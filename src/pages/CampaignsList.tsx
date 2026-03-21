@@ -1,0 +1,107 @@
+import { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Plus, ArrowRight } from "lucide-react";
+import { toast } from "sonner";
+import type { Brand, Campaign } from "@/lib/types";
+import { useAuth } from "@/hooks/useAuth";
+
+const statusColors: Record<string, string> = {
+  draft: "bg-muted text-muted-foreground",
+  generating: "bg-yellow-500/20 text-yellow-400",
+  ready: "bg-primary/20 text-primary",
+  exported: "bg-blue-500/20 text-blue-400",
+  error: "bg-destructive/20 text-destructive",
+};
+
+export default function CampaignsList() {
+  const { brandId } = useParams<{ brandId: string }>();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [brand, setBrand] = useState<Brand | null>(null);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!brandId) return;
+    const load = async () => {
+      const { data: b } = await supabase.from("brands").select("*").eq("id", brandId).single();
+      setBrand(b as Brand | null);
+      const { data: c } = await supabase
+        .from("campaigns")
+        .select("*")
+        .eq("brand_id", brandId)
+        .order("created_at", { ascending: false });
+      setCampaigns((c || []) as Campaign[]);
+      setLoading(false);
+    };
+    load();
+  }, [brandId]);
+
+  const createCampaign = async () => {
+    if (!brandId || !user) return;
+    const { data, error } = await supabase
+      .from("campaigns")
+      .insert({ brand_id: brandId, name: "Untitled Campaign", status: "draft" })
+      .select()
+      .single();
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    navigate(`/brands/${brandId}/campaigns/${(data as Campaign).id}`);
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background p-6 md:p-12">
+      <div className="flex items-center justify-between mb-8 max-w-3xl">
+        <h1 className="text-2xl font-semibold">{brand?.name || "Brand"}</h1>
+        <Button onClick={createCampaign} className="bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all">
+          <Plus className="w-4 h-4 mr-1" /> New Campaign
+        </Button>
+      </div>
+
+      {campaigns.length === 0 ? (
+        <div className="max-w-3xl border border-dashed border-border rounded-lg p-12 text-center">
+          <p className="text-muted-foreground mb-4">No campaigns yet. Create your first one.</p>
+          <Button onClick={createCampaign} variant="outline" className="active:scale-[0.98] transition-all">
+            Create first campaign
+          </Button>
+        </div>
+      ) : (
+        <div className="max-w-3xl space-y-2">
+          {campaigns.map((c) => (
+            <div
+              key={c.id}
+              className="flex items-center justify-between p-4 rounded-lg border border-border bg-card hover:border-primary/30 transition-colors cursor-pointer"
+              onClick={() => navigate(`/brands/${brandId}/campaigns/${c.id}`)}
+            >
+              <div className="flex items-center gap-4">
+                <span className="text-sm font-medium">{c.name}</span>
+                <Badge className={statusColors[c.status] || statusColors.draft}>
+                  {c.status}
+                </Badge>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-xs text-muted-foreground">
+                  {new Date(c.created_at).toLocaleDateString()}
+                </span>
+                <ArrowRight className="w-4 h-4 text-muted-foreground" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
