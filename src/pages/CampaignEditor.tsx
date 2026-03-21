@@ -230,7 +230,7 @@ export default function CampaignEditor() {
             </div>
           ) : campaign?.html ? (
             <div
-              className="bg-white shadow-2xl overflow-hidden"
+              className="bg-white shadow-2xl overflow-hidden flex justify-center"
               style={{
                 width: previewMode === "desktop" ? emailNativeWidth : mobileViewportWidth,
                 borderRadius: previewMode === "mobile" ? 0 : 4,
@@ -239,8 +239,8 @@ export default function CampaignEditor() {
               <div
                 style={previewMode === "mobile" ? {
                   width: emailNativeWidth,
-                  transform: `scale(${mobileScale})`,
-                  transformOrigin: "top left",
+                  transform: `scale(${mobileScale * 1.14})`,
+                  transformOrigin: "top center",
                 } : undefined}
               >
                 <iframe
@@ -259,7 +259,7 @@ export default function CampaignEditor() {
                         // Adjust container height when scaled
                         const container = iframe.parentElement?.parentElement;
                         if (container && previewMode === "mobile") {
-                          container.style.height = (h * mobileScale) + "px";
+                          container.style.height = (h * mobileScale * 1.14) + "px";
                         }
                       }
                     } catch {}
