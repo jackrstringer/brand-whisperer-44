@@ -60,10 +60,15 @@ export default function BrandSetup() {
     setPreviews((p) => p.filter((_, i) => i !== index));
   };
 
-  const fileToBase64 = (file: File): Promise<string> =>
+  const fileToBase64 = (file: File): Promise<{ data: string; mediaType: string }> =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve((reader.result as string).split(",")[1]);
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const data = dataUrl.split(",")[1];
+        const mediaType = file.type || "image/png";
+        resolve({ data, mediaType });
+      };
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
