@@ -61,6 +61,19 @@ export default function CampaignEditor() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Measure preview panel width via ResizeObserver
+  useEffect(() => {
+    const el = previewPanelRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const saveName = async () => {
     if (!campaignId || !nameValue.trim()) return;
     setEditingName(false);
