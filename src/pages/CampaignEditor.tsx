@@ -215,7 +215,7 @@ export default function CampaignEditor() {
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel — Preview */}
-        <div className="w-[60%] bg-[#1a1a1a] overflow-y-auto flex justify-center p-8">
+        <div className="w-[60%] bg-[#1a1a1a] overflow-y-auto flex justify-center p-8 scrollbar-hide">
           {isGenerating ? (
             <div className="w-[600px] space-y-4 mt-12">
               <Skeleton className="h-8 w-3/4" />
@@ -226,13 +226,52 @@ export default function CampaignEditor() {
               <Skeleton className="h-10 w-1/3" />
             </div>
           ) : campaign?.html ? (
-            <div className="bg-white rounded shadow-2xl" style={{ width: iframeWidth }}>
+            <div
+              className="bg-white rounded-[2rem] shadow-2xl overflow-hidden"
+              style={{ width: previewMode === "desktop" ? 632 : 407 }}
+            >
+              {/* iPhone-style status bar */}
+              <div className="bg-[#f2f2f7] px-5 py-1.5 flex items-center justify-between">
+                <span className="text-[#1c1c1e] text-[11px] font-semibold">9:41</span>
+                <div className="flex items-center gap-1">
+                  <svg width="16" height="10" viewBox="0 0 16 10" fill="none"><rect x="0" y="3" width="3" height="7" rx="0.5" fill="#1c1c1e"/><rect x="4" y="2" width="3" height="8" rx="0.5" fill="#1c1c1e"/><rect x="8" y="1" width="3" height="9" rx="0.5" fill="#1c1c1e"/><rect x="12" y="0" width="3" height="10" rx="0.5" fill="#1c1c1e"/></svg>
+                  <svg width="15" height="10" viewBox="0 0 15 10" fill="none"><path d="M7.5 2C9.5 2 11.3 2.8 12.6 4.1L14 2.7C12.3 1 10 0 7.5 0S2.7 1 1 2.7L2.4 4.1C3.7 2.8 5.5 2 7.5 2Z" fill="#1c1c1e"/><path d="M7.5 5C8.9 5 10.1 5.5 11 6.4L12.4 5C11.1 3.7 9.4 3 7.5 3S3.9 3.7 2.6 5L4 6.4C4.9 5.5 6.1 5 7.5 5Z" fill="#1c1c1e"/><circle cx="7.5" cy="8.5" r="1.5" fill="#1c1c1e"/></svg>
+                  <svg width="24" height="10" viewBox="0 0 24 10" fill="none"><rect x="0" y="0" width="21" height="10" rx="2" stroke="#1c1c1e" strokeWidth="1"/><rect x="1.5" y="1.5" width="15" height="7" rx="1" fill="#1c1c1e"/><rect x="22" y="3" width="2" height="4" rx="0.5" fill="#1c1c1e"/></svg>
+                </div>
+              </div>
+              {/* Gmail-style nav bar */}
+              <div className="bg-[#f2f2f7] px-4 pb-2 flex items-center gap-2 border-b border-[#c6c6c8]">
+                <span className="text-[#007aff] text-[13px] font-normal">‹ Inbox</span>
+                <div className="flex-1" />
+                <span className="text-[#007aff] text-[13px]">⬆</span>
+                <span className="text-[#007aff] text-[13px]">🗑</span>
+              </div>
+              {/* Email header */}
+              <div className="bg-white px-4 py-3 border-b border-[#e5e5ea]">
+                <p className="text-[#1c1c1e] text-[15px] font-semibold truncate">{campaign?.name || "Campaign Preview"}</p>
+                <div className="flex items-center gap-1 mt-1">
+                  <div className="w-6 h-6 rounded-full bg-[#34c759] flex items-center justify-center text-white text-[10px] font-bold shrink-0">B</div>
+                  <div className="min-w-0">
+                    <p className="text-[#1c1c1e] text-[13px] font-medium truncate">Brand <span className="text-[#8e8e93] font-normal">&lt;noreply@brand.com&gt;</span></p>
+                    <p className="text-[#8e8e93] text-[11px]">to me</p>
+                  </div>
+                </div>
+              </div>
               <iframe
                 srcDoc={campaign.html}
                 sandbox="allow-same-origin"
-                className="w-full border-0"
-                style={{ width: iframeWidth, minHeight: 800 }}
+                className="w-full border-0 block"
+                style={{ width: iframeWidth, minHeight: 800, margin: "0 auto" }}
                 title="Email Preview"
+                onLoad={(e) => {
+                  const iframe = e.target as HTMLIFrameElement;
+                  try {
+                    const doc = iframe.contentDocument;
+                    if (doc?.body) {
+                      iframe.style.height = doc.body.scrollHeight + "px";
+                    }
+                  } catch {}
+                }}
               />
             </div>
           ) : (
@@ -293,7 +332,7 @@ export default function CampaignEditor() {
           ) : (
             /* Chat Interface */
             <div className="flex flex-col flex-1 overflow-hidden">
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
                 {messages.map((msg) => {
                   if (msg.role === "system") {
                     return (
