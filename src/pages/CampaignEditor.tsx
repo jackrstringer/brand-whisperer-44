@@ -236,7 +236,7 @@ export default function CampaignEditor() {
             <Smartphone className="w-4 h-4" />
           </Button>
           <span className="text-[11px] tabular-nums text-muted-foreground px-2">
-            {baseViewportWidth}px → {Math.round(containerWidth)}px ({Math.round(scaleFactor * 100)}%)
+            {IFRAME_WIDTH}px → {Math.round(containerWidth)}px ({Math.round(scaleFactor * 100)}%)
           </span>
           <Button variant="outline" size="sm" onClick={exportHtml} disabled={!campaign?.html} className="active:scale-[0.98] transition-all">
             <Download className="w-3 h-3 mr-1" /> Export HTML
