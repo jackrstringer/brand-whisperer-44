@@ -261,7 +261,10 @@ export default function CampaignEditor() {
             ) : campaign?.html ? (
               <div
                 className="overflow-hidden"
-                style={{ width: containerWidth, height: scaledHeight }}
+                style={{
+                  width: containerWidth > 0 ? containerWidth : '100%',
+                  height: containerWidth > 0 ? scaledHeight : 'auto',
+                }}
               >
                 <iframe
                   key={previewMode}
@@ -271,7 +274,7 @@ export default function CampaignEditor() {
                   style={{
                     width: IFRAME_WIDTH,
                     height: iframeContentHeight,
-                    transform: `scale(${scaleFactor})`,
+                    transform: containerWidth > 0 ? `scale(${scaleFactor})` : 'none',
                     transformOrigin: "top left",
                   }}
                   title="Email Preview"
