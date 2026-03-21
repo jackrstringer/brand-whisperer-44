@@ -3,7 +3,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 const EXTRACTION_PROMPT = `You are an expert HTML email developer and brand analyst.
@@ -11,7 +11,9 @@ Analyze these email campaign screenshots and extract a precise, email-specific d
 
 Extract exact values — not descriptions. For every value ask: could a developer use this to rebuild an email that looks identical?
 
-Return a JSON object with:
+Return a JSON object with two keys: "extraction" and "system_prompt".
+
+"extraction" must contain:
 {
   "colors": {
     "canvas": "string",
@@ -58,7 +60,11 @@ Return a JSON object with:
     "overall": "string",
     "low_confidence_fields": []
   }
-}`;
+}
+
+"system_prompt" must be a complete, copy-paste-ready prompt block that encodes every extracted rule so a developer could build a matching email from it alone.
+
+Return ONLY valid JSON with these two keys. No markdown fences. No commentary.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -76,11 +82,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Build vision content blocks
-    const imageBlocks = images.map((b64: string) => ({
-      type: "image",
-      source: { type: "base64", media_type: "image/png", data: b64 },
-    }));
+    // Build vision content blocks - images can be { data, mediaType } objects or plain base64 strings
+    const imageBlocks = images.map((img: any) => {
+      const data = typeof img === "string" ? img : img.data;
+      const mediaType = typeof img === "string" ? detectMediaType(data) : (img.mediaType || "image/png");
+      return {
+        type: "image",
+        source: { type: "base64", media_type: mediaType, data },
+      };
+    });
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -99,7 +109,7 @@ Deno.serve(async (req) => {
             ...imageBlocks,
             {
               type: "text",
-              text: `Brand: ${brandName}. Industry: ${industry || "not specified"}. Analyze these ${images.length} email campaign images and extract the brand design system as JSON. After the JSON, generate a system_prompt string: a complete, copy-paste-ready prompt block that encodes every extracted rule so a developer could build a matching email from it alone. Return your response as JSON with two keys: "extraction" (the design system object) and "system_prompt" (the string).`,
+              text: `Brand: ${brandName}. Industry: ${industry || "not specified"}. Analyze these ${images.length} email campaign images and extract the brand design system. Return ONLY valid JSON with "extraction" and "system_prompt" keys.`,
             },
           ],
         }],
@@ -132,3 +142,11 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+function detectMediaType(base64: string): string {
+  if (base64.startsWith("/9j/") || base64.startsWith("/9J/")) return "image/jpeg";
+  if (base64.startsWith("iVBOR")) return "image/png";
+  if (base64.startsWith("R0lGOD")) return "image/gif";
+  if (base64.startsWith("UklGR")) return "image/webp";
+  return "image/png";
+}
