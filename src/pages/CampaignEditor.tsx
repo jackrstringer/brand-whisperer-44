@@ -161,7 +161,10 @@ export default function CampaignEditor() {
 
   const isDraft = !campaign?.html || campaign?.status === "draft";
   const isGenerating = campaign?.status === "generating" || generating;
-  const iframeWidth = previewMode === "desktop" ? 600 : 375;
+  // Desktop: render email at native 600px. Mobile: scale 600px email down to 375px like Gmail on iPhone.
+  const emailNativeWidth = 600;
+  const mobileViewportWidth = 375;
+  const mobileScale = mobileViewportWidth / emailNativeWidth; // 0.625
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
