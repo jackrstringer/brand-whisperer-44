@@ -41,10 +41,36 @@ Deno.serve(async (req) => {
       .single();
     if (pErr || !profile) throw new Error("Brand profile not found");
 
-    // Fetch top 3 reference images
+    // Fetch top 3 reference images (pre-hosted to ImageKit for stable URLs)
     const imageBlocks: any[] = [];
-    const urls = (profile.reference_image_urls || []).slice(0, 3);
-    for (const url of urls) {
+    const referenceUrls = Array.isArray(profile.reference_image_urls)
+      ? profile.reference_image_urls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
+      : [];
+
+    let hostedReferenceUrls = referenceUrls.slice(0, 3);
+    if (hostedReferenceUrls.length > 0) {
+      const referencesHtml = hostedReferenceUrls
+        .map((url, index) => `<img src="${url}" alt="reference-${index}" />`)
+        .join("\n");
+
+      const rehostedReferencesHtml = await rehostHtmlImagesWithImageKit(referencesHtml, {
+        campaignId,
+        imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
+        folder: "/campaign-studio/references",
+      });
+
+      const extractedRehostedUrls = Array.from(
+        rehostedReferencesHtml.matchAll(/<img\b[^>]*?\bsrc=(["'])(.*?)\1/gi),
+      )
+        .map((match) => match[2])
+        .filter((url): url is string => Boolean(url));
+
+      if (extractedRehostedUrls.length > 0) {
+        hostedReferenceUrls = extractedRehostedUrls;
+      }
+    }
+
+    for (const url of hostedReferenceUrls) {
       try {
         const imgResp = await fetch(url);
         const buf = await imgResp.arrayBuffer();
@@ -64,9 +90,13 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
 
     const userContent: any[] = [];
     if (imageBlocks.length > 0) userContent.push(...imageBlocks);
+    const imageRulesText = hostedReferenceUrls.length > 0
+      ? `Image URL rules:\n- Never invent or use external stock URLs (Unsplash, Pexels, etc).\n- Use ONLY these exact URLs for all <img src> values:\n${hostedReferenceUrls.join("\n")}`
+      : "Image URL rules:\n- No approved image URLs exist, so do not include <img> tags.";
+
     userContent.push({
       type: "text",
-      text: `Brand rules: ${profile.system_prompt}\n\nCurrent HTML:\n${currentHtml}\n\nChange requested: ${message}\n\nReturn only the updated HTML.`,
+      text: `Brand rules: ${profile.system_prompt}\n\n${imageRulesText}\n\nCurrent HTML:\n${currentHtml}\n\nChange requested: ${message}\n\nReturn only the updated HTML.`,
     });
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -97,6 +127,7 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
     html = await rehostHtmlImagesWithImageKit(html, {
       campaignId,
       imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
+      fallbackImageUrls: hostedReferenceUrls,
     });
 
     // Append previous HTML to history

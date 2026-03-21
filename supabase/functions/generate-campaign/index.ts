@@ -79,10 +79,36 @@ Deno.serve(async (req) => {
 
     if (profileErr || !profile) throw new Error("Brand profile not found");
 
-    // Fetch reference images as base64
+    // Normalize and pre-host reference images to ImageKit so the model gets stable URLs
     const imageBlocks: any[] = [];
-    const urls = profile.reference_image_urls || [];
-    for (const url of urls.slice(0, 10)) {
+    const referenceUrls = Array.isArray(profile.reference_image_urls)
+      ? profile.reference_image_urls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
+      : [];
+
+    let hostedReferenceUrls = referenceUrls.slice(0, 10);
+    if (hostedReferenceUrls.length > 0) {
+      const referencesHtml = hostedReferenceUrls
+        .map((url, index) => `<img src="${url}" alt="reference-${index}" />`)
+        .join("\n");
+
+      const rehostedReferencesHtml = await rehostHtmlImagesWithImageKit(referencesHtml, {
+        campaignId,
+        imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
+        folder: "/campaign-studio/references",
+      });
+
+      const extractedRehostedUrls = Array.from(
+        rehostedReferencesHtml.matchAll(/<img\b[^>]*?\bsrc=(["'])(.*?)\1/gi),
+      )
+        .map((match) => match[2])
+        .filter((url): url is string => Boolean(url));
+
+      if (extractedRehostedUrls.length > 0) {
+        hostedReferenceUrls = extractedRehostedUrls;
+      }
+    }
+
+    for (const url of hostedReferenceUrls) {
       try {
         const imgResp = await fetch(url);
         const buf = await imgResp.arrayBuffer();
@@ -114,6 +140,11 @@ Deno.serve(async (req) => {
     // Part 3: This campaign
     let part3 = `Generate a ${goal} email campaign.\nBrief: ${brief}`;
     if (copy) part3 += `\nThe following copy must be used verbatim: ${copy}`;
+    if (hostedReferenceUrls.length > 0) {
+      part3 += `\n\nMANDATORY IMAGE URL RULES:\n- Never invent, guess, or use external stock image URLs (Unsplash, Pexels, etc).\n- Use ONLY the exact URLs below for every <img src> in the HTML:\n${hostedReferenceUrls.join("\n")}`;
+    } else {
+      part3 += `\n\nMANDATORY IMAGE URL RULES:\n- No approved image URLs were provided, so do not include <img> tags.`;
+    }
     part3 += `\n\nThe output must look like it was made by the same designer who created the reference campaigns above. Return only the complete HTML.`;
     userContent.push({ type: "text", text: part3 });
 
@@ -148,6 +179,7 @@ Deno.serve(async (req) => {
     html = await rehostHtmlImagesWithImageKit(html, {
       campaignId,
       imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
+      fallbackImageUrls: hostedReferenceUrls,
     });
 
     // Save to database

@@ -75,6 +75,7 @@ export async function rehostHtmlImagesWithImageKit(
     campaignId: string;
     imagekitPrivateKey: string;
     folder?: string;
+    fallbackImageUrls?: string[];
   },
 ): Promise<string> {
   if (!html) return html;
@@ -93,17 +94,29 @@ export async function rehostHtmlImagesWithImageKit(
 
   let rewrittenHtml = html;
   let imageIndex = 0;
+  let fallbackIndex = 0;
   const folder = options.folder ?? "/campaign-studio/generated";
+  const fallbackImageUrls = (options.fallbackImageUrls ?? [])
+    .map((url) => normalizeImageSource(url))
+    .filter((url): url is string => Boolean(url));
 
   for (const source of discoveredSources) {
     const normalizedSource = normalizeImageSource(source);
     if (!normalizedSource) continue;
     if (/^https:\/\/ik\.imagekit\.io\//i.test(normalizedSource)) continue;
 
+    const applyFallback = () => {
+      if (fallbackImageUrls.length === 0) return;
+      const fallbackUrl = fallbackImageUrls[fallbackIndex % fallbackImageUrls.length];
+      fallbackIndex += 1;
+      rewrittenHtml = rewrittenHtml.split(source).join(fallbackUrl);
+    };
+
     try {
       const imageResponse = await fetch(normalizedSource);
       if (!imageResponse.ok) {
         console.warn(`Image fetch failed (${imageResponse.status}) for: ${normalizedSource}`);
+        applyFallback();
         continue;
       }
 
@@ -120,10 +133,14 @@ export async function rehostHtmlImagesWithImageKit(
         folder,
       });
 
-      if (!hostedUrl) continue;
+      if (!hostedUrl) {
+        applyFallback();
+        continue;
+      }
       rewrittenHtml = rewrittenHtml.split(source).join(hostedUrl);
     } catch (error) {
       console.warn(`Image re-hosting failed for ${normalizedSource}:`, error);
+      applyFallback();
     }
   }
 

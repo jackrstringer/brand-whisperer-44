@@ -11,6 +11,25 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import type { Campaign, ChatMessage } from "@/lib/types";
 
+const IMG_SRC_TAG_REGEX = /<img\b([^>]*?)\bsrc=(["'])(.*?)\2([^>]*)>/gi;
+const BROKEN_IMAGE_HOST_REGEX = /^(https?:\/\/(images\.unsplash\.com|source\.unsplash\.com|picsum\.photos))/i;
+
+function replaceLikelyBrokenImageUrls(html: string, fallbackUrls: string[]): string {
+  if (!html || fallbackUrls.length === 0) return html;
+
+  let fallbackIndex = 0;
+  return html.replace(IMG_SRC_TAG_REGEX, (fullTag, beforeSrc, quote, src, afterSrc) => {
+    const currentSrc = String(src || "").trim();
+    if (!currentSrc || !BROKEN_IMAGE_HOST_REGEX.test(currentSrc)) {
+      return fullTag;
+    }
+
+    const fallbackUrl = fallbackUrls[fallbackIndex % fallbackUrls.length];
+    fallbackIndex += 1;
+    return `<img${beforeSrc}src=${quote}${fallbackUrl}${quote}${afterSrc}>`;
+  });
+}
+
 export default function CampaignEditor() {
   const { brandId, campaignId } = useParams<{ brandId: string; campaignId: string }>();
   const navigate = useNavigate();
@@ -35,9 +54,10 @@ export default function CampaignEditor() {
   const [containerWidth, setContainerWidth] = useState(0);
   const [iframeContentHeight, setIframeContentHeight] = useState(800);
   const [zoom, setZoom] = useState(100); // percentage, 100 = 1x (375px rendered at 375px)
+  const [previewFallbackUrls, setPreviewFallbackUrls] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!campaignId) return;
+    if (!campaignId || !brandId) return;
     const load = async () => {
       const { data: c } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
       if (c) {
@@ -52,11 +72,23 @@ export default function CampaignEditor() {
         .select("*")
         .eq("campaign_id", campaignId)
         .order("created_at", { ascending: true });
+
+      const { data: brandProfile } = await supabase
+        .from("brand_profiles")
+        .select("reference_image_urls")
+        .eq("brand_id", brandId)
+        .single();
+
+      const fallbackUrls = Array.isArray(brandProfile?.reference_image_urls)
+        ? brandProfile.reference_image_urls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
+        : [];
+
+      setPreviewFallbackUrls(fallbackUrls);
       setMessages((msgs || []) as ChatMessage[]);
       setLoading(false);
     };
     load();
-  }, [campaignId]);
+  }, [brandId, campaignId]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -187,8 +219,12 @@ export default function CampaignEditor() {
   const renderedHeight = Math.round(iframeContentHeight * zoomScale);
 
   // Inject viewport meta into srcdoc so it renders as a true 375px mobile viewport
-  const srcdocHtml = campaign?.html
-    ? campaign.html.replace(
+  const htmlForPreview = campaign?.html
+    ? replaceLikelyBrokenImageUrls(campaign.html, previewFallbackUrls)
+    : "";
+
+  const srcdocHtml = htmlForPreview
+    ? htmlForPreview.replace(
         /(<head[^>]*>)/i,
         '$1<meta name="viewport" content="width=device-width, initial-scale=1">'
       )
