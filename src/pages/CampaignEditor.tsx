@@ -260,31 +260,28 @@ export default function CampaignEditor() {
               </div>
             ) : campaign?.html ? (
               <div
-                className="bg-white overflow-hidden"
+                className="overflow-hidden"
                 style={{ width: containerWidth, height: scaledHeight }}
               >
-                <div
+                <iframe
+                  key={previewMode}
+                  srcDoc={srcdocHtml}
+                  sandbox="allow-same-origin"
+                  className="border-0 block bg-white"
                   style={{
-                    width: baseViewportWidth,
+                    width: IFRAME_WIDTH,
+                    height: iframeContentHeight,
                     transform: `scale(${scaleFactor})`,
                     transformOrigin: "top left",
                   }}
-                >
-                  <iframe
-                    key={previewMode}
-                    srcDoc={campaign.html}
-                    sandbox="allow-same-origin"
-                    className="border-0 block bg-white"
-                    style={{ width: baseViewportWidth, height: iframeContentHeight }}
-                    title="Email Preview"
-                    onLoad={(e) => {
-                      const iframe = e.currentTarget;
-                      measureIframeHeight(iframe);
-                      window.setTimeout(() => measureIframeHeight(iframe), 150);
-                      window.setTimeout(() => measureIframeHeight(iframe), 600);
-                    }}
-                  />
-                </div>
+                  title="Email Preview"
+                  onLoad={(e) => {
+                    const iframe = e.currentTarget;
+                    measureIframeHeight(iframe);
+                    window.setTimeout(() => measureIframeHeight(iframe), 150);
+                    window.setTimeout(() => measureIframeHeight(iframe), 600);
+                  }}
+                />
               </div>
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
