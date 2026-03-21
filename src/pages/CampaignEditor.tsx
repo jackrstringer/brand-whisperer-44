@@ -266,13 +266,6 @@ export default function CampaignEditor() {
                   }}
                 />
               </div>
-            </div>
-                      iframe.style.height = doc.body.scrollHeight + "px";
-                    }
-                  } catch {}
-                }}
-              />
-            </div>
           ) : (
             <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
               Generate a campaign to see the preview
