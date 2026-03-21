@@ -284,32 +284,34 @@ export default function CampaignEditor() {
                 <Skeleton className="h-10 w-1/3" />
               </div>
             ) : campaign?.html ? (
-              <div
-                className="overflow-hidden"
-                style={{
-                  width: containerWidth > 0 ? containerWidth : '100%',
-                  height: containerWidth > 0 ? scaledHeight : 'auto',
-                }}
-              >
-                <iframe
-                  key={previewMode}
-                  srcDoc={srcdocHtml}
-                  sandbox="allow-same-origin"
-                  className="border-0 block bg-white"
+              <div className="flex justify-center p-8">
+                <div
+                  className="overflow-hidden"
                   style={{
-                    width: IFRAME_WIDTH,
-                    height: iframeContentHeight,
-                    transform: containerWidth > 0 ? `scale(${scaleFactor})` : 'none',
-                    transformOrigin: "top left",
+                    width: renderedWidth,
+                    height: renderedHeight,
                   }}
-                  title="Email Preview"
-                  onLoad={(e) => {
-                    const iframe = e.currentTarget;
-                    measureIframeHeight(iframe);
-                    window.setTimeout(() => measureIframeHeight(iframe), 150);
-                    window.setTimeout(() => measureIframeHeight(iframe), 600);
-                  }}
-                />
+                >
+                  <iframe
+                    key={previewMode}
+                    srcDoc={srcdocHtml}
+                    sandbox="allow-same-origin"
+                    className="border-0 block bg-white shadow-2xl"
+                    style={{
+                      width: IFRAME_WIDTH,
+                      height: iframeContentHeight,
+                      transform: `scale(${zoomScale})`,
+                      transformOrigin: "top left",
+                    }}
+                    title="Email Preview"
+                    onLoad={(e) => {
+                      const iframe = e.currentTarget;
+                      measureIframeHeight(iframe);
+                      window.setTimeout(() => measureIframeHeight(iframe), 150);
+                      window.setTimeout(() => measureIframeHeight(iframe), 600);
+                    }}
+                  />
+                </div>
               </div>
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
