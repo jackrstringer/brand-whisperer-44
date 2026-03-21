@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,9 @@ export default function CampaignEditor() {
   const [sending, setSending] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const previewPanelRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [iframeContentHeight, setIframeContentHeight] = useState(800);
 
   useEffect(() => {
     if (!campaignId) return;
@@ -57,6 +60,19 @@ export default function CampaignEditor() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Measure preview panel width via ResizeObserver
+  useEffect(() => {
+    const el = previewPanelRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const saveName = async () => {
     if (!campaignId || !nameValue.trim()) return;
@@ -161,10 +177,17 @@ export default function CampaignEditor() {
 
   const isDraft = !campaign?.html || campaign?.status === "draft";
   const isGenerating = campaign?.status === "generating" || generating;
-  // Desktop: render email at native 600px. Mobile: scale 600px email down to 375px like Gmail on iPhone.
-  const emailNativeWidth = 600;
-  const mobileViewportWidth = 375;
-  const mobileScale = mobileViewportWidth / emailNativeWidth; // 0.625
+
+  // Mobile: render iframe at 375px (true Gmail mobile viewport), scale UP to fill panel
+  const mobileIframeWidth = 375;
+  // Desktop: render at native 600px
+  const desktopIframeWidth = 600;
+
+  const iframeWidth = previewMode === "mobile" ? mobileIframeWidth : desktopIframeWidth;
+  // Scale factor: only used in mobile mode to enlarge 375px to fill container
+  const scaleFactor = previewMode === "mobile" && containerWidth > 0
+    ? containerWidth / mobileIframeWidth
+    : 1;
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
@@ -218,9 +241,9 @@ export default function CampaignEditor() {
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel — Preview */}
-        <div className="w-[60%] bg-[#1a1a1a] overflow-y-auto flex justify-center p-8 scrollbar-hide">
+        <div ref={previewPanelRef} className="w-[60%] bg-[#1a1a1a] overflow-y-auto p-8 scrollbar-hide">
           {isGenerating ? (
-            <div className="w-[600px] space-y-4 mt-12">
+            <div className="w-[600px] mx-auto space-y-4 mt-12">
               <Skeleton className="h-8 w-3/4" />
               <Skeleton className="h-48 w-full" />
               <Skeleton className="h-4 w-full" />
@@ -229,44 +252,66 @@ export default function CampaignEditor() {
               <Skeleton className="h-10 w-1/3" />
             </div>
           ) : campaign?.html ? (
-            <div
-              className="bg-white shadow-2xl overflow-hidden flex justify-center"
-              style={{
-                width: previewMode === "desktop" ? emailNativeWidth : mobileViewportWidth,
-                borderRadius: previewMode === "mobile" ? 0 : 4,
-              }}
-            >
+            previewMode === "mobile" ? (
+              /* Mobile: iframe at 375px, scaled UP to fill panel */
               <div
-                style={previewMode === "mobile" ? {
-                  width: emailNativeWidth,
-                  transform: `scale(${mobileScale * 1.14})`,
-                  transformOrigin: "top center",
-                } : undefined}
+                style={{
+                  width: containerWidth > 0 ? containerWidth - 64 : '100%',
+                  height: iframeContentHeight * scaleFactor,
+                  overflow: 'hidden',
+                }}
               >
-                <iframe
-                  srcDoc={campaign.html}
-                  sandbox="allow-same-origin"
-                  className="border-0 block"
-                  style={{ width: emailNativeWidth, minHeight: 800 }}
-                  title="Email Preview"
-                  onLoad={(e) => {
-                    const iframe = e.target as HTMLIFrameElement;
-                    try {
-                      const doc = iframe.contentDocument;
-                      if (doc?.body) {
-                        const h = doc.body.scrollHeight;
-                        iframe.style.height = h + "px";
-                        // Adjust container height when scaled
-                        const container = iframe.parentElement?.parentElement;
-                        if (container && previewMode === "mobile") {
-                          container.style.height = (h * mobileScale * 1.14) + "px";
-                        }
-                      }
-                    } catch {}
+                <div
+                  style={{
+                    transform: `scale(${scaleFactor})`,
+                    transformOrigin: 'top left',
+                    width: mobileIframeWidth,
                   }}
-                />
+                >
+                  <iframe
+                    srcDoc={campaign.html}
+                    sandbox="allow-same-origin"
+                    className="border-0 block bg-white"
+                    style={{ width: mobileIframeWidth, height: iframeContentHeight }}
+                    title="Email Preview"
+                    onLoad={(e) => {
+                      const iframe = e.target as HTMLIFrameElement;
+                      try {
+                        const doc = iframe.contentDocument;
+                        if (doc?.body) {
+                          setIframeContentHeight(doc.body.scrollHeight);
+                        }
+                      } catch {}
+                    }}
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              /* Desktop: native 600px, centered */
+              <div className="flex justify-center">
+                <div
+                  className="bg-white shadow-2xl overflow-hidden"
+                  style={{ width: desktopIframeWidth, borderRadius: 4 }}
+                >
+                  <iframe
+                    srcDoc={campaign.html}
+                    sandbox="allow-same-origin"
+                    className="border-0 block"
+                    style={{ width: desktopIframeWidth, minHeight: 800 }}
+                    title="Email Preview"
+                    onLoad={(e) => {
+                      const iframe = e.target as HTMLIFrameElement;
+                      try {
+                        const doc = iframe.contentDocument;
+                        if (doc?.body) {
+                          iframe.style.height = doc.body.scrollHeight + "px";
+                        }
+                      } catch {}
+                    }}
+                  />
+                </div>
+              </div>
+            )
           ) : (
             <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
               Generate a campaign to see the preview
