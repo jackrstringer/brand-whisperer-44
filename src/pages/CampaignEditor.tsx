@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Monitor, Smartphone, Download, Send, Undo2 } from "lucide-react";
+import { ArrowLeft, Monitor, Smartphone, Download, Send, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -34,6 +34,7 @@ export default function CampaignEditor() {
 
   const [containerWidth, setContainerWidth] = useState(0);
   const [iframeContentHeight, setIframeContentHeight] = useState(800);
+  const [zoom, setZoom] = useState(100); // percentage, 100 = 1x (375px rendered at 375px)
 
   useEffect(() => {
     if (!campaignId) return;
@@ -179,10 +180,11 @@ export default function CampaignEditor() {
   const isGenerating = campaign?.status === "generating" || generating;
 
   // Iframe is ALWAYS 375px (iPhone CSS viewport — Gmail mobile renders at this width).
-  // CSS transform scales it up to fill the preview panel.
+  // Zoom controls how large it appears on screen — content never reflows.
   const IFRAME_WIDTH = 375;
-  const scaleFactor = containerWidth > 0 ? containerWidth / IFRAME_WIDTH : 1;
-  const scaledHeight = Math.round(iframeContentHeight * scaleFactor);
+  const zoomScale = zoom / 100;
+  const renderedWidth = Math.round(IFRAME_WIDTH * zoomScale);
+  const renderedHeight = Math.round(iframeContentHeight * zoomScale);
 
   // Inject viewport meta into srcdoc so it renders as a true 375px mobile viewport
   const srcdocHtml = campaign?.html
@@ -235,9 +237,32 @@ export default function CampaignEditor() {
           >
             <Smartphone className="w-4 h-4" />
           </Button>
-          <span className="text-[11px] tabular-nums text-muted-foreground px-2">
-            {IFRAME_WIDTH}px → {Math.round(containerWidth)}px ({Math.round(scaleFactor * 100)}%)
-          </span>
+
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded border border-border bg-card">
+            <button
+              onClick={() => setZoom((z) => Math.max(50, z - 10))}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <input
+              type="range"
+              min={50}
+              max={200}
+              step={5}
+              value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value))}
+              className="w-20 accent-primary"
+            />
+            <button
+              onClick={() => setZoom((z) => Math.min(200, z + 10))}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+            <span className="text-[11px] tabular-nums text-muted-foreground w-8 text-center">{zoom}%</span>
+          </div>
+
           <Button variant="outline" size="sm" onClick={exportHtml} disabled={!campaign?.html} className="active:scale-[0.98] transition-all">
             <Download className="w-3 h-3 mr-1" /> Export HTML
           </Button>
@@ -259,32 +284,34 @@ export default function CampaignEditor() {
                 <Skeleton className="h-10 w-1/3" />
               </div>
             ) : campaign?.html ? (
-              <div
-                className="overflow-hidden"
-                style={{
-                  width: containerWidth > 0 ? containerWidth : '100%',
-                  height: containerWidth > 0 ? scaledHeight : 'auto',
-                }}
-              >
-                <iframe
-                  key={previewMode}
-                  srcDoc={srcdocHtml}
-                  sandbox="allow-same-origin"
-                  className="border-0 block bg-white"
+              <div className="flex justify-center p-8">
+                <div
+                  className="overflow-hidden"
                   style={{
-                    width: IFRAME_WIDTH,
-                    height: iframeContentHeight,
-                    transform: containerWidth > 0 ? `scale(${scaleFactor})` : 'none',
-                    transformOrigin: "top left",
+                    width: renderedWidth,
+                    height: renderedHeight,
                   }}
-                  title="Email Preview"
-                  onLoad={(e) => {
-                    const iframe = e.currentTarget;
-                    measureIframeHeight(iframe);
-                    window.setTimeout(() => measureIframeHeight(iframe), 150);
-                    window.setTimeout(() => measureIframeHeight(iframe), 600);
-                  }}
-                />
+                >
+                  <iframe
+                    key={previewMode}
+                    srcDoc={srcdocHtml}
+                    sandbox="allow-same-origin"
+                    className="border-0 block bg-white shadow-2xl"
+                    style={{
+                      width: IFRAME_WIDTH,
+                      height: iframeContentHeight,
+                      transform: `scale(${zoomScale})`,
+                      transformOrigin: "top left",
+                    }}
+                    title="Email Preview"
+                    onLoad={(e) => {
+                      const iframe = e.currentTarget;
+                      measureIframeHeight(iframe);
+                      window.setTimeout(() => measureIframeHeight(iframe), 150);
+                      window.setTimeout(() => measureIframeHeight(iframe), 600);
+                    }}
+                  />
+                </div>
               </div>
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
