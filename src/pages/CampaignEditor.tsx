@@ -34,6 +34,7 @@ export default function CampaignEditor() {
 
   const [containerWidth, setContainerWidth] = useState(0);
   const [iframeContentHeight, setIframeContentHeight] = useState(800);
+  const [zoom, setZoom] = useState(100); // percentage, 100 = 1x (375px rendered at 375px)
 
   useEffect(() => {
     if (!campaignId) return;
