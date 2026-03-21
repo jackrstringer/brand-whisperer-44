@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { rehostHtmlImagesWithImageKit } from "../_shared/imagekit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,6 +15,8 @@ Deno.serve(async (req) => {
   try {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
+    const IMAGEKIT_PRIVATE_KEY = Deno.env.get("IMAGEKIT_PRIVATE_KEY");
+    if (!IMAGEKIT_PRIVATE_KEY) throw new Error("IMAGEKIT_PRIVATE_KEY not configured");
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -89,6 +92,12 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
     const result = await response.json();
     let html = result.content?.[0]?.text || "";
     html = html.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
+
+    // Re-host edited image URLs to ImageKit for reliable rendering
+    html = await rehostHtmlImagesWithImageKit(html, {
+      campaignId,
+      imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
+    });
 
     // Append previous HTML to history
     const history = Array.isArray(campaign.html_history) ? campaign.html_history : [];
