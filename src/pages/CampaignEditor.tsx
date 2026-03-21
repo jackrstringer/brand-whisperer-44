@@ -178,11 +178,19 @@ export default function CampaignEditor() {
   const isDraft = !campaign?.html || campaign?.status === "draft";
   const isGenerating = campaign?.status === "generating" || generating;
 
-  // The iframe always renders at the base viewport width.
-  // CSS transform scales it to fill whatever panel width the user drags to.
-  const baseViewportWidth = previewMode === "mobile" ? 375 : 600;
-  const scaleFactor = containerWidth > 0 ? containerWidth / baseViewportWidth : 1;
+  // Iframe is ALWAYS 375px (iPhone CSS viewport — Gmail mobile renders at this width).
+  // CSS transform scales it up to fill the preview panel.
+  const IFRAME_WIDTH = 375;
+  const scaleFactor = containerWidth > 0 ? containerWidth / IFRAME_WIDTH : 1;
   const scaledHeight = Math.round(iframeContentHeight * scaleFactor);
+
+  // Inject viewport meta into srcdoc so it renders as a true 375px mobile viewport
+  const srcdocHtml = campaign?.html
+    ? campaign.html.replace(
+        /(<head[^>]*>)/i,
+        '$1<meta name="viewport" content="width=device-width, initial-scale=1">'
+      )
+    : "";
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
