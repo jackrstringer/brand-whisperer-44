@@ -237,9 +237,32 @@ export default function CampaignEditor() {
           >
             <Smartphone className="w-4 h-4" />
           </Button>
-          <span className="text-[11px] tabular-nums text-muted-foreground px-2">
-            {IFRAME_WIDTH}px → {Math.round(containerWidth)}px ({Math.round(scaleFactor * 100)}%)
-          </span>
+
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded border border-border bg-card">
+            <button
+              onClick={() => setZoom((z) => Math.max(50, z - 10))}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
+            <input
+              type="range"
+              min={50}
+              max={200}
+              step={5}
+              value={zoom}
+              onChange={(e) => setZoom(Number(e.target.value))}
+              className="w-20 accent-primary"
+            />
+            <button
+              onClick={() => setZoom((z) => Math.min(200, z + 10))}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+            <span className="text-[11px] tabular-nums text-muted-foreground w-8 text-center">{zoom}%</span>
+          </div>
+
           <Button variant="outline" size="sm" onClick={exportHtml} disabled={!campaign?.html} className="active:scale-[0.98] transition-all">
             <Download className="w-3 h-3 mr-1" /> Export HTML
           </Button>
