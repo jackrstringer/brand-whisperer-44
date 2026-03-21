@@ -32,8 +32,14 @@ export default function CampaignEditor() {
   const [canUndo, setCanUndo] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const previewPanelRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
   const [containerWidth, setContainerWidth] = useState(0);
   const [iframeContentHeight, setIframeContentHeight] = useState(800);
+  const [mobileWindowWidth, setMobileWindowWidth] = useState(375);
+  const [desktopWindowWidth, setDesktopWindowWidth] = useState(600);
+  const [mobileZoom, setMobileZoom] = useState(1);
+  const [desktopZoom, setDesktopZoom] = useState(1);
 
   useEffect(() => {
     if (!campaignId) return;
@@ -73,6 +79,26 @@ export default function CampaignEditor() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  const measureIframeHeight = useCallback((iframe: HTMLIFrameElement | null) => {
+    if (!iframe) return;
+    try {
+      const doc = iframe.contentDocument;
+      if (!doc) return;
+      const bodyHeight = doc.body?.scrollHeight ?? 0;
+      const docHeight = doc.documentElement?.scrollHeight ?? 0;
+      setIframeContentHeight(Math.max(bodyHeight, docHeight, 800));
+    } catch {
+      // ignore cross-document access errors
+    }
+  }, []);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    const t = window.setTimeout(() => measureIframeHeight(iframe), 0);
+    return () => window.clearTimeout(t);
+  }, [previewMode, campaign?.html, measureIframeHeight]);
 
   const saveName = async () => {
     if (!campaignId || !nameValue.trim()) return;
@@ -178,22 +204,46 @@ export default function CampaignEditor() {
   const isDraft = !campaign?.html || campaign?.status === "draft";
   const isGenerating = campaign?.status === "generating" || generating;
 
-  // Mobile: render iframe at 375px (true Gmail mobile viewport), scale UP to fill panel
   const mobileIframeWidth = 375;
-  // Desktop: render at native 600px
   const desktopIframeWidth = 600;
+  const panelHorizontalPadding = 64; // p-8 both sides
+  const availablePreviewWidth = Math.max(containerWidth - panelHorizontalPadding, 280);
 
-  const iframeWidth = previewMode === "mobile" ? mobileIframeWidth : desktopIframeWidth;
-  // Scale factor: only used in mobile mode to enlarge 375px to fill container
-  const scaleFactor = previewMode === "mobile" && containerWidth > 0
-    ? containerWidth / mobileIframeWidth
-    : 1;
+  const baseViewportWidth = previewMode === "mobile" ? mobileIframeWidth : desktopIframeWidth;
+  const minWindowWidth = previewMode === "mobile" ? 260 : 360;
+  const maxWindowWidth = Math.max(minWindowWidth, Math.floor(availablePreviewWidth));
+  const requestedWindowWidth = previewMode === "mobile" ? mobileWindowWidth : desktopWindowWidth;
+  const previewWindowWidth = Math.min(requestedWindowWidth, maxWindowWidth);
+
+  const zoomValue = previewMode === "mobile" ? mobileZoom : desktopZoom;
+  const scaleFactor = (previewWindowWidth / baseViewportWidth) * zoomValue;
+  const scaledPreviewHeight = Math.max(1, Math.round(iframeContentHeight * scaleFactor));
+  const renderedWidth = Math.round(baseViewportWidth * scaleFactor);
+
+  const handleWindowWidthChange = (next: number) => {
+    const clamped = Math.max(minWindowWidth, Math.min(maxWindowWidth, next));
+    if (previewMode === "mobile") {
+      setMobileWindowWidth(clamped);
+    } else {
+      setDesktopWindowWidth(clamped);
+    }
+  };
+
+  const handleZoomChange = (nextPercent: number) => {
+    const clampedPercent = Math.max(50, Math.min(200, nextPercent));
+    const nextZoom = clampedPercent / 100;
+    if (previewMode === "mobile") {
+      setMobileZoom(nextZoom);
+    } else {
+      setDesktopZoom(nextZoom);
+    }
+  };
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
       {/* Top Bar */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0 gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <button onClick={() => navigate(`/brands/${brandId}`)} className="text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -207,7 +257,7 @@ export default function CampaignEditor() {
               className="bg-transparent border-b border-primary text-sm font-medium outline-none"
             />
           ) : (
-            <button onClick={() => setEditingName(true)} className="text-sm font-medium hover:text-primary transition-colors">
+            <button onClick={() => setEditingName(true)} className="text-sm font-medium hover:text-primary transition-colors truncate">
               {campaign?.name}
             </button>
           )}
@@ -215,7 +265,8 @@ export default function CampaignEditor() {
             {campaign?.status}
           </Badge>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           <Button
             variant="ghost"
             size="icon"
@@ -232,6 +283,37 @@ export default function CampaignEditor() {
           >
             <Smartphone className="w-4 h-4" />
           </Button>
+
+          <div className="flex items-center gap-2 px-2 py-1 rounded border border-border bg-card">
+            <span className="text-[11px] text-muted-foreground">Window</span>
+            <input
+              type="range"
+              min={minWindowWidth}
+              max={maxWindowWidth}
+              value={previewWindowWidth}
+              onChange={(e) => handleWindowWidthChange(Number(e.target.value))}
+              className="w-28 accent-primary"
+            />
+            <span className="text-[11px] tabular-nums text-foreground">{Math.round(previewWindowWidth)}px</span>
+          </div>
+
+          <div className="flex items-center gap-2 px-2 py-1 rounded border border-border bg-card">
+            <span className="text-[11px] text-muted-foreground">Zoom</span>
+            <input
+              type="range"
+              min={50}
+              max={200}
+              value={Math.round(zoomValue * 100)}
+              onChange={(e) => handleZoomChange(Number(e.target.value))}
+              className="w-24 accent-primary"
+            />
+            <span className="text-[11px] tabular-nums text-foreground">{Math.round(zoomValue * 100)}%</span>
+          </div>
+
+          <div className="text-[11px] text-muted-foreground tabular-nums px-2">
+            Viewport {baseViewportWidth}px · Scale {Math.round(scaleFactor * 100)}% · Render {renderedWidth}px
+          </div>
+
           <Button variant="outline" size="sm" onClick={exportHtml} disabled={!campaign?.html} className="active:scale-[0.98] transition-all">
             <Download className="w-3 h-3 mr-1" /> Export HTML
           </Button>
@@ -241,7 +323,7 @@ export default function CampaignEditor() {
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Panel — Preview */}
-        <div ref={previewPanelRef} className="w-[60%] bg-[#1a1a1a] overflow-y-auto p-8 scrollbar-hide">
+        <div ref={previewPanelRef} className="w-[60%] bg-card overflow-y-auto p-8 scrollbar-hide">
           {isGenerating ? (
             <div className="w-[600px] mx-auto space-y-4 mt-12">
               <Skeleton className="h-8 w-3/4" />
@@ -252,66 +334,40 @@ export default function CampaignEditor() {
               <Skeleton className="h-10 w-1/3" />
             </div>
           ) : campaign?.html ? (
-            previewMode === "mobile" ? (
-              /* Mobile: iframe at 375px, scaled UP to fill panel */
+            <div className="flex justify-center">
               <div
+                className="bg-white shadow-2xl overflow-hidden"
                 style={{
-                  width: containerWidth > 0 ? containerWidth - 64 : '100%',
-                  height: iframeContentHeight * scaleFactor,
-                  overflow: 'hidden',
+                  width: previewWindowWidth,
+                  height: scaledPreviewHeight,
+                  borderRadius: previewMode === "mobile" ? 0 : 4,
                 }}
               >
                 <div
                   style={{
+                    width: baseViewportWidth,
                     transform: `scale(${scaleFactor})`,
-                    transformOrigin: 'top left',
-                    width: mobileIframeWidth,
+                    transformOrigin: "top left",
                   }}
                 >
                   <iframe
+                    ref={iframeRef}
+                    key={`${previewMode}-${baseViewportWidth}`}
                     srcDoc={campaign.html}
                     sandbox="allow-same-origin"
                     className="border-0 block bg-white"
-                    style={{ width: mobileIframeWidth, height: iframeContentHeight }}
+                    style={{ width: baseViewportWidth, height: iframeContentHeight }}
                     title="Email Preview"
                     onLoad={(e) => {
-                      const iframe = e.target as HTMLIFrameElement;
-                      try {
-                        const doc = iframe.contentDocument;
-                        if (doc?.body) {
-                          setIframeContentHeight(doc.body.scrollHeight);
-                        }
-                      } catch {}
+                      const iframe = e.currentTarget;
+                      measureIframeHeight(iframe);
+                      window.setTimeout(() => measureIframeHeight(iframe), 120);
+                      window.setTimeout(() => measureIframeHeight(iframe), 500);
                     }}
                   />
                 </div>
               </div>
-            ) : (
-              /* Desktop: native 600px, centered */
-              <div className="flex justify-center">
-                <div
-                  className="bg-white shadow-2xl overflow-hidden"
-                  style={{ width: desktopIframeWidth, borderRadius: 4 }}
-                >
-                  <iframe
-                    srcDoc={campaign.html}
-                    sandbox="allow-same-origin"
-                    className="border-0 block"
-                    style={{ width: desktopIframeWidth, minHeight: 800 }}
-                    title="Email Preview"
-                    onLoad={(e) => {
-                      const iframe = e.target as HTMLIFrameElement;
-                      try {
-                        const doc = iframe.contentDocument;
-                        if (doc?.body) {
-                          iframe.style.height = doc.body.scrollHeight + "px";
-                        }
-                      } catch {}
-                    }}
-                  />
-                </div>
-              </div>
-            )
+            </div>
           ) : (
             <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
               Generate a campaign to see the preview
