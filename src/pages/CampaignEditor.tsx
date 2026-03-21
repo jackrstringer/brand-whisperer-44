@@ -31,6 +31,9 @@ export default function CampaignEditor() {
   const [sending, setSending] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const previewPanelRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+  const [iframeContentHeight, setIframeContentHeight] = useState(800);
 
   useEffect(() => {
     if (!campaignId) return;
