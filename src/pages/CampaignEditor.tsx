@@ -178,11 +178,19 @@ export default function CampaignEditor() {
   const isDraft = !campaign?.html || campaign?.status === "draft";
   const isGenerating = campaign?.status === "generating" || generating;
 
-  // The iframe always renders at the base viewport width.
-  // CSS transform scales it to fill whatever panel width the user drags to.
-  const baseViewportWidth = previewMode === "mobile" ? 375 : 600;
-  const scaleFactor = containerWidth > 0 ? containerWidth / baseViewportWidth : 1;
+  // Iframe is ALWAYS 375px (iPhone CSS viewport — Gmail mobile renders at this width).
+  // CSS transform scales it up to fill the preview panel.
+  const IFRAME_WIDTH = 375;
+  const scaleFactor = containerWidth > 0 ? containerWidth / IFRAME_WIDTH : 1;
   const scaledHeight = Math.round(iframeContentHeight * scaleFactor);
+
+  // Inject viewport meta into srcdoc so it renders as a true 375px mobile viewport
+  const srcdocHtml = campaign?.html
+    ? campaign.html.replace(
+        /(<head[^>]*>)/i,
+        '$1<meta name="viewport" content="width=device-width, initial-scale=1">'
+      )
+    : "";
 
   return (
     <div className="h-screen bg-background flex flex-col overflow-hidden">
@@ -228,7 +236,7 @@ export default function CampaignEditor() {
             <Smartphone className="w-4 h-4" />
           </Button>
           <span className="text-[11px] tabular-nums text-muted-foreground px-2">
-            {baseViewportWidth}px → {Math.round(containerWidth)}px ({Math.round(scaleFactor * 100)}%)
+            {IFRAME_WIDTH}px → {Math.round(containerWidth)}px ({Math.round(scaleFactor * 100)}%)
           </span>
           <Button variant="outline" size="sm" onClick={exportHtml} disabled={!campaign?.html} className="active:scale-[0.98] transition-all">
             <Download className="w-3 h-3 mr-1" /> Export HTML
@@ -252,31 +260,28 @@ export default function CampaignEditor() {
               </div>
             ) : campaign?.html ? (
               <div
-                className="bg-white overflow-hidden"
+                className="overflow-hidden"
                 style={{ width: containerWidth, height: scaledHeight }}
               >
-                <div
+                <iframe
+                  key={previewMode}
+                  srcDoc={srcdocHtml}
+                  sandbox="allow-same-origin"
+                  className="border-0 block bg-white"
                   style={{
-                    width: baseViewportWidth,
+                    width: IFRAME_WIDTH,
+                    height: iframeContentHeight,
                     transform: `scale(${scaleFactor})`,
                     transformOrigin: "top left",
                   }}
-                >
-                  <iframe
-                    key={previewMode}
-                    srcDoc={campaign.html}
-                    sandbox="allow-same-origin"
-                    className="border-0 block bg-white"
-                    style={{ width: baseViewportWidth, height: iframeContentHeight }}
-                    title="Email Preview"
-                    onLoad={(e) => {
-                      const iframe = e.currentTarget;
-                      measureIframeHeight(iframe);
-                      window.setTimeout(() => measureIframeHeight(iframe), 150);
-                      window.setTimeout(() => measureIframeHeight(iframe), 600);
-                    }}
-                  />
-                </div>
+                  title="Email Preview"
+                  onLoad={(e) => {
+                    const iframe = e.currentTarget;
+                    measureIframeHeight(iframe);
+                    window.setTimeout(() => measureIframeHeight(iframe), 150);
+                    window.setTimeout(() => measureIframeHeight(iframe), 600);
+                  }}
+                />
               </div>
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
