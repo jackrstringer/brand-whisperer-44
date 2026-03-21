@@ -14,7 +14,144 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      brand_profiles: {
+        Row: {
+          brand_id: string
+          created_at: string
+          id: string
+          raw_extraction: Json | null
+          reference_image_urls: string[] | null
+          system_prompt: string | null
+        }
+        Insert: {
+          brand_id: string
+          created_at?: string
+          id?: string
+          raw_extraction?: Json | null
+          reference_image_urls?: string[] | null
+          system_prompt?: string | null
+        }
+        Update: {
+          brand_id?: string
+          created_at?: string
+          id?: string
+          raw_extraction?: Json | null
+          reference_image_urls?: string[] | null
+          system_prompt?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_profiles_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      brands: {
+        Row: {
+          created_at: string
+          id: string
+          industry: string | null
+          name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          industry?: string | null
+          name: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          industry?: string | null
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      campaigns: {
+        Row: {
+          brand_id: string
+          brief: string | null
+          created_at: string
+          goal: string | null
+          html: string | null
+          html_history: Json | null
+          id: string
+          name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          brand_id: string
+          brief?: string | null
+          created_at?: string
+          goal?: string | null
+          html?: string | null
+          html_history?: Json | null
+          id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          brand_id?: string
+          brief?: string | null
+          created_at?: string
+          goal?: string | null
+          html?: string | null
+          html_history?: Json | null
+          id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaigns_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_messages: {
+        Row: {
+          campaign_id: string
+          content: string
+          created_at: string
+          id: string
+          role: string
+        }
+        Insert: {
+          campaign_id: string
+          content: string
+          created_at?: string
+          id?: string
+          role: string
+        }
+        Update: {
+          campaign_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
