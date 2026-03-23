@@ -226,7 +226,7 @@ export default function CampaignEditor() {
   const srcdocHtml = htmlForPreview
     ? htmlForPreview.replace(
         /(<head[^>]*>)/i,
-        '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}</style>'
+        '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;}img{max-width:100%!important;height:auto!important;}</style>'
       )
     : "";
 
