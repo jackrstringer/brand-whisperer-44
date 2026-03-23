@@ -256,6 +256,11 @@ export default function BrandSettings() {
           </div>
           <Button onClick={saveInstructions} disabled={saving} className="bg-primary text-primary-foreground">Save Checklist</Button>
         </TabsContent>
+
+        {/* Analysis Tab */}
+        <TabsContent value="analysis">
+          {brandId && <ReanalyzeBrand brandId={brandId} brandName={name} industry={industry} />}
+        </TabsContent>
       </Tabs>
 
       {/* Delete confirmation */}
