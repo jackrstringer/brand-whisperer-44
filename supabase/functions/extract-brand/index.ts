@@ -87,9 +87,9 @@ Deno.serve(async (req) => {
     console.log(`Processing ${limitedImages.length} images for brand: ${brandName}`);
 
     // Build vision content blocks - images can be { data, mediaType } objects or plain base64 strings
-    const imageBlocks = images.map((img: any) => {
+    const imageBlocks = limitedImages.map((img: any) => {
       const data = typeof img === "string" ? img : img.data;
-      const mediaType = typeof img === "string" ? detectMediaType(data) : (img.mediaType || "image/png");
+      const mediaType = typeof img === "string" ? detectMediaType(data) : (img.mediaType || "image/jpeg");
       return {
         type: "image",
         source: { type: "base64", media_type: mediaType, data },
