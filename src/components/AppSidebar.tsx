@@ -71,7 +71,7 @@ export function AppSidebar() {
 
         {/* Brand context */}
         {brandId && brandName && (
-          <SidebarGroup defaultOpen>
+          <SidebarGroup>
             <SidebarGroupLabel>{collapsed ? "B" : brandName}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
