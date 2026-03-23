@@ -99,6 +99,7 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let campaignIdForError: string | null = null;
   try {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
@@ -111,6 +112,10 @@ Deno.serve(async (req) => {
     );
 
     const { brandId, campaignId, brief, goal, copy } = await req.json();
+    campaignIdForError = campaignId;
+
+    // Mark campaign as generating immediately
+    await supabase.from("campaigns").update({ status: "generating" }).eq("id", campaignId);
 
     // Fetch brand profile
     const { data: profile, error: profileErr } = await supabase
@@ -395,6 +400,12 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
+    if (campaignIdForError) {
+      try {
+        const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        await sb.from("campaigns").update({ status: "error" }).eq("id", campaignIdForError);
+      } catch {}
+    }
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
