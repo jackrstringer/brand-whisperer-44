@@ -396,52 +396,11 @@ export default function BrandSetup() {
     return () => clearInterval(poll);
   }, [brandGuideHtml, step]);
 
-  // === Save brand ===
+  // === Save brand (brand already created early, just generate starter campaigns) ===
   const saveBrand = async () => {
-    if (!user || !extraction) return;
+    if (!user || !earlyBrandId) return;
     setSaving(true);
     try {
-      const imageUrls: string[] = [];
-      const allImageFiles = getAllImageFiles();
-      for (const file of allImageFiles) {
-        const path = `${user.id}/${Date.now()}-${file.name}`;
-        const { error: uploadError } = await supabase.storage.from("brand-references").upload(path, file);
-        if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage.from("brand-references").getPublicUrl(path);
-        imageUrls.push(urlData.publicUrl);
-      }
-
-      const { data: brand, error: brandError } = await supabase
-        .from("brands")
-        .insert({ name: brandName, industry: industry || null, user_id: user.id, website_url: websiteUrl || null, source_types: selectedSources })
-        .select()
-        .single();
-      if (brandError) throw brandError;
-
-      const { error: profileError } = await supabase.from("brand_profiles").insert({
-        brand_id: brand.id,
-        system_prompt: systemPrompt,
-        raw_extraction: extraction as any,
-        reference_image_urls: imageUrls,
-        brand_guide_html: brandGuideHtml || null,
-        audit_findings: auditFindings || null,
-      } as any);
-      if (profileError) throw profileError;
-
-      const assetInserts: { brand_id: string; category: string; url: string; filename: string }[] = [];
-      for (const [category, catData] of Object.entries(assetCategories)) {
-        for (const file of catData.files) {
-          const path = `${user.id}/${brand.id}/${category}/${Date.now()}-${file.name}`;
-          const { error: uploadErr } = await supabase.storage.from("brand-assets").upload(path, file);
-          if (uploadErr) continue;
-          const { data: urlData } = supabase.storage.from("brand-assets").getPublicUrl(path);
-          assetInserts.push({ brand_id: brand.id, category, url: urlData.publicUrl, filename: file.name });
-        }
-      }
-      if (assetInserts.length > 0) {
-        await supabase.from("brand_assets").insert(assetInserts);
-      }
-
       toast.success("Brand saved! Generating starter campaigns...");
 
       const starterCampaigns = [
@@ -453,16 +412,16 @@ export default function BrandSetup() {
       for (const sc of starterCampaigns) {
         const { data: camp, error: campErr } = await supabase
           .from("campaigns")
-          .insert({ brand_id: brand.id, name: sc.name, status: "generating", brief: sc.brief, goal: sc.goal })
+          .insert({ brand_id: earlyBrandId, name: sc.name, status: "generating", brief: sc.brief, goal: sc.goal })
           .select()
           .single();
         if (campErr) continue;
         supabase.functions.invoke("generate-campaign", {
-          body: { brandId: brand.id, campaignId: camp.id, brief: sc.brief, goal: sc.goal },
+          body: { brandId: earlyBrandId, campaignId: camp.id, brief: sc.brief, goal: sc.goal },
         }).catch(() => {});
       }
 
-      navigate(`/brands/${brand.id}/onboarding`);
+      navigate(`/brands/${earlyBrandId}/onboarding`);
     } catch (err: any) {
       toast.error(err.message || "Failed to save brand");
     } finally {
