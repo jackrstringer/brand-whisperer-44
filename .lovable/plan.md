@@ -1,41 +1,61 @@
 
 
-# Three Independent Preview Controls
+# Fix Logo, Default Viewport, Button Width, and Body Copy Size
 
-## What You Get
+## Problems Identified
 
-Three labeled numeric inputs in the toolbar, each showing real pixel values:
+1. **Logo getting messed up** — The asset catalog sends all images with categories but doesn't give specific instructions for logo handling. Logos need special treatment: they should be displayed at a reasonable max-width (120-180px), centered, and NEVER stretched to full width or cropped.
 
-1. **Render Width** — the iframe's actual CSS `width` (the HTML layout width). Currently hardcoded at 431px. You'll be able to type any value (e.g. 375, 431, 600) and the email HTML reflows to that width.
+2. **Default viewport settings wrong** — Currently defaults to 431px render / 431px viewport. Change to 470px / 470px / 100% zoom.
 
-2. **Viewport Width** — the visible window/container that clips the iframe. Independent of render width. If viewport < render, the email gets clipped. If viewport > render, you see whitespace around it.
+3. **Buttons stretching to full page width** — The mobile `@media` rule in `UNIVERSAL_EMAIL_RULES` says "Buttons: full-width or auto" which causes the AI to make buttons `width:100%`. In real email clients (Klaviyo on mobile/desktop), the media query may not fire the same way, creating a mismatch. The rule should say buttons should be `auto` width with generous padding — NOT full-width.
 
-3. **Screen Zoom** — CSS `transform: scale()` that makes the whole thing bigger or smaller on your screen without changing either width. Just visual scaling.
+4. **Body copy too small** — The current rule says "Body text minimum 15px" which is borderline for mobile. Should be minimum 16px, with a recommendation of 16-18px for optimal mobile readability.
 
-All three show their current pixel value and are directly editable via number inputs.
+## Additional Bug: Brand Values Not Extracted Correctly
 
-## Changes — `src/pages/CampaignEditor.tsx` only
+The code reads `rawExtraction?.card_radius` but the actual structure is `rawExtraction?.spacing?.card_radius` and `rawExtraction?.buttons?.border_radius`. This means the QA pass is always using the fallback defaults ("12" and "100") instead of the actual brand values. Must fix the nested path access.
 
-### State
-Replace single `zoom` state with three:
-- `renderWidth` (default 431) — sets `iframe { width: renderWidth }`
-- `viewportWidth` (default 431) — sets wrapper div `width: viewportWidth * screenZoom`
-- `screenZoom` (default 100, percentage) — sets `transform: scale(screenZoom/100)`
+---
 
-### Toolbar
-Replace the current zoom slider control block with three compact labeled number inputs:
+## Changes
+
+### 1. `src/pages/CampaignEditor.tsx` — Change defaults
+
+- Line 54: `renderWidth` default from 431 → 470
+- Line 55: `viewportWidth` default from 431 → 470
+- Line 56: `screenZoom` stays at 100
+
+### 2. `supabase/functions/generate-campaign/index.ts`
+
+**Fix brand value extraction (line 124-130):**
 ```
-Render: [431]px  |  Viewport: [431]px  |  Zoom: [100]%
+card_radius: rawExtraction?.spacing?.card_radius ?? "12"
+button_radius: rawExtraction?.buttons?.border_radius ?? "100px"
+accent_color: rawExtraction?.colors?.accent ?? ""
+text_color: rawExtraction?.colors?.text_primary ?? ""
+background_color: rawExtraction?.colors?.canvas ?? ""
 ```
-Each is a small `<input type="number">` with step buttons, showing exact values.
 
-### Preview rendering
-- Iframe gets `width: renderWidth` and `height: iframeContentHeight`
-- Iframe gets `transform: scale(screenZoom/100)` with `transform-origin: top left`
-- Wrapper div gets `width: viewportWidth * (screenZoom/100)` and `height: iframeContentHeight * (screenZoom/100)` with `overflow: hidden`
-- The wrapper is centered in the panel via the existing `flex justify-center`
+**Fix UNIVERSAL_EMAIL_RULES:**
+- MOBILE section: Change "Buttons: minimum 44px tall, full-width or auto" → "Buttons: minimum 44px tall, auto width with generous horizontal padding (32-48px). NEVER full-width — buttons should look the same in the preview as they do in real email clients."
+- BUTTONS section: Remove hardcoded "border-radius:100px" — replace with "use the brand's button border-radius value"
+- Body text minimum: Change from 15px → 16px, add "Recommended: 16-18px for body paragraphs on mobile"
 
-### Remove
-- Remove the old `IFRAME_WIDTH` constant, `zoom` state, and the zoom slider/buttons
-- Remove the desktop/mobile toggle (these three controls supersede it)
+**Add logo-specific rules to IMAGE RULES section:**
+- "LOGO HANDLING: Images categorized as 'logo' must be displayed at max-width:150px (or similar reasonable size), centered, with padding above and below. NEVER stretch a logo to full width. NEVER crop a logo. If a dark-mode-safe variant exists, use it."
+
+**Add to asset catalog format:** When building the catalog string, prefix logo entries with a note: `[logo — display at max-width 150px, centered, DO NOT stretch or crop]`
+
+### 3. `supabase/functions/edit-campaign/index.ts`
+
+Apply the same button and body text rule changes to its system prompt to keep edits consistent.
+
+---
+
+## Files Modified
+
+1. **`src/pages/CampaignEditor.tsx`** — Default render/viewport to 470px
+2. **`supabase/functions/generate-campaign/index.ts`** — Fix nested brand value paths, logo rules, button width rules, body text minimums
+3. **`supabase/functions/edit-campaign/index.ts`** — Same prompt rule updates
 
