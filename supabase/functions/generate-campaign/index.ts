@@ -126,6 +126,23 @@ Deno.serve(async (req) => {
 
     if (profileErr || !profile) throw new Error("Brand profile not found");
 
+    // Fetch brand instructions and QA checklist
+    const brandInstructions = (profile as any).brand_instructions || "";
+    const brandQaChecklist: string[] = Array.isArray((profile as any).qa_checklist) ? (profile as any).qa_checklist : [];
+
+    // Fetch user preferences (global rules + QA)
+    const { data: brand } = await supabase.from("brands").select("user_id").eq("id", brandId).single();
+    let globalRules = "";
+    let globalQaChecklist: string[] = [];
+    if (brand?.user_id) {
+      const { data: prefs } = await supabase.from("user_preferences").select("preferences").eq("user_id", brand.user_id).single();
+      if (prefs?.preferences) {
+        const p = prefs.preferences as any;
+        globalRules = p.generation_rules || "";
+        globalQaChecklist = Array.isArray(p.qa_checklist) ? p.qa_checklist : [];
+      }
+    }
+
     // Extract brand-specific design values from raw_extraction
     const rawExtraction = profile.raw_extraction as Record<string, any> | null;
     const brandValues = {
