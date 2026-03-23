@@ -388,6 +388,14 @@ export default function CampaignEditor() {
                       <SelectItem value="educational">Educational</SelectItem>
                       <SelectItem value="re-engagement">Re-engagement</SelectItem>
                       <SelectItem value="seasonal">Seasonal</SelectItem>
+                      <SelectItem value="welcome">Welcome</SelectItem>
+                      <SelectItem value="social_proof">Social Proof</SelectItem>
+                      <SelectItem value="highlight">Highlight</SelectItem>
+                      <SelectItem value="product_launch">Product Launch</SelectItem>
+                      <SelectItem value="abandoned_cart">Abandoned Cart</SelectItem>
+                      <SelectItem value="win_back">Win-back</SelectItem>
+                      <SelectItem value="newsletter">Newsletter</SelectItem>
+                      <SelectItem value="announcement">Announcement</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
