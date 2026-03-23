@@ -49,6 +49,8 @@ export function applyImageKitTransform(
     height?: number;
     focus?: string; // e.g. "auto" for smart cropping
     crop?: string; // e.g. "maintain_ratio" or "at_max" for tight crop
+    extractY?: number; // y-offset for cm-extract (vertical slice)
+    cropMode?: string; // e.g. "extract" for cm-extract
   } = {},
 ): string {
   if (!/^https:\/\/ik\.imagekit\.io\//i.test(url)) return url;
@@ -58,13 +60,14 @@ export function applyImageKitTransform(
   if (options.height) parts.push(`h-${options.height}`);
   if (options.focus) parts.push(`fo-${options.focus}`);
   if (options.crop) parts.push(`c-${options.crop}`);
+  if (options.cropMode) parts.push(`cm-${options.cropMode}`);
+  if (options.extractY !== undefined) parts.push(`y-${options.extractY}`);
 
   if (parts.length === 0) return url;
 
   const trString = `tr:${parts.join(",")}`;
 
   // Insert transformation before the filename in the URL path
-  // e.g. https://ik.imagekit.io/abc/folder/file.jpg -> https://ik.imagekit.io/abc/folder/tr:w-600/file.jpg
   const urlObj = new URL(url);
   const pathParts = urlObj.pathname.split("/");
   const filename = pathParts.pop();
@@ -72,6 +75,79 @@ export function applyImageKitTransform(
   urlObj.pathname = pathParts.join("/");
 
   return urlObj.toString();
+}
+
+/**
+ * Generate an array of ImageKit slice URLs for a tall image.
+ * Uses cm-extract to extract vertical slices without distortion.
+ * If the image is shorter than sliceHeight, returns the original URL.
+ */
+export function getImageSliceUrls(
+  baseUrl: string,
+  totalHeight: number,
+  sliceHeight = 1300,
+  width = 600,
+): string[] {
+  if (totalHeight <= sliceHeight) return [baseUrl];
+
+  const sliceCount = Math.ceil(totalHeight / sliceHeight);
+  const urls: string[] = [];
+
+  for (let i = 0; i < sliceCount; i++) {
+    const y = i * sliceHeight;
+    const h = Math.min(sliceHeight, totalHeight - y);
+    urls.push(applyImageKitTransform(baseUrl, {
+      width,
+      height: h,
+      cropMode: "extract",
+      extractY: y,
+    }));
+  }
+
+  return urls;
+}
+
+/**
+ * Estimate the height of an image from its URL by fetching just enough to read dimensions.
+ * Returns null if unable to determine.
+ */
+export async function estimateImageHeight(url: string): Promise<number | null> {
+  try {
+    const resp = await fetch(url, { method: "HEAD" });
+    // Some servers return content dimensions in headers but this is rare.
+    // Instead, fetch the full image and check via arraybuffer size heuristic.
+    // For a more reliable approach, fetch the image and decode dimensions from the header bytes.
+    const fullResp = await fetch(url);
+    if (!fullResp.ok) return null;
+    const buf = await fullResp.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+
+    // PNG: width at bytes 16-19, height at bytes 20-23 (big-endian)
+    if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) {
+      const height = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+      return height;
+    }
+
+    // JPEG: scan for SOF markers
+    if (bytes[0] === 0xFF && bytes[1] === 0xD8) {
+      let offset = 2;
+      while (offset < bytes.length - 8) {
+        if (bytes[offset] !== 0xFF) { offset++; continue; }
+        const marker = bytes[offset + 1];
+        // SOF markers: C0, C1, C2
+        if (marker === 0xC0 || marker === 0xC1 || marker === 0xC2) {
+          const height = (bytes[offset + 5] << 8) | bytes[offset + 6];
+          return height;
+        }
+        const segLen = (bytes[offset + 2] << 8) | bytes[offset + 3];
+        offset += 2 + segLen;
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 async function uploadToImageKit(params: {
