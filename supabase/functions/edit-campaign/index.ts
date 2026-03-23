@@ -96,10 +96,10 @@ Deno.serve(async (req) => {
     // Extract brand values for QA enforcement
     const rawExtraction = profile.raw_extraction as Record<string, any> | null;
     const brandValues = {
-      card_radius: rawExtraction?.card_radius ?? rawExtraction?.border_radius ?? "12",
-      button_radius: rawExtraction?.button_radius ?? "100",
-      accent_color: rawExtraction?.accent_color ?? rawExtraction?.primary_color ?? "",
-      text_color: rawExtraction?.text_color ?? rawExtraction?.body_color ?? "",
+      card_radius: rawExtraction?.spacing?.card_radius ?? rawExtraction?.card_radius ?? rawExtraction?.border_radius ?? "12",
+      button_radius: rawExtraction?.buttons?.border_radius ?? rawExtraction?.button_radius ?? "100",
+      accent_color: rawExtraction?.colors?.accent ?? rawExtraction?.accent_color ?? rawExtraction?.primary_color ?? "",
+      text_color: rawExtraction?.colors?.text_primary ?? rawExtraction?.text_color ?? rawExtraction?.body_color ?? "",
     };
 
     const systemMsg = `You are editing an existing HTML email.
