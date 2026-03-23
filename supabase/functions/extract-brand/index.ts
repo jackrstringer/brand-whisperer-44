@@ -199,25 +199,36 @@ Deno.serve(async (req) => {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
-    const { auditFindings, brandName, industry, brandId } = await req.json();
+    const { auditFindings, brandName, industry, brandId, step } = await req.json();
     if (!auditFindings) {
       return new Response(JSON.stringify({ error: "No audit findings provided" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // If brandId provided, run async (save to DB, return immediately)
+    // If brandId provided, support step-based processing to avoid runtime timeouts.
     if (brandId) {
-      // Return acknowledgment immediately, then process
-      const promise = processExtraction(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId);
-      // Use waitUntil-like pattern: don't await, let it run in background
+      const mode = step === "guide" ? "guide" : step === "full" ? "full" : "spec";
+
+      // Run spec synchronously so the caller can reliably trigger guide generation next.
+      if (mode === "spec") {
+        await processSpecStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId);
+        return new Response(JSON.stringify({ status: "spec_complete", brandId }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Guide generation can run in background while frontend polls DB.
+      const promise = mode === "full"
+        ? processExtraction(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId)
+        : processGuideStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId);
+
       promise.catch((err) => {
-        console.error("[extract-brand] Background processing error:", err);
-        // Save error state to DB
+        console.error(`[extract-brand] ${mode} background processing error:`, err);
         saveError(brandId, err.message).catch(console.error);
       });
 
-      return new Response(JSON.stringify({ status: "processing", brandId }), {
+      return new Response(JSON.stringify({ status: `${mode}_processing`, brandId }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -244,18 +255,35 @@ function getSupabaseAdmin() {
 
 async function saveError(brandId: string, errorMessage: string) {
   const sb = getSupabaseAdmin();
-  // Store error in audit_findings so frontend can detect it
+  const { data: existing } = await sb
+    .from("brand_profiles")
+    .select("audit_findings")
+    .eq("brand_id", brandId)
+    .maybeSingle();
+
+  const baseAudit = existing?.audit_findings && typeof existing.audit_findings === "object" && !Array.isArray(existing.audit_findings)
+    ? existing.audit_findings as Record<string, unknown>
+    : {};
+
   await sb.from("brand_profiles").update({
-    audit_findings: { _error: errorMessage },
+    audit_findings: { ...baseAudit, _error: errorMessage },
   }).eq("brand_id", brandId);
 }
 
-async function processExtraction(
+function stripRuntimeKeys(auditFindings: any) {
+  if (!auditFindings || typeof auditFindings !== "object" || Array.isArray(auditFindings)) {
+    return auditFindings;
+  }
+
+  const { _error, _status, ...rest } = auditFindings;
+  return rest;
+}
+
+async function runSpecCall(
   apiKey: string,
   auditFindings: any,
   brandName: string,
   industry: string,
-  brandId?: string,
 ) {
   const anthropicHeaders = {
     "Content-Type": "application/json",
@@ -265,7 +293,6 @@ async function processExtraction(
 
   const auditJson = JSON.stringify(auditFindings, null, 2);
 
-  // === CALL 1: Extraction + System Prompt (small JSON, fast) ===
   console.log(`[extract-brand] Call 1: Generating spec for ${brandName}`);
   const specResponse = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -290,31 +317,36 @@ async function processExtraction(
   const specText = specResult.content?.[0]?.text || "";
   const specJsonMatch = specText.match(/\{[\s\S]*\}/);
   if (!specJsonMatch) throw new Error("Failed to parse spec result");
-  const specParsed = JSON.parse(specJsonMatch[0]);
 
-  console.log(`[extract-brand] Call 1 complete. Starting Call 2: HTML guide`);
+  return JSON.parse(specJsonMatch[0]);
+}
 
-  // If async mode, save spec immediately so frontend can see progress
-  if (brandId) {
-    const sb = getSupabaseAdmin();
-    await sb.from("brand_profiles").update({
-      system_prompt: specParsed.system_prompt,
-      raw_extraction: specParsed.extraction,
-    }).eq("brand_id", brandId);
-    console.log(`[extract-brand] Spec saved for brand ${brandId}`);
-  }
+async function runGuideCall(
+  apiKey: string,
+  auditFindings: any,
+  brandName: string,
+  industry: string,
+  extraction: any,
+) {
+  const anthropicHeaders = {
+    "Content-Type": "application/json",
+    "x-api-key": apiKey,
+    "anthropic-version": "2023-06-01",
+  };
 
-  // === CALL 2: HTML Brand Guide (raw HTML, no JSON wrapping) ===
+  const auditJson = JSON.stringify(auditFindings, null, 2);
+
+  console.log(`[extract-brand] Call 2: Generating HTML guide for ${brandName}`);
   const guideResponse = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: anthropicHeaders,
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 64000,
+      max_tokens: 36000,
       system: GUIDE_PROMPT,
       messages: [{
         role: "user",
-        content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}\n\n=== BRAND EXTRACTION SPEC ===\n${JSON.stringify(specParsed.extraction, null, 2)}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}\n\n${HTML_GUIDE_TEMPLATE}\n\nGenerate the FULL premium HTML brand guide document. Start with <!DOCTYPE html> and end with </html>. Do not abbreviate or skip sections.`,
+        content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}\n\n=== BRAND EXTRACTION SPEC ===\n${JSON.stringify(extraction, null, 2)}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}\n\n${HTML_GUIDE_TEMPLATE}\n\nGenerate the FULL premium HTML brand guide document. Start with <!DOCTYPE html> and end with </html>. Do not abbreviate or skip sections.`,
       }],
     }),
   });
@@ -327,16 +359,103 @@ async function processExtraction(
   const guideResult = await guideResponse.json();
   let guideHtml = guideResult.content?.[0]?.text || "";
 
-  // Clean up any markdown fences if Claude wrapped it
   guideHtml = guideHtml.replace(/^```html?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
 
-  // Ensure it starts with DOCTYPE
   if (!guideHtml.startsWith("<!DOCTYPE") && !guideHtml.startsWith("<html")) {
     const docStart = guideHtml.indexOf("<!DOCTYPE");
     if (docStart > -1) guideHtml = guideHtml.substring(docStart);
   }
 
   console.log(`[extract-brand] Call 2 complete. Guide HTML length: ${guideHtml.length}`);
+  return guideHtml;
+}
+
+async function processSpecStep(
+  apiKey: string,
+  auditFindings: any,
+  brandName: string,
+  industry: string,
+  brandId: string,
+) {
+  const cleanedAudit = stripRuntimeKeys(auditFindings);
+  const specParsed = await runSpecCall(apiKey, cleanedAudit, brandName, industry);
+
+  const sb = getSupabaseAdmin();
+  await sb.from("brand_profiles").update({
+    system_prompt: specParsed.system_prompt,
+    raw_extraction: specParsed.extraction,
+    audit_findings: cleanedAudit,
+  }).eq("brand_id", brandId);
+
+  console.log(`[extract-brand] Spec saved for brand ${brandId}`);
+  return specParsed;
+}
+
+async function processGuideStep(
+  apiKey: string,
+  auditFindings: any,
+  brandName: string,
+  industry: string,
+  brandId: string,
+) {
+  const sb = getSupabaseAdmin();
+  const cleanedAudit = stripRuntimeKeys(auditFindings);
+
+  const { data: profile, error: profileError } = await sb
+    .from("brand_profiles")
+    .select("raw_extraction, audit_findings")
+    .eq("brand_id", brandId)
+    .maybeSingle();
+
+  if (profileError) {
+    throw new Error(`Failed to load profile for guide generation: ${profileError.message}`);
+  }
+
+  let extraction = profile?.raw_extraction;
+  const effectiveAudit = cleanedAudit ?? stripRuntimeKeys(profile?.audit_findings) ?? {};
+
+  // Fallback if spec step was skipped.
+  if (!extraction) {
+    const specParsed = await processSpecStep(apiKey, effectiveAudit, brandName, industry, brandId);
+    extraction = specParsed.extraction;
+  }
+
+  const guideHtml = await runGuideCall(apiKey, effectiveAudit, brandName, industry, extraction);
+
+  await sb.from("brand_profiles").update({
+    brand_guide_html: guideHtml,
+    audit_findings: effectiveAudit,
+  }).eq("brand_id", brandId);
+
+  console.log(`[extract-brand] Guide saved for brand ${brandId}`);
+
+  return {
+    extraction,
+    brand_guide_html: guideHtml,
+  };
+}
+
+async function processExtraction(
+  apiKey: string,
+  auditFindings: any,
+  brandName: string,
+  industry: string,
+  brandId?: string,
+) {
+  const cleanedAudit = stripRuntimeKeys(auditFindings);
+  const specParsed = await runSpecCall(apiKey, cleanedAudit, brandName, industry);
+
+  if (brandId) {
+    const sb = getSupabaseAdmin();
+    await sb.from("brand_profiles").update({
+      system_prompt: specParsed.system_prompt,
+      raw_extraction: specParsed.extraction,
+      audit_findings: cleanedAudit,
+    }).eq("brand_id", brandId);
+    console.log(`[extract-brand] Spec saved for brand ${brandId}`);
+  }
+
+  const guideHtml = await runGuideCall(apiKey, cleanedAudit, brandName, industry, specParsed.extraction);
 
   const result = {
     extraction: specParsed.extraction,
@@ -351,7 +470,7 @@ async function processExtraction(
       system_prompt: specParsed.system_prompt,
       raw_extraction: specParsed.extraction,
       brand_guide_html: guideHtml,
-      audit_findings: auditFindings,
+      audit_findings: cleanedAudit,
     }).eq("brand_id", brandId);
     console.log(`[extract-brand] Full results saved for brand ${brandId}`);
   }
