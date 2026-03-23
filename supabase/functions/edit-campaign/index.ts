@@ -147,9 +147,13 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
       ? `Image URL rules:\n- Reference screenshots above are for STYLE only — never embed them.\n- Never invent or use external stock URLs.\n- For <img src> values, use ONLY from these brand asset URLs:\n${embeddableUrls.join("\n")}`
       : "Image URL rules:\n- No approved image URLs exist, so do not add new <img> tags.";
 
+    let extraRules = "";
+    if (brandInstructions) extraRules += `\n\nBrand-specific instructions:\n${brandInstructions}`;
+    if (globalRules) extraRules += `\n\nGlobal generation rules:\n${globalRules}`;
+
     userContent.push({
       type: "text",
-      text: `Brand rules: ${profile.system_prompt}\n\n${imageRulesText}\n\nCurrent HTML:\n${currentHtml}\n\nChange requested: ${message}\n\nReturn only the updated HTML.`,
+      text: `Brand rules: ${profile.system_prompt}${extraRules}\n\n${imageRulesText}\n\nCurrent HTML:\n${currentHtml}\n\nChange requested: ${message}\n\nReturn only the updated HTML.`,
     });
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
