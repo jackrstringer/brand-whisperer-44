@@ -126,6 +126,23 @@ Deno.serve(async (req) => {
 
     if (profileErr || !profile) throw new Error("Brand profile not found");
 
+    // Fetch brand instructions and QA checklist
+    const brandInstructions = (profile as any).brand_instructions || "";
+    const brandQaChecklist: string[] = Array.isArray((profile as any).qa_checklist) ? (profile as any).qa_checklist : [];
+
+    // Fetch user preferences (global rules + QA)
+    const { data: brand } = await supabase.from("brands").select("user_id").eq("id", brandId).single();
+    let globalRules = "";
+    let globalQaChecklist: string[] = [];
+    if (brand?.user_id) {
+      const { data: prefs } = await supabase.from("user_preferences").select("preferences").eq("user_id", brand.user_id).single();
+      if (prefs?.preferences) {
+        const p = prefs.preferences as any;
+        globalRules = p.generation_rules || "";
+        globalQaChecklist = Array.isArray(p.qa_checklist) ? p.qa_checklist : [];
+      }
+    }
+
     // Extract brand-specific design values from raw_extraction
     const rawExtraction = profile.raw_extraction as Record<string, any> | null;
     const brandValues = {
@@ -254,6 +271,16 @@ Deno.serve(async (req) => {
     if (brandValues.text_color) brandValuesText += `\nBody text color: ${brandValues.text_color} — NEVER use generic gray (#999, #666, etc.)`;
     if (brandValues.background_color) brandValuesText += `\nBackground color: ${brandValues.background_color}`;
 
+    // Inject brand-specific instructions
+    if (brandInstructions) {
+      brandValuesText += `\n\n=== BRAND-SPECIFIC INSTRUCTIONS ===\n${brandInstructions}`;
+    }
+
+    // Inject global generation rules
+    if (globalRules) {
+      brandValuesText += `\n\n=== GLOBAL GENERATION RULES ===\n${globalRules}`;
+    }
+
     userContent.push({ type: "text", text: brandValuesText });
 
     // Goal-specific creative direction for structural variety
@@ -349,9 +376,15 @@ Deno.serve(async (req) => {
         qaContent.push(...imageBlocks);
       }
 
+      // Build custom QA items from brand + global checklists
+      const allQaItems = [...brandQaChecklist, ...globalQaChecklist];
+      const customQaSection = allQaItems.length > 0
+        ? `\n\n=== CUSTOM QA CHECKLIST ITEMS ===\n${allQaItems.map((item, i) => `${i + 1}. ${item}`).join("\n")}`
+        : "";
+
       qaContent.push({
         type: "text",
-        text: `Brand design rules:\n${profile.system_prompt}\n\n=== SPECIFIC VALUES TO ENFORCE ===\ncard_radius: ${brandValues.card_radius}px\nbutton_radius: ${brandValues.button_radius}px\naccent_color: ${brandValues.accent_color}\ntext_color: ${brandValues.text_color}\n\n=== GENERATED HTML TO AUDIT ===\n${html}`,
+        text: `Brand design rules:\n${profile.system_prompt}\n\n=== SPECIFIC VALUES TO ENFORCE ===\ncard_radius: ${brandValues.card_radius}px\nbutton_radius: ${brandValues.button_radius}px\naccent_color: ${brandValues.accent_color}\ntext_color: ${brandValues.text_color}${customQaSection}\n\n=== GENERATED HTML TO AUDIT ===\n${html}`,
       });
 
       const qaResponse = await fetch("https://api.anthropic.com/v1/messages", {
