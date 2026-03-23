@@ -93,6 +93,15 @@ Deno.serve(async (req) => {
       .filter((url: string) => typeof url === "string" && url.trim().length > 0)
       .slice(0, 15);
 
+    // Extract brand values for QA enforcement
+    const rawExtraction = profile.raw_extraction as Record<string, any> | null;
+    const brandValues = {
+      card_radius: rawExtraction?.card_radius ?? rawExtraction?.border_radius ?? "12",
+      button_radius: rawExtraction?.button_radius ?? "100",
+      accent_color: rawExtraction?.accent_color ?? rawExtraction?.primary_color ?? "",
+      text_color: rawExtraction?.text_color ?? rawExtraction?.body_color ?? "",
+    };
+
     const systemMsg = `You are editing an existing HTML email.
 Apply only the change described. Do not rewrite sections not mentioned.
 Maintain all inline styles, table structure, and Gmail dark mode fixes.
@@ -101,6 +110,19 @@ The outermost wrapper table must use width="100%" with max-width:600px — never
 CONSISTENCY RULE: All images must have the same padding treatment — either all full-bleed or all with equal side padding. Never mix.
 DESIGN COHESION: All text alignment within a section must be consistent. Never use raw gray body text. Bullet points in centered layouts must be centered (use pill/chip design).
 FOOTER: Every email must have a footer with brand name, unsubscribe link (#unsubscribe), and address placeholder. It must be a separate section from main content.
+
+BRAND VALUES TO ENFORCE:
+- Card/container border-radius: ${brandValues.card_radius}px everywhere
+- Button border-radius: ${brandValues.button_radius}px
+${brandValues.accent_color ? `- Accent color: ${brandValues.accent_color}` : ""}
+${brandValues.text_color ? `- Body text color: ${brandValues.text_color} — never generic gray` : ""}
+
+After making the requested change, also audit the ENTIRE email for:
+- Consistent border-radius on all cards/containers
+- No images with excessive negative space (remove or suggest cropping)
+- Consistent image padding treatment
+- Proper footer separation
+
 Return only the complete updated HTML. No commentary. No markdown fences.`;
 
     const userContent: any[] = [];

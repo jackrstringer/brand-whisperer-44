@@ -48,7 +48,7 @@ export function applyImageKitTransform(
     width?: number;
     height?: number;
     focus?: string; // e.g. "auto" for smart cropping
-    crop?: string; // e.g. "maintain_ratio"
+    crop?: string; // e.g. "maintain_ratio" or "at_max" for tight crop
   } = {},
 ): string {
   if (!/^https:\/\/ik\.imagekit\.io\//i.test(url)) return url;
