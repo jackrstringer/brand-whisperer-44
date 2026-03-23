@@ -77,10 +77,14 @@ Deno.serve(async (req) => {
 
     const { images, brandName, industry } = await req.json();
     if (!images || !Array.isArray(images) || images.length < 3) {
-      return new Response(JSON.stringify({ error: "At least 3 images required" }), {
+      return new Response(JSON.stringify({ error: `At least 3 images required (got ${images?.length || 0})` }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Limit to 5 images max to stay within API limits
+    const limitedImages = images.slice(0, 5);
+    console.log(`Processing ${limitedImages.length} images for brand: ${brandName}`);
 
     // Build vision content blocks - images can be { data, mediaType } objects or plain base64 strings
     const imageBlocks = images.map((img: any) => {
