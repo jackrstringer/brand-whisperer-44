@@ -234,8 +234,9 @@ export default function BrandSetup() {
       setInconsistencies(data.inconsistencies || []);
       setNeedsConfirmation(data.needs_confirmation || []);
       setProgressValue(100);
-      setProgressMessage("Audit complete!");
-      setTimeout(() => setStep("audit_review"), 500);
+      setProgressMessage("Audit complete! Generating brand guide...");
+      // Skip audit review — go straight to guide generation
+      setTimeout(() => generateGuideFromAudit(data.audit), 500);
     } catch (err: any) {
       clearInterval(interval);
       toast.error(err.message || "Audit failed");
@@ -244,14 +245,17 @@ export default function BrandSetup() {
   };
 
   // === PASS 2+3: Spec + Guide ===
-  const generateGuide = async () => {
+  const generateGuideFromAudit = async (findings?: any) => {
+    const auditData = findings || auditFindings;
+    if (!auditData) { toast.error("No audit data available"); return; }
+
     setStep("generating_guide");
     setProgressValue(0);
     setProgressMessage(GUIDE_MESSAGES[0]);
 
     const interval = setInterval(() => {
       setProgressValue((v) => {
-        const next = Math.min(v + 1.5, 95);
+        const next = Math.min(v + 0.8, 95);
         const msgIndex = Math.min(Math.floor(next / 25), GUIDE_MESSAGES.length - 1);
         setProgressMessage(GUIDE_MESSAGES[msgIndex]);
         return next;
@@ -260,7 +264,7 @@ export default function BrandSetup() {
 
     try {
       const { data, error } = await supabase.functions.invoke("extract-brand", {
-        body: { auditFindings, brandName, industry },
+        body: { auditFindings: auditData, brandName, industry },
       });
 
       clearInterval(interval);
@@ -276,9 +280,12 @@ export default function BrandSetup() {
     } catch (err: any) {
       clearInterval(interval);
       toast.error(err.message || "Guide generation failed");
-      setStep("audit_review");
+      setStep("uploads");
     }
   };
+
+  // Keep old name for any other references
+  const generateGuide = () => generateGuideFromAudit();
 
   // Render guide HTML in iframe
   useEffect(() => {
@@ -659,7 +666,7 @@ export default function BrandSetup() {
   if (step === "guide_review" && brandGuideHtml) {
     return (
       <div className="min-h-screen bg-background p-6 md:p-12">
-        <button onClick={() => setStep("audit_review")} className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8 transition-colors">
+        <button onClick={() => setStep("uploads")} className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8 transition-colors">
           <ArrowLeft className="w-4 h-4" /> Back to audit
         </button>
         <div className="flex items-center justify-between mb-6 max-w-5xl">

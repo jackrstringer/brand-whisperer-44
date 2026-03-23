@@ -51,7 +51,7 @@ DARK MODE SAFETY:
 const HTML_GUIDE_TEMPLATE = `
 === HTML BRAND GUIDE TEMPLATE REFERENCE ===
 
-You MUST generate the brand_guide_html following this exact CSS architecture and HTML structure. This is the quality bar. The guide must look like a premium design deliverable, not a data dump.
+You MUST generate the brand guide HTML following this exact CSS architecture and HTML structure. This is the quality bar. The guide must look like a premium design deliverable, not a data dump.
 
 CSS ARCHITECTURE:
 - Use CSS custom properties for ALL brand colors (--brand-accent, --black, --white, --gray-50 through --gray-900)
@@ -78,7 +78,7 @@ REQUIRED CSS CLASSES AND PATTERNS:
    - Each section has: .section-label (monospace, uppercase, "01 / COLOR"), .section-title (serif, large), .section-desc (max-width 640px, muted color)
 
 4. COLOR PALETTE SECTION:
-   - .subgroup-label for "PRIMARY COLORS" and "SUPPORTING NEUTRALS" 
+   - .subgroup-label for "PRIMARY COLORS" and "SUPPORTING NEUTRALS"
    - .color-card with .color-swatch (140px tall, color fill, hex label at bottom) + .color-info (name + usage description)
    - Use .color-hex.on-dark (white text with subtle white bg) or .color-hex.on-light (dark text with subtle dark bg)
    - Grid of 3 for primary, grid of 4 for supporting neutrals
@@ -114,7 +114,7 @@ REQUIRED CSS CLASSES AND PATTERNS:
    - .photo-card with .photo-gradient (120px tall, CSS gradient representing the mood) + .photo-info (style name + description)
    - Grid of 3 photography styles (e.g., "Product on Neutral", "Lifestyle / In-Use", "People / Results")
    - Below: .rules-grid with Do's and Don'ts cards for photography
-   - .rule-card.do (light green bg) and .rule-card.dont (light red bg) with + and – prefixes
+   - .rule-card.do (light green bg) and .rule-card.dont (light red bg) with + and - prefixes
 
 10. VOICE & TONE SECTION:
     - .voice-table: Attribute / What It Sounds Like / What It Doesn't Sound Like columns
@@ -138,20 +138,16 @@ CRITICAL GENERATION RULES:
 - ALL CTA button examples MUST use font-style: normal unless italic was explicitly confirmed in the audit.
 - The code block CSS spec must EXACTLY match the rendered button examples.
 - Match the brand's actual conventions (sentence case vs title case, alignment, etc.)
-- No em dashes — use -- or reword.
+- No em dashes -- use -- or reword.
 - The guide itself must feel like a premium design agency deliverable.
 - Use generous whitespace, clean typography, and consistent spacing throughout.
 `;
 
-const SPEC_AND_GUIDE_PROMPT = `You are building a comprehensive email brand design system from confirmed audit findings.
+const SPEC_PROMPT = `You are building a structured email brand spec from confirmed audit findings.
 
-You will receive:
-1. Confirmed audit findings (JSON) from a visual analysis of the brand's email campaigns
-2. Brand name and industry
-3. A set of non-negotiable email design quality floor rules
-4. An HTML template reference showing the exact CSS architecture and section structure to follow
+You will receive confirmed audit findings (JSON) from a visual analysis of the brand's email campaigns, plus email design quality floor rules.
 
-Your job has THREE outputs, returned as a single JSON object with these keys:
+Return ONLY valid JSON (no markdown fences, no commentary) with these two keys:
 
 "extraction" — structured brand values for programmatic use:
 {
@@ -166,7 +162,19 @@ Your job has THREE outputs, returned as a single JSON object with these keys:
 
 "system_prompt" — a complete, copy-paste-ready prompt for generating on-brand emails. Must include exact hex codes, px values, font stacks, layout rules, and the quality floor rules. This prompt should be detailed enough that an AI could build a matching email from it alone.
 
-"brand_guide_html" — a COMPREHENSIVE, self-contained HTML document following the template reference provided. This must be a premium visual deliverable with:
+Apply the quality floor rules. If the brand audit shows practices that violate the floor (e.g., 12px body text, full-width buttons), override with the floor values and note the override in the system_prompt.`;
+
+const GUIDE_PROMPT = `You are generating a comprehensive, self-contained HTML email brand design guide document.
+
+You will receive:
+1. Confirmed audit findings (JSON)
+2. Brand extraction spec (JSON)
+3. Brand name and industry
+4. An HTML template reference showing the exact CSS architecture and section structure to follow
+
+Your output must be ONLY the raw HTML document — starting with <!DOCTYPE html> and ending with </html>. No JSON wrapping. No markdown fences. No commentary before or after.
+
+The HTML must be a premium visual deliverable with:
 - Full-viewport cover section with brand name, blurred accent circle effect, and metadata
 - Sticky navigation bar with anchor links to each section
 - 8 full sections: Color Palette, Typography (with specimens and type scale table), Button System (with live rendered buttons, CSS code block, and copy patterns), Email Layout (wireframe diagrams built in HTML/CSS, spacing system), Reusable Components (mini rendered previews of every observed component), Photography Direction (gradient mood cards, do's/don'ts), Voice & Tone (attribute table, headline formulas with live-rendered examples, messaging pillars), Design Rules (do's/don'ts grids for design and copy)
@@ -179,9 +187,7 @@ Your job has THREE outputs, returned as a single JSON object with these keys:
 - No external images — entirely self-contained
 - The guide itself must look like it was designed by a premium agency
 
-IMPORTANT: Apply the quality floor rules when generating the system_prompt. If the brand audit shows practices that violate the floor (e.g., 12px body text, full-width buttons), override with the floor values and note the override.
-
-Return ONLY valid JSON with these three keys. No markdown fences. No commentary.`;
+Do NOT abbreviate or skip sections. Every section must be fully fleshed out with real content from the audit findings.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -199,55 +205,81 @@ Deno.serve(async (req) => {
       });
     }
 
-    console.log(`Generating brand spec + guide for: ${brandName}`);
+    const anthropicHeaders = {
+      "Content-Type": "application/json",
+      "x-api-key": ANTHROPIC_API_KEY,
+      "anthropic-version": "2023-06-01",
+    };
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const auditJson = JSON.stringify(auditFindings, null, 2);
+
+    // === CALL 1: Extraction + System Prompt (small JSON, fast) ===
+    console.log(`[extract-brand] Call 1: Generating spec for ${brandName}`);
+    const specResponse = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
+      headers: anthropicHeaders,
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 64000,
-        system: SPEC_AND_GUIDE_PROMPT,
+        max_tokens: 8000,
+        system: SPEC_PROMPT,
         messages: [{
           role: "user",
-          content: `Brand: ${brandName}
-Industry: ${industry || "not specified"}
-
-=== CONFIRMED AUDIT FINDINGS ===
-${JSON.stringify(auditFindings, null, 2)}
-
-=== EMAIL DESIGN QUALITY FLOOR RULES ===
-${EMAIL_DESIGN_QUALITY_FLOOR}
-
-${HTML_GUIDE_TEMPLATE}
-
-Generate the extraction, system_prompt, and brand_guide_html. The brand_guide_html must be a FULL, premium HTML document following the template reference above — with cover, sticky nav, all 8 sections with rich visual examples, and a guide footer. Do not abbreviate or skip sections.`,
+          content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}`,
         }],
       }),
     });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`API error: ${response.status} - ${errText}`);
+    if (!specResponse.ok) {
+      const errText = await specResponse.text();
+      throw new Error(`Spec API error: ${specResponse.status} - ${errText}`);
     }
 
-    const result = await response.json();
-    const text = result.content?.[0]?.text || "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("Failed to parse result");
+    const specResult = await specResponse.json();
+    const specText = specResult.content?.[0]?.text || "";
+    const specJsonMatch = specText.match(/\{[\s\S]*\}/);
+    if (!specJsonMatch) throw new Error("Failed to parse spec result");
+    const specParsed = JSON.parse(specJsonMatch[0]);
 
-    const parsed = JSON.parse(jsonMatch[0]);
+    console.log(`[extract-brand] Call 1 complete. Starting Call 2: HTML guide`);
 
-    console.log(`Brand spec + guide generation complete`);
+    // === CALL 2: HTML Brand Guide (raw HTML, no JSON wrapping) ===
+    const guideResponse = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: anthropicHeaders,
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 64000,
+        system: GUIDE_PROMPT,
+        messages: [{
+          role: "user",
+          content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}\n\n=== BRAND EXTRACTION SPEC ===\n${JSON.stringify(specParsed.extraction, null, 2)}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}\n\n${HTML_GUIDE_TEMPLATE}\n\nGenerate the FULL premium HTML brand guide document. Start with <!DOCTYPE html> and end with </html>. Do not abbreviate or skip sections.`,
+        }],
+      }),
+    });
+
+    if (!guideResponse.ok) {
+      const errText = await guideResponse.text();
+      throw new Error(`Guide API error: ${guideResponse.status} - ${errText}`);
+    }
+
+    const guideResult = await guideResponse.json();
+    let guideHtml = guideResult.content?.[0]?.text || "";
+
+    // Clean up any markdown fences if Claude wrapped it
+    guideHtml = guideHtml.replace(/^```html?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+
+    // Ensure it starts with DOCTYPE
+    if (!guideHtml.startsWith("<!DOCTYPE") && !guideHtml.startsWith("<html")) {
+      const docStart = guideHtml.indexOf("<!DOCTYPE");
+      if (docStart > -1) guideHtml = guideHtml.substring(docStart);
+    }
+
+    console.log(`[extract-brand] Call 2 complete. Guide HTML length: ${guideHtml.length}`);
 
     return new Response(JSON.stringify({
-      extraction: parsed.extraction,
-      system_prompt: parsed.system_prompt,
-      brand_guide_html: parsed.brand_guide_html,
+      extraction: specParsed.extraction,
+      system_prompt: specParsed.system_prompt,
+      brand_guide_html: guideHtml,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
