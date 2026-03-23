@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Trash2, Plus, X, Loader2, Upload } from "lucide-react";
+import ReanalyzeBrand from "@/components/brand/ReanalyzeBrand";
 import { toast } from "sonner";
 
 interface BrandAsset {
