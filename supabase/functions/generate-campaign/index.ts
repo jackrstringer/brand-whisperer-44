@@ -67,6 +67,31 @@ FOOTER (required on every email):
 
 Return only complete HTML. No commentary. No markdown fences.`;
 
+const QA_SYSTEM_PROMPT = `You are a visual QA auditor for HTML emails.
+You will receive:
+1. Brand reference images (showing the correct design language)
+2. The brand's design rules
+3. Specific brand values (card radius, button radius, colors)
+4. The generated HTML email to audit
+
+Your job: compare the HTML against the references and rules, then fix ANY issues.
+
+CHECK EACH — fail ANY = must fix:
+1. Card/container border-radius must match the brand's specified card_radius EVERYWHERE — no sharp corners if the brand uses rounded
+2. Button border-radius and styling must match brand specs
+3. Images with excessive empty/negative space (>30%) must use the smart-cropped URL variant (with tr: parameters). If no cropped variant is available, REMOVE the image
+4. ALL images must have identical padding treatment — either ALL full-bleed OR ALL with equal side padding. NEVER mix
+5. Footer MUST exist as a SEPARATE section with: brand name, "Unsubscribe" link (href="#unsubscribe"), address placeholder
+6. Text alignment must be consistent within each section — no left-aligned bullets in a center-aligned section
+7. Colors must match brand palette — no generic grays (#999, #666) for body text
+8. No reference campaign screenshots embedded as <img> tags
+9. The outermost wrapper must use width:100% with max-width:600px — never fixed width:600px
+10. Every contrast card must have border-radius matching the brand
+
+If ANY issues are found: return the CORRECTED complete HTML.
+If all checks pass: return the HTML unchanged.
+Return ONLY HTML. No commentary. No markdown fences.`;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -93,6 +118,16 @@ Deno.serve(async (req) => {
       .single();
 
     if (profileErr || !profile) throw new Error("Brand profile not found");
+
+    // Extract brand-specific design values from raw_extraction
+    const rawExtraction = profile.raw_extraction as Record<string, any> | null;
+    const brandValues = {
+      card_radius: rawExtraction?.card_radius ?? rawExtraction?.border_radius ?? "12",
+      button_radius: rawExtraction?.button_radius ?? "100",
+      accent_color: rawExtraction?.accent_color ?? rawExtraction?.primary_color ?? "",
+      text_color: rawExtraction?.text_color ?? rawExtraction?.body_color ?? "",
+      background_color: rawExtraction?.background_color ?? "",
+    };
 
     // Build reference image blocks for vision (style only — never embed)
     const imageBlocks: any[] = [];
@@ -182,8 +217,9 @@ Deno.serve(async (req) => {
     // Build asset catalog with categories and ImageKit transform hints
     const assetCatalog = hostedAssetEntries.map((entry) => {
       const baseUrl = entry.url;
-      const croppedUrl = applyImageKitTransform(baseUrl, { width: 600, focus: "auto", crop: "maintain_ratio" });
-      return `[${entry.category}] ${baseUrl}\n  → smart-cropped: ${croppedUrl}`;
+      const smartCrop = applyImageKitTransform(baseUrl, { width: 600, focus: "auto", crop: "maintain_ratio" });
+      const tightCrop = applyImageKitTransform(baseUrl, { width: 600, height: 400, focus: "auto", crop: "at_max" });
+      return `[${entry.category}] ${baseUrl}\n  → smart-cropped: ${smartCrop}\n  → tight-cropped: ${tightCrop}`;
     }).join("\n");
 
     const embeddableUrls = hostedAssetEntries.map((e) => e.url);
@@ -199,10 +235,16 @@ Deno.serve(async (req) => {
       userContent.push(...imageBlocks);
     }
 
-    userContent.push({
-      type: "text",
-      text: `From analyzing these campaigns, here are the specific rules to follow precisely:\n${profile.system_prompt}`,
-    });
+    // Inject explicit brand values
+    let brandValuesText = `\nFrom analyzing these campaigns, here are the specific rules to follow precisely:\n${profile.system_prompt}`;
+    brandValuesText += `\n\n=== BRAND DESIGN VALUES (use these EXACTLY) ===`;
+    brandValuesText += `\nCard/container border-radius: ${brandValues.card_radius}px — apply to ALL cards, contrast sections, and containers`;
+    brandValuesText += `\nButton border-radius: ${brandValues.button_radius}px`;
+    if (brandValues.accent_color) brandValuesText += `\nAccent/primary color: ${brandValues.accent_color}`;
+    if (brandValues.text_color) brandValuesText += `\nBody text color: ${brandValues.text_color} — NEVER use generic gray (#999, #666, etc.)`;
+    if (brandValues.background_color) brandValuesText += `\nBackground color: ${brandValues.background_color}`;
+
+    userContent.push({ type: "text", text: brandValuesText });
 
     let part3 = `Generate a ${goal} email campaign.\nBrief: ${brief}`;
     if (copy) part3 += `\nThe following copy must be used verbatim: ${copy}`;
@@ -211,8 +253,9 @@ Deno.serve(async (req) => {
 1. The reference campaign screenshots above are STYLE REFERENCES ONLY. NEVER embed them as <img> tags.
 2. Never invent, guess, or use external stock image URLs (Unsplash, Pexels, etc).
 3. You are the CREATIVE DIRECTOR. Choose ONLY the images that best serve this campaign's story. You do NOT need to use every available image — be selective.
-4. If an image has excessive negative space, use the smart-cropped URL variant provided below instead of the base URL.
-5. CONSISTENCY: Every image must have the same padding treatment — either ALL full-bleed or ALL with equal side padding. Never mix.`;
+4. Before using any image, consider if it has excessive empty space. If so, you MUST use the tight-cropped URL variant. If even the cropped version would look bad, skip the image entirely.
+5. For lifestyle/hero images, default to the tight-crop variant unless the full image is clearly well-composed with minimal negative space.
+6. CONSISTENCY: Every image must have the same padding treatment — either ALL full-bleed or ALL with equal side padding. Never mix.`;
 
     if (hostedAssetEntries.length > 0) {
       part3 += `\n\nAVAILABLE BRAND ASSETS (use selectively — pick what serves the campaign):\n${assetCatalog}`;
@@ -223,6 +266,7 @@ Deno.serve(async (req) => {
     part3 += `\n\nThe output must look like it was made by the same designer who created the reference campaigns above. Return only the complete HTML.`;
     userContent.push({ type: "text", text: part3 });
 
+    // === PASS 1: Generate ===
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -254,6 +298,52 @@ Deno.serve(async (req) => {
       imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
       fallbackImageUrls: embeddableUrls,
     });
+
+    // === PASS 2: QA Audit ===
+    try {
+      const qaContent: any[] = [];
+
+      if (imageBlocks.length > 0) {
+        qaContent.push({
+          type: "text",
+          text: `Here are ${imageBlocks.length} brand reference campaign images. The generated email must match their design language exactly.`,
+        });
+        qaContent.push(...imageBlocks);
+      }
+
+      qaContent.push({
+        type: "text",
+        text: `Brand design rules:\n${profile.system_prompt}\n\n=== SPECIFIC VALUES TO ENFORCE ===\ncard_radius: ${brandValues.card_radius}px\nbutton_radius: ${brandValues.button_radius}px\naccent_color: ${brandValues.accent_color}\ntext_color: ${brandValues.text_color}\n\n=== GENERATED HTML TO AUDIT ===\n${html}`,
+      });
+
+      const qaResponse = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 8192,
+          system: QA_SYSTEM_PROMPT,
+          messages: [{ role: "user", content: qaContent }],
+        }),
+      });
+
+      if (qaResponse.ok) {
+        const qaResult = await qaResponse.json();
+        let qaHtml = qaResult.content?.[0]?.text || "";
+        qaHtml = qaHtml.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
+        if (qaHtml.length > 100 && qaHtml.includes("<table")) {
+          html = qaHtml;
+        }
+      } else {
+        console.warn("QA pass failed, using first-pass HTML:", qaResponse.status);
+      }
+    } catch (qaErr) {
+      console.warn("QA pass error, using first-pass HTML:", qaErr);
+    }
 
     await supabase.from("campaigns").update({
       html,
