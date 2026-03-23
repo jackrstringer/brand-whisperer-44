@@ -1,133 +1,106 @@
 
 
-# Holistic UI Overhaul — Global Nav, Brand Management, Settings
+# Two-Pass Image Slicing Architecture for Brand Analysis & Campaign Generation
 
-## Overview
+## The Problem
 
-Add a persistent sidebar navigation accessible from every page. Add delete/edit capabilities for brands and campaigns. Add brand-level and global settings pages for managing assets, instructions, and QA checklists.
+Currently, reference campaign images (often 600x4000px) are sent whole to Claude. Images over 1568px on any edge get auto-downscaled, destroying the fine detail needed for typography, spacing, and color analysis. A 600x4000 image becomes ~235x1568 — useless for extracting design rules.
 
----
+The generation pass has the same issue: reference images sent for style matching are downscaled, so the AI can't actually see the design details it's supposed to replicate.
 
-## New/Modified Pages & Components
+## Solution
 
-### 1. Global Sidebar (`src/components/AppSidebar.tsx`)
+### 1. Client-side image slicing (`BrandSetup.tsx`)
 
-Persistent sidebar using shadcn `Sidebar` component, visible on all authenticated pages:
-- **Logo/app name** at top
-- **Dashboard** link (all brands)
-- **Current Brand** section (when on a brand route) — shows brand name, links to:
-  - Campaigns list
-  - Brand Settings
-- **Global Settings** link — account-wide generation rules & QA checklist
-- **Sign Out** button at bottom
-- Collapsible via `collapsible="icon"`
+Replace the single `resizeAndConvert` function with a `sliceImage` function:
 
-### 2. App Layout (`src/components/AppLayout.tsx`)
+- Load the image at full resolution
+- If height > 1400px, slice into segments of ~1300px tall (keeping width at original, capped at 600px)
+- Each slice becomes its own base64 JPEG
+- Label each slice: `{ data, mediaType, campaignIndex, sliceIndex, totalSlices }`
+- A 600x4000 image → 3 slices of 600x1333
 
-Wrap all protected routes in a `SidebarProvider` + layout shell:
-- Sidebar on left
-- `SidebarTrigger` in a thin header bar (always visible)
-- Main content area on right
+For images that are normal aspect ratio (not tall emails), just cap at 1500px max dimension — no slicing needed.
 
-Update `App.tsx` to wrap protected routes in `<AppLayout>` instead of bare `<ProtectedRoute>`.
+Send the sliced array to `extract-brand` with metadata so the AI knows which slices belong together.
 
-### 3. Delete Campaigns (`CampaignsList.tsx`)
+### 2. Two-pass extraction (`extract-brand/index.ts`)
 
-- Add a trash icon button on each campaign row
-- Confirmation dialog before delete
-- `supabase.from("campaigns").delete().eq("id", campaignId)`
+**Pass 1 — Per-campaign analysis:**
+- Group slices by `campaignIndex`
+- For each campaign (set of slices), make a focused API call:
+  - System: "Extract brand attributes from this email campaign"
+  - User: the slices in order, labeled "Slice 1/3 of Campaign 1", "Slice 2/3 of Campaign 1", etc.
+  - Request structured JSON: colors (hex), fonts, button styles, card radius, spacing, layout patterns, tone
+- Use Sonnet (fast, cheap) for each per-campaign pass
+- Run up to 3 in parallel with `Promise.all`
 
-### 4. Delete Brands (`BrandDashboard.tsx`)
+**Pass 2 — Synthesis:**
+- Collect all per-campaign JSON outputs (text only, no images)
+- Single API call with Opus: "Synthesize these individual analyses into a unified brand design system"
+- Same output format as current (extraction + system_prompt)
+- This pass is fast because it's text-only
 
-- Add a trash icon button on each brand card
-- Confirmation dialog (warns about deleting all campaigns too)
-- `supabase.from("brands").delete().eq("id", brandId)` — cascading deletes handle the rest
+### 3. Slicing for generation references (`generate-campaign/index.ts`)
 
-### 5. Brand Settings Page (`src/pages/BrandSettings.tsx`, route: `/brands/:brandId/settings`)
+Apply the same slicing logic server-side when fetching reference images for the generation and QA passes:
 
-Tabbed or sectioned page:
+- After fetching each reference image as a buffer, check dimensions
+- If height > 1400px, slice the image buffer into segments using canvas (Deno has no native canvas, so use the image dimensions from the response headers or a lightweight image-size check)
+- Actually simpler approach: since these are already hosted URLs, we can use **ImageKit URL transformations** to extract slices: `tr:w-600,h-1300,cm-extract,y-0` for slice 1, `tr:w-600,h-1300,cm-extract,y-1300` for slice 2, etc.
+- This means no server-side image processing — just construct the right URLs and fetch them
+- Label each in the prompt: "Reference Campaign 1 — Slice 1/3", "Reference Campaign 1 — Slice 2/3", etc.
 
-**Info tab:**
-- Edit brand name, industry, website URL
-- Delete brand button
+### 4. Practical limits baked in
 
-**Assets tab:**
-- Shows current assets grouped by category (logo, product_imagery, hero_shots, lifestyle)
-- Each category: thumbnail grid with remove buttons + upload button to add more
-- Reuse `AssetCategoryUploader` component (modified to show existing DB assets alongside new uploads)
+- Max 10 reference campaigns for brand analysis
+- Each sliced into max 4 segments = 40 images max for Pass 1 (spread across parallel calls)
+- Pass 2 is text-only
+- For generation: max 5 reference campaigns × 3 slices = 15 reference images + up to 15 asset images = 30 images total (well under the 100-image limit)
+- When >20 images in one request, each is capped at 2000x2000 — our slices at 600x1300 are well under this
 
-**Instructions tab:**
-- Large textarea for "Brand Instructions / Notes / Guidelines"
-- Stored in `brand_profiles.system_prompt` as an appended section (or a new `brand_instructions` text column on `brands`)
-- These get injected into every campaign generation for this brand
-- The system will agentically append to this when users mention rules during campaign editing
+## Files Modified
 
-**QA Checklist tab:**
-- List of QA checklist items specific to this brand
-- Add/remove/edit items
-- Stored as JSONB array on `brand_profiles` (new column `qa_checklist jsonb default '[]'`)
-- These items get appended to the QA pass prompt for this brand's campaigns
+1. **`src/pages/BrandSetup.tsx`** — Replace `resizeAndConvert` with `sliceImage` that produces labeled segments. Update `analyzeBrand` to send sliced data with campaign grouping metadata.
 
-### 6. Global Settings Page (`src/pages/GlobalSettings.tsx`, route: `/settings`)
+2. **`supabase/functions/extract-brand/index.ts`** — Complete rewrite to two-pass architecture:
+   - Pass 1: parallel per-campaign analysis calls (Sonnet)
+   - Pass 2: synthesis call (Opus) on text-only JSON
+   - Accept new payload format with `campaignIndex`/`sliceIndex` metadata
 
-**Generation Rules tab:**
-- Textarea for global generation instructions/notes
-- Stored in `user_preferences.preferences.generation_rules`
-- Injected into every campaign generation across all brands
+3. **`supabase/functions/generate-campaign/index.ts`** — When building `imageBlocks` from reference URLs, use ImageKit `cm-extract` transforms to slice tall images into segments. Label each slice in the prompt text.
 
-**QA Checklist tab:**
-- Global QA checklist items (apply to all brands)
-- Stored in `user_preferences.preferences.qa_checklist`
-- Appended to QA pass alongside brand-specific items
+4. **`supabase/functions/_shared/imagekit.ts`** — Add a `getImageSliceUrls(baseUrl, imageHeight, sliceHeight)` helper that returns an array of ImageKit URLs with `cm-extract` transforms for each vertical slice.
 
----
+## Implementation Details
 
-## Database Changes
+### Client-side slicing function (BrandSetup.tsx)
+```
+sliceImage(file, maxSliceHeight=1300, maxWidth=600) → Promise<Array<{data, mediaType, sliceIndex, totalSlices}>>
+```
+Uses canvas to draw each slice region and export as JPEG.
 
-### Alter `brand_profiles`
-- Add `brand_instructions text nullable` — user-written brand-specific guidelines
-- Add `qa_checklist jsonb default '[]'` — array of brand-specific QA items
+### ImageKit server-side slicing (imagekit.ts)
+```
+getImageSliceUrls(url, totalHeight, sliceHeight=1300) → string[]
+```
+Returns URLs like: `url/tr:w-600,h-1300,cm-extract,y-0`, `url/tr:w-600,h-1300,cm-extract,y-1300`, etc.
 
-### Alter `brands`
-- Ensure cascading deletes work: campaigns, brand_profiles, brand_assets, brand_feedback all have `ON DELETE CASCADE` on their `brand_id` FK (verify existing FKs)
+Need to determine image height — fetch with a HEAD request or use ImageKit's `tr:oi-true` to get dimensions, or simply always slice into 3 segments for known-tall email references.
 
-No new tables needed — `user_preferences.preferences` JSONB already exists for global settings.
+### Extract-brand Pass 1 prompt
+```
+"You are analyzing one email campaign split into {N} sequential slices (top to bottom).
+Slice {i}/{N} is shown. Together they form one complete email.
+Extract: colors (exact hex), fonts, button styles (radius, padding, colors), card/container border-radius, section spacing, layout approach, copy tone.
+Return structured JSON only."
+```
 
----
-
-## Edge Function Updates
-
-### `generate-campaign/index.ts`
-- Fetch `brand_profiles.brand_instructions` and `brand_profiles.qa_checklist`
-- Fetch `user_preferences.preferences.generation_rules` and `user_preferences.preferences.qa_checklist`
-- Inject brand instructions into the generation system prompt
-- Inject global generation rules into the generation system prompt
-- Append both brand and global QA items to the QA pass prompt
-
-### `edit-campaign/index.ts`
-- Same: inject brand instructions and global rules
-- When user mentions a new rule during editing (detected by the AI), the edge function appends it to `brand_profiles.brand_instructions` automatically
-
----
-
-## Route Changes (`App.tsx`)
-
-Add:
-- `/brands/:brandId/settings` → `BrandSettings`
-- `/settings` → `GlobalSettings`
-
-Wrap all protected routes in `AppLayout`.
-
----
-
-## Implementation Order
-
-1. Database migration (add columns to brand_profiles, verify cascade FKs)
-2. AppSidebar + AppLayout components
-3. Update App.tsx routing to use layout wrapper
-4. Brand deletion (dashboard) + campaign deletion (campaigns list)
-5. BrandSettings page (info, assets, instructions, QA checklist tabs)
-6. GlobalSettings page (generation rules, QA checklist)
-7. Update edge functions to consume new instructions and QA items
-8. Agentic rule capture in edit-campaign (append detected rules to brand_instructions)
+### Extract-brand Pass 2 prompt
+```
+"You have individual brand analyses from {N} email campaigns.
+Synthesize into a unified brand design system. Identify the dominant patterns.
+Where campaigns differ, note the primary approach and flag inconsistencies.
+Return the standard extraction + system_prompt JSON."
+```
 
