@@ -118,27 +118,55 @@ export default function CampaignEditor() {
     if (!brandId || !campaignId || !brief.trim()) return;
     setGenerating(true);
     setCampaign((c) => c ? { ...c, status: "generating" } : c);
-    try {
-      const { data, error } = await supabase.functions.invoke("generate-campaign", {
-        body: { brandId, campaignId, brief, goal, copy: extraCopy || undefined },
-      });
-      if (error) throw new Error(error.message || "Generation failed");
-      if (data?.error) throw new Error(data.error);
-      setCampaign((c) => c ? { ...c, html: data.html, status: "ready", brief, goal } : c);
-      setMessages((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: "Campaign generated", created_at: new Date().toISOString() },
-      ]);
-    } catch (err: any) {
-      toast.error(err.message);
-      setCampaign((c) => c ? { ...c, status: "draft" } : c);
-      setMessages((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Generation failed: ${err.message}`, created_at: new Date().toISOString() },
-      ]);
-    } finally {
+
+    // Fire-and-forget: kick off the edge function but don't wait for its response
+    // (it can take 2+ minutes with image processing + 2 AI passes)
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-campaign`;
+    fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+      },
+      body: JSON.stringify({ brandId, campaignId, brief, goal, copy: extraCopy || undefined }),
+    }).catch(() => {}); // errors handled via polling
+
+    // Poll campaign status until ready or error
+    const pollInterval = setInterval(async () => {
+      const { data } = await supabase
+        .from("campaigns")
+        .select("*")
+        .eq("id", campaignId)
+        .single();
+      if (!data) return;
+      if (data.status === "ready") {
+        clearInterval(pollInterval);
+        setCampaign(data as Campaign);
+        setGenerating(false);
+        setMessages((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: "Campaign generated", created_at: new Date().toISOString() },
+        ]);
+      } else if (data.status === "error") {
+        clearInterval(pollInterval);
+        setCampaign(data as Campaign);
+        setGenerating(false);
+        toast.error("Campaign generation failed. Please try again.");
+        setMessages((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: "Generation failed", created_at: new Date().toISOString() },
+        ]);
+      }
+    }, 4000);
+
+    // Safety timeout after 5 minutes
+    setTimeout(() => {
+      clearInterval(pollInterval);
       setGenerating(false);
-    }
+      setCampaign((c) => c ? { ...c, status: "draft" } : c);
+      toast.error("Generation timed out. Please try again.");
+    }, 300000);
   };
 
   const sendMessage = async () => {
