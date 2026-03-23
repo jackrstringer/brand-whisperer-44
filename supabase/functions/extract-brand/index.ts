@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -198,89 +199,32 @@ Deno.serve(async (req) => {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
-    const { auditFindings, brandName, industry } = await req.json();
+    const { auditFindings, brandName, industry, brandId } = await req.json();
     if (!auditFindings) {
       return new Response(JSON.stringify({ error: "No audit findings provided" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const anthropicHeaders = {
-      "Content-Type": "application/json",
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-    };
+    // If brandId provided, run async (save to DB, return immediately)
+    if (brandId) {
+      // Return acknowledgment immediately, then process
+      const promise = processExtraction(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId);
+      // Use waitUntil-like pattern: don't await, let it run in background
+      promise.catch((err) => {
+        console.error("[extract-brand] Background processing error:", err);
+        // Save error state to DB
+        saveError(brandId, err.message).catch(console.error);
+      });
 
-    const auditJson = JSON.stringify(auditFindings, null, 2);
-
-    // === CALL 1: Extraction + System Prompt (small JSON, fast) ===
-    console.log(`[extract-brand] Call 1: Generating spec for ${brandName}`);
-    const specResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: anthropicHeaders,
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 8000,
-        system: SPEC_PROMPT,
-        messages: [{
-          role: "user",
-          content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}`,
-        }],
-      }),
-    });
-
-    if (!specResponse.ok) {
-      const errText = await specResponse.text();
-      throw new Error(`Spec API error: ${specResponse.status} - ${errText}`);
+      return new Response(JSON.stringify({ status: "processing", brandId }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const specResult = await specResponse.json();
-    const specText = specResult.content?.[0]?.text || "";
-    const specJsonMatch = specText.match(/\{[\s\S]*\}/);
-    if (!specJsonMatch) throw new Error("Failed to parse spec result");
-    const specParsed = JSON.parse(specJsonMatch[0]);
-
-    console.log(`[extract-brand] Call 1 complete. Starting Call 2: HTML guide`);
-
-    // === CALL 2: HTML Brand Guide (raw HTML, no JSON wrapping) ===
-    const guideResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: anthropicHeaders,
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 64000,
-        system: GUIDE_PROMPT,
-        messages: [{
-          role: "user",
-          content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}\n\n=== BRAND EXTRACTION SPEC ===\n${JSON.stringify(specParsed.extraction, null, 2)}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}\n\n${HTML_GUIDE_TEMPLATE}\n\nGenerate the FULL premium HTML brand guide document. Start with <!DOCTYPE html> and end with </html>. Do not abbreviate or skip sections.`,
-        }],
-      }),
-    });
-
-    if (!guideResponse.ok) {
-      const errText = await guideResponse.text();
-      throw new Error(`Guide API error: ${guideResponse.status} - ${errText}`);
-    }
-
-    const guideResult = await guideResponse.json();
-    let guideHtml = guideResult.content?.[0]?.text || "";
-
-    // Clean up any markdown fences if Claude wrapped it
-    guideHtml = guideHtml.replace(/^```html?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
-
-    // Ensure it starts with DOCTYPE
-    if (!guideHtml.startsWith("<!DOCTYPE") && !guideHtml.startsWith("<html")) {
-      const docStart = guideHtml.indexOf("<!DOCTYPE");
-      if (docStart > -1) guideHtml = guideHtml.substring(docStart);
-    }
-
-    console.log(`[extract-brand] Call 2 complete. Guide HTML length: ${guideHtml.length}`);
-
-    return new Response(JSON.stringify({
-      extraction: specParsed.extraction,
-      system_prompt: specParsed.system_prompt,
-      brand_guide_html: guideHtml,
-    }), {
+    // Legacy synchronous mode (no brandId) - kept for backward compat
+    const result = await processExtraction(ANTHROPIC_API_KEY, auditFindings, brandName, industry);
+    return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
@@ -290,3 +234,127 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+function getSupabaseAdmin() {
+  return createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
+}
+
+async function saveError(brandId: string, errorMessage: string) {
+  const sb = getSupabaseAdmin();
+  // Store error in audit_findings so frontend can detect it
+  await sb.from("brand_profiles").update({
+    audit_findings: { _error: errorMessage },
+  }).eq("brand_id", brandId);
+}
+
+async function processExtraction(
+  apiKey: string,
+  auditFindings: any,
+  brandName: string,
+  industry: string,
+  brandId?: string,
+) {
+  const anthropicHeaders = {
+    "Content-Type": "application/json",
+    "x-api-key": apiKey,
+    "anthropic-version": "2023-06-01",
+  };
+
+  const auditJson = JSON.stringify(auditFindings, null, 2);
+
+  // === CALL 1: Extraction + System Prompt (small JSON, fast) ===
+  console.log(`[extract-brand] Call 1: Generating spec for ${brandName}`);
+  const specResponse = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: anthropicHeaders,
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 8000,
+      system: SPEC_PROMPT,
+      messages: [{
+        role: "user",
+        content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}`,
+      }],
+    }),
+  });
+
+  if (!specResponse.ok) {
+    const errText = await specResponse.text();
+    throw new Error(`Spec API error: ${specResponse.status} - ${errText}`);
+  }
+
+  const specResult = await specResponse.json();
+  const specText = specResult.content?.[0]?.text || "";
+  const specJsonMatch = specText.match(/\{[\s\S]*\}/);
+  if (!specJsonMatch) throw new Error("Failed to parse spec result");
+  const specParsed = JSON.parse(specJsonMatch[0]);
+
+  console.log(`[extract-brand] Call 1 complete. Starting Call 2: HTML guide`);
+
+  // If async mode, save spec immediately so frontend can see progress
+  if (brandId) {
+    const sb = getSupabaseAdmin();
+    await sb.from("brand_profiles").update({
+      system_prompt: specParsed.system_prompt,
+      raw_extraction: specParsed.extraction,
+    }).eq("brand_id", brandId);
+    console.log(`[extract-brand] Spec saved for brand ${brandId}`);
+  }
+
+  // === CALL 2: HTML Brand Guide (raw HTML, no JSON wrapping) ===
+  const guideResponse = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: anthropicHeaders,
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 64000,
+      system: GUIDE_PROMPT,
+      messages: [{
+        role: "user",
+        content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}\n\n=== BRAND EXTRACTION SPEC ===\n${JSON.stringify(specParsed.extraction, null, 2)}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}\n\n${HTML_GUIDE_TEMPLATE}\n\nGenerate the FULL premium HTML brand guide document. Start with <!DOCTYPE html> and end with </html>. Do not abbreviate or skip sections.`,
+      }],
+    }),
+  });
+
+  if (!guideResponse.ok) {
+    const errText = await guideResponse.text();
+    throw new Error(`Guide API error: ${guideResponse.status} - ${errText}`);
+  }
+
+  const guideResult = await guideResponse.json();
+  let guideHtml = guideResult.content?.[0]?.text || "";
+
+  // Clean up any markdown fences if Claude wrapped it
+  guideHtml = guideHtml.replace(/^```html?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+
+  // Ensure it starts with DOCTYPE
+  if (!guideHtml.startsWith("<!DOCTYPE") && !guideHtml.startsWith("<html")) {
+    const docStart = guideHtml.indexOf("<!DOCTYPE");
+    if (docStart > -1) guideHtml = guideHtml.substring(docStart);
+  }
+
+  console.log(`[extract-brand] Call 2 complete. Guide HTML length: ${guideHtml.length}`);
+
+  const result = {
+    extraction: specParsed.extraction,
+    system_prompt: specParsed.system_prompt,
+    brand_guide_html: guideHtml,
+  };
+
+  // If async mode, save everything to DB
+  if (brandId) {
+    const sb = getSupabaseAdmin();
+    await sb.from("brand_profiles").update({
+      system_prompt: specParsed.system_prompt,
+      raw_extraction: specParsed.extraction,
+      brand_guide_html: guideHtml,
+      audit_findings: auditFindings,
+    }).eq("brand_id", brandId);
+    console.log(`[extract-brand] Full results saved for brand ${brandId}`);
+  }
+
+  return result;
+}
