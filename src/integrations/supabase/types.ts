@@ -14,8 +14,79 @@ export type Database = {
   }
   public: {
     Tables: {
+      brand_assets: {
+        Row: {
+          brand_id: string
+          category: string
+          created_at: string
+          filename: string | null
+          id: string
+          url: string
+        }
+        Insert: {
+          brand_id: string
+          category: string
+          created_at?: string
+          filename?: string | null
+          id?: string
+          url: string
+        }
+        Update: {
+          brand_id?: string
+          category?: string
+          created_at?: string
+          filename?: string | null
+          id?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_assets_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      brand_feedback: {
+        Row: {
+          attachment_urls: string[] | null
+          brand_id: string
+          created_at: string
+          feedback: Json
+          id: string
+          round: number
+        }
+        Insert: {
+          attachment_urls?: string[] | null
+          brand_id: string
+          created_at?: string
+          feedback?: Json
+          id?: string
+          round?: number
+        }
+        Update: {
+          attachment_urls?: string[] | null
+          brand_id?: string
+          created_at?: string
+          feedback?: Json
+          id?: string
+          round?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_feedback_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brand_profiles: {
         Row: {
+          brand_guide_url: string | null
           brand_id: string
           created_at: string
           id: string
@@ -24,6 +95,7 @@ export type Database = {
           system_prompt: string | null
         }
         Insert: {
+          brand_guide_url?: string | null
           brand_id: string
           created_at?: string
           id?: string
@@ -32,6 +104,7 @@ export type Database = {
           system_prompt?: string | null
         }
         Update: {
+          brand_guide_url?: string | null
           brand_id?: string
           created_at?: string
           id?: string
@@ -55,21 +128,27 @@ export type Database = {
           id: string
           industry: string | null
           name: string
+          source_types: string[] | null
           user_id: string
+          website_url: string | null
         }
         Insert: {
           created_at?: string
           id?: string
           industry?: string | null
           name: string
+          source_types?: string[] | null
           user_id: string
+          website_url?: string | null
         }
         Update: {
           created_at?: string
           id?: string
           industry?: string | null
           name?: string
+          source_types?: string[] | null
           user_id?: string
+          website_url?: string | null
         }
         Relationships: []
       }
@@ -83,6 +162,7 @@ export type Database = {
           html_history: Json | null
           id: string
           name: string
+          reference_campaign_ids: string[] | null
           status: string
           updated_at: string
         }
@@ -95,6 +175,7 @@ export type Database = {
           html_history?: Json | null
           id?: string
           name?: string
+          reference_campaign_ids?: string[] | null
           status?: string
           updated_at?: string
         }
@@ -107,6 +188,7 @@ export type Database = {
           html_history?: Json | null
           id?: string
           name?: string
+          reference_campaign_ids?: string[] | null
           status?: string
           updated_at?: string
         }
@@ -151,6 +233,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_preferences: {
+        Row: {
+          created_at: string
+          id: string
+          preferences: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          preferences?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          preferences?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {
