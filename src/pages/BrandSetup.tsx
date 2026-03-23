@@ -184,10 +184,9 @@ export default function BrandSetup() {
     }, 300);
 
     try {
-      // Only send reference images for style analysis (max 5, resized to 800px)
-      const refFiles = getReferenceImageFiles().slice(0, 5);
+      // Only send reference images for style analysis (max 10 campaigns)
+      const refFiles = getReferenceImageFiles().slice(0, 10);
       if (refFiles.length === 0) {
-        // If no reference images, grab a few from asset categories as fallback
         const fallbackFiles = Object.values(assetCategories)
           .flatMap((cat) => cat.files.filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f.name)))
           .slice(0, 5);
@@ -201,10 +200,19 @@ export default function BrandSetup() {
         return;
       }
 
-      const base64Images = await Promise.all(refFiles.map((f) => resizeAndConvert(f, 800)));
+      // Slice each image into segments (handles tall email screenshots)
+      const slicedImages: Array<{ data: string; mediaType: string; campaignIndex: number; sliceIndex: number; totalSlices: number }> = [];
+      for (let ci = 0; ci < refFiles.length; ci++) {
+        const slices = await sliceImage(refFiles[ci]);
+        for (const slice of slices) {
+          slicedImages.push({ ...slice, campaignIndex: ci });
+        }
+      }
+
+      console.log(`Sending ${slicedImages.length} total slices from ${refFiles.length} reference images`);
 
       const { data, error } = await supabase.functions.invoke("extract-brand", {
-        body: { images: base64Images, brandName, industry },
+        body: { images: slicedImages, brandName, industry },
       });
 
       clearInterval(interval);
