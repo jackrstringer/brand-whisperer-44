@@ -29,6 +29,7 @@ function AppRoutes() {
       <Route path="/" element={<Navigate to="/brands/new" replace />} />
       <Route path="/brands/new" element={<ProtectedRoute><BrandSetup /></ProtectedRoute>} />
       <Route path="/brands/:brandId" element={<ProtectedRoute><CampaignsList /></ProtectedRoute>} />
+      <Route path="/brands/:brandId/onboarding" element={<ProtectedRoute><BrandOnboarding /></ProtectedRoute>} />
       <Route path="/brands/:brandId/campaigns/:campaignId" element={<ProtectedRoute><CampaignEditor /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
