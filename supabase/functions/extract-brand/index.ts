@@ -48,12 +48,108 @@ DARK MODE SAFETY:
 - White backgrounds: use background-image:linear-gradient(#ffffff,#ffffff) alongside background-color:#ffffff.
 `;
 
+const HTML_GUIDE_TEMPLATE = `
+=== HTML BRAND GUIDE TEMPLATE REFERENCE ===
+
+You MUST generate the brand_guide_html following this exact CSS architecture and HTML structure. This is the quality bar. The guide must look like a premium design deliverable, not a data dump.
+
+CSS ARCHITECTURE:
+- Use CSS custom properties for ALL brand colors (--brand-accent, --black, --white, --gray-50 through --gray-900)
+- Load Google Fonts via <link> in <head> (the brand's heading font, body font, plus JetBrains Mono for code/labels)
+- Use clamp() for responsive font sizes on cover and section titles
+- Include a responsive @media (max-width: 768px) block that collapses grids to single column
+
+REQUIRED CSS CLASSES AND PATTERNS:
+
+1. COVER SECTION (.cover):
+   - Full-viewport dark background (--gray-900)
+   - Centered brand name, large title with one word in brand accent + italic using <em>, subtitle, meta line
+   - Subtle blurred accent circle using ::before pseudo-element (600px circle, blur(200px), opacity 0.05)
+   - Meta line uses monospace font (JetBrains Mono), shows "Prepared by [name] · [date] · v1.0"
+
+2. STICKY NAV (.sticky-nav):
+   - position: sticky; top: 0; z-index: 100
+   - White background, bottom border, brand name on left, section links as uppercase monospace labels
+   - Links: COLOR, TYPOGRAPHY, BUTTONS, LAYOUT, COMPONENTS, PHOTOGRAPHY, VOICE, RULES
+   - Horizontal scroll on mobile with hidden scrollbar
+
+3. SECTION PATTERN (.section):
+   - 80px vertical padding, 60px horizontal (48px/24px on mobile)
+   - Each section has: .section-label (monospace, uppercase, "01 / COLOR"), .section-title (serif, large), .section-desc (max-width 640px, muted color)
+
+4. COLOR PALETTE SECTION:
+   - .subgroup-label for "PRIMARY COLORS" and "SUPPORTING NEUTRALS" 
+   - .color-card with .color-swatch (140px tall, color fill, hex label at bottom) + .color-info (name + usage description)
+   - Use .color-hex.on-dark (white text with subtle white bg) or .color-hex.on-light (dark text with subtle dark bg)
+   - Grid of 3 for primary, grid of 4 for supporting neutrals
+   - End with .callout block (dark bg, accent title, muted body) showing "Color Ratio Rule"
+
+5. TYPOGRAPHY SECTION:
+   - .specimen-card with .specimen-preview (live rendered text in the actual font) + .specimen-info (tags showing font name/stack + description)
+   - Grid of 2: heading font specimen on left, body font specimen on right
+   - .type-scale-table: role / size+weight / live preview columns for Hero Headline, Section Header, Subhead, Body, CTA Label, Fine Print
+   - End with .callout showing "Emphasis Pattern" (how italic/bold is used)
+
+6. BUTTON SYSTEM SECTION:
+   - .button-card with .button-preview (live rendered CTA button) + .button-label-card (variant name + monospace spec note)
+   - Grid of 3: Primary CTA, Primary CTA (Short), Primary CTA on Dark (dark preview bg)
+   - Actual rendered button must use the EXACT brand button styles (fill, border, radius, weight, font-style: normal)
+   - .code-block: dark background, syntax-highlighted CSS spec with .comment, .sel, .prop, .val classes
+   - End with .callout showing "CTA Copy Patterns" with examples from the audit
+
+7. LAYOUT SECTION:
+   - .wireframe-grid (grid of 3): Each wireframe shows an email type structure
+   - .wireframe with .wireframe-title + .wireframe-body containing stacked .wf-block elements
+   - Block types: .wf-block.accent (brand accent), .wf-block.dark (dark bg), .wf-block.light (white with border), .wf-block.image (gray placeholder), .wf-block.cta (accent with border, pill shape, centered)
+   - Below wireframes: spacing system with .spacing-row (colored bar + monospace label) showing the spacing scale
+
+8. REUSABLE COMPONENTS SECTION:
+   - .component-card with .component-preview (mini rendered component) + .component-info (name + description)
+   - Grid of 2 or 3 depending on component count
+   - Include ALL observed components: announcement bars, review cards (with condition tags, stars, quoted title, body, author), benefit stacks (icon circles + text rows), founder story blocks (dark bg, serif headline), stat callouts (large number with accent highlight), risk reversal/guarantee blocks, product+text splits, comparison grids, standard footer (dark bg, brand wordmark, social SVG icons, legal text)
+   - Use SVG line icons for any icon representation — NEVER emojis
+   - Social icons in footer component must be actual SVG paths (Facebook, Instagram, TikTok, YouTube, etc.)
+
+9. PHOTOGRAPHY DIRECTION SECTION:
+   - .photo-card with .photo-gradient (120px tall, CSS gradient representing the mood) + .photo-info (style name + description)
+   - Grid of 3 photography styles (e.g., "Product on Neutral", "Lifestyle / In-Use", "People / Results")
+   - Below: .rules-grid with Do's and Don'ts cards for photography
+   - .rule-card.do (light green bg) and .rule-card.dont (light red bg) with + and – prefixes
+
+10. VOICE & TONE SECTION:
+    - .voice-table: Attribute / What It Sounds Like / What It Doesn't Sound Like columns
+    - 4-5 brand voice attributes with real examples from the audit findings
+    - Below: .formula-group sections showing headline formulas by category (Low-Effort Promise, Perspective Shift, Quiet Confidence, Social Proof, etc.) with live-rendered headlines using the brand's heading font, including <em> for italic emphasis words
+    - End with .callout showing "Messaging Pillars" (numbered list of brand messaging strategies)
+
+11. DESIGN RULES SECTION:
+    - .subgroup-label "DESIGN" + .rules-grid with Do and Don't cards
+    - .subgroup-label "COPY" + .rules-grid with Do and Don't cards
+    - Each rule item is specific and derived from observed patterns
+    - Include quality floor overrides where applicable: "Brand references showed X, but we recommend Y for better performance."
+
+12. GUIDE FOOTER:
+    - Dark background, brand name in serif, "living document" note, credit line in monospace
+
+CRITICAL GENERATION RULES:
+- NEVER use emojis anywhere. Use SVG line icons for icon representations.
+- NEVER include <img> tags or image file references. The guide is 100% self-contained.
+- NEVER include a "Sample Campaigns" or "Reference Emails" section.
+- ALL CTA button examples MUST use font-style: normal unless italic was explicitly confirmed in the audit.
+- The code block CSS spec must EXACTLY match the rendered button examples.
+- Match the brand's actual conventions (sentence case vs title case, alignment, etc.)
+- No em dashes — use -- or reword.
+- The guide itself must feel like a premium design agency deliverable.
+- Use generous whitespace, clean typography, and consistent spacing throughout.
+`;
+
 const SPEC_AND_GUIDE_PROMPT = `You are building a comprehensive email brand design system from confirmed audit findings.
 
 You will receive:
 1. Confirmed audit findings (JSON) from a visual analysis of the brand's email campaigns
 2. Brand name and industry
 3. A set of non-negotiable email design quality floor rules
+4. An HTML template reference showing the exact CSS architecture and section structure to follow
 
 Your job has THREE outputs, returned as a single JSON object with these keys:
 
@@ -70,15 +166,18 @@ Your job has THREE outputs, returned as a single JSON object with these keys:
 
 "system_prompt" — a complete, copy-paste-ready prompt for generating on-brand emails. Must include exact hex codes, px values, font stacks, layout rules, and the quality floor rules. This prompt should be detailed enough that an AI could build a matching email from it alone.
 
-"brand_guide_html" — a self-contained HTML document (single file, no external images, using Google Fonts via <link>) that serves as a visual brand guide. Requirements:
-- Use CSS custom properties for brand colors
-- Sections: Color System (swatches + hex + usage), Typography (specimens + scale), Button System (live rendered examples + CSS spec), Layout/Anatomy (wireframe diagrams in HTML/CSS), Reusable Components, Photography Direction (color-gradient mood blocks, no actual photos), Voice & Tone, Design Rules (Do's/Don'ts)
-- Professional design — the guide itself should look premium
-- NO images — use CSS gradients, color blocks, borders for visual examples
-- NO emojis anywhere
-- ALL button examples must use font-style: normal unless confirmed italic
-- Include the quality floor rules in the Design Rules section
-- Where the brand's actual practice conflicts with quality floor rules, note: "Brand references showed X, but we recommend Y for better performance."
+"brand_guide_html" — a COMPREHENSIVE, self-contained HTML document following the template reference provided. This must be a premium visual deliverable with:
+- Full-viewport cover section with brand name, blurred accent circle effect, and metadata
+- Sticky navigation bar with anchor links to each section
+- 8 full sections: Color Palette, Typography (with specimens and type scale table), Button System (with live rendered buttons, CSS code block, and copy patterns), Email Layout (wireframe diagrams built in HTML/CSS, spacing system), Reusable Components (mini rendered previews of every observed component), Photography Direction (gradient mood cards, do's/don'ts), Voice & Tone (attribute table, headline formulas with live-rendered examples, messaging pillars), Design Rules (do's/don'ts grids for design and copy)
+- Guide footer with brand name and credit
+- CSS custom properties for all brand colors
+- Google Fonts loaded via <link>
+- JetBrains Mono for monospace labels and code
+- Responsive design with mobile breakpoint
+- SVG icons where needed (never emojis)
+- No external images — entirely self-contained
+- The guide itself must look like it was designed by a premium agency
 
 IMPORTANT: Apply the quality floor rules when generating the system_prompt. If the brand audit shows practices that violate the floor (e.g., 12px body text, full-width buttons), override with the floor values and note the override.
 
@@ -111,7 +210,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 16000,
+        max_tokens: 64000,
         system: SPEC_AND_GUIDE_PROMPT,
         messages: [{
           role: "user",
@@ -124,7 +223,9 @@ ${JSON.stringify(auditFindings, null, 2)}
 === EMAIL DESIGN QUALITY FLOOR RULES ===
 ${EMAIL_DESIGN_QUALITY_FLOOR}
 
-Generate the extraction, system_prompt, and brand_guide_html.`,
+${HTML_GUIDE_TEMPLATE}
+
+Generate the extraction, system_prompt, and brand_guide_html. The brand_guide_html must be a FULL, premium HTML document following the template reference above — with cover, sticky nav, all 8 sections with rich visual examples, and a guide footer. Do not abbreviate or skip sections.`,
         }],
       }),
     });
