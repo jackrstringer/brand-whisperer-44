@@ -77,15 +77,19 @@ Deno.serve(async (req) => {
 
     const { images, brandName, industry } = await req.json();
     if (!images || !Array.isArray(images) || images.length < 3) {
-      return new Response(JSON.stringify({ error: "At least 3 images required" }), {
+      return new Response(JSON.stringify({ error: `At least 3 images required (got ${images?.length || 0})` }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // Limit to 5 images max to stay within API limits
+    const limitedImages = images.slice(0, 5);
+    console.log(`Processing ${limitedImages.length} images for brand: ${brandName}`);
+
     // Build vision content blocks - images can be { data, mediaType } objects or plain base64 strings
-    const imageBlocks = images.map((img: any) => {
+    const imageBlocks = limitedImages.map((img: any) => {
       const data = typeof img === "string" ? img : img.data;
-      const mediaType = typeof img === "string" ? detectMediaType(data) : (img.mediaType || "image/png");
+      const mediaType = typeof img === "string" ? detectMediaType(data) : (img.mediaType || "image/jpeg");
       return {
         type: "image",
         source: { type: "base64", media_type: mediaType, data },
@@ -109,7 +113,7 @@ Deno.serve(async (req) => {
             ...imageBlocks,
             {
               type: "text",
-              text: `Brand: ${brandName}. Industry: ${industry || "not specified"}. Analyze these ${images.length} email campaign images and extract the brand design system. Return ONLY valid JSON with "extraction" and "system_prompt" keys.`,
+              text: `Brand: ${brandName}. Industry: ${industry || "not specified"}. Analyze these ${limitedImages.length} email campaign images and extract the brand design system. Return ONLY valid JSON with "extraction" and "system_prompt" keys.`,
             },
           ],
         }],

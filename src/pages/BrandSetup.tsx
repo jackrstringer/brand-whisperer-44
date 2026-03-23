@@ -87,24 +87,44 @@ export default function BrandSetup() {
     setPreviews(previews.filter((_, i) => i !== index));
   };
 
-  const fileToBase64 = (file: File): Promise<{ data: string; mediaType: string }> =>
+  // Resize image to max dimension and return as base64 JPEG to reduce payload
+  const resizeAndConvert = (file: File, maxDim = 800): Promise<{ data: string; mediaType: string }> =>
     new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        resolve({ data: dataUrl.split(",")[1], mediaType: file.type || "image/png" });
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const ratio = Math.min(maxDim / width, maxDim / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+        resolve({ data: dataUrl.split(",")[1], mediaType: "image/jpeg" });
+        URL.revokeObjectURL(img.src);
       };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
     });
 
-  // Gather all image files for analysis
-  const getAllImageFiles = (): File[] => {
+  // Only gather REFERENCE images for brand style analysis (campaigns, brand deck, misc refs, mockups)
+  // NOT product/lifestyle assets — those are stored but not analyzed for style
+  const getReferenceImageFiles = (): File[] => {
     const all: File[] = [];
     all.push(...campaignFiles.filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f.name)));
     all.push(...brandDeckFiles.filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f.name)));
     all.push(...miscRefFiles.filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f.name)));
     all.push(...mockupFiles.filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f.name)));
+    return all;
+  };
+
+  // Gather ALL image files (for storage upload and minimum count check)
+  const getAllImageFiles = (): File[] => {
+    const all = getReferenceImageFiles();
     Object.values(assetCategories).forEach((cat) => {
       all.push(...cat.files.filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f.name)));
     });
@@ -117,8 +137,8 @@ export default function BrandSetup() {
       return;
     }
 
-    const imageFiles = getAllImageFiles();
-    if (imageFiles.length < 3) {
+    const allImages = getAllImageFiles();
+    if (allImages.length < 3) {
       toast.error("Please upload at least 3 images across your selected sources.");
       return;
     }
@@ -137,7 +157,24 @@ export default function BrandSetup() {
     }, 300);
 
     try {
-      const base64Images = await Promise.all(imageFiles.slice(0, 10).map(fileToBase64));
+      // Only send reference images for style analysis (max 5, resized to 800px)
+      const refFiles = getReferenceImageFiles().slice(0, 5);
+      if (refFiles.length === 0) {
+        // If no reference images, grab a few from asset categories as fallback
+        const fallbackFiles = Object.values(assetCategories)
+          .flatMap((cat) => cat.files.filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f.name)))
+          .slice(0, 5);
+        refFiles.push(...fallbackFiles);
+      }
+
+      if (refFiles.length < 3) {
+        clearInterval(interval);
+        toast.error("Need at least 3 reference images (campaigns, brand deck, or misc references) for analysis.");
+        setStep("uploads");
+        return;
+      }
+
+      const base64Images = await Promise.all(refFiles.map((f) => resizeAndConvert(f, 800)));
 
       const { data, error } = await supabase.functions.invoke("extract-brand", {
         body: { images: base64Images, brandName, industry },
