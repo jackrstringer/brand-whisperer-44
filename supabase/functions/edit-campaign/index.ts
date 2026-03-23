@@ -25,7 +25,6 @@ Deno.serve(async (req) => {
 
     const { campaignId, message, currentHtml } = await req.json();
 
-    // Fetch campaign
     const { data: campaign, error: cErr } = await supabase
       .from("campaigns")
       .select("*")
@@ -33,7 +32,6 @@ Deno.serve(async (req) => {
       .single();
     if (cErr || !campaign) throw new Error("Campaign not found");
 
-    // Fetch brand profile
     const { data: profile, error: pErr } = await supabase
       .from("brand_profiles")
       .select("*")
@@ -41,7 +39,7 @@ Deno.serve(async (req) => {
       .single();
     if (pErr || !profile) throw new Error("Brand profile not found");
 
-    // Fetch top 3 reference images for style context (vision only — never embed)
+    // Top 3 reference images for style context (vision only)
     const imageBlocks: any[] = [];
     const referenceUrls = Array.isArray(profile.reference_image_urls)
       ? profile.reference_image_urls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
@@ -50,7 +48,7 @@ Deno.serve(async (req) => {
     let hostedReferenceUrls = referenceUrls.slice(0, 3);
     if (hostedReferenceUrls.length > 0) {
       const referencesHtml = hostedReferenceUrls
-        .map((url, index) => `<img src="${url}" alt="reference-${index}" />`)
+        .map((url: string, index: number) => `<img src="${url}" alt="reference-${index}" />`)
         .join("\n");
 
       const rehostedReferencesHtml = await rehostHtmlImagesWithImageKit(referencesHtml, {
@@ -84,7 +82,7 @@ Deno.serve(async (req) => {
       } catch { /* skip */ }
     }
 
-    // Fetch actual brand assets for embeddable URLs
+    // Fetch brand assets for embeddable URLs
     const { data: brandAssets } = await supabase
       .from("brand_assets")
       .select("url, category")
@@ -93,13 +91,16 @@ Deno.serve(async (req) => {
     const embeddableUrls = (brandAssets || [])
       .map((a: any) => a.url)
       .filter((url: string) => typeof url === "string" && url.trim().length > 0)
-      .slice(0, 8);
+      .slice(0, 15);
 
     const systemMsg = `You are editing an existing HTML email.
 Apply only the change described. Do not rewrite sections not mentioned.
 Maintain all inline styles, table structure, and Gmail dark mode fixes.
 The email must continue to match the brand reference images.
+The outermost wrapper table must use width="100%" with max-width:600px — never a fixed width:600px.
 CONSISTENCY RULE: All images must have the same padding treatment — either all full-bleed or all with equal side padding. Never mix.
+DESIGN COHESION: All text alignment within a section must be consistent. Never use raw gray body text. Bullet points in centered layouts must be centered (use pill/chip design).
+FOOTER: Every email must have a footer with brand name, unsubscribe link (#unsubscribe), and address placeholder. It must be a separate section from main content.
 Return only the complete updated HTML. No commentary. No markdown fences.`;
 
     const userContent: any[] = [];
@@ -137,24 +138,20 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
     let html = result.content?.[0]?.text || "";
     html = html.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
 
-    // Re-host edited image URLs to ImageKit for reliable rendering
     html = await rehostHtmlImagesWithImageKit(html, {
       campaignId,
       imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
       fallbackImageUrls: embeddableUrls,
     });
 
-    // Append previous HTML to history
     const history = Array.isArray(campaign.html_history) ? campaign.html_history : [];
     history.push(campaign.html);
 
-    // Update campaign
     await supabase.from("campaigns").update({
       html,
       html_history: history,
     }).eq("id", campaignId);
 
-    // Save chat messages
     await supabase.from("chat_messages").insert([
       { campaign_id: campaignId, role: "user", content: message },
       { campaign_id: campaignId, role: "assistant", content: "Changes applied." },

@@ -38,6 +38,42 @@ function inferFileExtension(contentType: string | null, sourceUrl: string): stri
   return "png";
 }
 
+/**
+ * Append ImageKit URL transformation parameters to a hosted ImageKit URL.
+ * Only works on ik.imagekit.io URLs — returns the original URL unchanged for others.
+ */
+export function applyImageKitTransform(
+  url: string,
+  options: {
+    width?: number;
+    height?: number;
+    focus?: string; // e.g. "auto" for smart cropping
+    crop?: string; // e.g. "maintain_ratio"
+  } = {},
+): string {
+  if (!/^https:\/\/ik\.imagekit\.io\//i.test(url)) return url;
+
+  const parts: string[] = [];
+  if (options.width) parts.push(`w-${options.width}`);
+  if (options.height) parts.push(`h-${options.height}`);
+  if (options.focus) parts.push(`fo-${options.focus}`);
+  if (options.crop) parts.push(`c-${options.crop}`);
+
+  if (parts.length === 0) return url;
+
+  const trString = `tr:${parts.join(",")}`;
+
+  // Insert transformation before the filename in the URL path
+  // e.g. https://ik.imagekit.io/abc/folder/file.jpg -> https://ik.imagekit.io/abc/folder/tr:w-600/file.jpg
+  const urlObj = new URL(url);
+  const pathParts = urlObj.pathname.split("/");
+  const filename = pathParts.pop();
+  pathParts.push(trString, filename!);
+  urlObj.pathname = pathParts.join("/");
+
+  return urlObj.toString();
+}
+
 async function uploadToImageKit(params: {
   bytes: ArrayBuffer;
   fileName: string;

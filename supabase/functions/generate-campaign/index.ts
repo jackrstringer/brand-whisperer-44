@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { rehostHtmlImagesWithImageKit } from "../_shared/imagekit.ts";
+import { rehostHtmlImagesWithImageKit, applyImageKitTransform } from "../_shared/imagekit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,7 +14,8 @@ STRUCTURE:
 - All layout uses HTML tables — no divs for structure
 - All layout-affecting styles are inline on every element
 - <style> block in <head> for @media queries and Gmail fixes only
-- Wrapper table: width=600 style='max-width:600px; width:600px;'
+- Wrapper table: width="100%" style="max-width:600px; width:100%; margin:0 auto;"
+- The outermost wrapper table must NEVER use a fixed width:600px. Always width:100% with max-width:600px.
 
 GMAIL DARK MODE (apply to every single white <td> and the wrapper table):
 - Add background-image:linear-gradient(#ffffff,#ffffff) alongside background-color:#ffffff
@@ -41,13 +42,28 @@ HEADLINES:
 - Never rely on auto-wrapping — email clients reflow unpredictably
 
 IMAGES:
-- Full-bleed: Container: background-color:#fff; background-image:linear-gradient(#fff,#fff);
-- Contained: style='width:80%;max-width:400px;height:auto;display:block;margin:0 auto;'
+- All images must use: style="width:100%; height:auto; display:block;"
+- CONSISTENCY: Every image must have the same padding treatment. Either ALL images are full-bleed (edge-to-edge) OR ALL images have equal padding on both sides. NEVER mix full-bleed and padded images in the same email.
+- If an image has excessive negative space that would look awkward, use ImageKit smart cropping by appending transformation parameters to the URL, or skip the image entirely. Do NOT overlay text on images.
 
 CONTRAST CARDS:
 - Never full-width color blocks cutting the email in half
 - Always: outer padding + inner card with border-radius
 - White space visible on both sides of every contrast card
+
+DESIGN COHESION:
+- ALL text alignment within a section must be consistent — if a section is center-aligned, ALL elements in it (headlines, body text, bullets, sub-text) must be centered
+- Never use raw gray (#999 or similar) body text — use the brand's text color or a slightly muted version of it
+- Bullet points or benefit lists in a centered layout must themselves be centered (use centered pill/chip design, not left-aligned bullets)
+- Every section must feel "designed" — no default-looking text dumps
+- Maintain a clear visual hierarchy: headline → supporting text → CTA, with consistent spacing
+
+FOOTER (required on every email):
+- Must include: brand name, unsubscribe link placeholder, address placeholder
+- Style: small text (11-12px), muted color, centered, generous top padding (40-60px)
+- Unsubscribe link text: "Unsubscribe" — use href="#unsubscribe" as placeholder
+- Address placeholder: "123 Street, City, State 00000"
+- The footer is a SEPARATE section from the main content — never merge it with the last content block
 
 Return only complete HTML. No commentary. No markdown fences.`;
 
@@ -62,7 +78,6 @@ Deno.serve(async (req) => {
     const IMAGEKIT_PRIVATE_KEY = Deno.env.get("IMAGEKIT_PRIVATE_KEY");
     if (!IMAGEKIT_PRIVATE_KEY) throw new Error("IMAGEKIT_PRIVATE_KEY not configured");
 
-    const authHeader = req.headers.get("authorization");
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -79,7 +94,7 @@ Deno.serve(async (req) => {
 
     if (profileErr || !profile) throw new Error("Brand profile not found");
 
-    // Normalize and pre-host reference images to ImageKit so the model gets stable URLs
+    // Build reference image blocks for vision (style only — never embed)
     const imageBlocks: any[] = [];
     const referenceUrls = Array.isArray(profile.reference_image_urls)
       ? profile.reference_image_urls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
@@ -88,7 +103,7 @@ Deno.serve(async (req) => {
     let hostedReferenceUrls = referenceUrls.slice(0, 10);
     if (hostedReferenceUrls.length > 0) {
       const referencesHtml = hostedReferenceUrls
-        .map((url, index) => `<img src="${url}" alt="reference-${index}" />`)
+        .map((url: string, index: number) => `<img src="${url}" alt="reference-${index}" />`)
         .join("\n");
 
       const rehostedReferencesHtml = await rehostHtmlImagesWithImageKit(referencesHtml, {
@@ -122,43 +137,21 @@ Deno.serve(async (req) => {
       } catch { /* skip failed images */ }
     }
 
-    // Fetch brand assets (logos, product shots, lifestyle, hero shots) — these are embeddable
+    // Fetch ALL brand assets — let AI decide which to use
     const { data: brandAssets } = await supabase
       .from("brand_assets")
       .select("url, category")
       .eq("brand_id", brandId);
 
-    // Group assets by category for intelligent selection
-    const assetsByCategory: Record<string, string[]> = {};
-    for (const a of (brandAssets || [])) {
-      const url = a.url;
-      if (typeof url !== "string" || !url.trim()) continue;
-      const cat = a.category || "misc";
-      if (!assetsByCategory[cat]) assetsByCategory[cat] = [];
-      assetsByCategory[cat].push(url);
-    }
+    const allAssetEntries: { url: string; category: string }[] = (brandAssets || [])
+      .filter((a: any) => typeof a.url === "string" && a.url.trim().length > 0)
+      .slice(0, 15);
 
-    // Select a curated subset — NOT every image. Pick 1-2 per category max.
-    const curatedAssetUrls: string[] = [];
-    const logos = assetsByCategory["logo"] || [];
-    const heroShots = assetsByCategory["hero_shots"] || [];
-    const productImagery = assetsByCategory["product_imagery"] || [];
-    const lifestyle = assetsByCategory["lifestyle"] || [];
-
-    // Always include first logo
-    if (logos.length > 0) curatedAssetUrls.push(logos[0]);
-    // Include up to 2 hero shots (best for email hero sections)
-    curatedAssetUrls.push(...heroShots.slice(0, 2));
-    // Include up to 2 product images
-    curatedAssetUrls.push(...productImagery.slice(0, 2));
-    // Include up to 1 lifestyle image
-    if (lifestyle.length > 0) curatedAssetUrls.push(lifestyle[0]);
-
-    // Re-host curated asset URLs to ImageKit for stable rendering
-    let hostedAssetUrls = curatedAssetUrls.slice(0, 8);
-    if (hostedAssetUrls.length > 0) {
-      const assetsHtml = hostedAssetUrls
-        .map((url: string, index: number) => `<img src="${url}" alt="asset-${index}" />`)
+    // Re-host all asset URLs to ImageKit
+    let hostedAssetEntries: { url: string; category: string }[] = [];
+    if (allAssetEntries.length > 0) {
+      const assetsHtml = allAssetEntries
+        .map((entry, index) => `<img src="${entry.url}" alt="asset-${index}" />`)
         .join("\n");
 
       const rehostedAssetsHtml = await rehostHtmlImagesWithImageKit(assetsHtml, {
@@ -173,25 +166,31 @@ Deno.serve(async (req) => {
         .map((match) => match[2])
         .filter((url): url is string => Boolean(url));
 
-      if (extractedAssetUrls.length > 0) {
-        hostedAssetUrls = extractedAssetUrls;
+      if (extractedAssetUrls.length === allAssetEntries.length) {
+        hostedAssetEntries = allAssetEntries.map((entry, i) => ({
+          url: extractedAssetUrls[i],
+          category: entry.category,
+        }));
+      } else {
+        hostedAssetEntries = allAssetEntries.map((entry, i) => ({
+          url: extractedAssetUrls[i] || entry.url,
+          category: entry.category,
+        }));
       }
     }
 
-    // Build asset catalog with categories for the AI
-    const assetCatalog = hostedAssetUrls.map((url, i) => {
-      // Map back to category
-      let category = "misc";
-      if (logos.some(l => curatedAssetUrls.indexOf(l) === curatedAssetUrls.indexOf(url))) category = "logo";
-      else if (heroShots.some(h => curatedAssetUrls.indexOf(h) === curatedAssetUrls.indexOf(url))) category = "hero_shot";
-      else if (productImagery.some(p => curatedAssetUrls.indexOf(p) === curatedAssetUrls.indexOf(url))) category = "product";
-      else if (lifestyle.some(l => curatedAssetUrls.indexOf(l) === curatedAssetUrls.indexOf(url))) category = "lifestyle";
-      return `[${category}] ${url}`;
+    // Build asset catalog with categories and ImageKit transform hints
+    const assetCatalog = hostedAssetEntries.map((entry) => {
+      const baseUrl = entry.url;
+      const croppedUrl = applyImageKitTransform(baseUrl, { width: 600, focus: "auto", crop: "maintain_ratio" });
+      return `[${entry.category}] ${baseUrl}\n  → smart-cropped: ${croppedUrl}`;
     }).join("\n");
 
+    const embeddableUrls = hostedAssetEntries.map((e) => e.url);
+
+    // Build the user content array
     const userContent: any[] = [];
 
-    // Part 1: Reference images (STYLE ONLY — never embed)
     if (imageBlocks.length > 0) {
       userContent.push({
         type: "text",
@@ -200,28 +199,23 @@ Deno.serve(async (req) => {
       userContent.push(...imageBlocks);
     }
 
-    // Part 2: Brand rules
     userContent.push({
       type: "text",
       text: `From analyzing these campaigns, here are the specific rules to follow precisely:\n${profile.system_prompt}`,
     });
 
-    // Part 3: This campaign
     let part3 = `Generate a ${goal} email campaign.\nBrief: ${brief}`;
     if (copy) part3 += `\nThe following copy must be used verbatim: ${copy}`;
 
-    part3 += `\n\n=== CRITICAL IMAGE RULES ===
+    part3 += `\n\n=== IMAGE RULES ===
 1. The reference campaign screenshots above are STYLE REFERENCES ONLY. NEVER embed them as <img> tags.
 2. Never invent, guess, or use external stock image URLs (Unsplash, Pexels, etc).
-3. You do NOT need to use every available image. Be SELECTIVE — choose only images that serve the campaign's purpose.
-4. Use the logo in the header/footer. Use 1-2 product/hero images max in the body. Skip images that don't fit.
-5. Many brand images have large negative space or text overlay areas — these are designed for marketing layouts with text on top. In email, you should either:
-   - Use the image with a text overlay using absolute positioning, OR
-   - Skip it if the negative space would look awkward without overlaid text
-6. CONSISTENCY: Every image must have the same padding treatment. Either all images are full-bleed (edge-to-edge) OR all images have equal padding on both sides. Never mix.`;
+3. You are the CREATIVE DIRECTOR. Choose ONLY the images that best serve this campaign's story. You do NOT need to use every available image — be selective.
+4. If an image has excessive negative space, use the smart-cropped URL variant provided below instead of the base URL.
+5. CONSISTENCY: Every image must have the same padding treatment — either ALL full-bleed or ALL with equal side padding. Never mix.`;
 
-    if (hostedAssetUrls.length > 0) {
-      part3 += `\n\nAVAILABLE BRAND ASSETS (use selectively — NOT all of them):\n${assetCatalog}`;
+    if (hostedAssetEntries.length > 0) {
+      part3 += `\n\nAVAILABLE BRAND ASSETS (use selectively — pick what serves the campaign):\n${assetCatalog}`;
     } else {
       part3 += `\n\nNo brand asset images available. Use solid color blocks, gradients, or text-only sections instead. Do NOT include <img> tags.`;
     }
@@ -252,18 +246,15 @@ Deno.serve(async (req) => {
 
     const result = await response.json();
     let html = result.content?.[0]?.text || "";
-
-    // Strip markdown fences if present
     html = html.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
 
-    // Re-host generated image URLs to ImageKit for reliable rendering
+    // Re-host any generated image URLs to ImageKit
     html = await rehostHtmlImagesWithImageKit(html, {
       campaignId,
       imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
-      fallbackImageUrls: hostedAssetUrls,
+      fallbackImageUrls: embeddableUrls,
     });
 
-    // Save to database
     await supabase.from("campaigns").update({
       html,
       status: "ready",
@@ -271,7 +262,6 @@ Deno.serve(async (req) => {
       goal,
     }).eq("id", campaignId);
 
-    // Save system message
     await supabase.from("chat_messages").insert({
       campaign_id: campaignId,
       role: "system",
