@@ -226,7 +226,7 @@ export default function CampaignEditor() {
   const srcdocHtml = htmlForPreview
     ? htmlForPreview.replace(
         /(<head[^>]*>)/i,
-        '$1<meta name="viewport" content="width=device-width, initial-scale=1">'
+        '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}</style>'
       )
     : "";
 
