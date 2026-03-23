@@ -27,14 +27,15 @@ GMAIL DARK MODE (apply to every single white <td> and the wrapper table):
 MOBILE (@media only screen and (max-width:620px)):
 - .email-wrapper { width:100% !important }
 - Hero headline: scale down significantly (never let it wrap more than 2 lines)
-- Body text minimum 15px
+- Body text minimum 16px, recommended 16-18px for optimal mobile readability
 - Benefit pills/chips: display:block, stack vertically — never a horizontal row
-- Buttons: minimum 44px tall, full-width or auto — never squished
+- Buttons: minimum 44px tall, auto width with generous horizontal padding (32-48px). NEVER full-width — buttons should look the same in the preview as they do in real email clients.
 
 BUTTONS:
-- Always pill shape: border-radius:100px
+- Use the brand's button border-radius value (from BRAND DESIGN VALUES). Do NOT hardcode border-radius:100px unless that is the brand value.
 - Always 1.5px solid border — color matches brand button_border
 - Padding: minimum 16px vertical, 32px horizontal
+- Width: auto with horizontal padding. NEVER width:100%. Buttons must not stretch to fill the container.
 - Text: short enough to fit one line on 375px mobile
 
 HEADLINES:
@@ -45,6 +46,7 @@ IMAGES:
 - All images must use: style="width:100%; height:auto; display:block;"
 - CONSISTENCY: Every image must have the same padding treatment. Either ALL images are full-bleed (edge-to-edge) OR ALL images have equal padding on both sides. NEVER mix full-bleed and padded images in the same email.
 - If an image has excessive negative space that would look awkward, use ImageKit smart cropping by appending transformation parameters to the URL, or skip the image entirely. Do NOT overlay text on images.
+- LOGO HANDLING: Images categorized as 'logo' must be displayed at max-width:150px (or similar reasonable size), centered, with padding above and below. NEVER stretch a logo to full width. NEVER crop a logo. If a dark-mode-safe variant exists, use it.
 
 CONTRAST CARDS:
 - Never full-width color blocks cutting the email in half
@@ -122,11 +124,11 @@ Deno.serve(async (req) => {
     // Extract brand-specific design values from raw_extraction
     const rawExtraction = profile.raw_extraction as Record<string, any> | null;
     const brandValues = {
-      card_radius: rawExtraction?.card_radius ?? rawExtraction?.border_radius ?? "12",
-      button_radius: rawExtraction?.button_radius ?? "100",
-      accent_color: rawExtraction?.accent_color ?? rawExtraction?.primary_color ?? "",
-      text_color: rawExtraction?.text_color ?? rawExtraction?.body_color ?? "",
-      background_color: rawExtraction?.background_color ?? "",
+      card_radius: rawExtraction?.spacing?.card_radius ?? rawExtraction?.card_radius ?? rawExtraction?.border_radius ?? "12",
+      button_radius: rawExtraction?.buttons?.border_radius ?? rawExtraction?.button_radius ?? "100",
+      accent_color: rawExtraction?.colors?.accent ?? rawExtraction?.accent_color ?? rawExtraction?.primary_color ?? "",
+      text_color: rawExtraction?.colors?.text_primary ?? rawExtraction?.text_color ?? rawExtraction?.body_color ?? "",
+      background_color: rawExtraction?.colors?.canvas ?? rawExtraction?.background_color ?? "",
     };
 
     // Build reference image blocks for vision (style only — never embed)
@@ -217,6 +219,9 @@ Deno.serve(async (req) => {
     // Build asset catalog with categories and ImageKit transform hints
     const assetCatalog = hostedAssetEntries.map((entry) => {
       const baseUrl = entry.url;
+      if (entry.category === "logo") {
+        return `[logo — display at max-width 150px, centered, DO NOT stretch or crop] ${baseUrl}`;
+      }
       const smartCrop = applyImageKitTransform(baseUrl, { width: 600, focus: "auto", crop: "maintain_ratio" });
       const tightCrop = applyImageKitTransform(baseUrl, { width: 600, height: 400, focus: "auto", crop: "at_max" });
       return `[${entry.category}] ${baseUrl}\n  → smart-cropped: ${smartCrop}\n  → tight-cropped: ${tightCrop}`;

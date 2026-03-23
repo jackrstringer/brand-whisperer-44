@@ -51,8 +51,8 @@ export default function CampaignEditor() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const previewPanelRef = useRef<HTMLDivElement>(null);
 
-  const [renderWidth, setRenderWidth] = useState(431);
-  const [viewportWidth, setViewportWidth] = useState(431);
+  const [renderWidth, setRenderWidth] = useState(470);
+  const [viewportWidth, setViewportWidth] = useState(470);
   const [screenZoom, setScreenZoom] = useState(100);
   const [iframeContentHeight, setIframeContentHeight] = useState(800);
   const [previewFallbackUrls, setPreviewFallbackUrls] = useState<string[]>([]);
