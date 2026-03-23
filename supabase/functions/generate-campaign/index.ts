@@ -27,14 +27,15 @@ GMAIL DARK MODE (apply to every single white <td> and the wrapper table):
 MOBILE (@media only screen and (max-width:620px)):
 - .email-wrapper { width:100% !important }
 - Hero headline: scale down significantly (never let it wrap more than 2 lines)
-- Body text minimum 15px
+- Body text minimum 16px, recommended 16-18px for optimal mobile readability
 - Benefit pills/chips: display:block, stack vertically — never a horizontal row
-- Buttons: minimum 44px tall, full-width or auto — never squished
+- Buttons: minimum 44px tall, auto width with generous horizontal padding (32-48px). NEVER full-width — buttons should look the same in the preview as they do in real email clients.
 
 BUTTONS:
-- Always pill shape: border-radius:100px
+- Use the brand's button border-radius value (from BRAND DESIGN VALUES). Do NOT hardcode border-radius:100px unless that is the brand value.
 - Always 1.5px solid border — color matches brand button_border
 - Padding: minimum 16px vertical, 32px horizontal
+- Width: auto with horizontal padding. NEVER width:100%. Buttons must not stretch to fill the container.
 - Text: short enough to fit one line on 375px mobile
 
 HEADLINES:
