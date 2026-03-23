@@ -139,13 +139,50 @@ Deno.serve(async (req) => {
       text: `From analyzing these campaigns, here are the specific rules to follow precisely:\n${profile.system_prompt}`,
     });
 
+    // Fetch brand assets (logos, product shots, lifestyle, hero shots) — these are embeddable
+    const { data: brandAssets } = await supabase
+      .from("brand_assets")
+      .select("url, category")
+      .eq("brand_id", brandId);
+
+    const assetUrls = (brandAssets || [])
+      .map((a: any) => a.url)
+      .filter((url: string) => typeof url === "string" && url.trim().length > 0);
+
+    // Re-host brand asset URLs to ImageKit for stable rendering
+    let hostedAssetUrls = assetUrls.slice(0, 20);
+    if (hostedAssetUrls.length > 0) {
+      const assetsHtml = hostedAssetUrls
+        .map((url: string, index: number) => `<img src="${url}" alt="asset-${index}" />`)
+        .join("\n");
+
+      const rehostedAssetsHtml = await rehostHtmlImagesWithImageKit(assetsHtml, {
+        campaignId,
+        imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
+        folder: "/campaign-studio/brand-assets",
+      });
+
+      const extractedAssetUrls = Array.from(
+        rehostedAssetsHtml.matchAll(/<img\b[^>]*?\bsrc=(["'])(.*?)\1/gi),
+      )
+        .map((match) => match[2])
+        .filter((url): url is string => Boolean(url));
+
+      if (extractedAssetUrls.length > 0) {
+        hostedAssetUrls = extractedAssetUrls;
+      }
+    }
+
     // Part 3: This campaign
     let part3 = `Generate a ${goal} email campaign.\nBrief: ${brief}`;
     if (copy) part3 += `\nThe following copy must be used verbatim: ${copy}`;
-    if (hostedReferenceUrls.length > 0) {
-      part3 += `\n\nMANDATORY IMAGE URL RULES:\n- Never invent, guess, or use external stock image URLs (Unsplash, Pexels, etc).\n- Use ONLY the exact URLs below for every <img src> in the HTML:\n${hostedReferenceUrls.join("\n")}`;
+
+    // CRITICAL: Reference campaign images above are STYLE REFERENCES ONLY — never embed them as <img> tags.
+    // Only brand assets (logos, product shots, lifestyle imagery) should be used as <img src> URLs.
+    if (hostedAssetUrls.length > 0) {
+      part3 += `\n\nMANDATORY IMAGE URL RULES:\n- The reference campaign images shown above are for STYLE REFERENCE ONLY. Do NOT embed them as <img> tags — they are screenshots of past emails, not product images.\n- Never invent, guess, or use external stock image URLs (Unsplash, Pexels, etc).\n- For any <img> tags in the HTML, use ONLY from these approved brand asset URLs:\n${hostedAssetUrls.join("\n")}`;
     } else {
-      part3 += `\n\nMANDATORY IMAGE URL RULES:\n- No approved image URLs were provided, so do not include <img> tags.`;
+      part3 += `\n\nMANDATORY IMAGE URL RULES:\n- The reference campaign images shown above are for STYLE REFERENCE ONLY. Do NOT embed them as <img> tags.\n- No approved brand asset image URLs were provided, so do not include <img> tags. Use solid color blocks, gradients, or text-only sections instead.`;
     }
     part3 += `\n\nThe output must look like it was made by the same designer who created the reference campaigns above. Return only the complete HTML.`;
     userContent.push({ type: "text", text: part3 });
@@ -181,7 +218,7 @@ Deno.serve(async (req) => {
     html = await rehostHtmlImagesWithImageKit(html, {
       campaignId,
       imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
-      fallbackImageUrls: hostedReferenceUrls,
+      fallbackImageUrls: hostedAssetUrls,
     });
 
     // Save to database
