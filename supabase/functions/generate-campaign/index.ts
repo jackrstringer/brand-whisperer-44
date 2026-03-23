@@ -81,7 +81,7 @@ Your job: compare the HTML against the references and rules, then fix ANY issues
 CHECK EACH — fail ANY = must fix:
 1. Card/container border-radius must match the brand's specified card_radius EVERYWHERE — no sharp corners if the brand uses rounded
 2. Button border-radius and styling must match brand specs
-3. Images with excessive empty/negative space (>30%) must use the smart-cropped URL variant (with tr: parameters). If no cropped variant is available, REMOVE the image
+3. For EACH <img> tag: check if the image URL appears in the available asset catalog. If a tight-cropped variant exists and the original has excessive empty/negative space (>30%), REPLACE the src with the tight-cropped URL. If no cropped variant exists and the image looks bad, REMOVE the <img> tag entirely.
 4. ALL images must have identical padding treatment — either ALL full-bleed OR ALL with equal side padding. NEVER mix
 5. Footer MUST exist as a SEPARATE section with: brand name, "Unsubscribe" link (href="#unsubscribe"), address placeholder
 6. Text alignment must be consistent within each section — no left-aligned bullets in a center-aligned section
