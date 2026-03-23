@@ -26,8 +26,9 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/login" element={loading ? null : user ? <Navigate to="/brands/new" replace /> : <Login />} />
-      <Route path="/" element={<Navigate to="/brands/new" replace />} />
+      <Route path="/login" element={loading ? null : user ? <Navigate to="/dashboard" replace /> : <Login />} />
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/dashboard" element={<ProtectedRoute><BrandDashboard /></ProtectedRoute>} />
       <Route path="/brands/new" element={<ProtectedRoute><BrandSetup /></ProtectedRoute>} />
       <Route path="/brands/:brandId" element={<ProtectedRoute><CampaignsList /></ProtectedRoute>} />
       <Route path="/brands/:brandId/onboarding" element={<ProtectedRoute><BrandOnboarding /></ProtectedRoute>} />
