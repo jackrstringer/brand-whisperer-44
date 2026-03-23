@@ -9,6 +9,7 @@ import BrandDashboard from "./pages/BrandDashboard";
 import BrandSetup from "./pages/BrandSetup";
 import BrandOnboarding from "./pages/BrandOnboarding";
 import BrandSettings from "./pages/BrandSettings";
+import BrandGuide from "./pages/BrandGuide";
 import GlobalSettings from "./pages/GlobalSettings";
 import CampaignsList from "./pages/CampaignsList";
 import CampaignEditor from "./pages/CampaignEditor";
