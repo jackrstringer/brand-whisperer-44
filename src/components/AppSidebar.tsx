@@ -2,7 +2,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { LayoutDashboard, Settings, LogOut, FolderOpen, Palette } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, FolderOpen, Palette, BookOpen } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -88,6 +88,14 @@ export function AppSidebar() {
                     <NavLink to={`/brands/${brandId}/settings`} end activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">
                       <Palette className="mr-2 h-4 w-4 shrink-0" />
                       {!collapsed && <span>Brand Settings</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink to={`/brands/${brandId}/guide`} end activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">
+                      <BookOpen className="mr-2 h-4 w-4 shrink-0" />
+                      {!collapsed && <span>Brand Guide</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
