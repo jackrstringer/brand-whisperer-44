@@ -218,7 +218,7 @@ Deno.serve(async (req) => {
     html = await rehostHtmlImagesWithImageKit(html, {
       campaignId,
       imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
-      fallbackImageUrls: hostedReferenceUrls,
+      fallbackImageUrls: hostedAssetUrls,
     });
 
     // Save to database
