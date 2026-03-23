@@ -112,6 +112,7 @@ Deno.serve(async (req) => {
     );
 
     const { brandId, campaignId, brief, goal, copy } = await req.json();
+    campaignIdForError = campaignId;
 
     // Mark campaign as generating immediately
     await supabase.from("campaigns").update({ status: "generating" }).eq("id", campaignId);
