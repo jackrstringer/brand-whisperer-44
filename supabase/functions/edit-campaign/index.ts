@@ -141,7 +141,7 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
     html = await rehostHtmlImagesWithImageKit(html, {
       campaignId,
       imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
-      fallbackImageUrls: hostedReferenceUrls,
+      fallbackImageUrls: embeddableUrls,
     });
 
     // Append previous HTML to history
