@@ -251,8 +251,36 @@ Deno.serve(async (req) => {
 
     userContent.push({ type: "text", text: brandValuesText });
 
+    // Goal-specific creative direction for structural variety
+    const goalCreativeDirection: Record<string, string> = {
+      welcome: `CREATIVE DIRECTION: This is a Welcome email — the brand's first impression. Lead with warmth and personality. Consider: a bold hero moment with the brand's most striking visual, a personal tone, and a clear single CTA. Structure ideas: full-bleed hero image → warm welcome copy → 2-3 brand value props as styled cards → single CTA. Or: logo → headline → lifestyle image → copy → CTA. Keep it concise — don't overwhelm new subscribers.`,
+      social_proof: `CREATIVE DIRECTION: This is a Social Proof campaign — build trust and credibility. Lead with real results or testimonials. Structure ideas: headline stat or quote as the hero → supporting testimonials in a grid or stacked layout → product image → CTA. Or: customer quote pullout → before/after or results metrics → lifestyle imagery → CTA. Use contrast cards for testimonial callouts. Make the social proof feel authentic, not corporate.`,
+      highlight: `CREATIVE DIRECTION: This is a General Highlight — showcase the best of the brand. Be editorially creative. Structure ideas: magazine-style editorial layout with alternating image/text sections → feature callout cards → CTA. Or: hero lifestyle image → 3 product spotlights in a grid → brand story section → CTA. Think editorial, not catalog.`,
+      promotional: `CREATIVE DIRECTION: This is a Promotional email — drive urgency and action. Lead with the offer. Structure ideas: bold headline with the offer front-and-center → hero product image → supporting details → urgency element → CTA. Or: animated-feel countdown section → product grid → offer details → CTA. Use the brand's accent color boldly for the offer elements.`,
+      educational: `CREATIVE DIRECTION: This is an Educational email — teach and provide value. Structure ideas: compelling question as headline → step-by-step content with numbered sections → supporting imagery → resource CTA. Or: "Did you know?" hook → 3 insight cards with icons → deeper content section → CTA. Make it scannable with clear visual hierarchy.`,
+      re_engagement: `CREATIVE DIRECTION: This is a Re-engagement email — win back attention. Be bold and personal. Structure ideas: "We miss you" or provocative headline → single compelling image → what's new/what they're missing → incentive if applicable → CTA. Keep it SHORT — 2-3 sections max. Less is more for re-engagement.`,
+      seasonal: `CREATIVE DIRECTION: This is a Seasonal campaign — tap into the moment. Be festive or timely without being generic. Structure ideas: seasonal hero image → themed headline → curated product picks → CTA. Or: lifestyle imagery that captures the season → story-driven copy → product spotlight → CTA. Make it feel current and relevant.`,
+      product_launch: `CREATIVE DIRECTION: This is a Product Launch — build excitement and showcase the new. Structure ideas: dramatic reveal hero → product detail shots with feature callouts → lifestyle context image → launch CTA. Or: teaser headline → full-bleed product hero → 3 key features as cards → social proof snippet → CTA. Make it feel like an event.`,
+      abandoned_cart: `CREATIVE DIRECTION: This is an Abandoned Cart email — be helpful, not pushy. Structure ideas: "Still thinking it over?" headline → product image reminder → 1-2 supporting reasons (reviews, benefits) → CTA. Keep it minimal — 2 sections max. The product image does the heavy lifting.`,
+      win_back: `CREATIVE DIRECTION: This is a Win-back email — reconnect with lapsed customers. Structure ideas: "It's been a while" headline → what's new since they left → single compelling offer or reason to return → CTA. Or: nostalgia angle → new products/features showcase → incentive → CTA. Be concise and genuine.`,
+      newsletter: `CREATIVE DIRECTION: This is a Newsletter — curate and inform. Structure ideas: branded header → 3-4 content blocks with varied layouts (image-left/image-right alternating, or card grid) → each with its own mini-CTA → footer. Make each section visually distinct but cohesive. Think magazine layout.`,
+      announcement: `CREATIVE DIRECTION: This is an Announcement — deliver news with impact. Structure ideas: bold headline announcement → supporting detail → single hero image → CTA. Or: "Big News" header → announcement details → what it means for the reader → CTA. Keep it focused — one message, one action.`,
+    };
+
+    const creativeDir = goalCreativeDirection[goal] || goalCreativeDirection[goal?.replace(/[-\s]/g, '_')] || 
+      `CREATIVE DIRECTION: Be creative with the layout structure. Don't default to a generic template. Consider the campaign goal "${goal}" and design a unique layout that serves that purpose. Vary section types, image placements, and content flow. Think like an editorial designer.`;
+
     let part3 = `Generate a ${goal} email campaign.\nBrief: ${brief}`;
     if (copy) part3 += `\nThe following copy must be used verbatim: ${copy}`;
+
+    part3 += `\n\n=== ${creativeDir}`;
+
+    part3 += `\n\n=== STRUCTURAL VARIETY RULES ===
+1. DO NOT use the same layout structure for every email. Each campaign should feel uniquely designed for its specific purpose.
+2. Vary your section types: use hero images, split layouts, card grids, quote pullouts, metric callouts, editorial columns — mix it up based on what serves the content.
+3. The reference campaigns show the BRAND STYLE (colors, fonts, spacing, tone) — NOT a template to copy verbatim. Extract the design language, then apply it to a FRESH layout.
+4. Never start every email the same way. Vary your openings: sometimes a full-bleed hero, sometimes a headline-first approach, sometimes a personal greeting, sometimes a provocative question.
+5. Section count should vary by campaign type — a welcome email might be 3-4 sections, a newsletter might be 6-8, an abandoned cart might be just 2.`;
 
     part3 += `\n\n=== IMAGE RULES ===
 1. The reference campaign screenshots above are STYLE REFERENCES ONLY. NEVER embed them as <img> tags.
@@ -268,7 +296,7 @@ Deno.serve(async (req) => {
       part3 += `\n\nNo brand asset images available. Use solid color blocks, gradients, or text-only sections instead. Do NOT include <img> tags.`;
     }
 
-    part3 += `\n\nThe output must look like it was made by the same designer who created the reference campaigns above. Return only the complete HTML.`;
+    part3 += `\n\nThe output must MATCH the brand's design language (colors, fonts, spacing, tone) from the references above, but the LAYOUT and STRUCTURE must be original and tailored to this specific campaign goal. Return only the complete HTML.`;
     userContent.push({ type: "text", text: part3 });
 
     // === PASS 1: Generate ===
