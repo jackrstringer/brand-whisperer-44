@@ -3,10 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { ThumbsUp, ThumbsDown, ArrowRight, Upload, X } from "lucide-react";
+import { ThumbsUp, ThumbsDown, ArrowRight, ArrowLeft, ChevronRight, Upload, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Campaign } from "@/lib/types";
 
@@ -28,13 +26,16 @@ export default function BrandOnboarding() {
   const navigate = useNavigate();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
-  const [answers, setAnswers] = useState<FeedbackAnswer[]>(
-    FEEDBACK_QUESTIONS.map((q) => ({ question: q, text: "" }))
-  );
+  const [currentCampaign, setCurrentCampaign] = useState(0);
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [allAnswers, setAllAnswers] = useState<Record<string, FeedbackAnswer[]>>({});
+  const [completedCampaigns, setCompletedCampaigns] = useState<Set<string>>(new Set());
   const [attachments, setAttachments] = useState<File[]>([]);
   const [attachmentPreviews, setAttachmentPreviews] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [iframeHeight, setIframeHeight] = useState(800);
 
   useEffect(() => {
     if (!brandId) return;
@@ -44,28 +45,90 @@ export default function BrandOnboarding() {
         .select("*")
         .eq("brand_id", brandId)
         .order("created_at", { ascending: true });
-      setCampaigns((data || []) as Campaign[]);
+      const campaignData = (data || []) as Campaign[];
+      setCampaigns(campaignData);
+      // Initialize answers for each campaign
+      const initial: Record<string, FeedbackAnswer[]> = {};
+      campaignData.forEach((c) => {
+        initial[c.id] = FEEDBACK_QUESTIONS.map((q) => ({ question: q, text: "" }));
+      });
+      setAllAnswers(initial);
       setLoading(false);
     };
     load();
 
-    // Poll for campaign status updates
     const interval = setInterval(async () => {
       const { data } = await supabase
         .from("campaigns")
         .select("*")
         .eq("brand_id", brandId)
         .order("created_at", { ascending: true });
-      if (data) setCampaigns(data as Campaign[]);
+      if (data) {
+        setCampaigns(data as Campaign[]);
+        // Add any new campaign IDs to answers
+        setAllAnswers((prev) => {
+          const updated = { ...prev };
+          data.forEach((c: any) => {
+            if (!updated[c.id]) {
+              updated[c.id] = FEEDBACK_QUESTIONS.map((q) => ({ question: q, text: "" }));
+            }
+          });
+          return updated;
+        });
+      }
     }, 5000);
 
     return () => clearInterval(interval);
   }, [brandId]);
 
   const allReady = campaigns.length > 0 && campaigns.every((c) => c.status === "ready" || c.status === "error");
+  const activeCampaign = campaigns[currentCampaign];
+  const campaignAnswers = activeCampaign ? allAnswers[activeCampaign.id] : undefined;
 
-  const updateAnswer = (index: number, update: Partial<FeedbackAnswer>) => {
-    setAnswers((prev) => prev.map((a, i) => (i === index ? { ...a, ...update } : a)));
+  // Measure iframe content height
+  useEffect(() => {
+    if (!activeCampaign?.html) return;
+    const timer = setTimeout(() => {
+      try {
+        const doc = iframeRef.current?.contentDocument;
+        if (doc?.body) {
+          setIframeHeight(doc.body.scrollHeight || 800);
+        }
+      } catch {}
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [activeCampaign?.html, currentCampaign]);
+
+  const updateCurrentAnswer = (update: Partial<FeedbackAnswer>) => {
+    if (!activeCampaign) return;
+    setAllAnswers((prev) => {
+      const updated = { ...prev };
+      const answers = [...(updated[activeCampaign.id] || [])];
+      answers[currentQuestion] = { ...answers[currentQuestion], ...update };
+      updated[activeCampaign.id] = answers;
+      return updated;
+    });
+  };
+
+  const handleNext = () => {
+    if (currentQuestion < FEEDBACK_QUESTIONS.length - 1) {
+      setCurrentQuestion((q) => q + 1);
+    } else {
+      // Mark this campaign as reviewed
+      if (activeCampaign) {
+        setCompletedCampaigns((prev) => new Set([...prev, activeCampaign.id]));
+      }
+      // Move to next campaign
+      if (currentCampaign < campaigns.length - 1) {
+        setCurrentCampaign((c) => c + 1);
+        setCurrentQuestion(0);
+      }
+    }
+  };
+
+  const goToCampaign = (index: number) => {
+    setCurrentCampaign(index);
+    setCurrentQuestion(0);
   };
 
   const addAttachments = (files: File[]) => {
@@ -79,11 +142,12 @@ export default function BrandOnboarding() {
     setAttachmentPreviews((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const allCampaignsReviewed = campaigns.length > 0 && campaigns.every((c) => completedCampaigns.has(c.id));
+
   const submitFeedback = async () => {
     if (!brandId) return;
     setSubmitting(true);
     try {
-      // Upload attachments
       const attachmentUrls: string[] = [];
       for (const file of attachments) {
         const path = `feedback/${brandId}/${Date.now()}-${file.name}`;
@@ -94,17 +158,15 @@ export default function BrandOnboarding() {
         }
       }
 
-      // Save feedback
       await supabase.from("brand_feedback").insert({
         brand_id: brandId,
         round: 1,
-        feedback: { answers } as any,
+        feedback: { answers: allAnswers } as any,
         attachment_urls: attachmentUrls.length > 0 ? attachmentUrls : null,
       });
 
-      // Call refine-brand edge function
       const { error } = await supabase.functions.invoke("refine-brand", {
-        body: { brandId, feedback: answers, attachmentUrls },
+        body: { brandId, feedback: allAnswers, attachmentUrls },
       });
 
       if (error) throw error;
@@ -118,107 +180,234 @@ export default function BrandOnboarding() {
     }
   };
 
+  // Inject CSS to prevent scrollbar & enforce box-sizing in iframe
+  const getIframeSrcDoc = (html: string) => {
+    const cssOverride = `<style>
+      html, body { margin:0; padding:0; overflow:hidden !important; }
+      *, *::before, *::after { box-sizing: border-box !important; }
+      table { max-width: 100% !important; }
+      ::-webkit-scrollbar { display: none !important; }
+    </style>`;
+    if (html.includes("<head>")) {
+      return html.replace("<head>", `<head>${cssOverride}`);
+    }
+    return cssOverride + html;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading campaigns...</p>
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  // Generating state
+  if (!allReady) {
+    const readyCount = campaigns.filter((c) => c.status === "ready").length;
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <h2 className="text-lg font-semibold">Generating your campaigns...</h2>
+        <p className="text-sm text-muted-foreground">
+          {readyCount} of {campaigns.length} ready — this usually takes 30–60 seconds
+        </p>
+      </div>
+    );
+  }
+
+  if (submitted) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+        <h2 className="text-xl font-semibold">Brand profile updated!</h2>
+        <p className="text-sm text-muted-foreground">Your feedback has been applied. Future campaigns will reflect your preferences.</p>
+        <Button onClick={() => navigate(`/brands/${brandId}`)} className="mt-2">
+          Go to Campaigns <ArrowRight className="w-4 h-4 ml-1" />
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background p-6 md:p-12">
-      <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-semibold mb-2">Your Starter Campaigns</h1>
-        <p className="text-muted-foreground mb-8">
-          {allReady
-            ? "Review your 3 starter campaigns and provide feedback to refine the design."
-            : "Your campaigns are being generated. This usually takes 30-60 seconds."}
-        </p>
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Header */}
+      <div className="border-b border-border px-6 py-4 flex items-center justify-between shrink-0">
+        <div>
+          <h1 className="text-lg font-semibold">Review Your Campaigns</h1>
+          <p className="text-sm text-muted-foreground">
+            Campaign {currentCampaign + 1} of {campaigns.length}
+            {activeCampaign && ` — ${activeCampaign.name}`}
+          </p>
+        </div>
+        <Button variant="ghost" onClick={() => navigate(`/brands/${brandId}`)} className="text-muted-foreground text-sm">
+          Skip feedback <ArrowRight className="w-4 h-4 ml-1" />
+        </Button>
+      </div>
 
-        {/* Campaign previews */}
-        <div className="grid md:grid-cols-3 gap-4 mb-12">
-          {campaigns.map((c) => (
-            <Card key={c.id} className="bg-card border-border overflow-hidden">
-              <div className="p-3 border-b border-border flex items-center justify-between">
-                <span className="text-sm font-medium truncate">{c.name}</span>
-                <Badge className={`text-[10px] ${c.status === "ready" ? "bg-primary/20 text-primary" : c.status === "error" ? "bg-destructive/20 text-destructive" : "bg-yellow-500/20 text-yellow-400"}`}>
-                  {c.status}
-                </Badge>
-              </div>
-              <CardContent className="p-0">
-                {c.status === "generating" ? (
-                  <div className="p-6 space-y-3">
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-24 w-full" />
-                    <Skeleton className="h-4 w-1/2" />
-                  </div>
-                ) : c.html ? (
-                  <div className="relative h-[300px] overflow-hidden">
-                    <iframe
-                      srcDoc={c.html}
-                      sandbox="allow-same-origin"
-                      className="border-0 w-[375px] h-[800px] bg-white"
-                      style={{
-                        transform: "scale(0.5)",
-                        transformOrigin: "top left",
-                      }}
-                      title={c.name}
-                    />
-                  </div>
-                ) : (
-                  <div className="p-6 text-center text-sm text-muted-foreground">
-                    {c.status === "error" ? "Generation failed" : "No preview available"}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+      {/* Main content */}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        {/* Campaign preview — left/main area */}
+        <div className="flex-1 flex flex-col items-center overflow-y-auto py-6 px-4 bg-muted/30">
+          {/* Campaign navigation */}
+          <div className="flex items-center gap-3 mb-4">
+            <button
+              onClick={() => goToCampaign(Math.max(0, currentCampaign - 1))}
+              disabled={currentCampaign === 0}
+              className="p-2 rounded-full border border-border bg-card hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+
+            {/* Dot indicators */}
+            <div className="flex gap-2">
+              {campaigns.map((c, i) => (
+                <button
+                  key={c.id}
+                  onClick={() => goToCampaign(i)}
+                  className={`w-2.5 h-2.5 rounded-full transition-colors ${
+                    i === currentCampaign
+                      ? "bg-primary"
+                      : completedCampaigns.has(c.id)
+                      ? "bg-primary/40"
+                      : "bg-border"
+                  }`}
+                />
+              ))}
+            </div>
+
+            <button
+              onClick={() => goToCampaign(Math.min(campaigns.length - 1, currentCampaign + 1))}
+              disabled={currentCampaign === campaigns.length - 1}
+              className="p-2 rounded-full border border-border bg-card hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Status badge */}
+          {activeCampaign && activeCampaign.status === "error" && (
+            <Badge variant="destructive" className="mb-3 text-xs">Generation failed</Badge>
+          )}
+
+          {/* Iframe preview */}
+          {activeCampaign?.html ? (
+            <div
+              className="bg-white rounded-lg shadow-sm border border-border"
+              style={{ width: 470, maxWidth: "100%" }}
+            >
+              <iframe
+                ref={iframeRef}
+                srcDoc={getIframeSrcDoc(activeCampaign.html)}
+                sandbox="allow-same-origin"
+                className="border-0"
+                style={{
+                  width: 470,
+                  height: iframeHeight,
+                  maxWidth: "100%",
+                  display: "block",
+                }}
+                title={activeCampaign.name}
+                onLoad={() => {
+                  try {
+                    const doc = iframeRef.current?.contentDocument;
+                    if (doc?.body) {
+                      setIframeHeight(doc.body.scrollHeight || 800);
+                    }
+                  } catch {}
+                }}
+              />
+            </div>
+          ) : activeCampaign?.status === "error" ? (
+            <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
+              This campaign failed to generate.
+            </div>
+          ) : null}
         </div>
 
-        {/* Feedback section */}
-        {allReady && !submitted && (
-          <div className="max-w-2xl">
-            <h2 className="text-lg font-semibold mb-6">Tell us what you think</h2>
-            <div className="space-y-6">
-              {answers.map((answer, i) => (
-                <div key={i} className="space-y-2">
-                  <p className="text-sm font-medium">{answer.question}</p>
-                  <div className="flex gap-2 mb-2">
-                    <button
-                      onClick={() => updateAnswer(i, { sentiment: "positive" })}
-                      className={`p-2 rounded border transition-all ${
-                        answer.sentiment === "positive" ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/30"
-                      }`}
-                    >
-                      <ThumbsUp className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => updateAnswer(i, { sentiment: "negative" })}
-                      className={`p-2 rounded border transition-all ${
-                        answer.sentiment === "negative" ? "border-destructive bg-destructive/10 text-destructive" : "border-border text-muted-foreground hover:border-destructive/30"
-                      }`}
-                    >
-                      <ThumbsDown className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <Textarea
-                    value={answer.text}
-                    onChange={(e) => updateAnswer(i, { text: e.target.value })}
-                    placeholder="Optional details..."
-                    className="bg-card border-border min-h-[60px]"
-                  />
-                </div>
-              ))}
-
-              {/* Attachment uploads */}
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Attach reference images (optional)</p>
+        {/* Feedback panel — right side */}
+        <div className="w-full lg:w-[380px] border-t lg:border-t-0 lg:border-l border-border bg-card flex flex-col shrink-0">
+          <div className="p-5 border-b border-border">
+            <h2 className="text-sm font-semibold mb-1">Feedback for Campaign {currentCampaign + 1}</h2>
+            <div className="flex gap-1">
+              {FEEDBACK_QUESTIONS.map((_, i) => (
                 <div
-                  className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                  key={i}
+                  className={`h-1 flex-1 rounded-full transition-colors ${
+                    i < currentQuestion
+                      ? "bg-primary"
+                      : i === currentQuestion
+                      ? "bg-primary/60"
+                      : "bg-border"
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="flex-1 p-5 flex flex-col">
+            {campaignAnswers && (
+              <div className="flex-1 flex flex-col">
+                <p className="text-sm font-medium mb-4">
+                  {campaignAnswers[currentQuestion]?.question}
+                </p>
+
+                {/* Sentiment buttons */}
+                <div className="flex gap-2 mb-4">
+                  <button
+                    onClick={() => updateCurrentAnswer({ sentiment: "positive" })}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-all ${
+                      campaignAnswers[currentQuestion]?.sentiment === "positive"
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:border-primary/30"
+                    }`}
+                  >
+                    <ThumbsUp className="w-4 h-4" /> Looks good
+                  </button>
+                  <button
+                    onClick={() => updateCurrentAnswer({ sentiment: "negative" })}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm transition-all ${
+                      campaignAnswers[currentQuestion]?.sentiment === "negative"
+                        ? "border-destructive bg-destructive/10 text-destructive"
+                        : "border-border text-muted-foreground hover:border-destructive/30"
+                    }`}
+                  >
+                    <ThumbsDown className="w-4 h-4" /> Needs work
+                  </button>
+                </div>
+
+                {/* Text input */}
+                <Textarea
+                  value={campaignAnswers[currentQuestion]?.text || ""}
+                  onChange={(e) => updateCurrentAnswer({ text: e.target.value })}
+                  placeholder="Optional details..."
+                  className="bg-background border-border min-h-[80px] flex-1 resize-none"
+                />
+
+                {/* Next / complete button */}
+                <Button
+                  onClick={handleNext}
+                  className="mt-4 w-full"
+                >
+                  {currentQuestion < FEEDBACK_QUESTIONS.length - 1 ? (
+                    <>Next Question <ChevronRight className="w-4 h-4 ml-1" /></>
+                  ) : currentCampaign < campaigns.length - 1 ? (
+                    <>Next Campaign <ArrowRight className="w-4 h-4 ml-1" /></>
+                  ) : (
+                    "Finish Review"
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {/* Attachments section — only show after all reviewed */}
+            {allCampaignsReviewed && (
+              <div className="mt-4 pt-4 border-t border-border space-y-3">
+                <p className="text-sm font-medium">Reference images (optional)</p>
+                <div
+                  className="border-2 border-dashed border-border rounded-lg p-3 text-center cursor-pointer hover:border-primary/50 transition-colors"
                   onClick={() => document.getElementById("feedback-upload")?.click()}
                 >
-                  <Upload className="w-5 h-5 mx-auto mb-1 text-muted-foreground" />
+                  <Upload className="w-4 h-4 mx-auto mb-1 text-muted-foreground" />
                   <p className="text-xs text-muted-foreground">Drop or click to upload</p>
                   <input
                     id="feedback-upload"
@@ -232,7 +421,7 @@ export default function BrandOnboarding() {
                 {attachmentPreviews.length > 0 && (
                   <div className="flex gap-2 flex-wrap">
                     {attachmentPreviews.map((src, i) => (
-                      <div key={i} className="relative w-16 h-16 rounded overflow-hidden border border-border group">
+                      <div key={i} className="relative w-12 h-12 rounded overflow-hidden border border-border group">
                         <img src={src} alt="" className="w-full h-full object-cover" />
                         <button
                           onClick={() => removeAttachment(i)}
@@ -244,36 +433,18 @@ export default function BrandOnboarding() {
                     ))}
                   </div>
                 )}
+
+                <Button
+                  onClick={submitFeedback}
+                  disabled={submitting}
+                  className="w-full"
+                >
+                  {submitting ? "Submitting..." : "Submit All Feedback & Refine"}
+                </Button>
               </div>
-
-              <Button
-                onClick={submitFeedback}
-                disabled={submitting}
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                {submitting ? "Submitting..." : "Submit Feedback & Refine"}
-              </Button>
-            </div>
+            )}
           </div>
-        )}
-
-        {submitted && (
-          <div className="max-w-2xl text-center space-y-4">
-            <p className="text-lg font-medium">Brand profile updated!</p>
-            <p className="text-sm text-muted-foreground">Your feedback has been applied. Future campaigns will reflect your preferences.</p>
-            <Button onClick={() => navigate(`/brands/${brandId}`)} className="bg-primary text-primary-foreground hover:bg-primary/90">
-              Go to Campaigns <ArrowRight className="w-4 h-4 ml-1" />
-            </Button>
-          </div>
-        )}
-
-        {!submitted && (
-          <div className="mt-8">
-            <Button variant="ghost" onClick={() => navigate(`/brands/${brandId}`)} className="text-muted-foreground">
-              Skip feedback — go to campaigns <ArrowRight className="w-4 h-4 ml-1" />
-            </Button>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
