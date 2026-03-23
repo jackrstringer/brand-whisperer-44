@@ -398,6 +398,17 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
+    // Try to mark campaign as error in DB
+    try {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      const body = await req.clone().json().catch(() => ({}));
+      if (body.campaignId) {
+        await supabase.from("campaigns").update({ status: "error" }).eq("id", body.campaignId);
+      }
+    } catch {}
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
