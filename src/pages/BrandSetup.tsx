@@ -314,12 +314,17 @@ export default function BrandSetup() {
         }
       }
 
-      setProgressMessage("Generating brand guide...");
+      setProgressMessage("Building brand spec...");
+      const { error: specError } = await supabase.functions.invoke("extract-brand", {
+        body: { auditFindings: auditData, brandName, industry, brandId, step: "spec" },
+      });
+      if (specError) throw new Error(specError.message || "Failed to build brand spec");
 
-      // Step 2: Fire extract-brand async (don't await response)
-      supabase.functions.invoke("extract-brand", {
-        body: { auditFindings: auditData, brandName, industry, brandId },
-      }).catch(() => {}); // fire and forget
+      setProgressMessage("Generating brand guide...");
+      const { error: guideStartError } = await supabase.functions.invoke("extract-brand", {
+        body: { auditFindings: auditData, brandName, industry, brandId, step: "guide" },
+      });
+      if (guideStartError) throw new Error(guideStartError.message || "Failed to start guide generation");
 
       // Step 3: Poll brand_profiles for brand_guide_html
       const POLL_INTERVAL = 5000;

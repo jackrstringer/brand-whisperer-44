@@ -190,10 +190,17 @@ export default function ReanalyzeBrand({ brandId, brandName, industry }: Reanaly
         .update({ audit_findings: auditFindings, brand_guide_html: null } as any)
         .eq("brand_id", brandId);
 
-      // Fire extract-brand async (don't await)
-      supabase.functions.invoke("extract-brand", {
-        body: { auditFindings, brandName, industry, brandId },
-      }).catch(() => {});
+      setProgressMessage("Building brand spec...");
+      const { error: specError } = await supabase.functions.invoke("extract-brand", {
+        body: { auditFindings, brandName, industry, brandId, step: "spec" },
+      });
+      if (specError) throw new Error(specError.message || "Failed to build brand spec");
+
+      setProgressMessage("Generating brand guide...");
+      const { error: guideStartError } = await supabase.functions.invoke("extract-brand", {
+        body: { auditFindings, brandName, industry, brandId, step: "guide" },
+      });
+      if (guideStartError) throw new Error(guideStartError.message || "Failed to start guide generation");
 
       // Poll for results
       const POLL_INTERVAL = 5000;
