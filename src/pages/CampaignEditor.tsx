@@ -211,9 +211,9 @@ export default function CampaignEditor() {
   const isDraft = !campaign?.html || campaign?.status === "draft";
   const isGenerating = campaign?.status === "generating" || generating;
 
-  // Iframe is ALWAYS 375px (iPhone CSS viewport — Gmail mobile renders at this width).
+  // Iframe width: 431px (375 * 1.15) — slightly wider than strict iPhone to reduce over-squeezing.
   // Zoom controls how large it appears on screen — content never reflows.
-  const IFRAME_WIDTH = 375;
+  const IFRAME_WIDTH = 431;
   const zoomScale = zoom / 100;
   const renderedWidth = Math.round(IFRAME_WIDTH * zoomScale);
   const renderedHeight = Math.round(iframeContentHeight * zoomScale);
