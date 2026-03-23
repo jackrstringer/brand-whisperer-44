@@ -144,6 +144,7 @@ export default function BrandSettings() {
           <TabsTrigger value="assets">Assets</TabsTrigger>
           <TabsTrigger value="instructions">Instructions</TabsTrigger>
           <TabsTrigger value="qa">QA Checklist</TabsTrigger>
+          <TabsTrigger value="analysis">Analysis</TabsTrigger>
         </TabsList>
 
         {/* Info Tab */}
