@@ -111,11 +111,13 @@ Deno.serve(async (req) => {
     for (const url of hostedReferenceUrls) {
       try {
         const imgResp = await fetch(url);
+        const contentType = imgResp.headers.get("content-type") || "image/png";
+        const mediaType = contentType.split(";")[0].trim();
         const buf = await imgResp.arrayBuffer();
         const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
         imageBlocks.push({
           type: "image",
-          source: { type: "base64", media_type: "image/png", data: b64 },
+          source: { type: "base64", media_type: mediaType, data: b64 },
         });
       } catch { /* skip failed images */ }
     }
