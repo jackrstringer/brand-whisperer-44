@@ -86,6 +86,8 @@ export type Database = {
       }
       brand_profiles: {
         Row: {
+          audit_findings: Json | null
+          brand_guide_html: string | null
           brand_guide_url: string | null
           brand_id: string
           brand_instructions: string | null
@@ -97,6 +99,8 @@ export type Database = {
           system_prompt: string | null
         }
         Insert: {
+          audit_findings?: Json | null
+          brand_guide_html?: string | null
           brand_guide_url?: string | null
           brand_id: string
           brand_instructions?: string | null
@@ -108,6 +112,8 @@ export type Database = {
           system_prompt?: string | null
         }
         Update: {
+          audit_findings?: Json | null
+          brand_guide_html?: string | null
           brand_guide_url?: string | null
           brand_id?: string
           brand_instructions?: string | null
