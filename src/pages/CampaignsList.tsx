@@ -3,7 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, ArrowRight } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Plus, ArrowRight, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Brand, Campaign } from "@/lib/types";
 import { useAuth } from "@/hooks/useAuth";
@@ -23,6 +24,7 @@ export default function CampaignsList() {
   const [brand, setBrand] = useState<Brand | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
 
   useEffect(() => {
     if (!brandId) return;
@@ -54,16 +56,24 @@ export default function CampaignsList() {
     navigate(`/brands/${brandId}/campaigns/${(data as Campaign).id}`);
   };
 
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await supabase.from("campaigns").delete().eq("id", deleteTarget.id);
+    setCampaigns(prev => prev.filter(c => c.id !== deleteTarget.id));
+    setDeleteTarget(null);
+    toast.success("Campaign deleted");
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex items-center justify-center h-full">
         <p className="text-muted-foreground">Loading...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background p-6 md:p-12">
+    <div className="p-6 md:p-12">
       <div className="flex items-center justify-between mb-8 max-w-3xl">
         <h1 className="text-2xl font-semibold">{brand?.name || "Brand"}</h1>
         <Button onClick={createCampaign} className="bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all">
@@ -92,16 +102,35 @@ export default function CampaignsList() {
                   {c.status}
                 </Badge>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <span className="text-xs text-muted-foreground">
                   {new Date(c.created_at).toLocaleDateString()}
                 </span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); }}
+                  className="p-1.5 rounded text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
                 <ArrowRight className="w-4 h-4 text-muted-foreground" />
               </div>
             </div>
           ))}
         </div>
       )}
+
+      <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete "{deleteTarget?.name}"?</DialogTitle>
+            <DialogDescription>This will permanently delete this campaign and all its data.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

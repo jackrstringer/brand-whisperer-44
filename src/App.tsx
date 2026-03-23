@@ -8,8 +8,11 @@ import Login from "./pages/Login";
 import BrandDashboard from "./pages/BrandDashboard";
 import BrandSetup from "./pages/BrandSetup";
 import BrandOnboarding from "./pages/BrandOnboarding";
+import BrandSettings from "./pages/BrandSettings";
+import GlobalSettings from "./pages/GlobalSettings";
 import CampaignsList from "./pages/CampaignsList";
 import CampaignEditor from "./pages/CampaignEditor";
+import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -21,6 +24,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function ProtectedLayout({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
+  if (!user) return <Navigate to="/login" replace />;
+  return <AppLayout>{children}</AppLayout>;
+}
+
 function AppRoutes() {
   const { user, loading } = useAuth();
 
@@ -28,11 +38,13 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={loading ? null : user ? <Navigate to="/dashboard" replace /> : <Login />} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/dashboard" element={<ProtectedRoute><BrandDashboard /></ProtectedRoute>} />
-      <Route path="/brands/new" element={<ProtectedRoute><BrandSetup /></ProtectedRoute>} />
-      <Route path="/brands/:brandId" element={<ProtectedRoute><CampaignsList /></ProtectedRoute>} />
-      <Route path="/brands/:brandId/onboarding" element={<ProtectedRoute><BrandOnboarding /></ProtectedRoute>} />
-      <Route path="/brands/:brandId/campaigns/:campaignId" element={<ProtectedRoute><CampaignEditor /></ProtectedRoute>} />
+      <Route path="/dashboard" element={<ProtectedLayout><BrandDashboard /></ProtectedLayout>} />
+      <Route path="/brands/new" element={<ProtectedLayout><BrandSetup /></ProtectedLayout>} />
+      <Route path="/brands/:brandId" element={<ProtectedLayout><CampaignsList /></ProtectedLayout>} />
+      <Route path="/brands/:brandId/onboarding" element={<ProtectedLayout><BrandOnboarding /></ProtectedLayout>} />
+      <Route path="/brands/:brandId/settings" element={<ProtectedLayout><BrandSettings /></ProtectedLayout>} />
+      <Route path="/brands/:brandId/campaigns/:campaignId" element={<ProtectedLayout><CampaignEditor /></ProtectedLayout>} />
+      <Route path="/settings" element={<ProtectedLayout><GlobalSettings /></ProtectedLayout>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

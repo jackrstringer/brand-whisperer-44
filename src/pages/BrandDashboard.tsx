@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, ArrowRight, Loader2 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Plus, ArrowRight, Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 interface Brand {
   id: string;
@@ -19,6 +21,7 @@ export default function BrandDashboard() {
   const navigate = useNavigate();
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<Brand | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -33,16 +36,24 @@ export default function BrandDashboard() {
     fetchBrands();
   }, [user]);
 
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await supabase.from("brands").delete().eq("id", deleteTarget.id);
+    setBrands(prev => prev.filter(b => b.id !== deleteTarget.id));
+    setDeleteTarget(null);
+    toast.success("Brand deleted");
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex items-center justify-center h-full">
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background p-6 md:p-12">
+    <div className="p-6 md:p-12">
       <div className="max-w-3xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -78,13 +89,34 @@ export default function BrandDashboard() {
                       {brand.industry || "No industry"} · Created {new Date(brand.created_at).toLocaleDateString()}
                     </p>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(brand); }}
+                      className="p-1.5 rounded text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                  </div>
                 </CardContent>
               </Card>
             ))}
           </div>
         )}
       </div>
+
+      <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete "{deleteTarget?.name}"?</DialogTitle>
+            <DialogDescription>This will permanently delete this brand and all its campaigns, assets, and data.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
