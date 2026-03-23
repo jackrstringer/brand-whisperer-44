@@ -234,8 +234,9 @@ export default function BrandSetup() {
       setInconsistencies(data.inconsistencies || []);
       setNeedsConfirmation(data.needs_confirmation || []);
       setProgressValue(100);
-      setProgressMessage("Audit complete!");
-      setTimeout(() => setStep("audit_review"), 500);
+      setProgressMessage("Audit complete! Generating brand guide...");
+      // Skip audit review — go straight to guide generation
+      setTimeout(() => generateGuideFromAudit(data.audit), 500);
     } catch (err: any) {
       clearInterval(interval);
       toast.error(err.message || "Audit failed");
