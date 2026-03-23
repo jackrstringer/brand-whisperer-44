@@ -36,7 +36,7 @@ export default function CampaignEditor() {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop");
+  const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop"); // kept for key
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState("");
 
