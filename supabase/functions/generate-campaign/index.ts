@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { rehostHtmlImagesWithImageKit, applyImageKitTransform } from "../_shared/imagekit.ts";
+import { rehostHtmlImagesWithImageKit, applyImageKitTransform, getImageSliceUrls, estimateImageHeight } from "../_shared/imagekit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
