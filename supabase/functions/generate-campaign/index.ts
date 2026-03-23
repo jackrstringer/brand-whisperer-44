@@ -412,10 +412,15 @@ Deno.serve(async (req) => {
         ? `\n\n=== CUSTOM QA CHECKLIST ITEMS ===\n${allQaItems.map((item, i) => `${i + 1}. ${item}`).join("\n")}`
         : "";
 
-      qaContent.push({
-        type: "text",
-        text: `Brand design rules:\n${profile.system_prompt}\n\n=== SPECIFIC VALUES TO ENFORCE ===\ncard_radius: ${brandValues.card_radius}px\nbutton_radius: ${brandValues.button_radius}px\naccent_color: ${brandValues.accent_color}\ntext_color: ${brandValues.text_color}${customQaSection}\n\n=== GENERATED HTML TO AUDIT ===\n${html}`,
-      });
+      let qaText = `Brand design rules:\n${profile.system_prompt}\n\n=== SPECIFIC VALUES TO ENFORCE ===\ncard_radius: ${brandValues.card_radius}px\nbutton_radius: ${brandValues.button_radius}px\naccent_color: ${brandValues.accent_color}\ntext_color: ${brandValues.text_color}${customQaSection}`;
+
+      if (assetCatalog) {
+        qaText += `\n\n=== AVAILABLE IMAGE VARIANTS ===\nFor any image that has excessive negative space, replace the URL with the tight-cropped variant below:\n${assetCatalog}`;
+      }
+
+      qaText += `\n\n=== GENERATED HTML TO AUDIT ===\n${html}`;
+
+      qaContent.push({ type: "text", text: qaText });
 
       const qaResponse = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
