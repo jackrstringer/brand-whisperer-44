@@ -176,7 +176,7 @@ export default function ReanalyzeBrand({ brandId, brandName, industry }: Reanaly
 
     const interval = setInterval(() => {
       setProgressValue((v) => {
-        const next = Math.min(v + 1.5, 95);
+        const next = Math.min(v + 0.8, 95);
         const msgIndex = Math.min(Math.floor(next / 25), GUIDE_MESSAGES.length - 1);
         setProgressMessage(GUIDE_MESSAGES[msgIndex]);
         return next;
@@ -184,33 +184,60 @@ export default function ReanalyzeBrand({ brandId, brandName, industry }: Reanaly
     }, 500);
 
     try {
-      const { data, error } = await supabase.functions.invoke("extract-brand", {
-        body: { auditFindings, brandName, industry },
-      });
-
-      clearInterval(interval);
-      if (error) throw new Error(error.message || "Guide generation failed");
-      if (data?.error) throw new Error(data.error);
-
-      setBrandGuideHtml(data.brand_guide_html);
-      setProgressValue(100);
-      setProgressMessage("Guide ready!");
-
-      // Save updated profile
-      setSaving(true);
+      // Save current audit findings to profile first
       await supabase
         .from("brand_profiles")
-        .update({
-          system_prompt: data.system_prompt,
-          raw_extraction: data.extraction,
-          brand_guide_html: data.brand_guide_html,
-          audit_findings: auditFindings,
-        } as any)
+        .update({ audit_findings: auditFindings, brand_guide_html: null } as any)
         .eq("brand_id", brandId);
-      setSaving(false);
-      toast.success("Brand profile updated!");
 
-      setTimeout(() => setPhase("guide_review"), 500);
+      // Fire extract-brand async (don't await)
+      supabase.functions.invoke("extract-brand", {
+        body: { auditFindings, brandName, industry, brandId },
+      }).catch(() => {});
+
+      // Poll for results
+      const POLL_INTERVAL = 5000;
+      const MAX_POLL_TIME = 5 * 60 * 1000;
+      const startTime = Date.now();
+
+      const pollTimer = setInterval(async () => {
+        try {
+          const { data: profile } = await supabase
+            .from("brand_profiles")
+            .select("brand_guide_html, audit_findings")
+            .eq("brand_id", brandId)
+            .single();
+
+          const findings = profile?.audit_findings as any;
+          if (findings?._error) {
+            clearInterval(pollTimer);
+            clearInterval(interval);
+            toast.error(findings._error || "Guide generation failed");
+            setPhase("audit_review");
+            return;
+          }
+
+          if (profile?.brand_guide_html) {
+            clearInterval(pollTimer);
+            clearInterval(interval);
+            setBrandGuideHtml(profile.brand_guide_html);
+            setProgressValue(100);
+            setProgressMessage("Guide ready!");
+            toast.success("Brand profile updated!");
+            setTimeout(() => setPhase("guide_review"), 500);
+            return;
+          }
+
+          if (Date.now() - startTime > MAX_POLL_TIME) {
+            clearInterval(pollTimer);
+            clearInterval(interval);
+            toast.error("Guide generation timed out. Please try again.");
+            setPhase("audit_review");
+          }
+        } catch {
+          // Keep polling on transient errors
+        }
+      }, POLL_INTERVAL);
     } catch (err: any) {
       clearInterval(interval);
       toast.error(err.message || "Guide generation failed");

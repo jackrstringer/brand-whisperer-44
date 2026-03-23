@@ -244,10 +244,13 @@ export default function BrandSetup() {
     }
   };
 
-  // === PASS 2+3: Spec + Guide ===
+  // Brand ID created early for async guide generation
+  const [earlyBrandId, setEarlyBrandId] = useState<string | null>(null);
+
+  // === PASS 2+3: Spec + Guide (async with polling) ===
   const generateGuideFromAudit = async (findings?: any) => {
     const auditData = findings || auditFindings;
-    if (!auditData) { toast.error("No audit data available"); return; }
+    if (!auditData || !user) { toast.error("No audit data available"); return; }
 
     setStep("generating_guide");
     setProgressValue(0);
@@ -263,20 +266,110 @@ export default function BrandSetup() {
     }, 500);
 
     try {
-      const { data, error } = await supabase.functions.invoke("extract-brand", {
-        body: { auditFindings: auditData, brandName, industry },
-      });
+      // Step 1: Upload images and create brand + profile early
+      let brandId = earlyBrandId;
+      if (!brandId) {
+        setProgressMessage("Uploading images...");
+        const imageUrls: string[] = [];
+        const allImageFiles = getAllImageFiles();
+        for (const file of allImageFiles) {
+          const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`;
+          const { error: uploadError } = await supabase.storage.from("brand-references").upload(path, file);
+          if (!uploadError) {
+            const { data: urlData } = supabase.storage.from("brand-references").getPublicUrl(path);
+            imageUrls.push(urlData.publicUrl);
+          }
+        }
 
-      clearInterval(interval);
-      if (error) throw new Error(error.message || "Guide generation failed");
-      if (data?.error) throw new Error(data.error);
+        const { data: brand, error: brandError } = await supabase
+          .from("brands")
+          .insert({ name: brandName, industry: industry || null, user_id: user.id, website_url: websiteUrl || null, source_types: selectedSources })
+          .select()
+          .single();
+        if (brandError) throw brandError;
+        brandId = brand.id;
+        setEarlyBrandId(brandId);
 
-      setExtraction(data.extraction);
-      setSystemPrompt(data.system_prompt);
-      setBrandGuideHtml(data.brand_guide_html);
-      setProgressValue(100);
-      setProgressMessage("Guide ready!");
-      setTimeout(() => setStep("guide_review"), 500);
+        // Create profile with audit findings
+        const { error: profileError } = await supabase.from("brand_profiles").insert({
+          brand_id: brandId,
+          reference_image_urls: imageUrls,
+          audit_findings: auditData,
+        } as any);
+        if (profileError) throw profileError;
+
+        // Upload asset files
+        const assetInserts: { brand_id: string; category: string; url: string; filename: string }[] = [];
+        for (const [category, catData] of Object.entries(assetCategories)) {
+          for (const file of catData.files) {
+            const path = `${user.id}/${brandId}/${category}/${Date.now()}-${file.name}`;
+            const { error: uploadErr } = await supabase.storage.from("brand-assets").upload(path, file);
+            if (uploadErr) continue;
+            const { data: urlData } = supabase.storage.from("brand-assets").getPublicUrl(path);
+            assetInserts.push({ brand_id: brandId, category, url: urlData.publicUrl, filename: file.name });
+          }
+        }
+        if (assetInserts.length > 0) {
+          await supabase.from("brand_assets").insert(assetInserts);
+        }
+      }
+
+      setProgressMessage("Generating brand guide...");
+
+      // Step 2: Fire extract-brand async (don't await response)
+      supabase.functions.invoke("extract-brand", {
+        body: { auditFindings: auditData, brandName, industry, brandId },
+      }).catch(() => {}); // fire and forget
+
+      // Step 3: Poll brand_profiles for brand_guide_html
+      const POLL_INTERVAL = 5000;
+      const MAX_POLL_TIME = 5 * 60 * 1000; // 5 minutes
+      const startTime = Date.now();
+
+      const pollForGuide = () => {
+        const pollTimer = setInterval(async () => {
+          try {
+            const { data: profile } = await supabase
+              .from("brand_profiles")
+              .select("brand_guide_html, system_prompt, raw_extraction, audit_findings")
+              .eq("brand_id", brandId!)
+              .single();
+
+            // Check for error state
+            const findings = profile?.audit_findings as any;
+            if (findings?._error) {
+              clearInterval(pollTimer);
+              clearInterval(interval);
+              toast.error(findings._error || "Guide generation failed");
+              setStep("uploads");
+              return;
+            }
+
+            if (profile?.brand_guide_html) {
+              clearInterval(pollTimer);
+              clearInterval(interval);
+              setExtraction(profile.raw_extraction as any);
+              setSystemPrompt(profile.system_prompt || "");
+              setBrandGuideHtml(profile.brand_guide_html);
+              setProgressValue(100);
+              setProgressMessage("Guide ready!");
+              setTimeout(() => setStep("guide_review"), 500);
+              return;
+            }
+
+            if (Date.now() - startTime > MAX_POLL_TIME) {
+              clearInterval(pollTimer);
+              clearInterval(interval);
+              toast.error("Guide generation timed out. Please try again.");
+              setStep("uploads");
+            }
+          } catch {
+            // Keep polling on transient errors
+          }
+        }, POLL_INTERVAL);
+      };
+
+      pollForGuide();
     } catch (err: any) {
       clearInterval(interval);
       toast.error(err.message || "Guide generation failed");
