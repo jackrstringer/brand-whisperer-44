@@ -109,6 +109,8 @@ The email must continue to match the brand reference images.
 The outermost wrapper table must use width="100%" with max-width:600px — never a fixed width:600px.
 CONSISTENCY RULE: All images must have the same padding treatment — either all full-bleed or all with equal side padding. Never mix.
 DESIGN COHESION: All text alignment within a section must be consistent. Never use raw gray body text. Bullet points in centered layouts must be centered (use pill/chip design).
+BUTTONS: Use the brand's button border-radius value. Width must be auto with generous horizontal padding (32-48px). NEVER full-width. Minimum body text: 16px (recommended 16-18px).
+LOGO: Logo images must be max-width:150px, centered, never stretched or cropped.
 FOOTER: Every email must have a footer with brand name, unsubscribe link (#unsubscribe), and address placeholder. It must be a separate section from main content.
 
 BRAND VALUES TO ENFORCE:
@@ -122,6 +124,7 @@ After making the requested change, also audit the ENTIRE email for:
 - No images with excessive negative space (remove or suggest cropping)
 - Consistent image padding treatment
 - Proper footer separation
+- Buttons must NOT be full-width
 
 Return only the complete updated HTML. No commentary. No markdown fences.`;
 

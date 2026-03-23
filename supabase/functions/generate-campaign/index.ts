@@ -219,6 +219,9 @@ Deno.serve(async (req) => {
     // Build asset catalog with categories and ImageKit transform hints
     const assetCatalog = hostedAssetEntries.map((entry) => {
       const baseUrl = entry.url;
+      if (entry.category === "logo") {
+        return `[logo — display at max-width 150px, centered, DO NOT stretch or crop] ${baseUrl}`;
+      }
       const smartCrop = applyImageKitTransform(baseUrl, { width: 600, focus: "auto", crop: "maintain_ratio" });
       const tightCrop = applyImageKitTransform(baseUrl, { width: 600, height: 400, focus: "auto", crop: "at_max" });
       return `[${entry.category}] ${baseUrl}\n  → smart-cropped: ${smartCrop}\n  → tight-cropped: ${tightCrop}`;
