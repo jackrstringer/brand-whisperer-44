@@ -202,14 +202,10 @@ export default function CampaignEditor() {
   const isDraft = !campaign?.html || campaign?.status === "draft";
   const isGenerating = campaign?.status === "generating" || generating;
 
-  // Iframe width: 431px (375 * 1.15) — slightly wider than strict iPhone to reduce over-squeezing.
-  // Zoom controls how large it appears on screen — content never reflows.
-  const IFRAME_WIDTH = 431;
-  const zoomScale = zoom / 100;
-  const renderedWidth = Math.round(IFRAME_WIDTH * zoomScale);
+  const zoomScale = screenZoom / 100;
+  const renderedWidth = Math.round(viewportWidth * zoomScale);
   const renderedHeight = Math.round(iframeContentHeight * zoomScale);
 
-  // Inject viewport meta into srcdoc so it renders as a true 375px mobile viewport
   const htmlForPreview = campaign?.html
     ? replaceLikelyBrokenImageUrls(campaign.html, previewFallbackUrls)
     : "";
@@ -248,46 +244,42 @@ export default function CampaignEditor() {
           </Badge>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setPreviewMode("desktop")}
-            className={previewMode === "desktop" ? "text-foreground" : "text-muted-foreground"}
-          >
-            <Monitor className="w-4 h-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setPreviewMode("mobile")}
-            className={previewMode === "mobile" ? "text-foreground" : "text-muted-foreground"}
-          >
-            <Smartphone className="w-4 h-4" />
-          </Button>
-
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded border border-border bg-card">
-            <button
-              onClick={() => setZoom((z) => Math.max(50, z - 10))}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ZoomOut className="w-3.5 h-3.5" />
-            </button>
-            <input
-              type="range"
-              min={50}
-              max={200}
-              step={5}
-              value={zoom}
-              onChange={(e) => setZoom(Number(e.target.value))}
-              className="w-20 accent-primary"
-            />
-            <button
-              onClick={() => setZoom((z) => Math.min(200, z + 10))}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ZoomIn className="w-3.5 h-3.5" />
-            </button>
-            <span className="text-[11px] tabular-nums text-muted-foreground w-8 text-center">{zoom}%</span>
+          <div className="flex items-center gap-3 px-3 py-1.5 rounded border border-border bg-card text-xs">
+            <label className="flex items-center gap-1.5">
+              <span className="text-muted-foreground">Render:</span>
+              <input
+                type="number"
+                value={renderWidth}
+                onChange={(e) => setRenderWidth(Math.max(200, Math.min(1200, Number(e.target.value) || 431)))}
+                className="w-14 bg-transparent border-b border-border text-foreground text-center tabular-nums outline-none focus:border-primary"
+                step={10}
+              />
+              <span className="text-muted-foreground">px</span>
+            </label>
+            <span className="text-border">|</span>
+            <label className="flex items-center gap-1.5">
+              <span className="text-muted-foreground">Viewport:</span>
+              <input
+                type="number"
+                value={viewportWidth}
+                onChange={(e) => setViewportWidth(Math.max(200, Math.min(1200, Number(e.target.value) || 431)))}
+                className="w-14 bg-transparent border-b border-border text-foreground text-center tabular-nums outline-none focus:border-primary"
+                step={10}
+              />
+              <span className="text-muted-foreground">px</span>
+            </label>
+            <span className="text-border">|</span>
+            <label className="flex items-center gap-1.5">
+              <span className="text-muted-foreground">Zoom:</span>
+              <input
+                type="number"
+                value={screenZoom}
+                onChange={(e) => setScreenZoom(Math.max(25, Math.min(300, Number(e.target.value) || 100)))}
+                className="w-12 bg-transparent border-b border-border text-foreground text-center tabular-nums outline-none focus:border-primary"
+                step={5}
+              />
+              <span className="text-muted-foreground">%</span>
+            </label>
           </div>
 
           <Button variant="outline" size="sm" onClick={exportHtml} disabled={!campaign?.html} className="active:scale-[0.98] transition-all">
@@ -300,7 +292,7 @@ export default function CampaignEditor() {
       <PanelGroup direction="horizontal" className="flex-1">
         {/* Left Panel — Preview */}
         <Panel defaultSize={60} minSize={25} maxSize={85}>
-          <div ref={previewPanelRef} className="h-full bg-card overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <div ref={previewPanelRef} className="h-full bg-card overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' as any }}>
             {isGenerating ? (
               <div className="max-w-[600px] mx-auto space-y-4 p-8 mt-12">
                 <Skeleton className="h-8 w-3/4" />
@@ -320,12 +312,12 @@ export default function CampaignEditor() {
                   }}
                 >
                   <iframe
-                    key={previewMode}
+                    key={`${renderWidth}-${viewportWidth}`}
                     srcDoc={srcdocHtml}
                     sandbox="allow-same-origin"
                     className="border-0 block bg-white shadow-2xl"
                     style={{
-                      width: IFRAME_WIDTH,
+                      width: renderWidth,
                       height: iframeContentHeight,
                       transform: `scale(${zoomScale})`,
                       transformOrigin: "top left",
