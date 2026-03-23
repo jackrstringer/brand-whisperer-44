@@ -1,198 +1,79 @@
 
 
-# Revamped Brand Onboarding + Campaign Flow
+# Fix Campaign Generation Quality — Multiple Issues
 
-## Overview
+## Problems Identified
 
-Replace the current single-step brand setup with a multi-step guided onboarding quiz. Add structured image asset management with categorized buckets. Auto-generate 3 starter campaigns after brand analysis. Add a feedback/refinement loop. Expand campaign goal types. Allow per-campaign reference uploads.
-
----
-
-## Database Changes
-
-### New tables
-
-**`brand_assets`** — categorized image storage per brand
-- `id` uuid PK
-- `brand_id` uuid FK → brands
-- `category` text (enum-like: `logo`, `product_imagery`, `hero_shots`, `lifestyle`, `misc`)
-- `url` text — ImageKit/storage URL
-- `filename` text
-- `created_at` timestamptz
-
-**`user_preferences`** — account-wide learned preferences
-- `id` uuid PK
-- `user_id` uuid (references auth.users)
-- `preferences` jsonb — accumulated non-brand-specific preferences
-- `created_at` timestamptz
-- `updated_at` timestamptz
-
-**`brand_feedback`** — stores feedback responses from the refinement quiz (step 5)
-- `id` uuid PK
-- `brand_id` uuid FK → brands
-- `round` int — feedback round number
-- `feedback` jsonb — structured Q&A responses
-- `attachment_urls` text[]
-- `created_at` timestamptz
-
-### Alter existing tables
-
-**`brands`** — add columns:
-- `website_url` text nullable
-- `source_types` text[] — which resource types user selected (e.g. `['website', 'past_campaigns', 'brand_deck', 'product_mockups', 'image_assets']`)
-
-**`brand_profiles`** — add column:
-- `brand_guide_url` text nullable — uploaded brand deck PDF/image
-
-**`campaigns`** — add column:
-- `reference_campaign_ids` text[] nullable — IDs of reference campaigns chosen for this specific campaign
-
-RLS on all new tables: users access only through their own brands (same join pattern as existing tables).
-
-### New storage buckets
-
-- `brand-assets` (public) — for categorized image assets (logos, product shots, lifestyle, etc.)
+1. **AI uses ALL images indiscriminately** — needs full autonomy to pick what fits the campaign goal, not a hardcoded "1 logo, 2 hero, 2 product" selection
+2. **No image processing** — images with excessive negative space get used raw; ImageKit URL transformations can crop/resize on the fly
+3. **No email footer** — missing unsubscribe link, brand address, social links section
+4. **White bar on right side** — the email wrapper is 600px but mobile view is 375px; the email's `width:600px` inline style creates overflow in the 375px iframe
+5. **Design inconsistency** — mixed alignment, gray text, center-aligned sections with left-aligned bullets — the system prompt needs stricter design cohesion rules
 
 ---
 
-## Step-by-step Flow
+## Changes
 
-### Step 1: Source Selection Quiz (`/brands/new` — first screen)
+### 1. Give AI full asset access with metadata (generate-campaign edge function)
 
-A clean multi-select quiz: "What would you like to base your email designs on?"
+Stop hardcoding "pick 1 logo, 2 hero shots." Instead:
+- Send ALL brand assets (up to ~15) with their categories as a labeled catalog
+- Let the AI decide which images serve the campaign based on the brief and goal
+- Add instructions: "You are the creative director. Choose the images that best serve this campaign's story. You do not need to use all of them."
 
-Checkboxes:
-1. **Current Website URL** — text input appears for URL
-2. **Past Email Campaigns** (recommended badge) — upload zone
-3. **Brand Deck / Brand Guidelines** — upload zone (PDF/images)
-4. **Outside Misc Branding References** — upload zone
-5. **Product Mockups** — upload zone
-6. **Image Assets** — expands into sub-categories
+### 2. ImageKit URL transformations for smart cropping (shared imagekit.ts)
 
-When "Image Assets" is selected, show sub-upload zones:
-- Logo (transparent bg — light and dark required)
-- Misc Product Imagery
-- Transparent BG Product Hero Shots
-- Lifestyle Imagery
+Add a utility function that appends ImageKit transformation parameters to hosted URLs:
+- After uploading to ImageKit, the returned URL is a base like `https://ik.imagekit.io/xxx/image.jpg`
+- Append `tr:w-600,fo-auto` for smart auto-focus cropping (removes excessive negative space)
+- For images the AI marks as "hero/full-bleed": `tr:w-600,h-400,fo-auto,c-maintain_ratio`
+- Expose this as a helper the generate function uses when building the asset catalog, so the AI gets pre-transformed URLs
 
-User checks what they have, then proceeds.
+The AI prompt will also instruct: "If an image has excessive empty space, use ImageKit URL transformations by appending `/tr:w-600,h-400,fo-auto,c-maintain_ratio` to crop it intelligently."
 
-### Step 2: Resource Upload Screens (one per selected type)
+### 3. Add footer requirements to the system prompt (generate-campaign)
 
-Paginated screens — one per selected resource type. Each has:
-- Title + description of what to upload
-- Drag-drop zone (reuse existing component)
-- Thumbnail grid with remove buttons
-- "Next" / "Back" navigation
-- For website URL: just a text input + "Scan" button (future: scrape)
-- For image assets: sub-sections for each category within one screen
+Add to `UNIVERSAL_EMAIL_RULES`:
+```
+FOOTER (required on every email):
+- Must include: brand name, unsubscribe link placeholder, address placeholder
+- Style: small text (11-12px), muted color, centered, generous top padding
+- Unsubscribe link text: "Unsubscribe" — use href="#unsubscribe" as placeholder
+- Optional: social media icon row above the footer text
+- The footer is a SEPARATE section from the main content — never merge it with the last content block
+```
 
-All uploads go to `brand-assets` table with correct `category`.
-Past campaigns go to existing `brand-references` bucket.
-Brand deck goes to `brand-assets` with category `brand_deck`.
+### 4. Fix white bar / mobile rendering (generate-campaign system prompt)
 
-### Step 3: Brand Analysis (existing logic, expanded)
+Update the `STRUCTURE` section of `UNIVERSAL_EMAIL_RULES`:
+- Change from `width=600 style='max-width:600px; width:600px;'` to `width="100%" style="max-width:600px; width:100%;"`
+- This makes the email fluid within the 375px iframe viewport — no overflow, no white bar
+- Add: "The outermost wrapper table must be `width='100%'` with `max-width:600px` and `margin:0 auto`. Never use a fixed `width:600px` on the wrapper."
 
-- Combine all uploaded assets: past campaigns as vision inputs, website screenshot (if URL provided — future), brand deck pages as vision inputs, product/lifestyle images for context
-- Call `extract-brand` edge function (expanded to accept categorized assets)
-- Show the existing review screen (colors, typography, layout, voice)
-- Save everything including categorized asset URLs
+### 5. Stricter design cohesion rules (generate-campaign system prompt)
 
-### Step 4: Auto-generate 3 Starter Campaigns
+Add to `UNIVERSAL_EMAIL_RULES`:
+```
+DESIGN COHESION:
+- ALL text alignment within a section must be consistent — if a section is center-aligned, ALL elements in it (headlines, body text, bullets, sub-text) must be centered
+- Never use raw gray (#999 or similar) body text — use the brand's text color or a slightly muted version of it
+- Bullet points or benefit lists in a centered layout must themselves be centered (use centered pill/chip design, not left-aligned bullets)
+- Every section must feel "designed" — no default-looking text dumps
+- Maintain a clear visual hierarchy: headline → supporting text → CTA, with consistent spacing
+```
 
-After brand save, automatically create 3 campaigns and generate them in parallel:
-1. **Welcome Campaign** — goal: `welcome`
-2. **Social Proof Campaign** — goal: `social_proof`
-3. **General Highlight Campaign** — goal: `highlight`
+### 6. Remove the "no overlay" instruction from prompt
 
-Navigate to brand's campaign list showing all 3 generating/ready.
-
-### Step 5: Feedback & Refinement Loop
-
-After the 3 campaigns are generated, present a structured feedback flow:
-- Show all 3 campaigns in a scrollable preview
-- Ask targeted questions:
-  - "How do you feel about the overall design direction?" (with thumbs up/down + text)
-  - "Any changes to colors or typography?"
-  - "How's the copy tone and voice?"
-  - "Anything specific you'd like changed?"
-- User can attach reference images with each response
-- On submit: save to `brand_feedback`, update `brand_profiles.system_prompt` via a new edge function `refine-brand`
-- Non-brand-specific preferences (e.g. "I always want buttons larger") save to `user_preferences`
-- Can do multiple rounds
-
-### Campaign Creation Enhancements
-
-**Expanded goal types** in the campaign editor:
-- Promotional
-- Educational
-- Re-engagement
-- Seasonal
-- Welcome
-- Social Proof
-- Highlight
-- Product Launch
-- Abandoned Cart
-- Win-back
-- Newsletter
-- Announcement
-
-**Per-campaign reference selection:**
-- When creating a new campaign, add a section to:
-  - Upload new reference campaigns specific to this email
-  - Browse/select from the brand's saved reference library (thumbnails from `brand_assets` + `brand-references`)
-- Selected references get passed to `generate-campaign` as additional vision inputs
+The current prompt says to use absolute positioning for text overlays or skip the image. Since the user said no overlays right now, change this to: "If an image has excessive negative space that would look awkward, use ImageKit smart cropping by appending transformation parameters to the URL, or skip the image entirely. Do NOT overlay text on images."
 
 ---
 
-## New/Modified Edge Functions
+## Files Modified
 
-### `extract-brand` (modify)
-- Accept additional input types: `brandDeckImages`, `websiteUrl`, `productImages`, `lifestyleImages`
-- Include all image types as vision inputs with labeled context
-- Same output format
+1. **`supabase/functions/generate-campaign/index.ts`** — Updated system prompt (footer, fluid width, design cohesion, overlay removal), send all assets with full catalog, ImageKit transform hints in prompt
+2. **`supabase/functions/_shared/imagekit.ts`** — Add `applyImageKitTransform(url, options)` helper that appends `tr:` params to ImageKit URLs
+3. **`supabase/functions/edit-campaign/index.ts`** — Same prompt fixes (footer, fluid width, design cohesion) in the edit system message
 
-### `refine-brand` (new)
-- Input: `{ brandId, feedback, attachmentUrls }`
-- Fetches current `brand_profiles.system_prompt`
-- Calls Claude with current prompt + feedback + any attached references
-- Returns updated `system_prompt` and saves to DB
-- Extracts any account-wide preferences and returns them separately
-
-### `generate-campaign` (modify)
-- Accept optional `referenceCampaignUrls` for per-campaign references
-- Include them as additional vision inputs alongside brand references
-
----
-
-## New Pages/Components
-
-1. **`/brands/new`** — Complete rewrite of `BrandSetup.tsx` with quiz flow (steps 1-3)
-2. **`/brands/:brandId/onboarding`** — New page for feedback loop (step 5), shown after initial 3 campaigns generate
-3. **`CampaignsList.tsx`** — Add reference library browser, show auto-generated starter campaigns
-4. **`CampaignEditor.tsx`** — Add reference upload/selection in the brief form, expanded goal dropdown
-
-## Component Breakdown
-
-- `SourceQuiz` — checkbox selection with conditional inputs
-- `ResourceUploader` — paginated upload screens per resource type
-- `AssetCategoryUploader` — sub-component for image asset categories (logo, product, lifestyle, hero)
-- `FeedbackFlow` — structured feedback questions with image attachment
-- `ReferenceLibrary` — browse/select from saved brand references
-- `CampaignPreviewCard` — compact preview of a campaign for the feedback screen
-
----
-
-## Implementation Order
-
-1. Database migrations (new tables, altered columns, storage bucket)
-2. Source quiz UI + resource upload screens (rewrite BrandSetup)
-3. Asset category uploaders with ImageKit hosting
-4. Update `extract-brand` to handle all input types
-5. Auto-generate 3 starter campaigns after brand save
-6. Feedback flow page + `refine-brand` edge function
-7. User preferences storage
-8. Per-campaign reference selection in editor
-9. Expanded campaign goal types
-10. Reference library browser component
+### Deployment
+- Redeploy `generate-campaign` and `edit-campaign` edge functions after changes
 
