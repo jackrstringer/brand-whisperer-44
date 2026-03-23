@@ -376,9 +376,15 @@ Deno.serve(async (req) => {
         qaContent.push(...imageBlocks);
       }
 
+      // Build custom QA items from brand + global checklists
+      const allQaItems = [...brandQaChecklist, ...globalQaChecklist];
+      const customQaSection = allQaItems.length > 0
+        ? `\n\n=== CUSTOM QA CHECKLIST ITEMS ===\n${allQaItems.map((item, i) => `${i + 1}. ${item}`).join("\n")}`
+        : "";
+
       qaContent.push({
         type: "text",
-        text: `Brand design rules:\n${profile.system_prompt}\n\n=== SPECIFIC VALUES TO ENFORCE ===\ncard_radius: ${brandValues.card_radius}px\nbutton_radius: ${brandValues.button_radius}px\naccent_color: ${brandValues.accent_color}\ntext_color: ${brandValues.text_color}\n\n=== GENERATED HTML TO AUDIT ===\n${html}`,
+        text: `Brand design rules:\n${profile.system_prompt}\n\n=== SPECIFIC VALUES TO ENFORCE ===\ncard_radius: ${brandValues.card_radius}px\nbutton_radius: ${brandValues.button_radius}px\naccent_color: ${brandValues.accent_color}\ntext_color: ${brandValues.text_color}${customQaSection}\n\n=== GENERATED HTML TO AUDIT ===\n${html}`,
       });
 
       const qaResponse = await fetch("https://api.anthropic.com/v1/messages", {
