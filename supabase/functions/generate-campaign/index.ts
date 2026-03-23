@@ -112,6 +112,9 @@ Deno.serve(async (req) => {
 
     const { brandId, campaignId, brief, goal, copy } = await req.json();
 
+    // Mark campaign as generating immediately
+    await supabase.from("campaigns").update({ status: "generating" }).eq("id", campaignId);
+
     // Fetch brand profile
     const { data: profile, error: profileErr } = await supabase
       .from("brand_profiles")
