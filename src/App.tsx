@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import Login from "./pages/Login";
 import BrandSetup from "./pages/BrandSetup";
+import BrandOnboarding from "./pages/BrandOnboarding";
 import CampaignsList from "./pages/CampaignsList";
 import CampaignEditor from "./pages/CampaignEditor";
 import NotFound from "./pages/NotFound";
@@ -28,6 +29,7 @@ function AppRoutes() {
       <Route path="/" element={<Navigate to="/brands/new" replace />} />
       <Route path="/brands/new" element={<ProtectedRoute><BrandSetup /></ProtectedRoute>} />
       <Route path="/brands/:brandId" element={<ProtectedRoute><CampaignsList /></ProtectedRoute>} />
+      <Route path="/brands/:brandId/onboarding" element={<ProtectedRoute><BrandOnboarding /></ProtectedRoute>} />
       <Route path="/brands/:brandId/campaigns/:campaignId" element={<ProtectedRoute><CampaignEditor /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
