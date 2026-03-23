@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { rehostHtmlImagesWithImageKit, applyImageKitTransform } from "../_shared/imagekit.ts";
+import { rehostHtmlImagesWithImageKit, applyImageKitTransform, getImageSliceUrls, estimateImageHeight } from "../_shared/imagekit.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -182,17 +182,47 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Build image blocks with slicing for tall images
+    let refImageIndex = 0;
     for (const url of hostedReferenceUrls) {
       try {
-        const imgResp = await fetch(url);
-        const contentType = imgResp.headers.get("content-type") || "image/png";
-        const mediaType = contentType.split(";")[0].trim();
-        const buf = await imgResp.arrayBuffer();
-        const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-        imageBlocks.push({
-          type: "image",
-          source: { type: "base64", media_type: mediaType, data: b64 },
-        });
+        // Estimate height to decide if slicing is needed
+        const height = await estimateImageHeight(url);
+        const isImageKitUrl = /^https:\/\/ik\.imagekit\.io\//i.test(url);
+
+        if (height && height > 1400 && isImageKitUrl) {
+          // Slice using ImageKit URL transforms
+          const sliceUrls = getImageSliceUrls(url, height, 1300, 600);
+          for (let si = 0; si < sliceUrls.length; si++) {
+            const imgResp = await fetch(sliceUrls[si]);
+            if (!imgResp.ok) continue;
+            const contentType = imgResp.headers.get("content-type") || "image/jpeg";
+            const mediaType = contentType.split(";")[0].trim();
+            const buf = await imgResp.arrayBuffer();
+            const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+            imageBlocks.push({
+              type: "text",
+              text: `Reference Campaign ${refImageIndex + 1} — Slice ${si + 1}/${sliceUrls.length} (top to bottom):`,
+            });
+            imageBlocks.push({
+              type: "image",
+              source: { type: "base64", media_type: mediaType, data: b64 },
+            });
+          }
+        } else {
+          // Single image (short enough or not on ImageKit)
+          const imgResp = await fetch(url);
+          if (!imgResp.ok) continue;
+          const contentType = imgResp.headers.get("content-type") || "image/png";
+          const mediaType = contentType.split(";")[0].trim();
+          const buf = await imgResp.arrayBuffer();
+          const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+          imageBlocks.push({
+            type: "image",
+            source: { type: "base64", media_type: mediaType, data: b64 },
+          });
+        }
+        refImageIndex++;
       } catch { /* skip failed images */ }
     }
 

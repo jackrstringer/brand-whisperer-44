@@ -87,25 +87,52 @@ export default function BrandSetup() {
     setPreviews(previews.filter((_, i) => i !== index));
   };
 
-  // Resize image to max dimension and return as base64 JPEG to reduce payload
-  const resizeAndConvert = (file: File, maxDim = 800): Promise<{ data: string; mediaType: string }> =>
+  // Slice a tall image into segments for Claude API (max 1400px per slice to stay under 1568px limit)
+  const sliceImage = (
+    file: File,
+    maxSliceHeight = 1300,
+    maxWidth = 600,
+  ): Promise<Array<{ data: string; mediaType: string; sliceIndex: number; totalSlices: number }>> =>
     new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
         let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          const ratio = Math.min(maxDim / width, maxDim / height);
-          width = Math.round(width * ratio);
+        // Scale width down to maxWidth if needed, maintaining aspect ratio
+        if (width > maxWidth) {
+          const ratio = maxWidth / width;
+          width = maxWidth;
           height = Math.round(height * ratio);
         }
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d")!;
-        ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
-        resolve({ data: dataUrl.split(",")[1], mediaType: "image/jpeg" });
+
+        const totalSlices = Math.max(1, Math.ceil(height / maxSliceHeight));
+        const sliceHeight = Math.ceil(height / totalSlices);
+        const results: Array<{ data: string; mediaType: string; sliceIndex: number; totalSlices: number }> = [];
+
+        for (let i = 0; i < totalSlices; i++) {
+          const sy = i * sliceHeight;
+          const sh = Math.min(sliceHeight, height - sy);
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = sh;
+          const ctx = canvas.getContext("2d")!;
+          // Draw from the original image, accounting for any width scaling
+          const origRatio = img.naturalWidth / width;
+          ctx.drawImage(
+            img,
+            0, sy * origRatio, img.naturalWidth, sh * origRatio,
+            0, 0, width, sh,
+          );
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+          results.push({
+            data: dataUrl.split(",")[1],
+            mediaType: "image/jpeg",
+            sliceIndex: i,
+            totalSlices,
+          });
+        }
+
         URL.revokeObjectURL(img.src);
+        resolve(results);
       };
       img.onerror = reject;
       img.src = URL.createObjectURL(file);
@@ -157,10 +184,9 @@ export default function BrandSetup() {
     }, 300);
 
     try {
-      // Only send reference images for style analysis (max 5, resized to 800px)
-      const refFiles = getReferenceImageFiles().slice(0, 5);
+      // Only send reference images for style analysis (max 10 campaigns)
+      const refFiles = getReferenceImageFiles().slice(0, 10);
       if (refFiles.length === 0) {
-        // If no reference images, grab a few from asset categories as fallback
         const fallbackFiles = Object.values(assetCategories)
           .flatMap((cat) => cat.files.filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f.name)))
           .slice(0, 5);
@@ -174,10 +200,19 @@ export default function BrandSetup() {
         return;
       }
 
-      const base64Images = await Promise.all(refFiles.map((f) => resizeAndConvert(f, 800)));
+      // Slice each image into segments (handles tall email screenshots)
+      const slicedImages: Array<{ data: string; mediaType: string; campaignIndex: number; sliceIndex: number; totalSlices: number }> = [];
+      for (let ci = 0; ci < refFiles.length; ci++) {
+        const slices = await sliceImage(refFiles[ci]);
+        for (const slice of slices) {
+          slicedImages.push({ ...slice, campaignIndex: ci });
+        }
+      }
+
+      console.log(`Sending ${slicedImages.length} total slices from ${refFiles.length} reference images`);
 
       const { data, error } = await supabase.functions.invoke("extract-brand", {
-        body: { images: base64Images, brandName, industry },
+        body: { images: slicedImages, brandName, industry },
       });
 
       clearInterval(interval);
