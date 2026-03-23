@@ -1,62 +1,141 @@
 
 
-# Redesign Onboarding Screen + Fix QA Image Cropping
+# Deep Brand Analysis — Three-Pass Visual Audit + Brand Guide + Email Design Floor
 
-## Two Problems
+## Overview
 
-**1. Onboarding UI is cramped and unusable.** Three campaigns squeezed into tiny 375px-wide cards scaled to 50% — impossible to see. Feedback is a wall of questions dumped at the bottom.
+Replace the current "extract JSON → save → generate campaigns" brand creation flow with a much deeper three-pass process that produces a comprehensive brand design system document. The user reviews the audit findings before the system generates the final brand profile. This ensures the extracted design rules are accurate and the user has confidence in what will guide all future campaigns.
 
-**2. QA pass isn't actually cropping images.** The QA prompt tells the AI to "use the smart-cropped URL variant" but the QA pass only receives the final HTML as text — it has no access to the asset catalog with the smart-cropped/tight-cropped URL variants. So even if it detects bad images, it can't fix them because it doesn't know the correct URLs.
-
----
-
-## Changes
-
-### 1. Redesign `BrandOnboarding.tsx` — carousel + interactive per-campaign quiz
-
-**Layout:** Full-width single campaign view with navigation to swap between designs.
-
-- One large campaign preview at a time, rendered in a 470px-wide iframe (matching CampaignEditor settings) with proper scaling to fill available space
-- Campaign name + status badge above, left/right arrow buttons to navigate between the 3 campaigns
-- Dot indicators below the preview showing which campaign is active
-- "1 of 3" counter
-
-**Per-campaign feedback:** Each campaign gets its own feedback, shown as a one-question-at-a-time interactive quiz below the preview.
-
-- State: `currentCampaign` index (0-2), `currentQuestion` index per campaign (0-3)
-- Show one question at a time with thumbs up/down + optional text input
-- "Next" button advances to next question. On last question, show "Submit Feedback for this Campaign" or "Next Campaign"
-- After all 3 campaigns have feedback, show a final "Submit All & Refine" button
-- Store answers as `Record<campaignId, FeedbackAnswer[]>`
-
-**Generating state:** While campaigns are generating, show a clean centered loading state with a progress message — not skeleton cards.
-
-### 2. Fix QA pass image cropping — pass asset catalog to QA
-
-In `generate-campaign/index.ts`, the QA pass currently receives:
-- Reference images (good)
-- Brand rules (good)
-- The generated HTML (good)
-- But NOT the asset catalog with cropped URL variants (bad)
-
-**Fix:** Include the `assetCatalog` string in the QA content so the AI can actually swap URLs:
-
-Add to the QA text content:
-```
-=== AVAILABLE IMAGE VARIANTS ===
-For any image that has excessive negative space, replace the URL with the tight-cropped variant below:
-{assetCatalog}
-```
-
-Also strengthen QA checklist item #3 to be more explicit:
-```
-3. For EACH <img> tag in the HTML: check if the image URL appears in the asset catalog. If a tight-cropped variant exists, compare — if the original has excessive empty space, REPLACE the src with the tight-cropped URL. If no cropped variant exists and the image looks bad, REMOVE the <img> tag entirely.
-```
+The system also enforces a "quality floor" — baseline email design best practices that never get compromised even if the reference emails have questionable design choices.
 
 ---
 
-## Files Modified
+## New Flow
 
-1. **`src/pages/BrandOnboarding.tsx`** — Complete rewrite: single-campaign carousel view, per-campaign one-at-a-time quiz, proper 470px iframe rendering
-2. **`supabase/functions/generate-campaign/index.ts`** — Pass `assetCatalog` to QA content, strengthen image cropping enforcement in QA checklist
+```text
+Current:  Info → Sources → Uploads → [auto-analyze] → Review JSON → Save → Generate campaigns
+Proposed: Info → Sources → Uploads → [Pass 1: Deep Audit] → Review Audit → [Pass 2+3: Spec + Guide] → Review Guide → Save → Generate campaigns
+```
+
+### Pass 1: Deep Visual Audit (edge function)
+- Uses the comprehensive audit checklist from the skill (logo treatment, colors, typography headlines/body/subheads, CTA buttons with italic detection, image treatment, section dividers, footer, icons, special patterns, voice)
+- Returns structured findings as JSON organized by design element (not by email)
+- Flags `[NEEDS CONFIRMATION]` items and inconsistencies between campaigns
+- Presented to the user for review/correction before proceeding
+
+### Pass 2: Internal Spec Compilation (edge function, triggered after user confirms audit)
+- Takes confirmed/corrected audit + email design quality floor rules
+- Compiles into structured brand spec (the internal blueprint)
+- No separate user confirmation needed
+
+### Pass 3: Brand Guide Generation (edge function, same call as Pass 2)
+- Generates a comprehensive HTML brand guide document (self-contained, no external images)
+- Sections: Color System, Typography, Button System, Layout/Anatomy, Reusable Components, Photography Direction, Voice & Tone, Design Rules (Do's/Don'ts)
+- This HTML guide is stored alongside the brand profile and is viewable/downloadable
+- The system_prompt for campaign generation is derived from this guide
+
+### Email Design Quality Floor
+Baked into both the synthesis and the generation prompt — a set of non-negotiable rules that override brand reference if the reference emails have bad practices:
+- Fluid layouts, consistent padding, proper CTA sizing
+- Body text min 16px, logo max 150px, buttons never full-width
+- Footer always present and separate
+- No text on images, consistent alignment within sections
+- Rounded corners preferred unless brand explicitly uses sharp
+- "Flowy" designs — minimize hard section cuts, prefer gentle transitions with spacing
+
+---
+
+## Database Changes
+
+### Add column to `brand_profiles`
+- `brand_guide_html text nullable` — the generated HTML brand guide document
+- `audit_findings jsonb nullable` — the Pass 1 audit results for reference
+
+No new tables needed.
+
+---
+
+## Edge Function Changes
+
+### New: `supabase/functions/audit-brand/index.ts`
+Pass 1 — Deep visual audit. Receives the same sliced images as `extract-brand`. Uses the comprehensive audit checklist. Returns structured JSON findings organized by design element.
+
+- System prompt: the full audit checklist from the skill (logo, colors, typography, CTAs, image treatment, section dividers, footer, icons, special patterns, voice)
+- Per-campaign parallel analysis (Sonnet), then synthesis of findings across campaigns
+- Output: `{ audit: { logo, colors, typography_headlines, typography_body, typography_subheads, cta_buttons, image_treatment, section_dividers, footer, icons, special_patterns, voice }, inconsistencies: [...], needs_confirmation: [...] }`
+
+### Modify: `supabase/functions/extract-brand/index.ts`
+Rename conceptually to serve Pass 2+3. New endpoint accepts:
+- The confirmed audit findings (JSON)
+- Brand name, industry
+- The original sliced images (for Pass 3 guide generation context)
+
+Returns:
+- `extraction` (structured brand values — same as now)
+- `system_prompt` (campaign generation prompt — same as now but richer)
+- `brand_guide_html` (the full HTML brand guide document)
+
+The synthesis prompt now incorporates the email design quality floor rules, ensuring the system_prompt never allows bad practices even if references showed them.
+
+### Modify: `supabase/functions/generate-campaign/index.ts`
+- No structural changes needed — it already consumes `system_prompt` and `raw_extraction`
+- The improved quality of these values from the deeper audit process will naturally improve output
+
+---
+
+## Frontend Changes
+
+### `src/pages/BrandSetup.tsx` — New steps in the flow
+
+Change step type from `"info" | "sources" | "uploads" | "analyzing" | "review"` to:
+`"info" | "sources" | "uploads" | "auditing" | "audit_review" | "generating_guide" | "guide_review"`
+
+**`auditing` step**: Progress UI while Pass 1 runs. Shows "Analyzing your campaigns..." with progress messages.
+
+**`audit_review` step**: Displays the audit findings in a clean, organized UI:
+- Sections for each design element (colors, typography, buttons, etc.)
+- Highlighted `[NEEDS CONFIRMATION]` items with editable fields
+- Inconsistencies called out with the user asked to resolve
+- "Confirm & Generate Guide" button to proceed
+- "Re-analyze" option if they uploaded wrong files
+
+**`generating_guide` step**: Progress UI while Pass 2+3 runs.
+
+**`guide_review` step**: 
+- Renders the brand guide HTML in a large iframe (like the campaign preview)
+- Shows key extracted values (colors, fonts, buttons) as a summary sidebar
+- "Save Brand & Continue" button
+- Option to download the guide HTML
+- Proceeds to save brand + generate starter campaigns (existing flow)
+
+### New: `src/pages/BrandGuide.tsx` (route: `/brands/:brandId/guide`)
+- View the saved brand guide anytime from brand settings or sidebar
+- Renders `brand_guide_html` in an iframe
+- Download button
+
+### `src/components/AppSidebar.tsx`
+- Add "Brand Guide" link under brand section
+
+### `src/App.tsx`
+- Add route `/brands/:brandId/guide`
+
+---
+
+## Implementation Order
+
+1. Database migration (add `brand_guide_html` and `audit_findings` columns)
+2. `audit-brand` edge function (Pass 1 — deep visual audit)
+3. Update `extract-brand` edge function (Pass 2+3 — spec + guide generation with quality floor)
+4. Update `BrandSetup.tsx` (new audit_review and guide_review steps)
+5. Create `BrandGuide.tsx` page + route
+6. Update sidebar with guide link
+
+---
+
+## Key Design Decisions
+
+- **Quality floor over brand fidelity**: If a brand's reference emails use 12px body text or full-width buttons, the system overrides with best practices. The guide will note "Brand references showed X, but we recommend Y for better performance."
+- **Italic CTA detection**: The audit prompt explicitly warns about JPEG compression artifacts making bold text appear italic. Default is `font-style: normal` unless unmistakable.
+- **No images in the guide**: The HTML guide is self-contained with CSS gradients and color blocks for visual examples — no `<img>` tags pointing to uploaded files.
+- **Pass 1 uses Sonnet for speed** (per-campaign parallel), **Pass 2+3 uses Opus for quality** (single synthesis + guide generation call).
 
