@@ -1,61 +1,133 @@
 
 
-# Fix Logo, Default Viewport, Button Width, and Body Copy Size
+# Holistic UI Overhaul — Global Nav, Brand Management, Settings
 
-## Problems Identified
+## Overview
 
-1. **Logo getting messed up** — The asset catalog sends all images with categories but doesn't give specific instructions for logo handling. Logos need special treatment: they should be displayed at a reasonable max-width (120-180px), centered, and NEVER stretched to full width or cropped.
-
-2. **Default viewport settings wrong** — Currently defaults to 431px render / 431px viewport. Change to 470px / 470px / 100% zoom.
-
-3. **Buttons stretching to full page width** — The mobile `@media` rule in `UNIVERSAL_EMAIL_RULES` says "Buttons: full-width or auto" which causes the AI to make buttons `width:100%`. In real email clients (Klaviyo on mobile/desktop), the media query may not fire the same way, creating a mismatch. The rule should say buttons should be `auto` width with generous padding — NOT full-width.
-
-4. **Body copy too small** — The current rule says "Body text minimum 15px" which is borderline for mobile. Should be minimum 16px, with a recommendation of 16-18px for optimal mobile readability.
-
-## Additional Bug: Brand Values Not Extracted Correctly
-
-The code reads `rawExtraction?.card_radius` but the actual structure is `rawExtraction?.spacing?.card_radius` and `rawExtraction?.buttons?.border_radius`. This means the QA pass is always using the fallback defaults ("12" and "100") instead of the actual brand values. Must fix the nested path access.
+Add a persistent sidebar navigation accessible from every page. Add delete/edit capabilities for brands and campaigns. Add brand-level and global settings pages for managing assets, instructions, and QA checklists.
 
 ---
 
-## Changes
+## New/Modified Pages & Components
 
-### 1. `src/pages/CampaignEditor.tsx` — Change defaults
+### 1. Global Sidebar (`src/components/AppSidebar.tsx`)
 
-- Line 54: `renderWidth` default from 431 → 470
-- Line 55: `viewportWidth` default from 431 → 470
-- Line 56: `screenZoom` stays at 100
+Persistent sidebar using shadcn `Sidebar` component, visible on all authenticated pages:
+- **Logo/app name** at top
+- **Dashboard** link (all brands)
+- **Current Brand** section (when on a brand route) — shows brand name, links to:
+  - Campaigns list
+  - Brand Settings
+- **Global Settings** link — account-wide generation rules & QA checklist
+- **Sign Out** button at bottom
+- Collapsible via `collapsible="icon"`
 
-### 2. `supabase/functions/generate-campaign/index.ts`
+### 2. App Layout (`src/components/AppLayout.tsx`)
 
-**Fix brand value extraction (line 124-130):**
-```
-card_radius: rawExtraction?.spacing?.card_radius ?? "12"
-button_radius: rawExtraction?.buttons?.border_radius ?? "100px"
-accent_color: rawExtraction?.colors?.accent ?? ""
-text_color: rawExtraction?.colors?.text_primary ?? ""
-background_color: rawExtraction?.colors?.canvas ?? ""
-```
+Wrap all protected routes in a `SidebarProvider` + layout shell:
+- Sidebar on left
+- `SidebarTrigger` in a thin header bar (always visible)
+- Main content area on right
 
-**Fix UNIVERSAL_EMAIL_RULES:**
-- MOBILE section: Change "Buttons: minimum 44px tall, full-width or auto" → "Buttons: minimum 44px tall, auto width with generous horizontal padding (32-48px). NEVER full-width — buttons should look the same in the preview as they do in real email clients."
-- BUTTONS section: Remove hardcoded "border-radius:100px" — replace with "use the brand's button border-radius value"
-- Body text minimum: Change from 15px → 16px, add "Recommended: 16-18px for body paragraphs on mobile"
+Update `App.tsx` to wrap protected routes in `<AppLayout>` instead of bare `<ProtectedRoute>`.
 
-**Add logo-specific rules to IMAGE RULES section:**
-- "LOGO HANDLING: Images categorized as 'logo' must be displayed at max-width:150px (or similar reasonable size), centered, with padding above and below. NEVER stretch a logo to full width. NEVER crop a logo. If a dark-mode-safe variant exists, use it."
+### 3. Delete Campaigns (`CampaignsList.tsx`)
 
-**Add to asset catalog format:** When building the catalog string, prefix logo entries with a note: `[logo — display at max-width 150px, centered, DO NOT stretch or crop]`
+- Add a trash icon button on each campaign row
+- Confirmation dialog before delete
+- `supabase.from("campaigns").delete().eq("id", campaignId)`
 
-### 3. `supabase/functions/edit-campaign/index.ts`
+### 4. Delete Brands (`BrandDashboard.tsx`)
 
-Apply the same button and body text rule changes to its system prompt to keep edits consistent.
+- Add a trash icon button on each brand card
+- Confirmation dialog (warns about deleting all campaigns too)
+- `supabase.from("brands").delete().eq("id", brandId)` — cascading deletes handle the rest
+
+### 5. Brand Settings Page (`src/pages/BrandSettings.tsx`, route: `/brands/:brandId/settings`)
+
+Tabbed or sectioned page:
+
+**Info tab:**
+- Edit brand name, industry, website URL
+- Delete brand button
+
+**Assets tab:**
+- Shows current assets grouped by category (logo, product_imagery, hero_shots, lifestyle)
+- Each category: thumbnail grid with remove buttons + upload button to add more
+- Reuse `AssetCategoryUploader` component (modified to show existing DB assets alongside new uploads)
+
+**Instructions tab:**
+- Large textarea for "Brand Instructions / Notes / Guidelines"
+- Stored in `brand_profiles.system_prompt` as an appended section (or a new `brand_instructions` text column on `brands`)
+- These get injected into every campaign generation for this brand
+- The system will agentically append to this when users mention rules during campaign editing
+
+**QA Checklist tab:**
+- List of QA checklist items specific to this brand
+- Add/remove/edit items
+- Stored as JSONB array on `brand_profiles` (new column `qa_checklist jsonb default '[]'`)
+- These items get appended to the QA pass prompt for this brand's campaigns
+
+### 6. Global Settings Page (`src/pages/GlobalSettings.tsx`, route: `/settings`)
+
+**Generation Rules tab:**
+- Textarea for global generation instructions/notes
+- Stored in `user_preferences.preferences.generation_rules`
+- Injected into every campaign generation across all brands
+
+**QA Checklist tab:**
+- Global QA checklist items (apply to all brands)
+- Stored in `user_preferences.preferences.qa_checklist`
+- Appended to QA pass alongside brand-specific items
 
 ---
 
-## Files Modified
+## Database Changes
 
-1. **`src/pages/CampaignEditor.tsx`** — Default render/viewport to 470px
-2. **`supabase/functions/generate-campaign/index.ts`** — Fix nested brand value paths, logo rules, button width rules, body text minimums
-3. **`supabase/functions/edit-campaign/index.ts`** — Same prompt rule updates
+### Alter `brand_profiles`
+- Add `brand_instructions text nullable` — user-written brand-specific guidelines
+- Add `qa_checklist jsonb default '[]'` — array of brand-specific QA items
+
+### Alter `brands`
+- Ensure cascading deletes work: campaigns, brand_profiles, brand_assets, brand_feedback all have `ON DELETE CASCADE` on their `brand_id` FK (verify existing FKs)
+
+No new tables needed — `user_preferences.preferences` JSONB already exists for global settings.
+
+---
+
+## Edge Function Updates
+
+### `generate-campaign/index.ts`
+- Fetch `brand_profiles.brand_instructions` and `brand_profiles.qa_checklist`
+- Fetch `user_preferences.preferences.generation_rules` and `user_preferences.preferences.qa_checklist`
+- Inject brand instructions into the generation system prompt
+- Inject global generation rules into the generation system prompt
+- Append both brand and global QA items to the QA pass prompt
+
+### `edit-campaign/index.ts`
+- Same: inject brand instructions and global rules
+- When user mentions a new rule during editing (detected by the AI), the edge function appends it to `brand_profiles.brand_instructions` automatically
+
+---
+
+## Route Changes (`App.tsx`)
+
+Add:
+- `/brands/:brandId/settings` → `BrandSettings`
+- `/settings` → `GlobalSettings`
+
+Wrap all protected routes in `AppLayout`.
+
+---
+
+## Implementation Order
+
+1. Database migration (add columns to brand_profiles, verify cascade FKs)
+2. AppSidebar + AppLayout components
+3. Update App.tsx routing to use layout wrapper
+4. Brand deletion (dashboard) + campaign deletion (campaigns list)
+5. BrandSettings page (info, assets, instructions, QA checklist tabs)
+6. GlobalSettings page (generation rules, QA checklist)
+7. Update edge functions to consume new instructions and QA items
+8. Agentic rule capture in edit-campaign (append detected rules to brand_instructions)
 
