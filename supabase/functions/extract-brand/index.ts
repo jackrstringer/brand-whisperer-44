@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
             ...imageBlocks,
             {
               type: "text",
-              text: `Brand: ${brandName}. Industry: ${industry || "not specified"}. Analyze these ${images.length} email campaign images and extract the brand design system. Return ONLY valid JSON with "extraction" and "system_prompt" keys.`,
+              text: `Brand: ${brandName}. Industry: ${industry || "not specified"}. Analyze these ${limitedImages.length} email campaign images and extract the brand design system. Return ONLY valid JSON with "extraction" and "system_prompt" keys.`,
             },
           ],
         }],
