@@ -245,14 +245,17 @@ export default function BrandSetup() {
   };
 
   // === PASS 2+3: Spec + Guide ===
-  const generateGuide = async () => {
+  const generateGuideFromAudit = async (findings?: any) => {
+    const auditData = findings || auditFindings;
+    if (!auditData) { toast.error("No audit data available"); return; }
+
     setStep("generating_guide");
     setProgressValue(0);
     setProgressMessage(GUIDE_MESSAGES[0]);
 
     const interval = setInterval(() => {
       setProgressValue((v) => {
-        const next = Math.min(v + 1.5, 95);
+        const next = Math.min(v + 0.8, 95);
         const msgIndex = Math.min(Math.floor(next / 25), GUIDE_MESSAGES.length - 1);
         setProgressMessage(GUIDE_MESSAGES[msgIndex]);
         return next;
@@ -261,7 +264,7 @@ export default function BrandSetup() {
 
     try {
       const { data, error } = await supabase.functions.invoke("extract-brand", {
-        body: { auditFindings, brandName, industry },
+        body: { auditFindings: auditData, brandName, industry },
       });
 
       clearInterval(interval);
@@ -277,9 +280,12 @@ export default function BrandSetup() {
     } catch (err: any) {
       clearInterval(interval);
       toast.error(err.message || "Guide generation failed");
-      setStep("audit_review");
+      setStep("uploads");
     }
   };
+
+  // Keep old name for any other references
+  const generateGuide = () => generateGuideFromAudit();
 
   // Render guide HTML in iframe
   useEffect(() => {
