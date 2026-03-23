@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import Login from "./pages/Login";
 import BrandSetup from "./pages/BrandSetup";
+import BrandOnboarding from "./pages/BrandOnboarding";
 import CampaignsList from "./pages/CampaignsList";
 import CampaignEditor from "./pages/CampaignEditor";
 import NotFound from "./pages/NotFound";
