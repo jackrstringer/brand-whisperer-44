@@ -54,6 +54,7 @@ export default function CampaignEditor() {
   const [renderWidth, setRenderWidth] = useState(431);
   const [viewportWidth, setViewportWidth] = useState(431);
   const [screenZoom, setScreenZoom] = useState(100);
+  const [iframeContentHeight, setIframeContentHeight] = useState(800);
   const [previewFallbackUrls, setPreviewFallbackUrls] = useState<string[]>([]);
 
   useEffect(() => {
