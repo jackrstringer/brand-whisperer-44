@@ -666,7 +666,7 @@ export default function BrandSetup() {
   if (step === "guide_review" && brandGuideHtml) {
     return (
       <div className="min-h-screen bg-background p-6 md:p-12">
-        <button onClick={() => setStep("audit_review")} className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8 transition-colors">
+        <button onClick={() => setStep("uploads")} className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8 transition-colors">
           <ArrowLeft className="w-4 h-4" /> Back to audit
         </button>
         <div className="flex items-center justify-between mb-6 max-w-5xl">
