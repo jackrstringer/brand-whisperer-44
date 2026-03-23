@@ -41,7 +41,7 @@ Deno.serve(async (req) => {
       .single();
     if (pErr || !profile) throw new Error("Brand profile not found");
 
-    // Fetch top 3 reference images (pre-hosted to ImageKit for stable URLs)
+    // Fetch top 3 reference images for style context (vision only — never embed)
     const imageBlocks: any[] = [];
     const referenceUrls = Array.isArray(profile.reference_image_urls)
       ? profile.reference_image_urls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
@@ -73,26 +73,40 @@ Deno.serve(async (req) => {
     for (const url of hostedReferenceUrls) {
       try {
         const imgResp = await fetch(url);
+        const contentType = imgResp.headers.get("content-type") || "image/png";
+        const mediaType = contentType.split(";")[0].trim();
         const buf = await imgResp.arrayBuffer();
         const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
         imageBlocks.push({
           type: "image",
-          source: { type: "base64", media_type: "image/png", data: b64 },
+          source: { type: "base64", media_type: mediaType, data: b64 },
         });
       } catch { /* skip */ }
     }
+
+    // Fetch actual brand assets for embeddable URLs
+    const { data: brandAssets } = await supabase
+      .from("brand_assets")
+      .select("url, category")
+      .eq("brand_id", campaign.brand_id);
+
+    const embeddableUrls = (brandAssets || [])
+      .map((a: any) => a.url)
+      .filter((url: string) => typeof url === "string" && url.trim().length > 0)
+      .slice(0, 8);
 
     const systemMsg = `You are editing an existing HTML email.
 Apply only the change described. Do not rewrite sections not mentioned.
 Maintain all inline styles, table structure, and Gmail dark mode fixes.
 The email must continue to match the brand reference images.
+CONSISTENCY RULE: All images must have the same padding treatment — either all full-bleed or all with equal side padding. Never mix.
 Return only the complete updated HTML. No commentary. No markdown fences.`;
 
     const userContent: any[] = [];
     if (imageBlocks.length > 0) userContent.push(...imageBlocks);
-    const imageRulesText = hostedReferenceUrls.length > 0
-      ? `Image URL rules:\n- Never invent or use external stock URLs (Unsplash, Pexels, etc).\n- Use ONLY these exact URLs for all <img src> values:\n${hostedReferenceUrls.join("\n")}`
-      : "Image URL rules:\n- No approved image URLs exist, so do not include <img> tags.";
+    const imageRulesText = embeddableUrls.length > 0
+      ? `Image URL rules:\n- Reference screenshots above are for STYLE only — never embed them.\n- Never invent or use external stock URLs.\n- For <img src> values, use ONLY from these brand asset URLs:\n${embeddableUrls.join("\n")}`
+      : "Image URL rules:\n- No approved image URLs exist, so do not add new <img> tags.";
 
     userContent.push({
       type: "text",
@@ -127,7 +141,7 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
     html = await rehostHtmlImagesWithImageKit(html, {
       campaignId,
       imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
-      fallbackImageUrls: hostedReferenceUrls,
+      fallbackImageUrls: embeddableUrls,
     });
 
     // Append previous HTML to history

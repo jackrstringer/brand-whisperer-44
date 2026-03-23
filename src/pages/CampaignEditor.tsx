@@ -309,7 +309,7 @@ export default function CampaignEditor() {
       <PanelGroup direction="horizontal" className="flex-1">
         {/* Left Panel — Preview */}
         <Panel defaultSize={60} minSize={25} maxSize={85}>
-          <div ref={previewPanelRef} className="h-full bg-card overflow-y-auto scrollbar-hide">
+          <div ref={previewPanelRef} className="h-full bg-card overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {isGenerating ? (
               <div className="max-w-[600px] mx-auto space-y-4 p-8 mt-12">
                 <Skeleton className="h-8 w-3/4" />
