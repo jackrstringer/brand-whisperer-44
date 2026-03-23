@@ -1,79 +1,103 @@
 
 
-# Fix Campaign Generation Quality — Multiple Issues
+# Self-QA Loop + Stronger Reference Adherence
 
-## Problems Identified
+## Problems
 
-1. **AI uses ALL images indiscriminately** — needs full autonomy to pick what fits the campaign goal, not a hardcoded "1 logo, 2 hero, 2 product" selection
-2. **No image processing** — images with excessive negative space get used raw; ImageKit URL transformations can crop/resize on the fly
-3. **No email footer** — missing unsubscribe link, brand address, social links section
-4. **White bar on right side** — the email wrapper is 600px but mobile view is 375px; the email's `width:600px` inline style creates overflow in the 375px iframe
-5. **Design inconsistency** — mixed alignment, gray text, center-aligned sections with left-aligned bullets — the system prompt needs stricter design cohesion rules
+1. **Design details from references not carried through** — e.g. references show rounded corners on cards, but the generated email uses sharp boxes. The `system_prompt` extracted from brand analysis apparently didn't capture `card_radius` strongly enough, or the AI ignored it.
+2. **Images with 60% empty space still getting used** — the prompt says "use smart-cropped URL or skip" but there's no enforcement. The AI picks the base URL anyway.
+3. **No QA step exists** — the pipeline generates HTML and saves it immediately. There is no second pass where the AI visually audits the output against the references.
+
+## Solution: Add a Visual Self-QA Pass
+
+After the first generation, render the HTML to a screenshot, send it back to the AI alongside the reference images, and ask it to identify and fix any inconsistencies. This catches the exact issues described: wrong border-radius, bad image crops, mixed padding, etc.
 
 ---
 
 ## Changes
 
-### 1. Give AI full asset access with metadata (generate-campaign edge function)
+### 1. New shared utility: HTML-to-screenshot (`_shared/screenshot.ts`)
 
-Stop hardcoding "pick 1 logo, 2 hero shots." Instead:
-- Send ALL brand assets (up to ~15) with their categories as a labeled catalog
-- Let the AI decide which images serve the campaign based on the brief and goal
-- Add instructions: "You are the creative director. Choose the images that best serve this campaign's story. You do not need to use all of them."
+Use a headless browser service or — more practically in Deno edge functions — use the existing approach of sending the HTML itself as a "rendered" artifact. Since we can't run a browser in an edge function, we'll use a **two-pass AI approach**:
 
-### 2. ImageKit URL transformations for smart cropping (shared imagekit.ts)
+- **Pass 1**: Generate the HTML (existing flow)
+- **Pass 2**: Send the generated HTML *as text* back to Claude along with all the reference images and a strict QA checklist. Ask it to audit and return a corrected version.
 
-Add a utility function that appends ImageKit transformation parameters to hosted URLs:
-- After uploading to ImageKit, the returned URL is a base like `https://ik.imagekit.io/xxx/image.jpg`
-- Append `tr:w-600,fo-auto` for smart auto-focus cropping (removes excessive negative space)
-- For images the AI marks as "hero/full-bleed": `tr:w-600,h-400,fo-auto,c-maintain_ratio`
-- Expose this as a helper the generate function uses when building the asset catalog, so the AI gets pre-transformed URLs
+This is cheaper and faster than screenshotting, and Claude can reason about HTML structure directly.
 
-The AI prompt will also instruct: "If an image has excessive empty space, use ImageKit URL transformations by appending `/tr:w-600,h-400,fo-auto,c-maintain_ratio` to crop it intelligently."
+### 2. Modify `generate-campaign/index.ts`
 
-### 3. Add footer requirements to the system prompt (generate-campaign)
+After the first generation produces `html`:
 
-Add to `UNIVERSAL_EMAIL_RULES`:
-```
-FOOTER (required on every email):
-- Must include: brand name, unsubscribe link placeholder, address placeholder
-- Style: small text (11-12px), muted color, centered, generous top padding
-- Unsubscribe link text: "Unsubscribe" — use href="#unsubscribe" as placeholder
-- Optional: social media icon row above the footer text
-- The footer is a SEPARATE section from the main content — never merge it with the last content block
-```
+**QA Pass** — Make a second Anthropic API call:
+- System prompt: a QA-specific prompt with a checklist
+- User content: the reference images (same `imageBlocks`), the brand `system_prompt`, and the generated HTML
+- QA checklist items:
+  - Does every card/container use the brand's `card_radius`? (check the extracted value)
+  - Are all images using the smart-cropped URL variant when they have excessive negative space?
+  - Is image padding consistent (all full-bleed OR all padded)?
+  - Does the footer exist and is it separated from content?
+  - Does text alignment stay consistent within each section?
+  - Do button styles match the brand extraction (border-radius, colors, padding)?
+- The QA prompt instructs: "If ANY issues are found, return the corrected complete HTML. If everything passes, return the HTML unchanged."
+- Use `claude-sonnet-4-20250514` for the QA pass (faster, cheaper than Opus, sufficient for auditing)
 
-### 4. Fix white bar / mobile rendering (generate-campaign system prompt)
+**Extract brand-specific values for the QA checklist**: Pull `card_radius`, `button border_radius`, `colors` from `profile.raw_extraction` so the QA prompt has exact numbers to check against (e.g. "card_radius should be 12px — check every container").
 
-Update the `STRUCTURE` section of `UNIVERSAL_EMAIL_RULES`:
-- Change from `width=600 style='max-width:600px; width:600px;'` to `width="100%" style="max-width:600px; width:100%;"`
-- This makes the email fluid within the 375px iframe viewport — no overflow, no white bar
-- Add: "The outermost wrapper table must be `width='100%'` with `max-width:600px` and `margin:0 auto`. Never use a fixed `width:600px` on the wrapper."
+### 3. Strengthen the generation prompt
 
-### 5. Stricter design cohesion rules (generate-campaign system prompt)
+Add to the user content in the initial generation call:
+- Explicitly inject key extracted values: "Brand card radius: {X}px — apply to ALL cards, containers, and contrast sections. Brand button radius: {Y}. Brand accent color: {Z}."
+- For images: "Before using any image, consider if it has excessive empty space. If so, you MUST use the smart-cropped URL variant. If even the cropped version would look bad, skip the image entirely."
 
-Add to `UNIVERSAL_EMAIL_RULES`:
-```
-DESIGN COHESION:
-- ALL text alignment within a section must be consistent — if a section is center-aligned, ALL elements in it (headlines, body text, bullets, sub-text) must be centered
-- Never use raw gray (#999 or similar) body text — use the brand's text color or a slightly muted version of it
-- Bullet points or benefit lists in a centered layout must themselves be centered (use centered pill/chip design, not left-aligned bullets)
-- Every section must feel "designed" — no default-looking text dumps
-- Maintain a clear visual hierarchy: headline → supporting text → CTA, with consistent spacing
-```
+### 4. Smarter image cropping enforcement
 
-### 6. Remove the "no overlay" instruction from prompt
+In the asset catalog builder, also provide an "aggressive crop" variant:
+- Base URL (original)
+- Smart-cropped: `tr:w-600,fo-auto,c-maintain_ratio`
+- Tight crop: `tr:w-600,h-400,fo-auto,c-at_max` (forces a max aspect ratio)
 
-The current prompt says to use absolute positioning for text overlays or skip the image. Since the user said no overlays right now, change this to: "If an image has excessive negative space that would look awkward, use ImageKit smart cropping by appending transformation parameters to the URL, or skip the image entirely. Do NOT overlay text on images."
+Tell the AI: "For lifestyle/hero images, default to the tight-crop variant unless the full image is clearly well-composed."
 
 ---
 
 ## Files Modified
 
-1. **`supabase/functions/generate-campaign/index.ts`** — Updated system prompt (footer, fluid width, design cohesion, overlay removal), send all assets with full catalog, ImageKit transform hints in prompt
-2. **`supabase/functions/_shared/imagekit.ts`** — Add `applyImageKitTransform(url, options)` helper that appends `tr:` params to ImageKit URLs
-3. **`supabase/functions/edit-campaign/index.ts`** — Same prompt fixes (footer, fluid width, design cohesion) in the edit system message
+1. **`supabase/functions/generate-campaign/index.ts`**
+   - Add QA pass after initial generation (second API call to Claude Sonnet)
+   - Inject extracted brand values (card_radius, button styles) into generation prompt
+   - Add tight-crop URL variant to asset catalog
+   - Use QA-corrected HTML instead of raw first-pass HTML
 
-### Deployment
-- Redeploy `generate-campaign` and `edit-campaign` edge functions after changes
+2. **`supabase/functions/_shared/imagekit.ts`**
+   - Add a `tightCrop` preset to `applyImageKitTransform`
+
+3. **`supabase/functions/edit-campaign/index.ts`**
+   - Same QA checklist added to the edit system prompt so edits also get audited
+
+## QA Prompt (new constant in generate-campaign)
+
+```
+You are a visual QA auditor for HTML emails.
+Compare the generated email HTML against the brand reference images and rules.
+
+CHECK EACH OF THESE — fail ANY = must fix:
+1. Card/container border-radius must be {card_radius}px everywhere
+2. Button border-radius must be {button_radius}
+3. Images with >30% empty/negative space must use smart-cropped URLs
+4. All images must have identical padding treatment (all full-bleed OR all padded)
+5. Footer must exist as a separate section with unsubscribe link
+6. Text alignment must be consistent within each section
+7. Colors must match brand palette — no generic grays for body text
+8. No reference campaign screenshots embedded as <img> tags
+
+If issues found: return the CORRECTED complete HTML.
+If all checks pass: return the HTML unchanged.
+Return ONLY HTML. No commentary.
+```
+
+## Impact
+- Catches rounded-corner violations before user sees them
+- Eliminates images with excessive negative space
+- Adds ~3-5 seconds to generation time (Sonnet QA pass) but dramatically improves first-impression quality
 
