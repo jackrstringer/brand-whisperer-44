@@ -88,8 +88,10 @@ export type Database = {
         Row: {
           brand_guide_url: string | null
           brand_id: string
+          brand_instructions: string | null
           created_at: string
           id: string
+          qa_checklist: Json | null
           raw_extraction: Json | null
           reference_image_urls: string[] | null
           system_prompt: string | null
@@ -97,8 +99,10 @@ export type Database = {
         Insert: {
           brand_guide_url?: string | null
           brand_id: string
+          brand_instructions?: string | null
           created_at?: string
           id?: string
+          qa_checklist?: Json | null
           raw_extraction?: Json | null
           reference_image_urls?: string[] | null
           system_prompt?: string | null
@@ -106,8 +110,10 @@ export type Database = {
         Update: {
           brand_guide_url?: string | null
           brand_id?: string
+          brand_instructions?: string | null
           created_at?: string
           id?: string
+          qa_checklist?: Json | null
           raw_extraction?: Json | null
           reference_image_urls?: string[] | null
           system_prompt?: string | null
