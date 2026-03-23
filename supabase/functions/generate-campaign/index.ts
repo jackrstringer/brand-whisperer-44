@@ -122,11 +122,11 @@ Deno.serve(async (req) => {
     // Extract brand-specific design values from raw_extraction
     const rawExtraction = profile.raw_extraction as Record<string, any> | null;
     const brandValues = {
-      card_radius: rawExtraction?.card_radius ?? rawExtraction?.border_radius ?? "12",
-      button_radius: rawExtraction?.button_radius ?? "100",
-      accent_color: rawExtraction?.accent_color ?? rawExtraction?.primary_color ?? "",
-      text_color: rawExtraction?.text_color ?? rawExtraction?.body_color ?? "",
-      background_color: rawExtraction?.background_color ?? "",
+      card_radius: rawExtraction?.spacing?.card_radius ?? rawExtraction?.card_radius ?? rawExtraction?.border_radius ?? "12",
+      button_radius: rawExtraction?.buttons?.border_radius ?? rawExtraction?.button_radius ?? "100",
+      accent_color: rawExtraction?.colors?.accent ?? rawExtraction?.accent_color ?? rawExtraction?.primary_color ?? "",
+      text_color: rawExtraction?.colors?.text_primary ?? rawExtraction?.text_color ?? rawExtraction?.body_color ?? "",
+      background_color: rawExtraction?.colors?.canvas ?? rawExtraction?.background_color ?? "",
     };
 
     // Build reference image blocks for vision (style only — never embed)
