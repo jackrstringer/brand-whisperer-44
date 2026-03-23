@@ -271,6 +271,16 @@ Deno.serve(async (req) => {
     if (brandValues.text_color) brandValuesText += `\nBody text color: ${brandValues.text_color} — NEVER use generic gray (#999, #666, etc.)`;
     if (brandValues.background_color) brandValuesText += `\nBackground color: ${brandValues.background_color}`;
 
+    // Inject brand-specific instructions
+    if (brandInstructions) {
+      brandValuesText += `\n\n=== BRAND-SPECIFIC INSTRUCTIONS ===\n${brandInstructions}`;
+    }
+
+    // Inject global generation rules
+    if (globalRules) {
+      brandValuesText += `\n\n=== GLOBAL GENERATION RULES ===\n${globalRules}`;
+    }
+
     userContent.push({ type: "text", text: brandValuesText });
 
     // Goal-specific creative direction for structural variety
