@@ -122,35 +122,40 @@ Deno.serve(async (req) => {
       } catch { /* skip failed images */ }
     }
 
-    const userContent: any[] = [];
-
-    // Part 1: Reference images
-    if (imageBlocks.length > 0) {
-      userContent.push({
-        type: "text",
-        text: `Here are ${imageBlocks.length} past email campaigns from this brand. Study them carefully. Your output must feel like it belongs in this exact same family — same design instincts, same typographic choices, same copy voice, same structural patterns.`,
-      });
-      userContent.push(...imageBlocks);
-    }
-
-    // Part 2: Brand rules
-    userContent.push({
-      type: "text",
-      text: `From analyzing these campaigns, here are the specific rules to follow precisely:\n${profile.system_prompt}`,
-    });
-
     // Fetch brand assets (logos, product shots, lifestyle, hero shots) — these are embeddable
     const { data: brandAssets } = await supabase
       .from("brand_assets")
       .select("url, category")
       .eq("brand_id", brandId);
 
-    const assetUrls = (brandAssets || [])
-      .map((a: any) => a.url)
-      .filter((url: string) => typeof url === "string" && url.trim().length > 0);
+    // Group assets by category for intelligent selection
+    const assetsByCategory: Record<string, string[]> = {};
+    for (const a of (brandAssets || [])) {
+      const url = a.url;
+      if (typeof url !== "string" || !url.trim()) continue;
+      const cat = a.category || "misc";
+      if (!assetsByCategory[cat]) assetsByCategory[cat] = [];
+      assetsByCategory[cat].push(url);
+    }
 
-    // Re-host brand asset URLs to ImageKit for stable rendering
-    let hostedAssetUrls = assetUrls.slice(0, 20);
+    // Select a curated subset — NOT every image. Pick 1-2 per category max.
+    const curatedAssetUrls: string[] = [];
+    const logos = assetsByCategory["logo"] || [];
+    const heroShots = assetsByCategory["hero_shots"] || [];
+    const productImagery = assetsByCategory["product_imagery"] || [];
+    const lifestyle = assetsByCategory["lifestyle"] || [];
+
+    // Always include first logo
+    if (logos.length > 0) curatedAssetUrls.push(logos[0]);
+    // Include up to 2 hero shots (best for email hero sections)
+    curatedAssetUrls.push(...heroShots.slice(0, 2));
+    // Include up to 2 product images
+    curatedAssetUrls.push(...productImagery.slice(0, 2));
+    // Include up to 1 lifestyle image
+    if (lifestyle.length > 0) curatedAssetUrls.push(lifestyle[0]);
+
+    // Re-host curated asset URLs to ImageKit for stable rendering
+    let hostedAssetUrls = curatedAssetUrls.slice(0, 8);
     if (hostedAssetUrls.length > 0) {
       const assetsHtml = hostedAssetUrls
         .map((url: string, index: number) => `<img src="${url}" alt="asset-${index}" />`)
@@ -173,17 +178,54 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Build asset catalog with categories for the AI
+    const assetCatalog = hostedAssetUrls.map((url, i) => {
+      // Map back to category
+      let category = "misc";
+      if (logos.some(l => curatedAssetUrls.indexOf(l) === curatedAssetUrls.indexOf(url))) category = "logo";
+      else if (heroShots.some(h => curatedAssetUrls.indexOf(h) === curatedAssetUrls.indexOf(url))) category = "hero_shot";
+      else if (productImagery.some(p => curatedAssetUrls.indexOf(p) === curatedAssetUrls.indexOf(url))) category = "product";
+      else if (lifestyle.some(l => curatedAssetUrls.indexOf(l) === curatedAssetUrls.indexOf(url))) category = "lifestyle";
+      return `[${category}] ${url}`;
+    }).join("\n");
+
+    const userContent: any[] = [];
+
+    // Part 1: Reference images (STYLE ONLY — never embed)
+    if (imageBlocks.length > 0) {
+      userContent.push({
+        type: "text",
+        text: `Here are ${imageBlocks.length} past email campaigns from this brand. Study them carefully for STYLE and DESIGN PATTERNS ONLY. These are screenshots — NEVER embed them as <img> tags in your output. Your output must feel like it belongs in this exact same family.`,
+      });
+      userContent.push(...imageBlocks);
+    }
+
+    // Part 2: Brand rules
+    userContent.push({
+      type: "text",
+      text: `From analyzing these campaigns, here are the specific rules to follow precisely:\n${profile.system_prompt}`,
+    });
+
     // Part 3: This campaign
     let part3 = `Generate a ${goal} email campaign.\nBrief: ${brief}`;
     if (copy) part3 += `\nThe following copy must be used verbatim: ${copy}`;
 
-    // CRITICAL: Reference campaign images above are STYLE REFERENCES ONLY — never embed them as <img> tags.
-    // Only brand assets (logos, product shots, lifestyle imagery) should be used as <img src> URLs.
+    part3 += `\n\n=== CRITICAL IMAGE RULES ===
+1. The reference campaign screenshots above are STYLE REFERENCES ONLY. NEVER embed them as <img> tags.
+2. Never invent, guess, or use external stock image URLs (Unsplash, Pexels, etc).
+3. You do NOT need to use every available image. Be SELECTIVE — choose only images that serve the campaign's purpose.
+4. Use the logo in the header/footer. Use 1-2 product/hero images max in the body. Skip images that don't fit.
+5. Many brand images have large negative space or text overlay areas — these are designed for marketing layouts with text on top. In email, you should either:
+   - Use the image with a text overlay using absolute positioning, OR
+   - Skip it if the negative space would look awkward without overlaid text
+6. CONSISTENCY: Every image must have the same padding treatment. Either all images are full-bleed (edge-to-edge) OR all images have equal padding on both sides. Never mix.`;
+
     if (hostedAssetUrls.length > 0) {
-      part3 += `\n\nMANDATORY IMAGE URL RULES:\n- The reference campaign images shown above are for STYLE REFERENCE ONLY. Do NOT embed them as <img> tags — they are screenshots of past emails, not product images.\n- Never invent, guess, or use external stock image URLs (Unsplash, Pexels, etc).\n- For any <img> tags in the HTML, use ONLY from these approved brand asset URLs:\n${hostedAssetUrls.join("\n")}`;
+      part3 += `\n\nAVAILABLE BRAND ASSETS (use selectively — NOT all of them):\n${assetCatalog}`;
     } else {
-      part3 += `\n\nMANDATORY IMAGE URL RULES:\n- The reference campaign images shown above are for STYLE REFERENCE ONLY. Do NOT embed them as <img> tags.\n- No approved brand asset image URLs were provided, so do not include <img> tags. Use solid color blocks, gradients, or text-only sections instead.`;
+      part3 += `\n\nNo brand asset images available. Use solid color blocks, gradients, or text-only sections instead. Do NOT include <img> tags.`;
     }
+
     part3 += `\n\nThe output must look like it was made by the same designer who created the reference campaigns above. Return only the complete HTML.`;
     userContent.push({ type: "text", text: part3 });
 
