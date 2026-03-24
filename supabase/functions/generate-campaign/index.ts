@@ -206,7 +206,7 @@ Deno.serve(async (req) => {
     const selectedReferenceUrls = referenceUrls.slice(0, maxRefs);
 
     // Fetch all reference images in PARALLEL (no ImageKit rehosting — use direct URLs)
-    const imagePromises = selectedReferenceUrls.map(async (url: string, index: number) => {
+    const imagePromises = selectedReferenceUrls.map(async (url: string) => {
       try {
         const imgResp = await fetch(url);
         if (!imgResp.ok) return null;
@@ -214,7 +214,7 @@ Deno.serve(async (req) => {
         const mediaType = contentType.split(";")[0].trim();
         const buf = await imgResp.arrayBuffer();
         const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-        return { index, type: "image" as const, source: { type: "base64" as const, media_type: mediaType, data: b64 } };
+        return { type: "image" as const, source: { type: "base64" as const, media_type: mediaType, data: b64 } };
       } catch { return null; }
     });
 
