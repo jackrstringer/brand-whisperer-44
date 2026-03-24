@@ -193,14 +193,17 @@ export default function BrandSetup() {
     setProgressValue(0);
     setProgressMessage(AUDIT_MESSAGES[0]);
 
+    // Slow, realistic progress: takes ~3 min to reach 90%, then crawls
+    const startTime = Date.now();
     const interval = setInterval(() => {
-      setProgressValue((v) => {
-        const next = Math.min(v + 1.5, 95);
-        const msgIndex = Math.min(Math.floor(next / 16), AUDIT_MESSAGES.length - 1);
-        setProgressMessage(AUDIT_MESSAGES[msgIndex]);
-        return next;
-      });
-    }, 400);
+      const elapsed = (Date.now() - startTime) / 1000; // seconds
+      // Logarithmic curve: fast to 30%, slows to 60%, crawls to 90%
+      // At 30s → ~30%, at 60s → ~50%, at 120s → ~70%, at 180s → ~85%, caps at 90%
+      const progress = Math.min(90, 30 * Math.log10(1 + elapsed / 10));
+      const msgIndex = Math.min(Math.floor(progress / 16), AUDIT_MESSAGES.length - 1);
+      setProgressMessage(AUDIT_MESSAGES[msgIndex]);
+      setProgressValue(progress);
+    }, 1000);
 
     try {
       // === Parallel extraction: Figma + Website + Image slicing ===
@@ -236,7 +239,7 @@ export default function BrandSetup() {
       }
 
       // Image slicing (always)
-      const refFiles = getReferenceImageFiles().slice(0, 10);
+      const refFiles = getReferenceImageFiles().slice(0, 8);
       if (refFiles.length === 0) {
         const fallbackFiles = Object.values(assetCategories)
           .flatMap((cat) => cat.files.filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f.name)))
@@ -336,14 +339,14 @@ export default function BrandSetup() {
     setProgressValue(0);
     setProgressMessage(GUIDE_MESSAGES[0]);
 
+    const guideStartTime = Date.now();
     const interval = setInterval(() => {
-      setProgressValue((v) => {
-        const next = Math.min(v + 0.8, 95);
-        const msgIndex = Math.min(Math.floor(next / 25), GUIDE_MESSAGES.length - 1);
-        setProgressMessage(GUIDE_MESSAGES[msgIndex]);
-        return next;
-      });
-    }, 500);
+      const elapsed = (Date.now() - guideStartTime) / 1000;
+      const progress = Math.min(90, 25 * Math.log10(1 + elapsed / 8));
+      const msgIndex = Math.min(Math.floor(progress / 25), GUIDE_MESSAGES.length - 1);
+      setProgressMessage(GUIDE_MESSAGES[msgIndex]);
+      setProgressValue(progress);
+    }, 1000);
 
     try {
       // Step 1: Upload images and create brand + profile early

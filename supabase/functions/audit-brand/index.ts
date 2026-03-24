@@ -260,7 +260,7 @@ Deno.serve(async (req) => {
 
     // === PASS 1: Per-campaign audit (parallel, Sonnet) ===
     const campaignEntries = Array.from(campaignGroups.entries());
-    const batchSize = 3;
+    const batchSize = 5;
     const perCampaignResults: Array<{ campaignIndex: number; audit: any }> = [];
 
     for (let batch = 0; batch < campaignEntries.length; batch += batchSize) {
