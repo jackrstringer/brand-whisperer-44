@@ -105,7 +105,7 @@ export default function ReanalyzeBrand({ brandId, brandName, industry }: Reanaly
     try {
       const { data: profile } = await supabase
         .from("brand_profiles")
-        .select("reference_image_urls")
+        .select("reference_image_urls, confirmed_properties")
         .eq("brand_id", brandId)
         .single();
 
