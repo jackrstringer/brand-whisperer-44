@@ -7,6 +7,46 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const PERMANENT_HOSTS = ["ik.imagekit.io", ".supabase.co/storage"];
+
+function isAlreadyHosted(url: string): boolean {
+  return PERMANENT_HOSTS.some((host) => url.includes(host));
+}
+
+/** Chunked base64 encoding to avoid stack overflow on large images */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+/** Anthropic API call with AbortController timeout */
+async function callAnthropic(body: object, apiKey: string, timeoutMs = 120000): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error(`Anthropic API call timed out after ${timeoutMs / 1000}s`);
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -25,6 +65,7 @@ Deno.serve(async (req) => {
 
     const { campaignId, message, currentHtml } = await req.json();
 
+    // FIX 2: Fetch campaign first (need brand_id), then parallelize the rest
     const { data: campaign, error: cErr } = await supabase
       .from("campaigns")
       .select("*")
@@ -32,54 +73,35 @@ Deno.serve(async (req) => {
       .single();
     if (cErr || !campaign) throw new Error("Campaign not found");
 
-    const { data: profile, error: pErr } = await supabase
-      .from("brand_profiles")
-      .select("*")
-      .eq("brand_id", campaign.brand_id)
-      .single();
-    if (pErr || !profile) throw new Error("Brand profile not found");
+    // Parallelize all reads that depend on brand_id
+    const [profileResult, brandAssetsResult, productAssetsResult, brandResult] = await Promise.all([
+      supabase.from("brand_profiles").select("*").eq("brand_id", campaign.brand_id).single(),
+      supabase.from("brand_assets").select("url, category").eq("brand_id", campaign.brand_id),
+      supabase.from("product_assets").select("url").eq("brand_id", campaign.brand_id),
+      supabase.from("brands").select("user_id").eq("id", campaign.brand_id).single(),
+    ]);
 
-    // Fetch brand instructions
+    const profile = profileResult.data;
+    if (profileResult.error || !profile) throw new Error("Brand profile not found");
+
     const brandInstructions = (profile as any).brand_instructions || "";
 
-    // Fetch global rules
-    const { data: brand } = await supabase.from("brands").select("user_id").eq("id", campaign.brand_id).single();
+    // Chain user_preferences after brand (needs user_id)
     let globalRules = "";
-    if (brand?.user_id) {
-      const { data: prefs } = await supabase.from("user_preferences").select("preferences").eq("user_id", brand.user_id).single();
+    if (brandResult.data?.user_id) {
+      const { data: prefs } = await supabase.from("user_preferences").select("preferences").eq("user_id", brandResult.data.user_id).single();
       if (prefs?.preferences) {
         globalRules = (prefs.preferences as any).generation_rules || "";
       }
     }
 
-    // Top 3 reference images for style context (vision only)
+    // FIX 5: Reference images — skip rehost for already-hosted URLs, fetch once for base64 only
     const imageBlocks: any[] = [];
     const referenceUrls = Array.isArray(profile.reference_image_urls)
       ? profile.reference_image_urls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
       : [];
 
-    let hostedReferenceUrls = referenceUrls.slice(0, 3);
-    if (hostedReferenceUrls.length > 0) {
-      const referencesHtml = hostedReferenceUrls
-        .map((url: string, index: number) => `<img src="${url}" alt="reference-${index}" />`)
-        .join("\n");
-
-      const rehostedReferencesHtml = await rehostHtmlImagesWithImageKit(referencesHtml, {
-        campaignId,
-        imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
-        folder: "/campaign-studio/references",
-      });
-
-      const extractedRehostedUrls = Array.from(
-        rehostedReferencesHtml.matchAll(/<img\b[^>]*?\bsrc=(["'])(.*?)\1/gi),
-      )
-        .map((match) => match[2])
-        .filter((url): url is string => Boolean(url));
-
-      if (extractedRehostedUrls.length > 0) {
-        hostedReferenceUrls = extractedRehostedUrls;
-      }
-    }
+    const hostedReferenceUrls = referenceUrls.slice(0, 3);
 
     for (const url of hostedReferenceUrls) {
       try {
@@ -87,7 +109,8 @@ Deno.serve(async (req) => {
         const contentType = imgResp.headers.get("content-type") || "image/png";
         const mediaType = contentType.split(";")[0].trim();
         const buf = await imgResp.arrayBuffer();
-        const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+        // FIX 4: Chunked base64 encoding
+        const b64 = arrayBufferToBase64(buf);
         imageBlocks.push({
           type: "image",
           source: { type: "base64", media_type: mediaType, data: b64 },
@@ -95,28 +118,16 @@ Deno.serve(async (req) => {
       } catch { /* skip */ }
     }
 
-    // Fetch brand assets for embeddable URLs
-    const { data: brandAssets } = await supabase
-      .from("brand_assets")
-      .select("url, category")
-      .eq("brand_id", campaign.brand_id);
-
-    const brandAssetUrls = (brandAssets || [])
+    // Build unified asset catalog (brand + product)
+    const brandAssetUrls = (brandAssetsResult.data || [])
       .map((a: any) => a.url)
       .filter((url: string) => typeof url === "string" && url.trim().length > 0)
       .slice(0, 15);
 
-    // Also fetch ALL product assets for this brand so edits don't strip them
-    const { data: productAssets } = await supabase
-      .from("product_assets")
-      .select("url")
-      .eq("brand_id", campaign.brand_id);
-
-    const productAssetUrls = (productAssets || [])
+    const productAssetUrls = (productAssetsResult.data || [])
       .map((a: any) => a.url)
       .filter((url: string) => typeof url === "string" && url.trim().length > 0);
 
-    // Unified approved catalog
     const embeddableUrls = [...brandAssetUrls, ...productAssetUrls];
 
     // Extract brand values for QA enforcement
@@ -157,7 +168,7 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
     const userContent: any[] = [];
     if (imageBlocks.length > 0) userContent.push(...imageBlocks);
     const imageRulesText = embeddableUrls.length > 0
-      ? `Image URL rules:\n- Reference screenshots above are for STYLE only — never embed them.\n- Never invent or use external stock URLs.\n- For <img src> values, use ONLY from these brand asset URLs:\n${embeddableUrls.join("\n")}`
+      ? `Image URL rules:\n- Reference screenshots above are for STYLE only — never embed them.\n- Never invent or use external stock URLs.\n- For <img src> values, use ONLY from these approved asset URLs:\n${embeddableUrls.join("\n")}`
       : "Image URL rules:\n- No approved image URLs exist, so do not add new <img> tags.";
 
     let extraRules = "";
@@ -169,20 +180,13 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
       text: `Brand rules: ${profile.system_prompt}${extraRules}\n\n${imageRulesText}\n\nCurrent HTML:\n${currentHtml}\n\nChange requested: ${message}\n\nReturn only the updated HTML.`,
     });
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-opus-4-6",
-        max_tokens: 8192,
-        system: systemMsg,
-        messages: [{ role: "user", content: userContent }],
-      }),
-    });
+    // FIX 1: max_tokens 16384, FIX 6: callAnthropic with timeout
+    const response = await callAnthropic({
+      model: "claude-opus-4-6",
+      max_tokens: 16384,
+      system: systemMsg,
+      messages: [{ role: "user", content: userContent }],
+    }, ANTHROPIC_API_KEY);
 
     if (!response.ok) {
       const errText = await response.text();
@@ -193,6 +197,7 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
     let html = result.content?.[0]?.text || "";
     html = html.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
 
+    // FIX 5: rehostHtmlImagesWithImageKit now skips already-hosted URLs
     html = await rehostHtmlImagesWithImageKit(html, {
       campaignId,
       imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
