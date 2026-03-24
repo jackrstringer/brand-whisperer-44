@@ -505,6 +505,21 @@ async function processSpecStep(
   return specParsed;
 }
 
+async function updateStatus(brandId: string, status: string) {
+  const sb = getSupabaseAdmin();
+  const { data: existing } = await sb
+    .from("brand_profiles")
+    .select("audit_findings")
+    .eq("brand_id", brandId)
+    .maybeSingle();
+  const base = existing?.audit_findings && typeof existing.audit_findings === "object" && !Array.isArray(existing.audit_findings)
+    ? existing.audit_findings as Record<string, unknown>
+    : {};
+  await sb.from("brand_profiles").update({
+    audit_findings: { ...base, _status: status, _error: undefined },
+  }).eq("brand_id", brandId);
+}
+
 async function processGuideStep(
   apiKey: string,
   auditFindings: any,
@@ -514,6 +529,8 @@ async function processGuideStep(
 ) {
   const sb = getSupabaseAdmin();
   const cleanedAudit = stripRuntimeKeys(auditFindings);
+
+  await updateStatus(brandId, "guide_processing");
 
   const { data: profile, error: profileError } = await sb
     .from("brand_profiles")
