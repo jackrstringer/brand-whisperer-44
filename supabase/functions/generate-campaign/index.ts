@@ -38,6 +38,12 @@ BUTTONS:
 - Width: auto with horizontal padding. NEVER width:100%. Buttons must not stretch to fill the container.
 - Text: short enough to fit one line on 375px mobile
 
+FIRST FOLD CTA (mandatory):
+- Every email MUST have a CTA button visible within the first ~600px of vertical content (the "first fold")
+- This means: hero section → headline → brief supporting text → CTA, all within the first screenful
+- The first CTA should appear BEFORE any secondary content sections, product grids, or testimonials
+- Additional CTAs can appear later in the email, but the first one must be above the fold
+
 HEADLINES:
 - All multi-line headlines use hard <br> line breaks
 - Never rely on auto-wrapping — email clients reflow unpredictably
