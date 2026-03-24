@@ -103,6 +103,8 @@ export default function BrandSetup() {
 
   // Sliced images cache for reuse across passes
   const [slicedImagesCache, setSlicedImagesCache] = useState<any[]>([]);
+  // Confirmed properties from Figma/website extraction
+  const [confirmedProperties, setConfirmedProperties] = useState<any>(null);
 
   const toggleSource = (source: SourceType) => {
     setSelectedSources((prev) =>
