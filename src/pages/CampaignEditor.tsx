@@ -111,6 +111,36 @@ export default function CampaignEditor() {
     } catch {}
   }, []);
 
+  // Attach ResizeObserver to iframe body for continuous height tracking
+  const iframeObserverRef = useRef<ResizeObserver | null>(null);
+  const setupIframeObserver = useCallback((iframe: HTMLIFrameElement | null) => {
+    if (iframeObserverRef.current) {
+      iframeObserverRef.current.disconnect();
+      iframeObserverRef.current = null;
+    }
+    if (!iframe) return;
+    try {
+      const doc = iframe.contentDocument;
+      if (!doc?.body) return;
+      const observer = new ResizeObserver(() => measureIframeHeight(iframe));
+      observer.observe(doc.body);
+      iframeObserverRef.current = observer;
+      // Also re-measure when images inside load
+      const images = doc.querySelectorAll("img");
+      images.forEach((img) => {
+        if (!img.complete) {
+          img.addEventListener("load", () => measureIframeHeight(iframe), { once: true });
+        }
+      });
+    } catch {}
+  }, [measureIframeHeight]);
+
+  useEffect(() => {
+    return () => {
+      if (iframeObserverRef.current) iframeObserverRef.current.disconnect();
+    };
+  }, []);
+
   const saveName = async () => {
     if (!campaignId || !nameValue.trim()) return;
     setEditingName(false);
