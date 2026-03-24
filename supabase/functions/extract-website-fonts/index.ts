@@ -96,11 +96,17 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { url } = await req.json();
+    let { url } = await req.json();
     if (!url) {
       return new Response(JSON.stringify({ error: "url is required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Normalize URL: add https:// if no protocol present
+    url = url.trim();
+    if (!/^https?:\/\//i.test(url)) {
+      url = `https://${url}`;
     }
 
     console.log(`[extract-website-fonts] Fetching: ${url}`);

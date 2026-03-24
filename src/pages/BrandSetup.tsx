@@ -193,14 +193,17 @@ export default function BrandSetup() {
     setProgressValue(0);
     setProgressMessage(AUDIT_MESSAGES[0]);
 
+    // Slow, realistic progress: takes ~3 min to reach 90%, then crawls
+    const startTime = Date.now();
     const interval = setInterval(() => {
-      setProgressValue((v) => {
-        const next = Math.min(v + 1.5, 95);
-        const msgIndex = Math.min(Math.floor(next / 16), AUDIT_MESSAGES.length - 1);
-        setProgressMessage(AUDIT_MESSAGES[msgIndex]);
-        return next;
-      });
-    }, 400);
+      const elapsed = (Date.now() - startTime) / 1000; // seconds
+      // Logarithmic curve: fast to 30%, slows to 60%, crawls to 90%
+      // At 30s → ~30%, at 60s → ~50%, at 120s → ~70%, at 180s → ~85%, caps at 90%
+      const progress = Math.min(90, 30 * Math.log10(1 + elapsed / 10));
+      const msgIndex = Math.min(Math.floor(progress / 16), AUDIT_MESSAGES.length - 1);
+      setProgressMessage(AUDIT_MESSAGES[msgIndex]);
+      setProgressValue(progress);
+    }, 1000);
 
     try {
       // === Parallel extraction: Figma + Website + Image slicing ===
