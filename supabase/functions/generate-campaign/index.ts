@@ -242,8 +242,8 @@ Deno.serve(async (req) => {
       ? profile.reference_image_urls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
       : [];
 
-    // FIX 3: Cap reference images — 5 for normal and fast, 3 for faster
-    const maxRefs = speedMode === "faster" ? 3 : 5;
+    // Cap reference images at 5 for all modes
+    const maxRefs = 5;
     const selectedReferenceUrls = referenceUrls.slice(0, maxRefs);
 
     // FIX 4: Fetch all reference images in PARALLEL with chunked base64
