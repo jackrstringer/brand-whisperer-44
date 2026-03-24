@@ -126,7 +126,12 @@ Return a JSON object with exactly three keys:
 
 "needs_confirmation" -- array of objects: [{"element": "e.g. typography.headline_italic_pattern", "reason": "Could be JPEG compression artifact vs actual italic"}]
 
-For unified values, use the MOST COMMON value (majority rules). If tied, pick the more standard option.
+For unified values, use the MOST COMMON value (majority rules).
+
+For CTA border/stroke specifically:
+- If ANY campaign clearly shows a visible outer stroke on primary CTA, preserve a stroked CTA variant in the unified audit.
+- Do NOT drop the stroke because some campaigns vary.
+- If mixed usage exists (some stroked, some unstroked), keep the stroked variant and add an inconsistency entry.
 
 CRITICAL:
 - CTA font-style defaults to NORMAL. Bold sans-serif text in JPEG screenshots can appear slightly italicized due to compression.
@@ -135,6 +140,57 @@ CRITICAL:
 - Merge all repeated_components, noting which appeared in multiple campaigns.
 
 Return ONLY valid JSON. No markdown fences. No commentary.`;
+
+function toBoolean(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") return value.trim().toLowerCase() === "true";
+  return false;
+}
+
+function mostCommonString(values: Array<string | null | undefined>): string | null {
+  const filtered = values.filter((v): v is string => !!v && v.trim().length > 0);
+  if (filtered.length === 0) return null;
+  const counts = new Map<string, number>();
+  for (const value of filtered) {
+    counts.set(value, (counts.get(value) || 0) + 1);
+  }
+  let best: string | null = null;
+  let bestCount = -1;
+  for (const [value, count] of counts) {
+    if (count > bestCount) {
+      best = value;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+function mostCommonNumber(values: Array<number | null | undefined>): number | null {
+  const filtered = values.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  if (filtered.length === 0) return null;
+  const counts = new Map<number, number>();
+  for (const value of filtered) {
+    counts.set(value, (counts.get(value) || 0) + 1);
+  }
+  let best: number | null = null;
+  let bestCount = -1;
+  for (const [value, count] of counts) {
+    if (count > bestCount) {
+      best = value;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+function normalizeBorderWeight(value: unknown): string | null {
+  if (typeof value === "number" && Number.isFinite(value)) return `${value}px`;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const trimmed = value.trim();
+    return trimmed.endsWith("px") ? trimmed : `${trimmed}px`;
+  }
+  return null;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -168,9 +224,17 @@ Deno.serve(async (req) => {
       }
       if (confirmed_properties.buttons) {
         const b = confirmed_properties.buttons;
-        parts.push(`Button border-radius: ${b.border_radius}px, font-weight: ${b.font_weight}, font-style: ${b.font_style || "normal"}`);
+        const radiusPart = b.border_radius != null ? `${b.border_radius}px` : "unknown";
+        parts.push(`Button border-radius: ${radiusPart}, font-weight: ${b.font_weight || "unknown"}, font-style: ${b.font_style || "normal"}`);
+        if (b.has_border === true) {
+          parts.push(`CTA has visible outer stroke: yes`);
+          if (b.border_color) parts.push(`CTA border color: ${b.border_color}`);
+          if (b.border_weight != null) parts.push(`CTA border weight: ${typeof b.border_weight === "number" ? `${b.border_weight}px` : b.border_weight}`);
+        } else if (b.has_border === false) {
+          parts.push(`CTA has visible outer stroke: no`);
+        }
       }
-      parts.push("\nUse these values as ground truth. Focus your visual audit on: CTA label text, copy patterns, layout spacing, component structures, voice/tone, photography style. Do NOT guess at font names or hex colors -- they have been confirmed above.");
+      parts.push("\nUse these values as ground truth. Focus your visual audit on: CTA label text, copy patterns, layout spacing, component structures, voice/tone, photography style. Do NOT guess at font names or hex colors -- they have been confirmed above. If CTA stroke is confirmed, preserve it and do not remove it as a simplification.");
       confirmedPrefix = parts.join("\n") + "\n\n";
     }
 
@@ -303,6 +367,92 @@ Deno.serve(async (req) => {
     if (!jsonMatch) throw new Error("Failed to parse synthesis result");
 
     const parsed = JSON.parse(jsonMatch[0]);
+
+    const borderEvidence = perCampaignResults
+      .map((entry) => {
+        const variants = Array.isArray(entry.audit?.cta_buttons?.variants) ? entry.audit.cta_buttons.variants : [];
+        const strokedVariant = variants.find((variant: any) => toBoolean(variant?.has_border));
+        return {
+          campaignIndex: entry.campaignIndex,
+          hasBorder: !!strokedVariant,
+          borderColor: strokedVariant?.border_color ?? null,
+          borderWeight: strokedVariant?.border_weight ?? null,
+        };
+      });
+
+    const campaignsWithBorder = borderEvidence.filter((entry) => entry.hasBorder);
+    const confirmedHasBorder = confirmed_properties?.buttons?.has_border;
+
+    if (!parsed.audit || typeof parsed.audit !== "object") parsed.audit = {};
+    if (!parsed.audit.cta_buttons || typeof parsed.audit.cta_buttons !== "object") parsed.audit.cta_buttons = {};
+    if (!Array.isArray(parsed.audit.cta_buttons.variants)) parsed.audit.cta_buttons.variants = [];
+    if (parsed.audit.cta_buttons.variants.length === 0) {
+      parsed.audit.cta_buttons.variants.push({ name: "primary" });
+    }
+
+    if (!Array.isArray(parsed.inconsistencies)) parsed.inconsistencies = [];
+    if (!Array.isArray(parsed.needs_confirmation)) parsed.needs_confirmation = [];
+
+    const unifiedVariants = parsed.audit.cta_buttons.variants;
+    const unifiedHasBorder = unifiedVariants.some((variant: any) => toBoolean(variant?.has_border));
+
+    const inferredBorderColor = mostCommonString(campaignsWithBorder.map((entry) => entry.borderColor));
+    const inferredBorderWeightRaw = mostCommonString(campaignsWithBorder.map((entry) => {
+      const weight = entry.borderWeight;
+      if (typeof weight === "number") return `${weight}`;
+      if (typeof weight === "string") return weight;
+      return null;
+    }));
+    const inferredBorderWeight = normalizeBorderWeight(inferredBorderWeightRaw);
+
+    const primaryVariant = unifiedVariants[0];
+    const shouldForceBorderFromConfirmed = confirmedHasBorder === true;
+    const shouldForceBorderFromEvidence = confirmedHasBorder == null && campaignsWithBorder.length > 0 && !unifiedHasBorder;
+
+    if (shouldForceBorderFromConfirmed || shouldForceBorderFromEvidence) {
+      primaryVariant.has_border = true;
+      if (!primaryVariant.border_color) {
+        primaryVariant.border_color = confirmed_properties?.buttons?.border_color ?? inferredBorderColor;
+      }
+      if (!primaryVariant.border_weight) {
+        const confirmedWeight = normalizeBorderWeight(confirmed_properties?.buttons?.border_weight);
+        primaryVariant.border_weight = confirmedWeight ?? inferredBorderWeight;
+      }
+    }
+
+    const hasMixedBorderUsage = campaignsWithBorder.length > 0 && campaignsWithBorder.length < perCampaignResults.length;
+    if (hasMixedBorderUsage) {
+      parsed.inconsistencies.push({
+        element: "cta_buttons.variants[].has_border",
+        description: `Visible CTA border appears in ${campaignsWithBorder.length}/${perCampaignResults.length} campaigns. Keep stroked variant and treat usage as mixed.`,
+        campaigns: borderEvidence.filter((entry) => entry.hasBorder).map((entry) => entry.campaignIndex + 1),
+      });
+    }
+
+    if (confirmedHasBorder == null && campaignsWithBorder.length === 0) {
+      parsed.needs_confirmation.push({
+        element: "cta_buttons.variants[].has_border",
+        reason: "No campaign produced high-confidence CTA stroke detection. Border presence should be manually confirmed if this is a key brand trait.",
+      });
+    }
+
+    const inferredBorderRadius = mostCommonNumber(
+      perCampaignResults
+        .flatMap((entry) => Array.isArray(entry.audit?.cta_buttons?.variants) ? entry.audit.cta_buttons.variants : [])
+        .map((variant: any) => {
+          const value = variant?.border_radius_px;
+          if (typeof value === "number") return value;
+          if (typeof value === "string") {
+            const parsedValue = parseFloat(value);
+            return Number.isFinite(parsedValue) ? parsedValue : null;
+          }
+          return null;
+        })
+    );
+
+    if (!primaryVariant.border_radius_px && inferredBorderRadius != null) {
+      primaryVariant.border_radius_px = Math.round(inferredBorderRadius);
+    }
 
     console.log(`Audit synthesis complete`);
 

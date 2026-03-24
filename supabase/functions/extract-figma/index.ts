@@ -28,12 +28,75 @@ interface ColorEntry {
   contexts: string[];
 }
 
+interface ButtonObservation {
+  name: string;
+  has_border: boolean;
+  border_color: string | null;
+  border_weight: number | null;
+  border_radius: number | null;
+}
+
+function getStrokeWeight(node: any): number | null {
+  if (typeof node.strokeWeight === "number" && Number.isFinite(node.strokeWeight) && node.strokeWeight > 0) {
+    return node.strokeWeight;
+  }
+
+  if (node.individualStrokeWeights && typeof node.individualStrokeWeights === "object") {
+    const values = Object.values(node.individualStrokeWeights)
+      .filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0);
+    if (values.length > 0) {
+      return values.reduce((sum, value) => sum + value, 0) / values.length;
+    }
+  }
+
+  return null;
+}
+
+function hasTextDescendant(node: any, depth = 0): boolean {
+  if (!node || depth > 4) return false;
+  if (node.type === "TEXT") return true;
+  if (!Array.isArray(node.children)) return false;
+  return node.children.some((child: any) => hasTextDescendant(child, depth + 1));
+}
+
+function looksLikeButtonNode(node: any): boolean {
+  if (!node || typeof node !== "object") return false;
+  const name = String(node.name || "").toLowerCase();
+  const type = String(node.type || "").toUpperCase();
+
+  if (/(button|cta|btn|primary action|shop|buy|order|subscribe|start|try|get)/.test(name)) {
+    return true;
+  }
+
+  const buttonLikeType = ["INSTANCE", "COMPONENT", "FRAME", "GROUP", "RECTANGLE"].includes(type);
+  const rounded = typeof node.cornerRadius === "number" && node.cornerRadius >= 8;
+  const hasStroke = Array.isArray(node.strokes) && node.strokes.some((s: any) => s?.visible !== false);
+  return buttonLikeType && rounded && hasStroke && hasTextDescendant(node);
+}
+
+function mostCommonString(values: Array<string | null | undefined>): string | null {
+  const filtered = values.filter((v): v is string => !!v && v.trim().length > 0);
+  if (filtered.length === 0) return null;
+  const counts = new Map<string, number>();
+  for (const v of filtered) counts.set(v, (counts.get(v) || 0) + 1);
+  let best: string | null = null;
+  let bestCount = -1;
+  for (const [value, count] of counts) {
+    if (count > bestCount) {
+      best = value;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
 function traverseNodes(
   node: any,
   textNodes: TextNode[],
   colorMap: Map<string, ColorEntry>,
   radii: number[],
   spacings: { padding: number[]; gaps: number[] },
+  buttonObservations: ButtonObservation[],
   depth = 0
 ) {
   if (!node) return;
@@ -97,10 +160,26 @@ function traverseNodes(
   if (node.paddingBottom != null) spacings.padding.push(node.paddingBottom);
   if (node.itemSpacing != null) spacings.gaps.push(node.itemSpacing);
 
+  // Button style observations
+  if (looksLikeButtonNode(node)) {
+    const visibleStroke = Array.isArray(node.strokes)
+      ? node.strokes.find((stroke: any) => stroke?.type === "SOLID" && stroke?.visible !== false && stroke?.color)
+      : null;
+
+    const borderWeight = getStrokeWeight(node);
+    buttonObservations.push({
+      name: String(node.name || "Unnamed"),
+      has_border: !!visibleStroke && (borderWeight == null || borderWeight > 0),
+      border_color: visibleStroke?.color ? figmaColorToHex(visibleStroke.color) : null,
+      border_weight: borderWeight,
+      border_radius: typeof node.cornerRadius === "number" ? node.cornerRadius : null,
+    });
+  }
+
   // Recurse children
   if (node.children && Array.isArray(node.children)) {
     for (const child of node.children) {
-      traverseNodes(child, textNodes, colorMap, radii, spacings, depth + 1);
+      traverseNodes(child, textNodes, colorMap, radii, spacings, buttonObservations, depth + 1);
     }
   }
 }
@@ -252,8 +331,9 @@ Deno.serve(async (req) => {
     const colorMap = new Map<string, ColorEntry>();
     const radii: number[] = [];
     const spacings = { padding: [] as number[], gaps: [] as number[] };
+    const buttonObservations: ButtonObservation[] = [];
 
-    traverseNodes(rootNode, textNodes, colorMap, radii, spacings);
+    traverseNodes(rootNode, textNodes, colorMap, radii, spacings, buttonObservations);
 
     console.log(`[extract-figma] Found ${textNodes.length} text nodes, ${colorMap.size} unique colors, ${radii.length} radii`);
 
@@ -278,6 +358,11 @@ Deno.serve(async (req) => {
     );
     const primaryAccent = nonBWColors[0]?.hex || null;
 
+    const buttonHasBorder = buttonObservations.some((button) => button.has_border);
+    const borderColor = mostCommonString(buttonObservations.filter((button) => button.has_border).map((button) => button.border_color));
+    const borderWeight = mostCommon(buttonObservations.filter((button) => button.has_border).map((button) => button.border_weight ?? 0).filter((v) => v > 0));
+    const buttonRadius = mostCommon(buttonObservations.map((button) => button.border_radius ?? 0).filter((v) => v > 0)) ?? mostCommon(radii);
+
     const confirmedProperties = {
       fonts: fonts || undefined,
       colors: {
@@ -286,7 +371,10 @@ Deno.serve(async (req) => {
         colors_by_frequency: allColors.slice(0, 10).map(c => ({ hex: c.hex, count: c.count, contexts: c.contexts })),
       },
       buttons: {
-        border_radius: mostCommon(radii),
+        has_border: buttonHasBorder,
+        border_color: borderColor,
+        border_weight: borderWeight,
+        border_radius: buttonRadius,
         font_weight: fonts?.body?.weights?.includes(700) ? 700 : (fonts?.body?.weights?.[fonts.body.weights.length - 1] || 700),
         font_style: "normal" as const,
       },
@@ -307,6 +395,7 @@ Deno.serve(async (req) => {
       confirmed_properties: confirmedProperties,
       source: "figma",
       raw_text_nodes_sample: rawTextSample,
+      button_observations_sample: buttonObservations.slice(0, 10),
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
