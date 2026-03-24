@@ -185,7 +185,9 @@ export default function BrandSetup() {
   const startAudit = async () => {
     if (!brandName.trim()) { toast.error("Please enter a brand name."); return; }
     const allImages = getAllImageFiles();
-    if (allImages.length < 3) { toast.error("Please upload at least 3 images."); return; }
+    if (allImages.length < 3 && !selectedSources.includes("website") && !selectedSources.includes("figma")) {
+      toast.error("Please upload at least 3 images."); return;
+    }
 
     setStep("auditing");
     setProgressValue(0);
@@ -201,6 +203,39 @@ export default function BrandSetup() {
     }, 400);
 
     try {
+      // === Parallel extraction: Figma + Website + Image slicing ===
+      const extractionPromises: Promise<any>[] = [];
+      const extractionSources: string[] = ["screenshots"];
+
+      // Figma extraction
+      if (selectedSources.includes("figma") && figmaUrl && figmaToken) {
+        extractionSources.push("figma");
+        extractionPromises.push(
+          supabase.functions.invoke("extract-figma", {
+            body: { figma_url: figmaUrl, figma_token: figmaToken },
+          }).then(({ data, error }) => {
+            if (error) { console.warn("Figma extraction failed:", error); return null; }
+            if (data?.error) { console.warn("Figma extraction error:", data.error); return null; }
+            return { source: "figma", ...data };
+          }).catch((err) => { console.warn("Figma extraction failed:", err); return null; })
+        );
+      }
+
+      // Website extraction
+      if (selectedSources.includes("website") && websiteUrl) {
+        extractionSources.push("website");
+        extractionPromises.push(
+          supabase.functions.invoke("extract-website-fonts", {
+            body: { url: websiteUrl },
+          }).then(({ data, error }) => {
+            if (error) { console.warn("Website extraction failed:", error); return null; }
+            if (data?.error) { console.warn("Website extraction error:", data.error); return null; }
+            return { source: "website", ...data };
+          }).catch((err) => { console.warn("Website extraction failed:", err); return null; })
+        );
+      }
+
+      // Image slicing (always)
       const refFiles = getReferenceImageFiles().slice(0, 10);
       if (refFiles.length === 0) {
         const fallbackFiles = Object.values(assetCategories)
@@ -208,26 +243,65 @@ export default function BrandSetup() {
           .slice(0, 5);
         refFiles.push(...fallbackFiles);
       }
-      if (refFiles.length < 3) {
+
+      let slicedImages: any[] = [];
+      if (refFiles.length >= 3) {
+        for (let ci = 0; ci < refFiles.length; ci++) {
+          const slices = await sliceImage(refFiles[ci]);
+          for (const slice of slices) {
+            slicedImages.push({ ...slice, campaignIndex: ci });
+          }
+        }
+        setSlicedImagesCache(slicedImages);
+      }
+
+      // Wait for parallel extractions
+      const extractionResults = await Promise.all(extractionPromises);
+
+      // Merge confirmed properties (Figma > Website)
+      let merged: any = null;
+      const websiteResult = extractionResults.find((r) => r?.source === "website");
+      const figmaResult = extractionResults.find((r) => r?.source === "figma");
+
+      if (websiteResult?.confirmed_properties) {
+        merged = { ...websiteResult.confirmed_properties };
+      }
+      if (figmaResult?.confirmed_properties) {
+        // Figma overrides website
+        merged = { ...(merged || {}), ...figmaResult.confirmed_properties };
+        if (figmaResult.confirmed_properties.fonts) {
+          merged.fonts = figmaResult.confirmed_properties.fonts;
+        }
+        if (figmaResult.confirmed_properties.colors) {
+          merged.colors = { ...(merged.colors || {}), ...figmaResult.confirmed_properties.colors };
+        }
+      }
+
+      setConfirmedProperties(merged);
+
+      if (slicedImages.length === 0 && !merged) {
         clearInterval(interval);
-        toast.error("Need at least 3 reference images for analysis.");
+        toast.error("Need at least 3 reference images or a Figma/website source.");
         setStep("uploads");
         return;
       }
 
-      const slicedImages: any[] = [];
-      for (let ci = 0; ci < refFiles.length; ci++) {
-        const slices = await sliceImage(refFiles[ci]);
-        for (const slice of slices) {
-          slicedImages.push({ ...slice, campaignIndex: ci });
-        }
+      // If we have no images but have confirmed props, skip audit and go straight to guide
+      if (slicedImages.length === 0) {
+        clearInterval(interval);
+        // Use confirmed properties as a minimal audit
+        const minimalAudit = { confirmed_properties: merged, _note: "No screenshots provided, using Figma/website data only" };
+        setAuditFindings(minimalAudit);
+        setProgressValue(100);
+        setProgressMessage("Extraction complete! Generating brand guide...");
+        setTimeout(() => generateGuideFromAudit(minimalAudit, merged, extractionSources), 500);
+        return;
       }
-      setSlicedImagesCache(slicedImages);
 
       console.log(`Sending ${slicedImages.length} slices from ${refFiles.length} refs to audit`);
 
       const { data, error } = await supabase.functions.invoke("audit-brand", {
-        body: { images: slicedImages, brandName, industry },
+        body: { images: slicedImages, brandName, industry, confirmed_properties: merged },
       });
 
       clearInterval(interval);
@@ -240,7 +314,7 @@ export default function BrandSetup() {
       setProgressValue(100);
       setProgressMessage("Audit complete! Generating brand guide...");
       // Skip audit review — go straight to guide generation
-      setTimeout(() => generateGuideFromAudit(data.audit), 500);
+      setTimeout(() => generateGuideFromAudit(data.audit, merged, extractionSources), 500);
     } catch (err: any) {
       clearInterval(interval);
       toast.error(err.message || "Audit failed");
