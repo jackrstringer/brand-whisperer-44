@@ -420,8 +420,7 @@ Deno.serve(async (req) => {
 
       if (qaResponse.ok) {
         const qaResult = await qaResponse.json();
-        let qaHtml = qaResult.content?.[0]?.text || "";
-        qaHtml = qaHtml.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
+        const qaHtml = extractHtmlOnly(qaResult.content?.[0]?.text || "");
         if (qaHtml.length > 100 && qaHtml.includes("<table")) {
           html = qaHtml;
         }
