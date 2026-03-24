@@ -34,6 +34,7 @@ STRUCTURE:
 - <style> block in <head> for @media queries and Gmail fixes only
 - Wrapper table: width="100%" style="max-width:600px; width:100%; margin:0 auto;"
 - The outermost wrapper table must NEVER use a fixed width:600px. Always width:100% with max-width:600px.
+- The outermost body/wrapper background MUST be pure white (#ffffff) or transparent. NEVER add a grey, off-white, or colored background wrapper around the email. No grey padding frames around the email content.
 
 GMAIL DARK MODE (apply to every single white <td> and the wrapper table):
 - Add background-image:linear-gradient(#ffffff,#ffffff) alongside background-color:#ffffff
@@ -68,8 +69,10 @@ HEADLINES:
 
 IMAGES:
 - All images must use: style="width:100%; height:auto; display:block;"
-- CONSISTENCY: Every image must have the same padding treatment. Either ALL images are full-bleed (edge-to-edge) OR ALL images have equal padding on both sides. NEVER mix full-bleed and padded images in the same email.
-- If an image has excessive negative space that would look awkward, use ImageKit smart cropping by appending transformation parameters to the URL, or skip the image entirely. Do NOT overlay text on images.
+- PADDING CONSISTENCY (critical): Every content image in the email must have the SAME padding treatment. Either ALL images sit inside table cells with equal left/right padding (e.g., 24-40px on each side) OR ALL images are full-bleed. NEVER mix padded and full-bleed images.
+- When using padded images, the image's parent <td> must have explicit left and right padding. The image itself stays width:100% within that padded cell.
+- Images should generally NOT span the full 600px edge-to-edge unless the brand's reference campaigns specifically use full-bleed imagery. Default to padded images with 24-40px side padding.
+- If an image has excessive negative space that would look awkward, skip the image entirely. Do NOT overlay text on images. Do NOT modify or transform image URLs.
 - LOGO HANDLING: Images categorized as 'logo' must be displayed at max-width:150px (or similar reasonable size), centered, with padding above and below. NEVER stretch a logo to full width. NEVER crop a logo. If a dark-mode-safe variant exists, use it.
 
 CONTRAST CARDS:
@@ -115,13 +118,14 @@ CHECK EACH — fail ANY = must fix:
 1. Card/container border-radius must match the brand's specified card_radius EVERYWHERE — no sharp corners if the brand uses rounded
 2. Button border-radius and styling must match brand specs
 3. For EACH <img> tag: verify the URL is from the brand's asset catalog. If the URL is fabricated (stock photo, unsplash, etc.), REMOVE the <img> tag entirely. Do NOT modify or transform image URLs.
-4. ALL images must have identical padding treatment — either ALL full-bleed OR ALL with equal side padding. NEVER mix
+4. ALL images must have identical padding treatment — either ALL full-bleed OR ALL with equal side padding (24-40px). NEVER mix. Default to padded unless brand references use full-bleed.
 5. Footer MUST exist as a SEPARATE section with: brand name, "Unsubscribe" link (href="#unsubscribe"), address placeholder
 6. Text alignment must be consistent within each section — no left-aligned bullets in a center-aligned section
 7. Colors must match brand palette — no generic grays (#999, #666) for body text
 8. No reference campaign screenshots embedded as <img> tags
 9. The outermost wrapper must use width:100% with max-width:600px — never fixed width:600px
 10. Every contrast card must have border-radius matching the brand
+11. The outermost body/wrapper background must be pure white (#ffffff) or transparent — NO grey or off-white padding frames around the email
 
 If ANY issues are found: return the CORRECTED complete HTML.
 If all checks pass: return the HTML unchanged.
@@ -441,11 +445,18 @@ Deno.serve(async (req) => {
       console.warn("QA pass error, using first-pass HTML:", qaErr);
     }
 
+    // Derive a short campaign name from the brief
+    const briefWords = brief.trim().split(/\s+/);
+    const campaignName = briefWords.length <= 8
+      ? brief.trim()
+      : briefWords.slice(0, 8).join(" ") + "...";
+
     await supabase.from("campaigns").update({
       html,
       status: "ready",
       brief,
       goal,
+      name: campaignName,
     }).eq("id", campaignId);
 
     await supabase.from("chat_messages").insert({
