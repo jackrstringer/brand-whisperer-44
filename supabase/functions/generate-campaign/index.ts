@@ -234,7 +234,7 @@ Deno.serve(async (req) => {
       .slice(0, 15);
 
     // Build rich asset catalog with descriptions for better AI selection
-    const assetCatalog = hostedAssetEntries.map((entry: any) => {
+    const assetCatalogEntries = hostedAssetEntries.map((entry: any) => {
       const parts: string[] = [];
       const cat = entry.ai_category || entry.category;
       if (cat === "logo") {
@@ -246,9 +246,58 @@ Deno.serve(async (req) => {
       if (entry.description) parts.push(`  Description: ${entry.description}`);
       if (entry.dominant_colors?.length) parts.push(`  Colors: ${entry.dominant_colors.join(", ")}`);
       return parts.join("\n");
-    }).join("\n\n");
+    });
 
-    const embeddableUrls = hostedAssetEntries.map((e) => e.url);
+    // Fetch product assets early so we can build a unified catalog
+    let productCatalogEntries: string[] = [];
+    let allProductAssetUrls: string[] = [];
+    let productRequirements = "";
+
+    if (Array.isArray(productIds) && productIds.length > 0) {
+      const { data: productRows } = await supabase
+        .from("products")
+        .select("id, name, description")
+        .in("id", productIds);
+
+      const { data: productAssetRows } = await supabase
+        .from("product_assets")
+        .select("*")
+        .in("product_id", productIds);
+
+      if (productRows && productRows.length > 0) {
+        productRequirements = `\n\n=== FEATURED PRODUCTS (MUST USE — these products were specifically selected by the user) ===
+You MUST feature these products prominently in the campaign. Use at least one image per product. If no specific images are pinned as [MUST USE], choose the best available images yourself — but you MUST include product imagery. The user selected these products because they want them in the email.`;
+        for (const product of productRows) {
+          productRequirements += `\n\nProduct: ${product.name}`;
+          if (product.description) productRequirements += `\nDescription: ${product.description}`;
+
+          const pAssets = (productAssetRows || []).filter((a: any) => a.product_id === product.id);
+          if (pAssets.length > 0) {
+            productRequirements += `\nAvailable images:`;
+            for (const asset of pAssets) {
+              const isPinned = Array.isArray(pinnedUrls) && pinnedUrls.includes(asset.url);
+              const bucketLabel = (asset.bucket || "").replace(/_/g, " ");
+              productRequirements += `\n  ${isPinned ? "[MUST USE] " : ""}[${bucketLabel}] ${asset.url}`;
+              if (asset.description) productRequirements += `\n    Description: ${asset.description}`;
+              if (asset.composition_notes) productRequirements += `\n    Notes: ${asset.composition_notes}`;
+              if (asset.dominant_colors?.length) productRequirements += `\n    Colors: ${(asset.dominant_colors as string[]).join(", ")}`;
+
+              // Add to unified catalog
+              allProductAssetUrls.push(asset.url);
+              const catParts = [`[product: ${product.name} — ${bucketLabel}]`, asset.url];
+              if (asset.description) catParts.push(`  Description: ${asset.description}`);
+              productCatalogEntries.push(catParts.join("\n"));
+            }
+          }
+        }
+        productRequirements += `\n\nIMAGEKIT TRANSFORMS: If you need a transparent-background version of a product image but only have a non-transparent one, append "?tr=bg-remove" to the URL. Do NOT modify URLs in any other way.`;
+      }
+    }
+
+    // Unified asset catalog = brand assets + product assets
+    const allCatalogEntries = [...assetCatalogEntries, ...productCatalogEntries];
+    const assetCatalog = allCatalogEntries.join("\n\n");
+    const embeddableUrls = [...hostedAssetEntries.map((e) => e.url), ...allProductAssetUrls];
 
     // Build the user content array
     const userContent: any[] = [];
