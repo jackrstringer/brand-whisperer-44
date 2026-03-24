@@ -376,41 +376,9 @@ You MUST feature these products prominently in the campaign. Use at least one im
       part3 += `\n\nNo brand asset images available. Use solid color blocks, gradients, or text-only sections instead. Do NOT include <img> tags.`;
     }
 
-    // === FEATURED PRODUCTS SECTION ===
-    if (Array.isArray(productIds) && productIds.length > 0) {
-      const { data: productRows } = await supabase
-        .from("products")
-        .select("id, name, description")
-        .in("id", productIds);
-
-      const { data: productAssetRows } = await supabase
-        .from("product_assets")
-        .select("*")
-        .in("product_id", productIds);
-
-      if (productRows && productRows.length > 0) {
-        let productSection = `\n\n=== FEATURED PRODUCTS (MUST USE — these products were specifically selected by the user) ===
-You MUST feature these products prominently in the campaign. Use at least one image per product. If no specific images are pinned as [MUST USE], choose the best available images yourself — but you MUST include product imagery. The user selected these products because they want them in the email.`;
-        for (const product of productRows) {
-          productSection += `\n\nProduct: ${product.name}`;
-          if (product.description) productSection += `\nDescription: ${product.description}`;
-
-          const pAssets = (productAssetRows || []).filter((a: any) => a.product_id === product.id);
-          if (pAssets.length > 0) {
-            productSection += `\nAvailable images:`;
-            for (const asset of pAssets) {
-              const isPinned = Array.isArray(pinnedUrls) && pinnedUrls.includes(asset.url);
-              const bucketLabel = (asset.bucket || "").replace(/_/g, " ");
-              productSection += `\n  ${isPinned ? "[MUST USE] " : ""}[${bucketLabel}] ${asset.url}`;
-              if (asset.description) productSection += `\n    Description: ${asset.description}`;
-              if (asset.composition_notes) productSection += `\n    Notes: ${asset.composition_notes}`;
-              if (asset.dominant_colors?.length) productSection += `\n    Colors: ${(asset.dominant_colors as string[]).join(", ")}`;
-            }
-          }
-        }
-        productSection += `\n\nIMAGEKIT TRANSFORMS: If you need a transparent-background version of a product image but only have a non-transparent one, append "?tr=bg-remove" to the URL. Do NOT modify URLs in any other way.`;
-        part3 += productSection;
-      }
+    // === FEATURED PRODUCTS SECTION (already built above) ===
+    if (productRequirements) {
+      part3 += productRequirements;
     }
 
     part3 += `\n\nThe output must MATCH the brand's design language (colors, fonts, spacing, tone) from the references above, but the LAYOUT and STRUCTURE must be original and tailored to this specific campaign goal. Return only the complete HTML.`;
