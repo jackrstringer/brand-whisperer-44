@@ -92,12 +92,12 @@ export default function CampaignsList() {
       status: "draft",
       brief: campaign.brief,
       goal: campaign.goal,
+      extra_copy: campaign.extra_copy ?? null,
+      speed_mode: campaign.speed_mode ?? "normal",
       reference_campaign_ids: campaign.reference_campaign_ids,
+      product_ids: Array.isArray(campaign.product_ids) && campaign.product_ids.length > 0 ? campaign.product_ids : null,
+      pinned_asset_urls: Array.isArray(campaign.pinned_asset_urls) && campaign.pinned_asset_urls.length > 0 ? campaign.pinned_asset_urls : null,
     };
-    // Copy product_ids if present
-    if ((campaign as any).product_ids?.length) {
-      cloneData.product_ids = (campaign as any).product_ids;
-    }
     const { data, error } = await supabase
       .from("campaigns")
       .insert(cloneData)

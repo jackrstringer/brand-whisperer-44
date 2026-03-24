@@ -21,10 +21,14 @@ export interface Campaign {
   name: string;
   brief: string | null;
   goal: string | null;
+  extra_copy?: string | null;
   html: string | null;
   html_history: any;
   status: string;
   reference_campaign_ids: string[] | null;
+  product_ids?: string[] | null;
+  pinned_asset_urls?: string[] | null;
+  speed_mode?: "normal" | "fast" | null;
   created_at: string;
   updated_at: string;
 }
