@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { rehostHtmlImagesWithImageKit, applyImageKitTransform, getImageSliceUrls, estimateImageHeight } from "../_shared/imagekit.ts";
+import { rehostHtmlImagesWithImageKit } from "../_shared/imagekit.ts";
 
 /** Strip any AI commentary and extract only the HTML document */
 function extractHtmlOnly(text: string): string {
@@ -201,71 +201,26 @@ Deno.serve(async (req) => {
       ? profile.reference_image_urls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
       : [];
 
-    let hostedReferenceUrls = referenceUrls.slice(0, 10);
-    if (hostedReferenceUrls.length > 0) {
-      const referencesHtml = hostedReferenceUrls
-        .map((url: string, index: number) => `<img src="${url}" alt="reference-${index}" />`)
-        .join("\n");
+    // Cap reference images by speed mode to reduce processing time
+    const maxRefs = speedMode === "faster" ? 3 : speedMode === "fast" ? 5 : 10;
+    const selectedReferenceUrls = referenceUrls.slice(0, maxRefs);
 
-      const rehostedReferencesHtml = await rehostHtmlImagesWithImageKit(referencesHtml, {
-        campaignId,
-        imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
-        folder: "/campaign-studio/references",
-      });
-
-      const extractedRehostedUrls = Array.from(
-        rehostedReferencesHtml.matchAll(/<img\b[^>]*?\bsrc=(["'])(.*?)\1/gi),
-      )
-        .map((match) => match[2])
-        .filter((url): url is string => Boolean(url));
-
-      if (extractedRehostedUrls.length > 0) {
-        hostedReferenceUrls = extractedRehostedUrls;
-      }
-    }
-
-    // Build image blocks with slicing for tall images
-    let refImageIndex = 0;
-    for (const url of hostedReferenceUrls) {
+    // Fetch all reference images in PARALLEL (no ImageKit rehosting — use direct URLs)
+    const imagePromises = selectedReferenceUrls.map(async (url: string, index: number) => {
       try {
-        // Estimate height to decide if slicing is needed
-        const height = await estimateImageHeight(url);
-        const isImageKitUrl = /^https:\/\/ik\.imagekit\.io\//i.test(url);
+        const imgResp = await fetch(url);
+        if (!imgResp.ok) return null;
+        const contentType = imgResp.headers.get("content-type") || "image/png";
+        const mediaType = contentType.split(";")[0].trim();
+        const buf = await imgResp.arrayBuffer();
+        const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+        return { index, type: "image" as const, source: { type: "base64" as const, media_type: mediaType, data: b64 } };
+      } catch { return null; }
+    });
 
-        if (height && height > 1400 && isImageKitUrl) {
-          // Slice using ImageKit URL transforms
-          const sliceUrls = getImageSliceUrls(url, height, 1300, 600);
-          for (let si = 0; si < sliceUrls.length; si++) {
-            const imgResp = await fetch(sliceUrls[si]);
-            if (!imgResp.ok) continue;
-            const contentType = imgResp.headers.get("content-type") || "image/jpeg";
-            const mediaType = contentType.split(";")[0].trim();
-            const buf = await imgResp.arrayBuffer();
-            const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-            imageBlocks.push({
-              type: "text",
-              text: `Reference Campaign ${refImageIndex + 1} — Slice ${si + 1}/${sliceUrls.length} (top to bottom):`,
-            });
-            imageBlocks.push({
-              type: "image",
-              source: { type: "base64", media_type: mediaType, data: b64 },
-            });
-          }
-        } else {
-          // Single image (short enough or not on ImageKit)
-          const imgResp = await fetch(url);
-          if (!imgResp.ok) continue;
-          const contentType = imgResp.headers.get("content-type") || "image/png";
-          const mediaType = contentType.split(";")[0].trim();
-          const buf = await imgResp.arrayBuffer();
-          const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-          imageBlocks.push({
-            type: "image",
-            source: { type: "base64", media_type: mediaType, data: b64 },
-          });
-        }
-        refImageIndex++;
-      } catch { /* skip failed images */ }
+    const imageResults = await Promise.all(imagePromises);
+    for (const result of imageResults) {
+      if (result) imageBlocks.push(result);
     }
 
     // Fetch ALL brand assets with AI-generated descriptions
@@ -437,49 +392,51 @@ You MUST feature these products prominently in the campaign. Use at least one im
     const result = await response.json();
     let html = extractHtmlOnly(result.content?.[0]?.text || "");
 
-    // === PASS 2: QA Audit (text-only — no reference images, just rules + HTML) ===
-    try {
-      const allQaItems = [...brandQaChecklist, ...globalQaChecklist];
-      const customQaSection = allQaItems.length > 0
-        ? `\n\n=== CUSTOM QA CHECKLIST ITEMS ===\n${allQaItems.map((item, i) => `${i + 1}. ${item}`).join("\n")}`
-        : "";
+    // === PASS 2: QA Audit (skip in "faster" mode to save time) ===
+    if (speedMode !== "faster") {
+      try {
+        const allQaItems = [...brandQaChecklist, ...globalQaChecklist];
+        const customQaSection = allQaItems.length > 0
+          ? `\n\n=== CUSTOM QA CHECKLIST ITEMS ===\n${allQaItems.map((item, i) => `${i + 1}. ${item}`).join("\n")}`
+          : "";
 
-      let qaText = `Brand design rules:\n${profile.system_prompt}\n\n=== SPECIFIC VALUES TO ENFORCE ===\ncard_radius: ${brandValues.card_radius}px\nbutton_radius: ${brandValues.button_radius}px\naccent_color: ${brandValues.accent_color}\ntext_color: ${brandValues.text_color}${customQaSection}`;
+        let qaText = `Brand design rules:\n${profile.system_prompt}\n\n=== SPECIFIC VALUES TO ENFORCE ===\ncard_radius: ${brandValues.card_radius}px\nbutton_radius: ${brandValues.button_radius}px\naccent_color: ${brandValues.accent_color}\ntext_color: ${brandValues.text_color}${customQaSection}`;
 
-      if (assetCatalog) {
-        qaText += `\n\n=== AVAILABLE BRAND ASSETS ===\n${assetCatalog}`;
-      }
-
-      qaText += `\n\n=== GENERATED HTML TO AUDIT ===\n${html}`;
-
-      const qaContent: any[] = [{ type: "text", text: qaText }];
-
-      const qaResponse = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: QA_MODEL,
-          max_tokens: 8192,
-          system: QA_SYSTEM_PROMPT,
-          messages: [{ role: "user", content: qaContent }],
-        }),
-      });
-
-      if (qaResponse.ok) {
-        const qaResult = await qaResponse.json();
-        const qaHtml = extractHtmlOnly(qaResult.content?.[0]?.text || "");
-        if (qaHtml.length > 100 && qaHtml.includes("<table")) {
-          html = qaHtml;
+        if (assetCatalog) {
+          qaText += `\n\n=== AVAILABLE BRAND ASSETS ===\n${assetCatalog}`;
         }
-      } else {
-        console.warn("QA pass failed, using first-pass HTML:", qaResponse.status);
+
+        qaText += `\n\n=== GENERATED HTML TO AUDIT ===\n${html}`;
+
+        const qaContent: any[] = [{ type: "text", text: qaText }];
+
+        const qaResponse = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify({
+            model: QA_MODEL,
+            max_tokens: 8192,
+            system: QA_SYSTEM_PROMPT,
+            messages: [{ role: "user", content: qaContent }],
+          }),
+        });
+
+        if (qaResponse.ok) {
+          const qaResult = await qaResponse.json();
+          const qaHtml = extractHtmlOnly(qaResult.content?.[0]?.text || "");
+          if (qaHtml.length > 100 && qaHtml.includes("<table")) {
+            html = qaHtml;
+          }
+        } else {
+          console.warn("QA pass failed, using first-pass HTML:", qaResponse.status);
+        }
+      } catch (qaErr) {
+        console.warn("QA pass error, using first-pass HTML:", qaErr);
       }
-    } catch (qaErr) {
-      console.warn("QA pass error, using first-pass HTML:", qaErr);
     }
 
     // Derive a short campaign name from the brief
