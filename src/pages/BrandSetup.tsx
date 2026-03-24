@@ -383,41 +383,49 @@ export default function BrandSetup() {
         } as any);
         if (profileError) throw profileError;
 
-        // Upload asset files and analyze each with AI
-        const assetInserts: { brand_id: string; category: string; url: string; filename: string; description?: string; dominant_colors?: string[]; ai_category?: string }[] = [];
-        const uploadPromises: Promise<void>[] = [];
-        for (const [category, catData] of Object.entries(assetCategories)) {
-          for (const file of catData.files) {
-            const path = `${user.id}/${brandId}/${category}/${Date.now()}-${file.name}`;
-            uploadPromises.push((async () => {
-              const { error: uploadErr } = await supabase.storage.from("brand-assets").upload(path, file);
-              if (uploadErr) return;
-              const { data: urlData } = supabase.storage.from("brand-assets").getPublicUrl(path);
-              const publicUrl = urlData.publicUrl;
+        // Fire-and-forget: upload asset files and analyze with AI in background
+        // This does NOT block guide generation — results are needed later for campaign building
+        const assetBrandId = brandId!;
+        (async () => {
+          try {
+            const assetInserts: { brand_id: string; category: string; url: string; filename: string; description?: string; dominant_colors?: string[]; ai_category?: string }[] = [];
+            const uploadPromises: Promise<void>[] = [];
+            for (const [category, catData] of Object.entries(assetCategories)) {
+              for (const file of catData.files) {
+                const path = `${user.id}/${assetBrandId}/${category}/${Date.now()}-${file.name}`;
+                uploadPromises.push((async () => {
+                  const { error: uploadErr } = await supabase.storage.from("brand-assets").upload(path, file);
+                  if (uploadErr) return;
+                  const { data: urlData } = supabase.storage.from("brand-assets").getPublicUrl(path);
+                  const publicUrl = urlData.publicUrl;
 
-              // Analyze image with AI (fire and don't block on failure)
-              let description: string | undefined;
-              let dominant_colors: string[] | undefined;
-              let ai_category: string | undefined;
-              try {
-                const { data: analysis } = await supabase.functions.invoke("analyze-asset", {
-                  body: { imageUrl: publicUrl, filename: file.name, userCategory: category },
-                });
-                if (analysis && !analysis.error) {
-                  description = analysis.description;
-                  dominant_colors = analysis.dominant_colors;
-                  ai_category = analysis.suggested_category;
-                }
-              } catch {}
+                  let description: string | undefined;
+                  let dominant_colors: string[] | undefined;
+                  let ai_category: string | undefined;
+                  try {
+                    const { data: analysis } = await supabase.functions.invoke("analyze-asset", {
+                      body: { imageUrl: publicUrl, filename: file.name, userCategory: category },
+                    });
+                    if (analysis && !analysis.error) {
+                      description = analysis.description;
+                      dominant_colors = analysis.dominant_colors;
+                      ai_category = analysis.suggested_category;
+                    }
+                  } catch {}
 
-              assetInserts.push({ brand_id: brandId!, category, url: publicUrl, filename: file.name, description, dominant_colors, ai_category });
-            })());
+                  assetInserts.push({ brand_id: assetBrandId, category, url: publicUrl, filename: file.name, description, dominant_colors, ai_category });
+                })());
+              }
+            }
+            await Promise.all(uploadPromises);
+            if (assetInserts.length > 0) {
+              await supabase.from("brand_assets").insert(assetInserts);
+            }
+            console.log(`Background asset upload complete: ${assetInserts.length} assets`);
+          } catch (err) {
+            console.warn("Background asset upload failed (non-blocking):", err);
           }
-        }
-        await Promise.all(uploadPromises);
-        if (assetInserts.length > 0) {
-          await supabase.from("brand_assets").insert(assetInserts);
-        }
+        })();
       }
 
       setProgressMessage("Building brand spec...");
