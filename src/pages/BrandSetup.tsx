@@ -448,34 +448,20 @@ export default function BrandSetup() {
       const pollForGuide = () => {
         const pollTimer = setInterval(async () => {
           try {
-            const { data: profile, error: queryErr } = await supabase
+            const { data: profile } = await supabase
               .from("brand_profiles")
               .select("brand_guide_html, system_prompt, raw_extraction, audit_findings")
               .eq("brand_id", brandId!)
               .single();
 
-            if (queryErr) {
-              console.warn("Poll query error:", queryErr.message);
-              // Keep polling on transient query errors
-              return;
-            }
-
-            // Check for error state — stop immediately
+            // Check for error state
             const findings = profile?.audit_findings as any;
             if (findings?._error) {
               clearInterval(pollTimer);
               clearInterval(interval);
-              const errMsg = typeof findings._error === "string" && findings._error.length < 200
-                ? findings._error
-                : "Guide generation failed. Please try again.";
-              toast.error(errMsg);
+              toast.error(findings._error || "Guide generation failed");
               setStep("uploads");
               return;
-            }
-
-            // Update progress message from status
-            if (findings?._status === "guide_processing") {
-              setProgressMessage("Generating brand guide...");
             }
 
             if (profile?.brand_guide_html) {
@@ -496,8 +482,8 @@ export default function BrandSetup() {
               toast.error("Guide generation timed out. Please try again.");
               setStep("uploads");
             }
-          } catch (pollErr) {
-            console.warn("Poll error:", pollErr);
+          } catch {
+            // Keep polling on transient errors
           }
         }, POLL_INTERVAL);
       };

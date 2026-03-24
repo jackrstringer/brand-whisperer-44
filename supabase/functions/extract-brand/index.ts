@@ -367,27 +367,28 @@ async function runSpecCall(
   }
 
   console.log(`[extract-brand] Call 1: Generating spec for ${brandName}`);
-  const specResponse = await fetchWithRetry(
-    "https://api.anthropic.com/v1/messages",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 8000,
-        system: SPEC_PROMPT,
-        messages: [{
-          role: "user",
-          content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}${confirmedBlock}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}`,
-        }],
-      }),
+  const specResponse = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
     },
-    "Spec",
-  );
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 8000,
+      system: SPEC_PROMPT,
+      messages: [{
+        role: "user",
+        content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}${confirmedBlock}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}`,
+      }],
+    }),
+  });
+
+  if (!specResponse.ok) {
+    const errText = await specResponse.text();
+    throw new Error(`Spec API error: ${specResponse.status} - ${errText}`);
+  }
 
   const specResult = await specResponse.json();
   const specText = specResult.content?.[0]?.text || "";
@@ -395,44 +396,6 @@ async function runSpecCall(
   if (!specJsonMatch) throw new Error("Failed to parse spec result");
 
   return JSON.parse(specJsonMatch[0]);
-}
-
-async function fetchWithRetry(
-  url: string,
-  options: RequestInit,
-  label: string,
-  maxRetries = 3,
-  timeoutMs = 120000,
-): Promise<Response> {
-  const RETRYABLE = new Set([429, 500, 502, 503, 504]);
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const resp = await fetch(url, { ...options, signal: controller.signal });
-      clearTimeout(timer);
-      if (resp.ok) return resp;
-      const errText = await resp.text();
-      if (RETRYABLE.has(resp.status) && attempt < maxRetries) {
-        const delay = Math.min(2000 * Math.pow(2, attempt - 1), 15000) + Math.random() * 1000;
-        console.warn(`[extract-brand] ${label} attempt ${attempt} got ${resp.status}, retrying in ${Math.round(delay)}ms`);
-        await new Promise((r) => setTimeout(r, delay));
-        continue;
-      }
-      throw new Error(`${label} API error: ${resp.status} - ${errText.slice(0, 500)}`);
-    } catch (err: any) {
-      clearTimeout(timer);
-      if (err.name === "AbortError") {
-        if (attempt < maxRetries) {
-          console.warn(`[extract-brand] ${label} attempt ${attempt} timed out, retrying...`);
-          continue;
-        }
-        throw new Error(`${label} timed out after ${maxRetries} attempts`);
-      }
-      throw err;
-    }
-  }
-  throw new Error(`${label} failed after ${maxRetries} retries`);
 }
 
 async function runGuideCall(
@@ -445,29 +408,28 @@ async function runGuideCall(
   const auditJson = JSON.stringify(auditFindings, null, 2);
 
   console.log(`[extract-brand] Call 2: Generating HTML guide for ${brandName}`);
-  const guideResponse = await fetchWithRetry(
-    "https://api.anthropic.com/v1/messages",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 16000,
-        system: GUIDE_PROMPT,
-        messages: [{
-          role: "user",
-          content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}\n\n=== BRAND EXTRACTION SPEC ===\n${JSON.stringify(extraction, null, 2)}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}\n\n${HTML_GUIDE_TEMPLATE}\n\nGenerate the FULL email design rules HTML document. Start with <!DOCTYPE html> and end with </html>. Follow the template structure exactly. Do not skip sections. Use actual content from the audit -- no placeholder text.`,
-        }],
-      }),
+  const guideResponse = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
     },
-    "Guide",
-    3,
-    150000,
-  );
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 64000,
+      system: GUIDE_PROMPT,
+      messages: [{
+        role: "user",
+        content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}\n\n=== BRAND EXTRACTION SPEC ===\n${JSON.stringify(extraction, null, 2)}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}\n\n${HTML_GUIDE_TEMPLATE}\n\nGenerate the FULL email design rules HTML document. Start with <!DOCTYPE html> and end with </html>. Follow the template structure exactly. Do not skip sections. Use actual content from the audit -- no placeholder text.`,
+      }],
+    }),
+  });
+
+  if (!guideResponse.ok) {
+    const errText = await guideResponse.text();
+    throw new Error(`Guide API error: ${guideResponse.status} - ${errText}`);
+  }
 
   const guideResult = await guideResponse.json();
   let guideHtml = guideResult.content?.[0]?.text || "";
@@ -505,21 +467,6 @@ async function processSpecStep(
   return specParsed;
 }
 
-async function updateStatus(brandId: string, status: string) {
-  const sb = getSupabaseAdmin();
-  const { data: existing } = await sb
-    .from("brand_profiles")
-    .select("audit_findings")
-    .eq("brand_id", brandId)
-    .maybeSingle();
-  const base = existing?.audit_findings && typeof existing.audit_findings === "object" && !Array.isArray(existing.audit_findings)
-    ? existing.audit_findings as Record<string, unknown>
-    : {};
-  await sb.from("brand_profiles").update({
-    audit_findings: { ...base, _status: status, _error: undefined },
-  }).eq("brand_id", brandId);
-}
-
 async function processGuideStep(
   apiKey: string,
   auditFindings: any,
@@ -529,8 +476,6 @@ async function processGuideStep(
 ) {
   const sb = getSupabaseAdmin();
   const cleanedAudit = stripRuntimeKeys(auditFindings);
-
-  await updateStatus(brandId, "guide_processing");
 
   const { data: profile, error: profileError } = await sb
     .from("brand_profiles")

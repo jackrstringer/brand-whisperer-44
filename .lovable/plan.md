@@ -1,54 +1,42 @@
 
-Do I know what the issue is? Yes.
 
-Root cause from logs:
-1) `audit-brand` completed successfully (`8 campaigns / 19 slices`).
-2) `extract-brand` spec step completed and saved.
-3) `extract-brand` guide step failed with upstream `502 Bad Gateway (cloudflare)` from Anthropic (`runGuideCall`), so `brand_guide_html` stayed null.
-4) Frontend kept polling and the user experienced either a long wait or timeout.
+# Single-Call Audit + Parallel Asset Categorization
 
-## Fix plan (immediate)
+## Problem
 
-1. Harden `extract-brand` guide generation against transient upstream failures  
-   - File: `supabase/functions/extract-brand/index.ts`  
-   - Add retry wrapper for Anthropic calls (`guide` and `spec`), with:
-     - retry on `429/500/502/503/504`
-     - exponential backoff + jitter
-     - request timeout via `AbortController`
-   - Keep model quality (no downgrade).
+The audit currently makes **one Anthropic API call per campaign image** (up to 8 calls), then a synthesis call. That's 9 sequential/batched API calls taking 2-3 minutes. Claude supports up to 20 images per message — there's no reason not to send them all at once.
 
-2. Reduce guide request execution risk (same quality, lower timeout probability)  
-   - File: `supabase/functions/extract-brand/index.ts`
-   - Lower `max_tokens` for guide from `64000` to a realistic ceiling (e.g. 12k–16k).
-   - Send a compacted audit payload to guide generation (trim oversized arrays like long color lists / CTA lists while preserving required fields).
-   - Preserve existing guide section structure exactly.
+Additionally, asset categorization (logo, product, lifestyle) is happening inline during brand setup, blocking the flow. It should be fire-and-forget since it's only needed later for campaign generation.
 
-3. Make failure states explicit and instantly visible  
-   - File: `supabase/functions/extract-brand/index.ts`
-   - On start: write `_status: "guide_processing"` into `brand_profiles.audit_findings`.
-   - On retry: update `_status: "guide_retrying"` with attempt count.
-   - On final failure: write normalized `_error` message (human-readable, no raw HTML blob).
+## Changes
 
-4. Improve polling behavior so users don’t sit on fake progress  
-   - File: `src/pages/BrandSetup.tsx`
-   - In poll loop, explicitly handle query errors (currently ignored).
-   - If `_error` exists, stop polling immediately and show concise toast.
-   - Update progress messaging to match current architecture (single-call audit + async guide), and avoid “stuck at near-complete” feel.
+### 1. `supabase/functions/audit-brand/index.ts` — Single API call
 
-5. Clean up current console warnings (non-blocking but should be fixed)  
-   - Files: `src/components/brand/ResourceUploader.tsx`, `src/components/brand/AssetCategoryUploader.tsx`, `src/pages/BrandSetup.tsx`
-   - Remove/refactor ref propagation path causing “Function components cannot be given refs” warnings.
+Replace the current two-pass architecture (per-campaign audit + synthesis) with **one single API call**:
 
-## Technical details (for engineer audit)
+- Build one message containing ALL images from ALL campaigns, with text delimiters between campaigns (e.g., "--- Campaign 1 (3 slices) ---", "--- Campaign 2 (2 slices) ---")
+- Send all images + the confirmed properties prefix in one Sonnet call
+- The prompt asks for the unified audit directly — no synthesis pass needed
+- Set `max_tokens: 8000` to accommodate the larger single response
+- Remove all the per-campaign batching code, the synthesis call, and the post-processing border-force logic (per the previously approved plan to fix that)
 
-- Current failing path: `BrandSetup.generateGuideFromAudit()` -> `extract-brand(step:"guide")` -> `runGuideCall()` (single large Anthropic request).
-- Confirmed failure timestamp in logs: `07:49:12Z`, error: `Guide API error: 502`.
-- Data state after failure: `brand_profiles.audit_findings._error` set; `brand_guide_html` null.
-- Primary reliability gap: one-shot external call with no retry and oversized output budget.
+This cuts the API calls from ~9 down to **1**.
 
-## Verification after implementation
+### 2. `src/pages/BrandSetup.tsx` — Fire-and-forget asset analysis
 
-1) Run a full brand analysis with same workload (Figma + website + ~8 refs).  
-2) Confirm logs show retry handling if transient errors occur, and eventual success writes `brand_guide_html`.  
-3) Confirm UI exits immediately on real failure (no 5-minute dead wait).  
-4) Confirm no ref warnings in console on `/brands/new`.
+Currently `generateGuideFromAudit` uploads assets and calls `analyze-asset` for each one, awaiting results before continuing. Change this:
+
+- Asset uploads + AI analysis should be **fire-and-forget** — start the uploads/analysis in parallel but don't `await` them before proceeding to guide generation
+- The brand analysis flow only needs: reference campaign images + logo. Nothing else.
+- `getReferenceImageFiles()` already separates campaign files from asset files — only send campaign files + logo to the audit
+- Asset categorization results get written to DB asynchronously; they'll be available when campaigns are generated later
+
+### 3. Remove border-force post-processing
+
+Lines 371-456 of `audit-brand/index.ts` contain the border evidence aggregation and force-override logic. This gets deleted since we're doing a single call and the AI should just report what it sees without post-processing overrides.
+
+## Files to Change
+
+1. **`supabase/functions/audit-brand/index.ts`** — Collapse to single API call, remove synthesis pass, remove border-force logic
+2. **`src/pages/BrandSetup.tsx`** — Make asset upload/analysis fire-and-forget, don't block guide generation on it
+
