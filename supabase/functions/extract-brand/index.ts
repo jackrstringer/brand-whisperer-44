@@ -212,7 +212,7 @@ Deno.serve(async (req) => {
 
       // Run spec synchronously so the caller can reliably trigger guide generation next.
       if (mode === "spec") {
-        await processSpecStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId);
+        await processSpecStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId, confirmed_properties);
         return new Response(JSON.stringify({ status: "spec_complete", brandId }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
