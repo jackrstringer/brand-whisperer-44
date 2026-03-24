@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { rehostHtmlImagesWithImageKit, applyImageKitTransform, getImageSliceUrls, estimateImageHeight } from "../_shared/imagekit.ts";
+import { rehostHtmlImagesWithImageKit } from "../_shared/imagekit.ts";
 
 /** Strip any AI commentary and extract only the HTML document */
 function extractHtmlOnly(text: string): string {
