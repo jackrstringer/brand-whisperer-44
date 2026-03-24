@@ -34,6 +34,7 @@ STRUCTURE:
 - <style> block in <head> for @media queries and Gmail fixes only
 - Wrapper table: width="100%" style="max-width:600px; width:100%; margin:0 auto;"
 - The outermost wrapper table must NEVER use a fixed width:600px. Always width:100% with max-width:600px.
+- The outermost body/wrapper background MUST be pure white (#ffffff) or transparent. NEVER add a grey, off-white, or colored background wrapper around the email. No grey padding frames around the email content.
 
 GMAIL DARK MODE (apply to every single white <td> and the wrapper table):
 - Add background-image:linear-gradient(#ffffff,#ffffff) alongside background-color:#ffffff
