@@ -384,8 +384,7 @@ Deno.serve(async (req) => {
     }
 
     const result = await response.json();
-    let html = result.content?.[0]?.text || "";
-    html = html.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
+    let html = extractHtmlOnly(result.content?.[0]?.text || "");
 
     // === PASS 2: QA Audit (text-only — no reference images, just rules + HTML) ===
     try {
