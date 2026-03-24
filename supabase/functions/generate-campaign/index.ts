@@ -392,49 +392,51 @@ You MUST feature these products prominently in the campaign. Use at least one im
     const result = await response.json();
     let html = extractHtmlOnly(result.content?.[0]?.text || "");
 
-    // === PASS 2: QA Audit (text-only — no reference images, just rules + HTML) ===
-    try {
-      const allQaItems = [...brandQaChecklist, ...globalQaChecklist];
-      const customQaSection = allQaItems.length > 0
-        ? `\n\n=== CUSTOM QA CHECKLIST ITEMS ===\n${allQaItems.map((item, i) => `${i + 1}. ${item}`).join("\n")}`
-        : "";
+    // === PASS 2: QA Audit (skip in "faster" mode to save time) ===
+    if (speedMode !== "faster") {
+      try {
+        const allQaItems = [...brandQaChecklist, ...globalQaChecklist];
+        const customQaSection = allQaItems.length > 0
+          ? `\n\n=== CUSTOM QA CHECKLIST ITEMS ===\n${allQaItems.map((item, i) => `${i + 1}. ${item}`).join("\n")}`
+          : "";
 
-      let qaText = `Brand design rules:\n${profile.system_prompt}\n\n=== SPECIFIC VALUES TO ENFORCE ===\ncard_radius: ${brandValues.card_radius}px\nbutton_radius: ${brandValues.button_radius}px\naccent_color: ${brandValues.accent_color}\ntext_color: ${brandValues.text_color}${customQaSection}`;
+        let qaText = `Brand design rules:\n${profile.system_prompt}\n\n=== SPECIFIC VALUES TO ENFORCE ===\ncard_radius: ${brandValues.card_radius}px\nbutton_radius: ${brandValues.button_radius}px\naccent_color: ${brandValues.accent_color}\ntext_color: ${brandValues.text_color}${customQaSection}`;
 
-      if (assetCatalog) {
-        qaText += `\n\n=== AVAILABLE BRAND ASSETS ===\n${assetCatalog}`;
-      }
-
-      qaText += `\n\n=== GENERATED HTML TO AUDIT ===\n${html}`;
-
-      const qaContent: any[] = [{ type: "text", text: qaText }];
-
-      const qaResponse = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: QA_MODEL,
-          max_tokens: 8192,
-          system: QA_SYSTEM_PROMPT,
-          messages: [{ role: "user", content: qaContent }],
-        }),
-      });
-
-      if (qaResponse.ok) {
-        const qaResult = await qaResponse.json();
-        const qaHtml = extractHtmlOnly(qaResult.content?.[0]?.text || "");
-        if (qaHtml.length > 100 && qaHtml.includes("<table")) {
-          html = qaHtml;
+        if (assetCatalog) {
+          qaText += `\n\n=== AVAILABLE BRAND ASSETS ===\n${assetCatalog}`;
         }
-      } else {
-        console.warn("QA pass failed, using first-pass HTML:", qaResponse.status);
+
+        qaText += `\n\n=== GENERATED HTML TO AUDIT ===\n${html}`;
+
+        const qaContent: any[] = [{ type: "text", text: qaText }];
+
+        const qaResponse = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify({
+            model: QA_MODEL,
+            max_tokens: 8192,
+            system: QA_SYSTEM_PROMPT,
+            messages: [{ role: "user", content: qaContent }],
+          }),
+        });
+
+        if (qaResponse.ok) {
+          const qaResult = await qaResponse.json();
+          const qaHtml = extractHtmlOnly(qaResult.content?.[0]?.text || "");
+          if (qaHtml.length > 100 && qaHtml.includes("<table")) {
+            html = qaHtml;
+          }
+        } else {
+          console.warn("QA pass failed, using first-pass HTML:", qaResponse.status);
+        }
+      } catch (qaErr) {
+        console.warn("QA pass error, using first-pass HTML:", qaErr);
       }
-    } catch (qaErr) {
-      console.warn("QA pass error, using first-pass HTML:", qaErr);
     }
 
     // Derive a short campaign name from the brief
