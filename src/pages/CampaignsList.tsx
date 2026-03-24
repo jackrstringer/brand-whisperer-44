@@ -131,6 +131,13 @@ export default function CampaignsList() {
                   {new Date(c.created_at).toLocaleDateString()}
                 </span>
                 <button
+                  onClick={(e) => { e.stopPropagation(); cloneCampaign(c); }}
+                  className="p-1.5 rounded text-muted-foreground hover:text-primary transition-colors"
+                  title="Clone campaign"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+                <button
                   onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); }}
                   className="p-1.5 rounded text-muted-foreground hover:text-destructive transition-colors"
                 >

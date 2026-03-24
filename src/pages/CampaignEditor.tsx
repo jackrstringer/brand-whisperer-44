@@ -350,6 +350,10 @@ export default function CampaignEditor() {
           <div ref={previewPanelRef} className="h-full bg-card overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' as any }}>
             {isGenerating ? (
               <div className="max-w-[600px] mx-auto space-y-4 p-8 mt-12">
+                <div className="text-center mb-6">
+                  <p className="text-lg font-medium text-foreground tabular-nums">{formatTimer(genElapsed)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Generating campaign...</p>
+                </div>
                 <Skeleton className="h-8 w-3/4" />
                 <Skeleton className="h-48 w-full" />
                 <Skeleton className="h-4 w-full" />
