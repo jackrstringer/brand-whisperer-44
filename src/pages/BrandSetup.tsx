@@ -339,14 +339,14 @@ export default function BrandSetup() {
     setProgressValue(0);
     setProgressMessage(GUIDE_MESSAGES[0]);
 
+    const guideStartTime = Date.now();
     const interval = setInterval(() => {
-      setProgressValue((v) => {
-        const next = Math.min(v + 0.8, 95);
-        const msgIndex = Math.min(Math.floor(next / 25), GUIDE_MESSAGES.length - 1);
-        setProgressMessage(GUIDE_MESSAGES[msgIndex]);
-        return next;
-      });
-    }, 500);
+      const elapsed = (Date.now() - guideStartTime) / 1000;
+      const progress = Math.min(90, 25 * Math.log10(1 + elapsed / 8));
+      const msgIndex = Math.min(Math.floor(progress / 25), GUIDE_MESSAGES.length - 1);
+      setProgressMessage(GUIDE_MESSAGES[msgIndex]);
+      setProgressValue(progress);
+    }, 1000);
 
     try {
       // Step 1: Upload images and create brand + profile early
