@@ -441,11 +441,18 @@ Deno.serve(async (req) => {
       console.warn("QA pass error, using first-pass HTML:", qaErr);
     }
 
+    // Derive a short campaign name from the brief
+    const briefWords = brief.trim().split(/\s+/);
+    const campaignName = briefWords.length <= 8
+      ? brief.trim()
+      : briefWords.slice(0, 8).join(" ") + "...";
+
     await supabase.from("campaigns").update({
       html,
       status: "ready",
       brief,
       goal,
+      name: campaignName,
     }).eq("id", campaignId);
 
     await supabase.from("chat_messages").insert({
