@@ -415,8 +415,10 @@ export default function CampaignEditor() {
                     onLoad={(e) => {
                       const iframe = e.currentTarget;
                       measureIframeHeight(iframe);
-                      window.setTimeout(() => measureIframeHeight(iframe), 150);
-                      window.setTimeout(() => measureIframeHeight(iframe), 600);
+                      setupIframeObserver(iframe);
+                      window.setTimeout(() => measureIframeHeight(iframe), 300);
+                      window.setTimeout(() => measureIframeHeight(iframe), 1000);
+                      window.setTimeout(() => measureIframeHeight(iframe), 3000);
                     }}
                   />
                 </div>
