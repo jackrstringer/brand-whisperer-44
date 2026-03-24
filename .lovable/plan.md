@@ -1,141 +1,101 @@
 
 
-# Deep Brand Analysis — Three-Pass Visual Audit + Brand Guide + Email Design Floor
+# Figma + Website Extraction Pipeline — Confirmed Properties Before AI Audit
 
-## Overview
+## Problem
+The AI guesses font names, hex colors, and button properties from compressed JPEG screenshots. It's bad at this. Figma and website CSS can provide these values deterministically.
 
-Replace the current "extract JSON → save → generate campaigns" brand creation flow with a much deeper three-pass process that produces a comprehensive brand design system document. The user reviews the audit findings before the system generates the final brand profile. This ensures the extracted design rules are accurate and the user has confidence in what will guide all future campaigns.
+## What Changes
 
-The system also enforces a "quality floor" — baseline email design best practices that never get compromised even if the reference emails have questionable design choices.
+### 1. UI — New inputs on Source Quiz + Brand Setup
 
----
+**SourceQuiz.tsx** — Add two new source options:
+- `"figma"` — "Figma File URL" with description "Exact font names, colors, and spacing -- no guessing." Shows two inputs when selected: Figma URL field + Figma Personal Access Token field (type=password, with help link)
+- `"website"` source already exists but only captures URL — keep as-is
 
-## New Flow
+**BrandSetup.tsx** — Add state for `figmaUrl`, `figmaToken`. Pass to SourceQuiz. Store `figmaUrl` on the brand record (the `website_url` column already exists). Token goes to the edge function only, never stored in DB.
 
-```text
-Current:  Info → Sources → Uploads → [auto-analyze] → Review JSON → Save → Generate campaigns
-Proposed: Info → Sources → Uploads → [Pass 1: Deep Audit] → Review Audit → [Pass 2+3: Spec + Guide] → Review Guide → Save → Generate campaigns
+### 2. New Edge Function: `extract-figma`
+
+**Input**: `{ figma_url, figma_token }`
+
+**Logic**:
+1. Parse file key + optional node ID from URL
+2. Call Figma REST API `GET /v1/files/{key}` (or `/v1/files/{key}/nodes?ids={id}`)
+3. Recursively traverse document tree:
+   - Collect all text nodes → extract `fontFamily`, `fontWeight`, `fontSize`, `italic`, `lineHeightPx`, `letterSpacing`, text content
+   - Collect all SOLID fills → convert `{r,g,b}` floats to hex
+   - Collect `cornerRadius`, auto-layout padding/spacing
+4. Deduplicate and categorize by usage (large text = heading, small = body)
+5. Return `confirmed_properties` JSON
+
+**Output**: `{ confirmed_properties: { fonts, colors, buttons, spacing }, source: "figma", raw_text_nodes_sample: [...] }`
+
+### 3. New Edge Function: `extract-website-fonts`
+
+**Input**: `{ url }`
+
+**Logic**:
+1. Fetch HTML
+2. Parse `<link>` tags for Google Fonts URLs → extract family names directly from URL params
+3. Parse `<style>` blocks and linked stylesheets for `font-family`, `color`, `background-color`, CSS custom properties
+4. Deduplicate
+
+**Output**: `{ confirmed_properties: { fonts_from_css, google_fonts_detected, colors_from_css, css_variables }, source: "website" }`
+
+### 4. Update `audit-brand` Edge Function
+
+Accept optional `confirmed_properties` parameter. When present, prepend to the per-campaign audit prompt:
+
+```
+CONFIRMED PROPERTIES (exact -- do not override):
+Fonts: Headline: Playfair Display, Body: DM Sans
+Colors: #D2E823, #FFFFFF, #333333, #000000
+Buttons: border-radius 999px, font-weight 700, font-style normal
+
+Focus on: layout patterns, voice/tone, emphasis patterns, photography style, component structures. Do NOT guess at font names or hex colors.
 ```
 
-### Pass 1: Deep Visual Audit (edge function)
-- Uses the comprehensive audit checklist from the skill (logo treatment, colors, typography headlines/body/subheads, CTA buttons with italic detection, image treatment, section dividers, footer, icons, special patterns, voice)
-- Returns structured findings as JSON organized by design element (not by email)
-- Flags `[NEEDS CONFIRMATION]` items and inconsistencies between campaigns
-- Presented to the user for review/correction before proceeding
+When absent, add the existing italic CTA warning.
 
-### Pass 2: Internal Spec Compilation (edge function, triggered after user confirms audit)
-- Takes confirmed/corrected audit + email design quality floor rules
-- Compiles into structured brand spec (the internal blueprint)
-- No separate user confirmation needed
+### 5. Update `BrandSetup.tsx` Orchestration
 
-### Pass 3: Brand Guide Generation (edge function, same call as Pass 2)
-- Generates a comprehensive HTML brand guide document (self-contained, no external images)
-- Sections: Color System, Typography, Button System, Layout/Anatomy, Reusable Components, Photography Direction, Voice & Tone, Design Rules (Do's/Don'ts)
-- This HTML guide is stored alongside the brand profile and is viewable/downloadable
-- The system_prompt for campaign generation is derived from this guide
+On "Analyze Brand" click:
+1. **Parallel extraction** (before audit):
+   - If Figma URL provided → call `extract-figma`
+   - If website URL provided → call `extract-website-fonts`
+   - Always → slice images (existing)
+2. **Merge** confirmed properties (Figma wins over website for conflicts)
+3. **Call `audit-brand`** with sliced images + merged `confirmed_properties`
+4. Continue to spec + guide generation as before
 
-### Email Design Quality Floor
-Baked into both the synthesis and the generation prompt — a set of non-negotiable rules that override brand reference if the reference emails have bad practices:
-- Fluid layouts, consistent padding, proper CTA sizing
-- Body text min 16px, logo max 150px, buttons never full-width
-- Footer always present and separate
-- No text on images, consistent alignment within sections
-- Rounded corners preferred unless brand explicitly uses sharp
-- "Flowy" designs — minimize hard section cuts, prefer gentle transitions with spacing
+### 6. Database Migration
 
----
+Add to `brand_profiles`:
+- `confirmed_properties` (jsonb, nullable) — merged extraction from Figma/website
+- `extraction_sources` (text[], nullable) — e.g. `["figma", "website", "screenshots"]`
 
-## Database Changes
+The `website_url` column already exists on `brands`. Add `figma_url` (text, nullable) to `brands`.
 
-### Add column to `brand_profiles`
-- `brand_guide_html text nullable` — the generated HTML brand guide document
-- `audit_findings jsonb nullable` — the Pass 1 audit results for reference
+### 7. Pass confirmed_properties to extract-brand
 
-No new tables needed.
+Update `extract-brand` spec prompt to use confirmed properties when available, so the system prompt and extraction JSON use exact font names and colors instead of AI guesses.
 
 ---
 
-## Edge Function Changes
+## Files
 
-### New: `supabase/functions/audit-brand/index.ts`
-Pass 1 — Deep visual audit. Receives the same sliced images as `extract-brand`. Uses the comprehensive audit checklist. Returns structured JSON findings organized by design element.
+1. **`src/components/brand/SourceQuiz.tsx`** — Add "figma" source type with URL + token inputs
+2. **`src/pages/BrandSetup.tsx`** — Add figmaUrl/figmaToken state, parallel extraction calls before audit, merge logic
+3. **`supabase/functions/extract-figma/index.ts`** — New: Figma REST API extraction
+4. **`supabase/functions/extract-website-fonts/index.ts`** — New: CSS/Google Fonts extraction
+5. **`supabase/functions/audit-brand/index.ts`** — Accept + inject confirmed_properties into prompts
+6. **`supabase/functions/extract-brand/index.ts`** — Pass confirmed_properties to spec generation
+7. **Database migration** — Add `confirmed_properties`, `extraction_sources` to brand_profiles; add `figma_url` to brands
 
-- System prompt: the full audit checklist from the skill (logo, colors, typography, CTAs, image treatment, section dividers, footer, icons, special patterns, voice)
-- Per-campaign parallel analysis (Sonnet), then synthesis of findings across campaigns
-- Output: `{ audit: { logo, colors, typography_headlines, typography_body, typography_subheads, cta_buttons, image_treatment, section_dividers, footer, icons, special_patterns, voice }, inconsistencies: [...], needs_confirmation: [...] }`
-
-### Modify: `supabase/functions/extract-brand/index.ts`
-Rename conceptually to serve Pass 2+3. New endpoint accepts:
-- The confirmed audit findings (JSON)
-- Brand name, industry
-- The original sliced images (for Pass 3 guide generation context)
-
-Returns:
-- `extraction` (structured brand values — same as now)
-- `system_prompt` (campaign generation prompt — same as now but richer)
-- `brand_guide_html` (the full HTML brand guide document)
-
-The synthesis prompt now incorporates the email design quality floor rules, ensuring the system_prompt never allows bad practices even if references showed them.
-
-### Modify: `supabase/functions/generate-campaign/index.ts`
-- No structural changes needed — it already consumes `system_prompt` and `raw_extraction`
-- The improved quality of these values from the deeper audit process will naturally improve output
-
----
-
-## Frontend Changes
-
-### `src/pages/BrandSetup.tsx` — New steps in the flow
-
-Change step type from `"info" | "sources" | "uploads" | "analyzing" | "review"` to:
-`"info" | "sources" | "uploads" | "auditing" | "audit_review" | "generating_guide" | "guide_review"`
-
-**`auditing` step**: Progress UI while Pass 1 runs. Shows "Analyzing your campaigns..." with progress messages.
-
-**`audit_review` step**: Displays the audit findings in a clean, organized UI:
-- Sections for each design element (colors, typography, buttons, etc.)
-- Highlighted `[NEEDS CONFIRMATION]` items with editable fields
-- Inconsistencies called out with the user asked to resolve
-- "Confirm & Generate Guide" button to proceed
-- "Re-analyze" option if they uploaded wrong files
-
-**`generating_guide` step**: Progress UI while Pass 2+3 runs.
-
-**`guide_review` step**: 
-- Renders the brand guide HTML in a large iframe (like the campaign preview)
-- Shows key extracted values (colors, fonts, buttons) as a summary sidebar
-- "Save Brand & Continue" button
-- Option to download the guide HTML
-- Proceeds to save brand + generate starter campaigns (existing flow)
-
-### New: `src/pages/BrandGuide.tsx` (route: `/brands/:brandId/guide`)
-- View the saved brand guide anytime from brand settings or sidebar
-- Renders `brand_guide_html` in an iframe
-- Download button
-
-### `src/components/AppSidebar.tsx`
-- Add "Brand Guide" link under brand section
-
-### `src/App.tsx`
-- Add route `/brands/:brandId/guide`
-
----
-
-## Implementation Order
-
-1. Database migration (add `brand_guide_html` and `audit_findings` columns)
-2. `audit-brand` edge function (Pass 1 — deep visual audit)
-3. Update `extract-brand` edge function (Pass 2+3 — spec + guide generation with quality floor)
-4. Update `BrandSetup.tsx` (new audit_review and guide_review steps)
-5. Create `BrandGuide.tsx` page + route
-6. Update sidebar with guide link
-
----
-
-## Key Design Decisions
-
-- **Quality floor over brand fidelity**: If a brand's reference emails use 12px body text or full-width buttons, the system overrides with best practices. The guide will note "Brand references showed X, but we recommend Y for better performance."
-- **Italic CTA detection**: The audit prompt explicitly warns about JPEG compression artifacts making bold text appear italic. Default is `font-style: normal` unless unmistakable.
-- **No images in the guide**: The HTML guide is self-contained with CSS gradients and color blocks for visual examples — no `<img>` tags pointing to uploaded files.
-- **Pass 1 uses Sonnet for speed** (per-campaign parallel), **Pass 2+3 uses Opus for quality** (single synthesis + guide generation call).
+## Not Changed
+- HTML guide template structure
+- Image slicing logic
+- Fire-and-forget pattern
+- Campaign generation flow
 
