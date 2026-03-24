@@ -149,7 +149,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { brandId, campaignId, brief, goal, copy, speedMode } = await req.json();
+    const { brandId, campaignId, brief, goal, copy, speedMode, productIds, pinnedAssetUrls: pinnedUrls } = await req.json();
     campaignIdForError = campaignId;
 
     // Model selection based on speed mode
