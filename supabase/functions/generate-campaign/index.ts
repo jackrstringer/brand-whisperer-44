@@ -236,57 +236,22 @@ Deno.serve(async (req) => {
       } catch { /* skip failed images */ }
     }
 
-    // Fetch ALL brand assets — let AI decide which to use
+    // Fetch ALL brand assets — use existing URLs directly (no rehosting needed)
     const { data: brandAssets } = await supabase
       .from("brand_assets")
-      .select("url, category")
+      .select("url, category, filename")
       .eq("brand_id", brandId);
 
-    const allAssetEntries: { url: string; category: string }[] = (brandAssets || [])
+    const hostedAssetEntries: { url: string; category: string }[] = (brandAssets || [])
       .filter((a: any) => typeof a.url === "string" && a.url.trim().length > 0)
       .slice(0, 15);
 
-    // Re-host all asset URLs to ImageKit
-    let hostedAssetEntries: { url: string; category: string }[] = [];
-    if (allAssetEntries.length > 0) {
-      const assetsHtml = allAssetEntries
-        .map((entry, index) => `<img src="${entry.url}" alt="asset-${index}" />`)
-        .join("\n");
-
-      const rehostedAssetsHtml = await rehostHtmlImagesWithImageKit(assetsHtml, {
-        campaignId,
-        imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
-        folder: "/campaign-studio/brand-assets",
-      });
-
-      const extractedAssetUrls = Array.from(
-        rehostedAssetsHtml.matchAll(/<img\b[^>]*?\bsrc=(["'])(.*?)\1/gi),
-      )
-        .map((match) => match[2])
-        .filter((url): url is string => Boolean(url));
-
-      if (extractedAssetUrls.length === allAssetEntries.length) {
-        hostedAssetEntries = allAssetEntries.map((entry, i) => ({
-          url: extractedAssetUrls[i],
-          category: entry.category,
-        }));
-      } else {
-        hostedAssetEntries = allAssetEntries.map((entry, i) => ({
-          url: extractedAssetUrls[i] || entry.url,
-          category: entry.category,
-        }));
-      }
-    }
-
-    // Build asset catalog with categories and ImageKit transform hints
+    // Build asset catalog — simple list with categories, no destructive cropping
     const assetCatalog = hostedAssetEntries.map((entry) => {
-      const baseUrl = entry.url;
       if (entry.category === "logo") {
-        return `[logo — display at max-width 150px, centered, DO NOT stretch or crop] ${baseUrl}`;
+        return `[logo — display at max-width 150px, centered, DO NOT stretch or crop] ${entry.url}`;
       }
-      const smartCrop = applyImageKitTransform(baseUrl, { width: 600, focus: "auto", crop: "maintain_ratio" });
-      const tightCrop = applyImageKitTransform(baseUrl, { width: 600, height: 400, focus: "auto", crop: "at_max" });
-      return `[${entry.category}] ${baseUrl}\n  → smart-cropped: ${smartCrop}\n  → tight-cropped: ${tightCrop}`;
+      return `[${entry.category}] ${entry.url}`;
     }).join("\n");
 
     const embeddableUrls = hostedAssetEntries.map((e) => e.url);
