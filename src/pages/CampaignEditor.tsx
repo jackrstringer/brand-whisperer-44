@@ -420,13 +420,37 @@ export default function CampaignEditor() {
                     className="bg-card border-border"
                   />
                 </div>
-                <Button
-                  onClick={generateCampaign}
-                  disabled={!brief.trim() || generating}
-                  className="w-full bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all"
-                >
-                  {generating ? "Generating..." : "Generate Campaign"}
-                </Button>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 p-3 rounded-lg border border-border bg-background">
+                    <Zap className={`w-4 h-4 ${speedMode !== "normal" ? "text-primary" : "text-muted-foreground"}`} />
+                    <span className="text-xs text-muted-foreground">Speed:</span>
+                    <div className="flex gap-1 flex-1">
+                      {(["normal", "fast", "faster"] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() => setSpeedMode(mode)}
+                          className={`flex-1 text-xs py-1.5 px-2 rounded-md transition-all capitalize ${
+                            speedMode === mode
+                              ? "bg-primary text-primary-foreground font-medium"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                          }`}
+                        >
+                          {mode}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground text-center">
+                    {speedMode === "normal" ? "Opus 4.6 — highest quality" : speedMode === "fast" ? "Sonnet 4.6 — good quality, faster" : "Haiku — fastest, lower quality"}
+                  </p>
+                  <Button
+                    onClick={generateCampaign}
+                    disabled={!brief.trim() || generating}
+                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all"
+                  >
+                    {generating ? "Generating..." : "Generate Campaign"}
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="flex flex-col flex-1 overflow-hidden">
