@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
-    const { auditFindings, brandName, industry, brandId, step } = await req.json();
+    const { auditFindings, brandName, industry, brandId, step, confirmed_properties } = await req.json();
     if (!auditFindings) {
       return new Response(JSON.stringify({ error: "No audit findings provided" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
