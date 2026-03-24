@@ -463,8 +463,8 @@ You MUST feature these products prominently in the campaign. Use at least one im
       }
     }
 
-    // === PASS 2: QA Audit — JSON patch mode (FIX 7), skip in "faster" mode ===
-    if (speedMode !== "faster" && isCompleteHtml(html)) {
+    // === PASS 2: QA Audit — JSON patch mode ===
+    if (isCompleteHtml(html)) {
       try {
         const allQaItems = [...brandQaChecklist, ...globalQaChecklist];
         const customQaSection = allQaItems.length > 0
