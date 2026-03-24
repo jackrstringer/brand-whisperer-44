@@ -434,7 +434,7 @@ Deno.serve(async (req) => {
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: QA_MODEL,
           max_tokens: 8192,
           system: QA_SYSTEM_PROMPT,
           messages: [{ role: "user", content: qaContent }],
