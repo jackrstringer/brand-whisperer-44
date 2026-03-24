@@ -501,7 +501,7 @@ export default function CampaignEditor() {
                     <Zap className={`w-4 h-4 ${speedMode !== "normal" ? "text-primary" : "text-muted-foreground"}`} />
                     <span className="text-xs text-muted-foreground">Speed:</span>
                     <div className="flex gap-1 flex-1">
-                      {(["normal", "fast", "faster"] as const).map((mode) => (
+                      {(["normal", "fast"] as const).map((mode) => (
                         <button
                           key={mode}
                           onClick={() => setSpeedMode(mode)}
@@ -517,7 +517,7 @@ export default function CampaignEditor() {
                     </div>
                   </div>
                   <p className="text-[10px] text-muted-foreground text-center">
-                    {speedMode === "normal" ? "Opus 4.6 — highest quality" : speedMode === "fast" ? "Sonnet 4.6 — good quality, faster" : "Haiku 4.5 — fastest, lower quality"}
+                    {speedMode === "normal" ? "Opus 4.6 — highest quality" : "Sonnet 4.5 — good quality, faster"}
                   </p>
                   <Button
                     onClick={generateCampaign}

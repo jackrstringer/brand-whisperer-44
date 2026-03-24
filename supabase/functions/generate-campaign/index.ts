@@ -196,8 +196,8 @@ Deno.serve(async (req) => {
     campaignIdForError = campaignId;
 
     // Model selection based on speed mode
-    const GENERATION_MODEL = speedMode === "faster" ? "claude-haiku-4-5-20251001" : speedMode === "fast" ? "claude-sonnet-4-6" : "claude-opus-4-6";
-    const QA_MODEL = speedMode === "faster" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
+    const GENERATION_MODEL = speedMode === "fast" ? "claude-sonnet-4-5-20250929" : "claude-opus-4-6";
+    const QA_MODEL = "claude-sonnet-4-5-20250929";
 
     // Mark campaign as generating immediately (must complete before reads)
     await supabase.from("campaigns").update({ status: "generating" }).eq("id", campaignId);
