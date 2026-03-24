@@ -111,8 +111,12 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { brandId, campaignId, brief, goal, copy } = await req.json();
+    const { brandId, campaignId, brief, goal, copy, speedMode } = await req.json();
     campaignIdForError = campaignId;
+
+    // Model selection based on speed mode
+    const GENERATION_MODEL = speedMode === "faster" ? "claude-haiku-3-5-20241022" : speedMode === "fast" ? "claude-sonnet-4-20250514" : "claude-opus-4-6";
+    const QA_MODEL = speedMode === "faster" ? "claude-haiku-3-5-20241022" : "claude-sonnet-4-20250514";
 
     // Mark campaign as generating immediately
     await supabase.from("campaigns").update({ status: "generating" }).eq("id", campaignId);
@@ -370,7 +374,7 @@ Deno.serve(async (req) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-opus-4-6",
+        model: GENERATION_MODEL,
         max_tokens: 8192,
         system: UNIVERSAL_EMAIL_RULES,
         messages: [{ role: "user", content: userContent }],
@@ -430,7 +434,7 @@ Deno.serve(async (req) => {
           "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: QA_MODEL,
           max_tokens: 8192,
           system: QA_SYSTEM_PROMPT,
           messages: [{ role: "user", content: qaContent }],
