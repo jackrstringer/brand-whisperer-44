@@ -36,6 +36,29 @@ export interface ChatMessage {
   created_at: string;
 }
 
+export interface Product {
+  id: string;
+  brand_id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+}
+
+export interface ProductAsset {
+  id: string;
+  product_id: string;
+  brand_id: string;
+  bucket: 'transparent_bg' | 'lifestyle' | 'hero_shots';
+  url: string;
+  filename: string | null;
+  description: string | null;
+  dominant_colors: string[] | null;
+  ai_category: string | null;
+  composition_notes: string | null;
+  transparent_bg: boolean;
+  created_at: string;
+}
+
 export interface BrandExtraction {
   colors: {
     canvas: string;
