@@ -1,101 +1,42 @@
 
 
-# Figma + Website Extraction Pipeline — Confirmed Properties Before AI Audit
+# Single-Call Audit + Parallel Asset Categorization
 
 ## Problem
-The AI guesses font names, hex colors, and button properties from compressed JPEG screenshots. It's bad at this. Figma and website CSS can provide these values deterministically.
 
-## What Changes
+The audit currently makes **one Anthropic API call per campaign image** (up to 8 calls), then a synthesis call. That's 9 sequential/batched API calls taking 2-3 minutes. Claude supports up to 20 images per message — there's no reason not to send them all at once.
 
-### 1. UI — New inputs on Source Quiz + Brand Setup
+Additionally, asset categorization (logo, product, lifestyle) is happening inline during brand setup, blocking the flow. It should be fire-and-forget since it's only needed later for campaign generation.
 
-**SourceQuiz.tsx** — Add two new source options:
-- `"figma"` — "Figma File URL" with description "Exact font names, colors, and spacing -- no guessing." Shows two inputs when selected: Figma URL field + Figma Personal Access Token field (type=password, with help link)
-- `"website"` source already exists but only captures URL — keep as-is
+## Changes
 
-**BrandSetup.tsx** — Add state for `figmaUrl`, `figmaToken`. Pass to SourceQuiz. Store `figmaUrl` on the brand record (the `website_url` column already exists). Token goes to the edge function only, never stored in DB.
+### 1. `supabase/functions/audit-brand/index.ts` — Single API call
 
-### 2. New Edge Function: `extract-figma`
+Replace the current two-pass architecture (per-campaign audit + synthesis) with **one single API call**:
 
-**Input**: `{ figma_url, figma_token }`
+- Build one message containing ALL images from ALL campaigns, with text delimiters between campaigns (e.g., "--- Campaign 1 (3 slices) ---", "--- Campaign 2 (2 slices) ---")
+- Send all images + the confirmed properties prefix in one Sonnet call
+- The prompt asks for the unified audit directly — no synthesis pass needed
+- Set `max_tokens: 8000` to accommodate the larger single response
+- Remove all the per-campaign batching code, the synthesis call, and the post-processing border-force logic (per the previously approved plan to fix that)
 
-**Logic**:
-1. Parse file key + optional node ID from URL
-2. Call Figma REST API `GET /v1/files/{key}` (or `/v1/files/{key}/nodes?ids={id}`)
-3. Recursively traverse document tree:
-   - Collect all text nodes → extract `fontFamily`, `fontWeight`, `fontSize`, `italic`, `lineHeightPx`, `letterSpacing`, text content
-   - Collect all SOLID fills → convert `{r,g,b}` floats to hex
-   - Collect `cornerRadius`, auto-layout padding/spacing
-4. Deduplicate and categorize by usage (large text = heading, small = body)
-5. Return `confirmed_properties` JSON
+This cuts the API calls from ~9 down to **1**.
 
-**Output**: `{ confirmed_properties: { fonts, colors, buttons, spacing }, source: "figma", raw_text_nodes_sample: [...] }`
+### 2. `src/pages/BrandSetup.tsx` — Fire-and-forget asset analysis
 
-### 3. New Edge Function: `extract-website-fonts`
+Currently `generateGuideFromAudit` uploads assets and calls `analyze-asset` for each one, awaiting results before continuing. Change this:
 
-**Input**: `{ url }`
+- Asset uploads + AI analysis should be **fire-and-forget** — start the uploads/analysis in parallel but don't `await` them before proceeding to guide generation
+- The brand analysis flow only needs: reference campaign images + logo. Nothing else.
+- `getReferenceImageFiles()` already separates campaign files from asset files — only send campaign files + logo to the audit
+- Asset categorization results get written to DB asynchronously; they'll be available when campaigns are generated later
 
-**Logic**:
-1. Fetch HTML
-2. Parse `<link>` tags for Google Fonts URLs → extract family names directly from URL params
-3. Parse `<style>` blocks and linked stylesheets for `font-family`, `color`, `background-color`, CSS custom properties
-4. Deduplicate
+### 3. Remove border-force post-processing
 
-**Output**: `{ confirmed_properties: { fonts_from_css, google_fonts_detected, colors_from_css, css_variables }, source: "website" }`
+Lines 371-456 of `audit-brand/index.ts` contain the border evidence aggregation and force-override logic. This gets deleted since we're doing a single call and the AI should just report what it sees without post-processing overrides.
 
-### 4. Update `audit-brand` Edge Function
+## Files to Change
 
-Accept optional `confirmed_properties` parameter. When present, prepend to the per-campaign audit prompt:
-
-```
-CONFIRMED PROPERTIES (exact -- do not override):
-Fonts: Headline: Playfair Display, Body: DM Sans
-Colors: #D2E823, #FFFFFF, #333333, #000000
-Buttons: border-radius 999px, font-weight 700, font-style normal
-
-Focus on: layout patterns, voice/tone, emphasis patterns, photography style, component structures. Do NOT guess at font names or hex colors.
-```
-
-When absent, add the existing italic CTA warning.
-
-### 5. Update `BrandSetup.tsx` Orchestration
-
-On "Analyze Brand" click:
-1. **Parallel extraction** (before audit):
-   - If Figma URL provided → call `extract-figma`
-   - If website URL provided → call `extract-website-fonts`
-   - Always → slice images (existing)
-2. **Merge** confirmed properties (Figma wins over website for conflicts)
-3. **Call `audit-brand`** with sliced images + merged `confirmed_properties`
-4. Continue to spec + guide generation as before
-
-### 6. Database Migration
-
-Add to `brand_profiles`:
-- `confirmed_properties` (jsonb, nullable) — merged extraction from Figma/website
-- `extraction_sources` (text[], nullable) — e.g. `["figma", "website", "screenshots"]`
-
-The `website_url` column already exists on `brands`. Add `figma_url` (text, nullable) to `brands`.
-
-### 7. Pass confirmed_properties to extract-brand
-
-Update `extract-brand` spec prompt to use confirmed properties when available, so the system prompt and extraction JSON use exact font names and colors instead of AI guesses.
-
----
-
-## Files
-
-1. **`src/components/brand/SourceQuiz.tsx`** — Add "figma" source type with URL + token inputs
-2. **`src/pages/BrandSetup.tsx`** — Add figmaUrl/figmaToken state, parallel extraction calls before audit, merge logic
-3. **`supabase/functions/extract-figma/index.ts`** — New: Figma REST API extraction
-4. **`supabase/functions/extract-website-fonts/index.ts`** — New: CSS/Google Fonts extraction
-5. **`supabase/functions/audit-brand/index.ts`** — Accept + inject confirmed_properties into prompts
-6. **`supabase/functions/extract-brand/index.ts`** — Pass confirmed_properties to spec generation
-7. **Database migration** — Add `confirmed_properties`, `extraction_sources` to brand_profiles; add `figma_url` to brands
-
-## Not Changed
-- HTML guide template structure
-- Image slicing logic
-- Fire-and-forget pattern
-- Campaign generation flow
+1. **`supabase/functions/audit-brand/index.ts`** — Collapse to single API call, remove synthesis pass, remove border-force logic
+2. **`src/pages/BrandSetup.tsx`** — Make asset upload/analysis fire-and-forget, don't block guide generation on it
 
