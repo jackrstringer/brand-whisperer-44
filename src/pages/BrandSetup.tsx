@@ -398,7 +398,7 @@ export default function BrandSetup() {
 
       setProgressMessage("Building brand spec...");
       const { error: specError } = await supabase.functions.invoke("extract-brand", {
-        body: { auditFindings: auditData, brandName, industry, brandId, step: "spec" },
+        body: { auditFindings: auditData, brandName, industry, brandId, step: "spec", confirmed_properties: props },
       });
       if (specError) throw new Error(specError.message || "Failed to build brand spec");
 
