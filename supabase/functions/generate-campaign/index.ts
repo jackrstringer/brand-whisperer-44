@@ -374,7 +374,7 @@ Deno.serve(async (req) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-opus-4-6",
+        model: GENERATION_MODEL,
         max_tokens: 8192,
         system: UNIVERSAL_EMAIL_RULES,
         messages: [{ role: "user", content: userContent }],
