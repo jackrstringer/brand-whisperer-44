@@ -116,7 +116,8 @@ CHECK EACH — fail ANY = must fix:
 
 If ANY issues are found: return the CORRECTED complete HTML.
 If all checks pass: return the HTML unchanged.
-Return ONLY HTML. No commentary. No markdown fences.`;
+
+CRITICAL: Return ONLY the raw HTML starting with <!DOCTYPE html>. Do NOT include any commentary, analysis, checklist results, or explanations before or after the HTML. No "I need to check..." or "Issues found:" text. ONLY the HTML document.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
