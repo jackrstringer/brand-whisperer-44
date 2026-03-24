@@ -69,8 +69,10 @@ HEADLINES:
 
 IMAGES:
 - All images must use: style="width:100%; height:auto; display:block;"
-- CONSISTENCY: Every image must have the same padding treatment. Either ALL images are full-bleed (edge-to-edge) OR ALL images have equal padding on both sides. NEVER mix full-bleed and padded images in the same email.
-- If an image has excessive negative space that would look awkward, use ImageKit smart cropping by appending transformation parameters to the URL, or skip the image entirely. Do NOT overlay text on images.
+- PADDING CONSISTENCY (critical): Every content image in the email must have the SAME padding treatment. Either ALL images sit inside table cells with equal left/right padding (e.g., 24-40px on each side) OR ALL images are full-bleed. NEVER mix padded and full-bleed images.
+- When using padded images, the image's parent <td> must have explicit left and right padding. The image itself stays width:100% within that padded cell.
+- Images should generally NOT span the full 600px edge-to-edge unless the brand's reference campaigns specifically use full-bleed imagery. Default to padded images with 24-40px side padding.
+- If an image has excessive negative space that would look awkward, skip the image entirely. Do NOT overlay text on images. Do NOT modify or transform image URLs.
 - LOGO HANDLING: Images categorized as 'logo' must be displayed at max-width:150px (or similar reasonable size), centered, with padding above and below. NEVER stretch a logo to full width. NEVER crop a logo. If a dark-mode-safe variant exists, use it.
 
 CONTRAST CARDS:
