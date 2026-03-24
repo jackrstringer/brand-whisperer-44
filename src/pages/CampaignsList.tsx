@@ -64,6 +64,30 @@ export default function CampaignsList() {
     toast.success("Campaign deleted");
   };
 
+  const cloneCampaign = async (campaign: Campaign) => {
+    if (!brandId || !user) return;
+    const { data, error } = await supabase
+      .from("campaigns")
+      .insert({
+        brand_id: brandId,
+        name: `${campaign.name} (clone)`,
+        status: "draft",
+        brief: campaign.brief,
+        goal: campaign.goal,
+        reference_campaign_ids: campaign.reference_campaign_ids,
+      })
+      .select()
+      .single();
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    const cloned = data as Campaign;
+    setCampaigns(prev => [cloned, ...prev]);
+    toast.success("Campaign cloned");
+    navigate(`/brands/${brandId}/campaigns/${cloned.id}`);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
