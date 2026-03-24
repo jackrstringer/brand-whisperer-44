@@ -149,11 +149,33 @@ Deno.serve(async (req) => {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
-    const { images, brandName, industry } = await req.json();
+    const { images, brandName, industry, confirmed_properties } = await req.json();
     if (!images || !Array.isArray(images) || images.length === 0) {
       return new Response(JSON.stringify({ error: "No images provided" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Build confirmed properties prefix for the audit prompt
+    let confirmedPrefix = "";
+    if (confirmed_properties) {
+      const parts: string[] = ["CONFIRMED PROPERTIES (from Figma/website -- these are exact, do not override them):\n"];
+      if (confirmed_properties.fonts) {
+        const f = confirmed_properties.fonts;
+        if (f.headline) parts.push(`Headline font: ${f.headline.family} (weights: ${f.headline.weights?.join(", ") || "unknown"}, italic: ${f.headline.italic_used ? "yes, used selectively" : "no"})`);
+        if (f.body) parts.push(`Body font: ${f.body.family} (weights: ${f.body.weights?.join(", ") || "unknown"}, italic: ${f.body.italic_used ? "yes" : "no"})`);
+      }
+      if (confirmed_properties.colors) {
+        const c = confirmed_properties.colors;
+        if (c.primary_accent) parts.push(`Primary accent: ${c.primary_accent}`);
+        if (c.all_colors_found) parts.push(`All confirmed colors: ${c.all_colors_found.slice(0, 10).join(", ")}`);
+      }
+      if (confirmed_properties.buttons) {
+        const b = confirmed_properties.buttons;
+        parts.push(`Button border-radius: ${b.border_radius}px, font-weight: ${b.font_weight}, font-style: ${b.font_style || "normal"}`);
+      }
+      parts.push("\nUse these values as ground truth. Focus your visual audit on: layout patterns, voice/tone, emphasis patterns, photography style, component structures, section flow. Do NOT guess at font names or hex colors -- they have been confirmed above.");
+      confirmedPrefix = parts.join("\n") + "\n\n";
     }
 
     // Group slices by campaignIndex
@@ -199,7 +221,7 @@ Deno.serve(async (req) => {
 
         imageContent.push({
           type: "text",
-          text: `Brand: ${brandName}. Industry: ${industry || "not specified"}. This campaign has ${slices.length} slices. Perform a comprehensive visual audit.`,
+          text: `${confirmedPrefix}Brand: ${brandName}. Industry: ${industry || "not specified"}. This campaign has ${slices.length} slices. Perform a comprehensive visual audit.`,
         });
 
         const response = await fetch("https://api.anthropic.com/v1/messages", {

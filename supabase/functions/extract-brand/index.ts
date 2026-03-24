@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
-    const { auditFindings, brandName, industry, brandId, step } = await req.json();
+    const { auditFindings, brandName, industry, brandId, step, confirmed_properties } = await req.json();
     if (!auditFindings) {
       return new Response(JSON.stringify({ error: "No audit findings provided" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -212,7 +212,7 @@ Deno.serve(async (req) => {
 
       // Run spec synchronously so the caller can reliably trigger guide generation next.
       if (mode === "spec") {
-        await processSpecStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId);
+        await processSpecStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId, confirmed_properties);
         return new Response(JSON.stringify({ status: "spec_complete", brandId }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
@@ -284,6 +284,7 @@ async function runSpecCall(
   auditFindings: any,
   brandName: string,
   industry: string,
+  confirmedProperties?: any,
 ) {
   const anthropicHeaders = {
     "Content-Type": "application/json",
@@ -292,6 +293,11 @@ async function runSpecCall(
   };
 
   const auditJson = JSON.stringify(auditFindings, null, 2);
+
+  let confirmedBlock = "";
+  if (confirmedProperties) {
+    confirmedBlock = `\n\n=== CONFIRMED PROPERTIES (exact values from Figma/website -- use these, do not guess) ===\n${JSON.stringify(confirmedProperties, null, 2)}`;
+  }
 
   console.log(`[extract-brand] Call 1: Generating spec for ${brandName}`);
   const specResponse = await fetch("https://api.anthropic.com/v1/messages", {
@@ -303,7 +309,7 @@ async function runSpecCall(
       system: SPEC_PROMPT,
       messages: [{
         role: "user",
-        content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}`,
+        content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}${confirmedBlock}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}`,
       }],
     }),
   });
@@ -376,9 +382,10 @@ async function processSpecStep(
   brandName: string,
   industry: string,
   brandId: string,
+  confirmedProperties?: any,
 ) {
   const cleanedAudit = stripRuntimeKeys(auditFindings);
-  const specParsed = await runSpecCall(apiKey, cleanedAudit, brandName, industry);
+  const specParsed = await runSpecCall(apiKey, cleanedAudit, brandName, industry, confirmedProperties);
 
   const sb = getSupabaseAdmin();
   await sb.from("brand_profiles").update({
