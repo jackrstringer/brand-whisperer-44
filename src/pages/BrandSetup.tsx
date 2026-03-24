@@ -326,8 +326,10 @@ export default function BrandSetup() {
   const [earlyBrandId, setEarlyBrandId] = useState<string | null>(null);
 
   // === PASS 2+3: Spec + Guide (async with polling) ===
-  const generateGuideFromAudit = async (findings?: any) => {
+  const generateGuideFromAudit = async (findings?: any, mergedProps?: any, sources?: string[]) => {
     const auditData = findings || auditFindings;
+    const props = mergedProps || confirmedProperties;
+    const extractionSrcs = sources || ["screenshots"];
     if (!auditData || !user) { toast.error("No audit data available"); return; }
 
     setStep("generating_guide");
