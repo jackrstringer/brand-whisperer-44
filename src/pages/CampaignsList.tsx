@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Plus, ArrowRight, Trash2, Copy } from "lucide-react";
+import { Plus, ArrowRight, Trash2, Copy, Timer } from "lucide-react";
 import { toast } from "sonner";
 import type { Brand, Campaign } from "@/lib/types";
 import { useAuth } from "@/hooks/useAuth";
@@ -17,6 +17,25 @@ const statusColors: Record<string, string> = {
   error: "bg-destructive/20 text-destructive",
 };
 
+function GenTimer({ campaign }: { campaign: Campaign }) {
+  const [elapsed, setElapsed] = useState(0);
+  const isGenerating = campaign.status === "generating";
+
+  useEffect(() => {
+    if (!isGenerating) return;
+    const start = new Date(campaign.updated_at).getTime();
+    const tick = () => setElapsed(Math.floor((Date.now() - start) / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [isGenerating, campaign.updated_at]);
+
+  if (!isGenerating) return null;
+  const m = Math.floor(elapsed / 60);
+  const s = elapsed % 60;
+  return <span className="text-[10px] tabular-nums text-yellow-400 font-mono">{m}:{s.toString().padStart(2, "0")}</span>;
+}
+
 export default function CampaignsList() {
   const { brandId } = useParams<{ brandId: string }>();
   const navigate = useNavigate();
@@ -25,6 +44,7 @@ export default function CampaignsList() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
+  const [showTimers, setShowTimers] = useState(false);
 
   useEffect(() => {
     if (!brandId) return;
@@ -66,16 +86,21 @@ export default function CampaignsList() {
 
   const cloneCampaign = async (campaign: Campaign) => {
     if (!brandId || !user) return;
+    const cloneData: any = {
+      brand_id: brandId,
+      name: `${campaign.name} (clone)`,
+      status: "draft",
+      brief: campaign.brief,
+      goal: campaign.goal,
+      reference_campaign_ids: campaign.reference_campaign_ids,
+    };
+    // Copy product_ids if present
+    if ((campaign as any).product_ids?.length) {
+      cloneData.product_ids = (campaign as any).product_ids;
+    }
     const { data, error } = await supabase
       .from("campaigns")
-      .insert({
-        brand_id: brandId,
-        name: `${campaign.name} (clone)`,
-        status: "draft",
-        brief: campaign.brief,
-        goal: campaign.goal,
-        reference_campaign_ids: campaign.reference_campaign_ids,
-      })
+      .insert(cloneData)
       .select()
       .single();
     if (error) {
@@ -100,9 +125,18 @@ export default function CampaignsList() {
     <div className="p-6 md:p-12">
       <div className="flex items-center justify-between mb-8 max-w-3xl">
         <h1 className="text-2xl font-semibold">{brand?.name || "Brand"}</h1>
-        <Button onClick={createCampaign} className="bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all">
-          <Plus className="w-4 h-4 mr-1" /> New Campaign
-        </Button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowTimers(t => !t)}
+            className={`p-1.5 rounded transition-colors ${showTimers ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground"}`}
+            title="Toggle generation timers"
+          >
+            <Timer className="w-3.5 h-3.5" />
+          </button>
+          <Button onClick={createCampaign} className="bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all">
+            <Plus className="w-4 h-4 mr-1" /> New Campaign
+          </Button>
+        </div>
       </div>
 
       {campaigns.length === 0 ? (
@@ -125,6 +159,7 @@ export default function CampaignsList() {
                 <Badge className={statusColors[c.status] || statusColors.draft}>
                   {c.status}
                 </Badge>
+                {showTimers && <GenTimer campaign={c} />}
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-xs text-muted-foreground">

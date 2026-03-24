@@ -190,6 +190,12 @@ export default function CampaignEditor() {
       }),
     }).catch(() => {});
 
+    // Persist brief, goal, product_ids to campaign record
+    supabase.from("campaigns").update({
+      brief, goal,
+      product_ids: selectedProductIds.length > 0 ? selectedProductIds : null,
+    } as any).eq("id", campaignId).then(() => {});
+
     const pollInterval = setInterval(async () => {
       const { data } = await supabase
         .from("campaigns")
