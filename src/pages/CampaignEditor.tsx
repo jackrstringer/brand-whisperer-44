@@ -193,11 +193,15 @@ export default function CampaignEditor() {
       }),
     }).catch(() => {});
 
-    // Persist brief, goal, product_ids to campaign record
-    supabase.from("campaigns").update({
-      brief, goal,
+    // Persist all draft preferences to campaign record
+    await supabase.from("campaigns").update({
+      brief,
+      goal,
+      extra_copy: extraCopy || null,
+      speed_mode: speedMode,
       product_ids: selectedProductIds.length > 0 ? selectedProductIds : null,
-    } as any).eq("id", campaignId).then(() => {});
+      pinned_asset_urls: pinnedAssetUrls.length > 0 ? pinnedAssetUrls : null,
+    } as any).eq("id", campaignId);
 
     const pollInterval = setInterval(async () => {
       const { data } = await supabase
