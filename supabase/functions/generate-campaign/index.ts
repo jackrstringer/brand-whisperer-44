@@ -84,12 +84,21 @@ DESIGN COHESION:
 - Every section must feel "designed" — no default-looking text dumps
 - Maintain a clear visual hierarchy: headline → supporting text → CTA, with consistent spacing
 
+NO EMOJIS — EVER:
+- Never use emoji characters anywhere in the email — not in headlines, body text, CTAs, subject lines, or footer
+- For icons (stars, checkmarks, arrows, social media icons, etc.), use inline SVG only
+- Social media icons: use simple inline SVG paths for each platform (Facebook, Instagram, TikTok, YouTube, etc.)
+- Star ratings: use inline SVG stars filled with the brand's accent color
+- Checkmarks, arrows, and decorative icons: use inline SVG with appropriate brand colors
+- Keep SVGs small and simple (single path elements) for email client compatibility
+
 FOOTER (required on every email):
 - Must include: brand name, unsubscribe link placeholder, address placeholder
 - Style: small text (11-12px), muted color, centered, generous top padding (40-60px)
 - Unsubscribe link text: "Unsubscribe" — use href="#unsubscribe" as placeholder
 - Address placeholder: "123 Street, City, State 00000"
 - The footer is a SEPARATE section from the main content — never merge it with the last content block
+- Social media icons in footer: use inline SVG, never emoji or text characters
 
 Return only complete HTML. No commentary. No markdown fences.`;
 
