@@ -5,11 +5,13 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const PER_CAMPAIGN_AUDIT_PROMPT = `You are performing a detailed visual audit of one email campaign that has been split into sequential vertical slices (top to bottom). The slices shown together form one complete email. Analyze them as a unified design.
+const SINGLE_PASS_AUDIT_PROMPT = `You are performing a detailed visual audit of multiple email campaigns from a single brand. Each campaign has been split into sequential vertical slices (top to bottom). Analyze ALL campaigns together to produce ONE unified audit.
 
 Organize your audit around the FIVE RULE CATEGORIES that matter for email design. Be EXACT with values. If you cannot clearly determine a property, mark it as "[NEEDS CONFIRMATION]" rather than guessing.
 
-Return a JSON object with these keys:
+Return a JSON object with these top-level keys: "audit", "inconsistencies", "needs_confirmation".
+
+The "audit" object must contain:
 
 {
   "cta_buttons": {
@@ -21,7 +23,7 @@ Return a JSON object with these keys:
         "font_family": "exact name or [NEEDS CONFIRMATION]",
         "font_weight": "400 | 500 | 600 | 700",
         "font_style": "normal",
-        "has_border": true,
+        "has_border": true or false,
         "border_color": "#hex or null",
         "border_weight": "Xpx or null",
         "border_radius": "sharp | slightly-rounded | rounded | pill",
@@ -35,7 +37,7 @@ Return a JSON object with these keys:
     "observed_labels": ["list every CTA label verbatim"],
     "max_label_length": "number of characters",
     "wraps_to_two_lines": false,
-    "notes": "IMPORTANT: CTA text is almost NEVER italic. Bold sans-serif at small sizes or JPEG compression can appear to lean. Default to font-style:normal unless the lean is unmistakable across multiple buttons."
+    "notes": ""
   },
   "typography": {
     "headline_font_family": "exact name or [NEEDS CONFIRMATION]",
@@ -102,95 +104,21 @@ Return a JSON object with these keys:
   }
 }
 
-CRITICAL RULES:
-- CTA font-style defaults to NORMAL. Only mark italic if unmistakable across many buttons.
-- Star rating color: use what is OBSERVED. Never default to gold (#FFD700).
-- List every CTA label verbatim -- do not paraphrase or generalize.
-- Pull actual text content from the emails for component samples, headlines, etc.
-- Do NOT invent or assume components that aren't visible.
-
-Return ONLY valid JSON. No markdown fences. No commentary.`;
-
-const SYNTHESIS_AUDIT_PROMPT = `You are synthesizing individual visual audits from multiple email campaigns into a unified brand audit report.
-
-You will receive JSON audits from multiple campaigns. Your job:
-1. Identify the DOMINANT patterns across all campaigns
-2. Where campaigns differ, note inconsistencies
-3. Flag any properties that couldn't be clearly determined
-
-Return a JSON object with exactly three keys:
-
-"audit" -- the unified findings using the same structure as individual audits (cta_buttons, typography, colors, spacing_and_sizing, copy_patterns, repeated_components, footer). Represents brand-wide consensus.
-
 "inconsistencies" -- array of objects: [{"element": "e.g. cta_buttons.border_radius", "description": "Campaign 1 uses pill, Campaign 3 uses rounded", "campaigns": [1, 3]}]
 
 "needs_confirmation" -- array of objects: [{"element": "e.g. typography.headline_italic_pattern", "reason": "Could be JPEG compression artifact vs actual italic"}]
 
-For unified values, use the MOST COMMON value (majority rules).
-
-For CTA border/stroke specifically:
-- If ANY campaign clearly shows a visible outer stroke on primary CTA, preserve a stroked CTA variant in the unified audit.
-- Do NOT drop the stroke because some campaigns vary.
-- If mixed usage exists (some stroked, some unstroked), keep the stroked variant and add an inconsistency entry.
-
-CRITICAL:
-- CTA font-style defaults to NORMAL. Bold sans-serif text in JPEG screenshots can appear slightly italicized due to compression.
-- Star rating color: use what was OBSERVED. Never default to gold (#FFD700).
-- Merge all observed_labels from all campaigns into one deduplicated list.
-- Merge all repeated_components, noting which appeared in multiple campaigns.
+CRITICAL RULES:
+- CTA font-style defaults to NORMAL. Only mark italic if unmistakable across many buttons. Bold sans-serif at small sizes or JPEG compression can appear to lean -- default to font-style:normal.
+- CTA has_border: Look VERY carefully at the button edges. If there is a visible outer stroke/border distinct from the fill, set has_border:true with exact border_color and border_weight. If there is NO visible stroke, set has_border:false. Do NOT guess -- zoom in mentally on every button edge.
+- Star rating color: use what is OBSERVED. Never default to gold (#FFD700).
+- List every CTA label verbatim -- do not paraphrase or generalize.
+- Pull actual text content from the emails for component samples, headlines, etc.
+- Do NOT invent or assume components that aren't visible.
+- For unified values across campaigns, use the MOST COMMON value (majority rules).
+- Note any inconsistencies between campaigns in the inconsistencies array.
 
 Return ONLY valid JSON. No markdown fences. No commentary.`;
-
-function toBoolean(value: unknown): boolean {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string") return value.trim().toLowerCase() === "true";
-  return false;
-}
-
-function mostCommonString(values: Array<string | null | undefined>): string | null {
-  const filtered = values.filter((v): v is string => !!v && v.trim().length > 0);
-  if (filtered.length === 0) return null;
-  const counts = new Map<string, number>();
-  for (const value of filtered) {
-    counts.set(value, (counts.get(value) || 0) + 1);
-  }
-  let best: string | null = null;
-  let bestCount = -1;
-  for (const [value, count] of counts) {
-    if (count > bestCount) {
-      best = value;
-      bestCount = count;
-    }
-  }
-  return best;
-}
-
-function mostCommonNumber(values: Array<number | null | undefined>): number | null {
-  const filtered = values.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-  if (filtered.length === 0) return null;
-  const counts = new Map<number, number>();
-  for (const value of filtered) {
-    counts.set(value, (counts.get(value) || 0) + 1);
-  }
-  let best: number | null = null;
-  let bestCount = -1;
-  for (const [value, count] of counts) {
-    if (count > bestCount) {
-      best = value;
-      bestCount = count;
-    }
-  }
-  return best;
-}
-
-function normalizeBorderWeight(value: unknown): string | null {
-  if (typeof value === "number" && Number.isFinite(value)) return `${value}px`;
-  if (typeof value === "string" && value.trim().length > 0) {
-    const trimmed = value.trim();
-    return trimmed.endsWith("px") ? trimmed : `${trimmed}px`;
-  }
-  return null;
-}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -227,18 +155,18 @@ Deno.serve(async (req) => {
         const radiusPart = b.border_radius != null ? `${b.border_radius}px` : "unknown";
         parts.push(`Button border-radius: ${radiusPart}, font-weight: ${b.font_weight || "unknown"}, font-style: ${b.font_style || "normal"}`);
         if (b.has_border === true) {
-          parts.push(`CTA has visible outer stroke: yes`);
+          parts.push(`CTA has visible outer stroke: yes (confirmed from Figma)`);
           if (b.border_color) parts.push(`CTA border color: ${b.border_color}`);
           if (b.border_weight != null) parts.push(`CTA border weight: ${typeof b.border_weight === "number" ? `${b.border_weight}px` : b.border_weight}`);
         } else if (b.has_border === false) {
-          parts.push(`CTA has visible outer stroke: no`);
+          parts.push(`CTA has visible outer stroke: no (confirmed from Figma)`);
         }
       }
-      parts.push("\nUse these values as ground truth. Focus your visual audit on: CTA label text, copy patterns, layout spacing, component structures, voice/tone, photography style. Do NOT guess at font names or hex colors -- they have been confirmed above. If CTA stroke is confirmed, preserve it and do not remove it as a simplification.");
+      parts.push("\nUse these values as ground truth. Focus your visual audit on: CTA label text, copy patterns, layout spacing, component structures, voice/tone, photography style. Do NOT guess at font names or hex colors -- they have been confirmed above.");
       confirmedPrefix = parts.join("\n") + "\n\n";
     }
 
-    // Group slices by campaignIndex
+    // Group slices by campaignIndex and build a single message
     const campaignGroups = new Map<number, Array<{ data: string; mediaType: string; sliceIndex: number; totalSlices: number }>>();
     for (const img of images) {
       const ci = img.campaignIndex ?? 0;
@@ -256,89 +184,31 @@ Deno.serve(async (req) => {
     }
 
     const campaignCount = campaignGroups.size;
-    console.log(`Auditing ${campaignCount} campaigns (${images.length} total slices) for brand: ${brandName}`);
+    console.log(`Auditing ${campaignCount} campaigns (${images.length} total slices) in SINGLE call for brand: ${brandName}`);
 
-    // === PASS 1: Per-campaign audit (parallel, Sonnet) ===
-    const campaignEntries = Array.from(campaignGroups.entries());
-    const batchSize = 5;
-    const perCampaignResults: Array<{ campaignIndex: number; audit: any }> = [];
+    // Build one message with ALL images
+    const imageContent: any[] = [];
+    const sortedEntries = Array.from(campaignGroups.entries()).sort((a, b) => a[0] - b[0]);
 
-    for (let batch = 0; batch < campaignEntries.length; batch += batchSize) {
-      const batchEntries = campaignEntries.slice(batch, batch + batchSize);
-
-      const batchPromises = batchEntries.map(async ([campaignIndex, slices]) => {
-        const imageContent: any[] = [];
-        for (const slice of slices) {
-          imageContent.push({
-            type: "text",
-            text: `Slice ${slice.sliceIndex + 1}/${slice.totalSlices} of this email campaign (reading top to bottom):`,
-          });
-          imageContent.push({
-            type: "image",
-            source: { type: "base64", media_type: slice.mediaType, data: slice.data },
-          });
-        }
-
-        imageContent.push({
-          type: "text",
-          text: `${confirmedPrefix}Brand: ${brandName}. Industry: ${industry || "not specified"}. This campaign has ${slices.length} slices. Perform a comprehensive visual audit organized by the five rule categories.`,
-        });
-
-        const response = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": ANTHROPIC_API_KEY!,
-            "anthropic-version": "2023-06-01",
-          },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-20250514",
-            max_tokens: 4096,
-            system: PER_CAMPAIGN_AUDIT_PROMPT,
-            messages: [{ role: "user", content: imageContent }],
-          }),
-        });
-
-        if (!response.ok) {
-          const errText = await response.text();
-          console.warn(`Audit failed for campaign ${campaignIndex}: ${response.status} - ${errText}`);
-          return null;
-        }
-
-        const result = await response.json();
-        const text = result.content?.[0]?.text || "";
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-          console.warn(`No JSON found for campaign ${campaignIndex}`);
-          return null;
-        }
-
-        try {
-          return { campaignIndex, audit: JSON.parse(jsonMatch[0]) };
-        } catch {
-          console.warn(`Invalid JSON for campaign ${campaignIndex}`);
-          return null;
-        }
+    for (const [campaignIndex, slices] of sortedEntries) {
+      imageContent.push({
+        type: "text",
+        text: `--- Campaign ${campaignIndex + 1} (${slices.length} slices, top to bottom) ---`,
       });
-
-      const batchResults = await Promise.all(batchPromises);
-      for (const r of batchResults) {
-        if (r) perCampaignResults.push(r);
+      for (const slice of slices) {
+        imageContent.push({
+          type: "image",
+          source: { type: "base64", media_type: slice.mediaType, data: slice.data },
+        });
       }
     }
 
-    if (perCampaignResults.length === 0) {
-      throw new Error("All per-campaign audits failed");
-    }
+    imageContent.push({
+      type: "text",
+      text: `${confirmedPrefix}Brand: ${brandName}. Industry: ${industry || "not specified"}. ${campaignCount} campaigns shown above. Perform a comprehensive unified visual audit organized by the five rule categories. Return the full JSON with "audit", "inconsistencies", and "needs_confirmation" keys.`,
+    });
 
-    console.log(`Pass 1 complete: ${perCampaignResults.length}/${campaignCount} campaigns audited`);
-
-    // === SYNTHESIS: Merge audits (text-only, Sonnet) ===
-    const synthesisInput = perCampaignResults
-      .map((r) => `=== Campaign ${r.campaignIndex + 1} Audit ===\n${JSON.stringify(r.audit, null, 2)}`)
-      .join("\n\n");
-
-    const synthesisResponse = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -347,117 +217,47 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 6000,
-        system: SYNTHESIS_AUDIT_PROMPT,
-        messages: [{
-          role: "user",
-          content: `Brand: ${brandName}. Industry: ${industry || "not specified"}.\n\nSynthesize these ${perCampaignResults.length} individual audits into a unified brand audit report.\n\n${synthesisInput}`,
-        }],
+        max_tokens: 8000,
+        system: SINGLE_PASS_AUDIT_PROMPT,
+        messages: [{ role: "user", content: imageContent }],
       }),
     });
 
-    if (!synthesisResponse.ok) {
-      const errText = await synthesisResponse.text();
-      throw new Error(`Synthesis error: ${synthesisResponse.status} - ${errText}`);
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Anthropic API error: ${response.status} - ${errText}`);
     }
 
-    const synthesisResult = await synthesisResponse.json();
-    const synthesisText = synthesisResult.content?.[0]?.text || "";
-    const jsonMatch = synthesisText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("Failed to parse synthesis result");
+    const result = await response.json();
+    const text = result.content?.[0]?.text || "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("Failed to parse audit result - no JSON found");
 
     const parsed = JSON.parse(jsonMatch[0]);
 
-    const borderEvidence = perCampaignResults
-      .map((entry) => {
-        const variants = Array.isArray(entry.audit?.cta_buttons?.variants) ? entry.audit.cta_buttons.variants : [];
-        const strokedVariant = variants.find((variant: any) => toBoolean(variant?.has_border));
-        return {
-          campaignIndex: entry.campaignIndex,
-          hasBorder: !!strokedVariant,
-          borderColor: strokedVariant?.border_color ?? null,
-          borderWeight: strokedVariant?.border_weight ?? null,
+    // Ensure expected structure
+    if (!parsed.audit || typeof parsed.audit !== "object") {
+      // The model may have returned the audit at top level
+      if (parsed.cta_buttons || parsed.typography) {
+        // Wrap it
+        const wrapped = {
+          audit: parsed,
+          inconsistencies: parsed.inconsistencies || [],
+          needs_confirmation: parsed.needs_confirmation || [],
         };
-      });
-
-    const campaignsWithBorder = borderEvidence.filter((entry) => entry.hasBorder);
-    const confirmedHasBorder = confirmed_properties?.buttons?.has_border;
-
-    if (!parsed.audit || typeof parsed.audit !== "object") parsed.audit = {};
-    if (!parsed.audit.cta_buttons || typeof parsed.audit.cta_buttons !== "object") parsed.audit.cta_buttons = {};
-    if (!Array.isArray(parsed.audit.cta_buttons.variants)) parsed.audit.cta_buttons.variants = [];
-    if (parsed.audit.cta_buttons.variants.length === 0) {
-      parsed.audit.cta_buttons.variants.push({ name: "primary" });
-    }
-
-    if (!Array.isArray(parsed.inconsistencies)) parsed.inconsistencies = [];
-    if (!Array.isArray(parsed.needs_confirmation)) parsed.needs_confirmation = [];
-
-    const unifiedVariants = parsed.audit.cta_buttons.variants;
-    const unifiedHasBorder = unifiedVariants.some((variant: any) => toBoolean(variant?.has_border));
-
-    const inferredBorderColor = mostCommonString(campaignsWithBorder.map((entry) => entry.borderColor));
-    const inferredBorderWeightRaw = mostCommonString(campaignsWithBorder.map((entry) => {
-      const weight = entry.borderWeight;
-      if (typeof weight === "number") return `${weight}`;
-      if (typeof weight === "string") return weight;
-      return null;
-    }));
-    const inferredBorderWeight = normalizeBorderWeight(inferredBorderWeightRaw);
-
-    const primaryVariant = unifiedVariants[0];
-    const shouldForceBorderFromConfirmed = confirmedHasBorder === true;
-    const shouldForceBorderFromEvidence = confirmedHasBorder == null && campaignsWithBorder.length > 0 && !unifiedHasBorder;
-
-    if (shouldForceBorderFromConfirmed || shouldForceBorderFromEvidence) {
-      primaryVariant.has_border = true;
-      if (!primaryVariant.border_color) {
-        primaryVariant.border_color = confirmed_properties?.buttons?.border_color ?? inferredBorderColor;
-      }
-      if (!primaryVariant.border_weight) {
-        const confirmedWeight = normalizeBorderWeight(confirmed_properties?.buttons?.border_weight);
-        primaryVariant.border_weight = confirmedWeight ?? inferredBorderWeight;
+        delete wrapped.audit.inconsistencies;
+        delete wrapped.audit.needs_confirmation;
+        console.log(`Audit complete (single call, ${campaignCount} campaigns)`);
+        return new Response(JSON.stringify(wrapped), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
     }
 
-    const hasMixedBorderUsage = campaignsWithBorder.length > 0 && campaignsWithBorder.length < perCampaignResults.length;
-    if (hasMixedBorderUsage) {
-      parsed.inconsistencies.push({
-        element: "cta_buttons.variants[].has_border",
-        description: `Visible CTA border appears in ${campaignsWithBorder.length}/${perCampaignResults.length} campaigns. Keep stroked variant and treat usage as mixed.`,
-        campaigns: borderEvidence.filter((entry) => entry.hasBorder).map((entry) => entry.campaignIndex + 1),
-      });
-    }
-
-    if (confirmedHasBorder == null && campaignsWithBorder.length === 0) {
-      parsed.needs_confirmation.push({
-        element: "cta_buttons.variants[].has_border",
-        reason: "No campaign produced high-confidence CTA stroke detection. Border presence should be manually confirmed if this is a key brand trait.",
-      });
-    }
-
-    const inferredBorderRadius = mostCommonNumber(
-      perCampaignResults
-        .flatMap((entry) => Array.isArray(entry.audit?.cta_buttons?.variants) ? entry.audit.cta_buttons.variants : [])
-        .map((variant: any) => {
-          const value = variant?.border_radius_px;
-          if (typeof value === "number") return value;
-          if (typeof value === "string") {
-            const parsedValue = parseFloat(value);
-            return Number.isFinite(parsedValue) ? parsedValue : null;
-          }
-          return null;
-        })
-    );
-
-    if (!primaryVariant.border_radius_px && inferredBorderRadius != null) {
-      primaryVariant.border_radius_px = Math.round(inferredBorderRadius);
-    }
-
-    console.log(`Audit synthesis complete`);
+    console.log(`Audit complete (single call, ${campaignCount} campaigns)`);
 
     return new Response(JSON.stringify({
-      audit: parsed.audit,
+      audit: parsed.audit || parsed,
       inconsistencies: parsed.inconsistencies || [],
       needs_confirmation: parsed.needs_confirmation || [],
     }), {
