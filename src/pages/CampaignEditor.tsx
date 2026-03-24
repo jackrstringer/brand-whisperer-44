@@ -49,6 +49,8 @@ export default function CampaignEditor() {
   const [chatInput, setChatInput] = useState("");
   const [sending, setSending] = useState(false);
   const [speedMode, setSpeedMode] = useState<"normal" | "fast" | "faster">("normal");
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [pinnedAssetUrls, setPinnedAssetUrls] = useState<string[]>([]);
   const [canUndo, setCanUndo] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const previewPanelRef = useRef<HTMLDivElement>(null);
