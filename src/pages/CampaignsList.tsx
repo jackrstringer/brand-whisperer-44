@@ -17,23 +17,35 @@ const statusColors: Record<string, string> = {
   error: "bg-destructive/20 text-destructive",
 };
 
-function GenTimer({ campaign }: { campaign: Campaign }) {
+function GenTimer({ campaign }: { campaign: any }) {
   const [elapsed, setElapsed] = useState(0);
   const isGenerating = campaign.status === "generating";
 
   useEffect(() => {
     if (!isGenerating) return;
-    const start = new Date(campaign.updated_at).getTime();
+    const start = campaign.generation_started_at
+      ? new Date(campaign.generation_started_at).getTime()
+      : new Date(campaign.updated_at).getTime();
     const tick = () => setElapsed(Math.floor((Date.now() - start) / 1000));
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [isGenerating, campaign.updated_at]);
+  }, [isGenerating, campaign.generation_started_at, campaign.updated_at]);
 
-  if (!isGenerating) return null;
-  const m = Math.floor(elapsed / 60);
-  const s = elapsed % 60;
-  return <span className="text-[10px] tabular-nums text-yellow-400 font-mono">{m}:{s.toString().padStart(2, "0")}</span>;
+  const fmt = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
+  // Show live timer if generating, otherwise show stored duration
+  if (isGenerating) {
+    return <span className="text-[10px] tabular-nums text-yellow-400 font-mono">{fmt(elapsed)}</span>;
+  }
+  if (campaign.generation_duration_secs != null) {
+    return <span className="text-[10px] tabular-nums text-muted-foreground font-mono">{fmt(campaign.generation_duration_secs)}</span>;
+  }
+  return null;
 }
 
 export default function CampaignsList() {

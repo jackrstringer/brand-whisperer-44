@@ -553,12 +553,15 @@ You MUST feature these products prominently in the campaign. Use at least one im
       ? brief.trim()
       : briefWords.slice(0, 8).join(" ") + "...";
 
+    const durationSecs = Math.round((Date.now() - new Date(genStartedAt).getTime()) / 1000);
+
     await supabase.from("campaigns").update({
       html,
       status: "ready",
       brief,
       goal,
       name: campaignName,
+      generation_duration_secs: durationSecs,
     }).eq("id", campaignId);
 
     await supabase.from("chat_messages").insert({
