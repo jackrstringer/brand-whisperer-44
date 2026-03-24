@@ -427,6 +427,17 @@ export default function CampaignEditor() {
                     className="bg-card border-border"
                   />
                 </div>
+                {brandId && (
+                  <ProductSelector
+                    brandId={brandId}
+                    selectedProductIds={selectedProductIds}
+                    pinnedAssetUrls={pinnedAssetUrls}
+                    onSelectionChange={(ids, pinned) => {
+                      setSelectedProductIds(ids);
+                      setPinnedAssetUrls(pinned);
+                    }}
+                  />
+                )}
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 p-3 rounded-lg border border-border bg-background">
                     <Zap className={`w-4 h-4 ${speedMode !== "normal" ? "text-primary" : "text-muted-foreground"}`} />
