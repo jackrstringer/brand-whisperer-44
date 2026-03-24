@@ -284,6 +284,7 @@ async function runSpecCall(
   auditFindings: any,
   brandName: string,
   industry: string,
+  confirmedProperties?: any,
 ) {
   const anthropicHeaders = {
     "Content-Type": "application/json",
@@ -292,6 +293,11 @@ async function runSpecCall(
   };
 
   const auditJson = JSON.stringify(auditFindings, null, 2);
+
+  let confirmedBlock = "";
+  if (confirmedProperties) {
+    confirmedBlock = `\n\n=== CONFIRMED PROPERTIES (exact values from Figma/website -- use these, do not guess) ===\n${JSON.stringify(confirmedProperties, null, 2)}`;
+  }
 
   console.log(`[extract-brand] Call 1: Generating spec for ${brandName}`);
   const specResponse = await fetch("https://api.anthropic.com/v1/messages", {
@@ -303,7 +309,7 @@ async function runSpecCall(
       system: SPEC_PROMPT,
       messages: [{
         role: "user",
-        content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}`,
+        content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}${confirmedBlock}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}`,
       }],
     }),
   });
