@@ -375,6 +375,8 @@ export default function BrandSetup() {
           brand_id: brandId,
           reference_image_urls: imageUrls,
           audit_findings: auditData,
+          confirmed_properties: props || null,
+          extraction_sources: extractionSrcs,
         } as any);
         if (profileError) throw profileError;
 
