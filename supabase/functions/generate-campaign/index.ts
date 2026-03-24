@@ -2,6 +2,24 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { rehostHtmlImagesWithImageKit, applyImageKitTransform, getImageSliceUrls, estimateImageHeight } from "../_shared/imagekit.ts";
 
+/** Strip any AI commentary and extract only the HTML document */
+function extractHtmlOnly(text: string): string {
+  let html = text.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
+  // If the response contains <!DOCTYPE or <html, extract from that point
+  const doctypeIdx = html.search(/<!DOCTYPE\s/i);
+  const htmlTagIdx = html.search(/<html[\s>]/i);
+  const startIdx = doctypeIdx >= 0 ? doctypeIdx : htmlTagIdx >= 0 ? htmlTagIdx : -1;
+  if (startIdx > 0) {
+    html = html.substring(startIdx);
+  }
+  // Trim anything after closing </html>
+  const endMatch = html.match(/<\/html\s*>/i);
+  if (endMatch && endMatch.index !== undefined) {
+    html = html.substring(0, endMatch.index + endMatch[0].length);
+  }
+  return html;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
