@@ -363,7 +363,7 @@ export default function BrandSetup() {
 
         const { data: brand, error: brandError } = await supabase
           .from("brands")
-          .insert({ name: brandName, industry: industry || null, user_id: user.id, website_url: websiteUrl || null, source_types: selectedSources })
+          .insert({ name: brandName, industry: industry || null, user_id: user.id, website_url: websiteUrl || null, source_types: selectedSources, figma_url: figmaUrl || null } as any)
           .select()
           .single();
         if (brandError) throw brandError;
