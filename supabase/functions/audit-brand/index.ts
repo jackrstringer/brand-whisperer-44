@@ -7,115 +7,107 @@ const corsHeaders = {
 
 const PER_CAMPAIGN_AUDIT_PROMPT = `You are performing a detailed visual audit of one email campaign that has been split into sequential vertical slices (top to bottom). The slices shown together form one complete email. Analyze them as a unified design.
 
-Audit the following design elements with EXACT values. If you cannot clearly determine a property, mark it as "[NEEDS CONFIRMATION]" rather than guessing.
+Organize your audit around the FIVE RULE CATEGORIES that matter for email design. Be EXACT with values. If you cannot clearly determine a property, mark it as "[NEEDS CONFIRMATION]" rather than guessing.
 
 Return a JSON object with these keys:
 
 {
-  "logo": {
-    "type": "text_wordmark | image_logo | none",
-    "font_family": "string or null",
-    "font_weight": "string or null",
-    "size_description": "string (relative to email width)",
-    "position": "centered | left-aligned | right-aligned",
-    "spacing": "string (above/below description)",
-    "color": "#hex or null"
-  },
-  "colors": {
-    "primary_background": "#hex",
-    "section_backgrounds": ["#hex, ..."],
-    "accent_highlight": "#hex",
-    "text_headline": "#hex",
-    "text_body": "#hex",
-    "text_muted": "#hex",
-    "footer_background": "#hex or same as body",
-    "context_specific_colors": [{"color": "#hex", "usage": "description"}]
-  },
-  "typography_headlines": {
-    "serif_or_sans": "serif | sans-serif",
-    "approximate_weight": "light | regular | medium | bold | black",
-    "italic_used": false,
-    "italic_pattern": "null or description of which words",
-    "alignment": "centered | left-aligned | mixed",
-    "approximate_size": "string",
-    "line_height": "tight | normal | loose"
-  },
-  "typography_body": {
-    "serif_or_sans": "serif | sans-serif",
-    "weight": "regular | mixed",
-    "bold_pattern": "description of what gets bolded",
-    "alignment": "centered | left-aligned | mixed",
-    "line_height": "tight | normal | loose",
-    "approximate_size": "string"
-  },
-  "typography_subheads": {
-    "same_as": "headlines | body | distinct",
-    "weight": "string",
-    "size_relative": "string",
-    "color": "#hex or same as headlines"
-  },
   "cta_buttons": {
     "variants": [
       {
         "name": "primary",
-        "background_fill": "#hex",
+        "fill_color": "#hex",
         "text_color": "#hex",
+        "font_family": "exact name or [NEEDS CONFIRMATION]",
+        "font_weight": "400 | 500 | 600 | 700",
+        "font_style": "normal",
         "has_border": true,
         "border_color": "#hex or null",
-        "border_weight": "string or null",
+        "border_weight": "Xpx or null",
         "border_radius": "sharp | slightly-rounded | rounded | pill",
         "border_radius_px": "approximate px value",
-        "text_weight": "regular | bold",
-        "text_style": "normal",
         "text_case": "sentence | uppercase | title",
-        "approximate_padding": "string"
+        "padding_vertical": "approximate px",
+        "padding_horizontal": "approximate px",
+        "width_behavior": "auto | full-width | constrained"
       }
     ],
+    "observed_labels": ["list every CTA label verbatim"],
+    "max_label_length": "number of characters",
+    "wraps_to_two_lines": false,
     "notes": "IMPORTANT: CTA text is almost NEVER italic. Bold sans-serif at small sizes or JPEG compression can appear to lean. Default to font-style:normal unless the lean is unmistakable across multiple buttons."
   },
-  "image_treatment": {
-    "bleed": "full-bleed | padded | mixed",
-    "photo_style": "on-white | lifestyle | people | mixed",
-    "images_per_email": "approximate count",
-    "rounded_corners": true,
-    "corner_radius_px": "approximate px or 0"
+  "typography": {
+    "headline_font_family": "exact name or [NEEDS CONFIRMATION]",
+    "headline_weights": ["700", "900"],
+    "headline_italic_pattern": "never | full headline | selective words (list which)",
+    "headline_alignment": "centered | left-aligned | mixed",
+    "headline_size_range": "approximate px range",
+    "body_font_family": "exact name or [NEEDS CONFIRMATION]",
+    "body_weights": ["400", "700"],
+    "body_bold_pattern": "description of what triggers bold",
+    "body_size": "approximate px",
+    "body_line_height": "tight | normal | loose",
+    "subhead_font": "same as headline | same as body | distinct",
+    "subhead_weight": "string",
+    "cta_label_font": "same as body | same as headline | distinct"
   },
-  "section_dividers": {
-    "type": "background-color-change | horizontal-rule | spacing-only | none",
-    "spacing_between_sections": "generous | moderate | tight",
-    "approximate_gap_px": "number"
+  "colors": {
+    "primary_accent": "#hex",
+    "primary_background": "#hex",
+    "section_backgrounds": ["#hex"],
+    "text_headline": "#hex",
+    "text_body": "#hex",
+    "text_muted": "#hex",
+    "footer_background": "#hex",
+    "footer_text": "#hex",
+    "star_rating_color": "#hex or null (NEVER default to gold #FFD700 -- use what is observed)",
+    "all_distinct_colors": [{"color": "#hex", "usage": "where used"}]
   },
+  "spacing_and_sizing": {
+    "email_max_width": "approximate px",
+    "content_side_padding": "approximate px",
+    "section_to_section_gap": "approximate px",
+    "headline_to_subhead_gap": "approximate px",
+    "body_to_cta_gap": "approximate px",
+    "cta_vertical_padding": "approximate px (space above/below button in its section)",
+    "footer_padding": "approximate px",
+    "image_treatment": "full-bleed | padded | mixed",
+    "image_corner_radius": "0 | approximate px",
+    "card_border_radius": "approximate px or null",
+    "card_border": "description or none",
+    "card_shadow": "description or none"
+  },
+  "copy_patterns": {
+    "cta_label_patterns": ["action-oriented", "includes product name", "casual", etc.],
+    "headline_formulas": [{"pattern": "name", "examples": ["actual headline text"]}],
+    "body_bold_usage": "description of what gets bolded with examples",
+    "emojis_used": false,
+    "tone_descriptors": ["3-5 adjective descriptors"]
+  },
+  "repeated_components": [
+    {
+      "name": "component name",
+      "description": "structure and specific styling",
+      "content_sample": "actual text content from the email"
+    }
+  ],
   "footer": {
     "background_color": "#hex",
     "logo_present": true,
-    "social_icons": ["platform names in order"],
+    "social_icons": ["platform names observed"],
     "social_icon_style": "filled-circles | outline | icons-only | none",
-    "address_format": "description",
+    "address_text": "actual address from footer",
     "unsubscribe_style": "description"
-  },
-  "icons_decorative": {
-    "uses_icons": false,
-    "icon_style": "line | filled | circular-bg | none",
-    "emojis_used": false,
-    "emoji_locations": "description or none"
-  },
-  "special_patterns": [
-    {"name": "pattern name", "description": "structure and styling"}
-  ],
-  "voice": {
-    "tone_descriptors": ["3-5 adjective descriptors"],
-    "headline_formula": "pattern description",
-    "cta_copy_style": "description"
-  },
-  "card_container_design": {
-    "uses_cards": true,
-    "card_background": "#hex or null",
-    "card_border": "description or none",
-    "card_radius_px": "number",
-    "card_shadow": "description or none",
-    "card_padding": "approximate px"
   }
 }
+
+CRITICAL RULES:
+- CTA font-style defaults to NORMAL. Only mark italic if unmistakable across many buttons.
+- Star rating color: use what is OBSERVED. Never default to gold (#FFD700).
+- List every CTA label verbatim -- do not paraphrase or generalize.
+- Pull actual text content from the emails for component samples, headlines, etc.
+- Do NOT invent or assume components that aren't visible.
 
 Return ONLY valid JSON. No markdown fences. No commentary.`;
 
@@ -128,15 +120,19 @@ You will receive JSON audits from multiple campaigns. Your job:
 
 Return a JSON object with exactly three keys:
 
-"audit" — the unified findings organized by design element (same structure as individual audits, but representing the brand-wide consensus)
+"audit" -- the unified findings using the same structure as individual audits (cta_buttons, typography, colors, spacing_and_sizing, copy_patterns, repeated_components, footer). Represents brand-wide consensus.
 
-"inconsistencies" — array of objects: [{"element": "e.g. cta_buttons.border_radius", "description": "Campaign 1 uses pill, Campaign 3 uses rounded", "campaigns": [1, 3]}]
+"inconsistencies" -- array of objects: [{"element": "e.g. cta_buttons.border_radius", "description": "Campaign 1 uses pill, Campaign 3 uses rounded", "campaigns": [1, 3]}]
 
-"needs_confirmation" — array of objects: [{"element": "e.g. typography_headlines.italic_used", "reason": "Could be JPEG compression artifact vs actual italic"}]
+"needs_confirmation" -- array of objects: [{"element": "e.g. typography.headline_italic_pattern", "reason": "Could be JPEG compression artifact vs actual italic"}]
 
-For the unified audit values, use the MOST COMMON value (majority rules). If there's a tie, pick the more professional/standard option.
+For unified values, use the MOST COMMON value (majority rules). If tied, pick the more standard option.
 
-IMPORTANT for CTA buttons: Default to font-style: normal. Bold sans-serif text in JPEG screenshots can appear slightly italicized due to compression. Only mark as italic if unmistakable across multiple emails.
+CRITICAL:
+- CTA font-style defaults to NORMAL. Bold sans-serif text in JPEG screenshots can appear slightly italicized due to compression.
+- Star rating color: use what was OBSERVED. Never default to gold (#FFD700).
+- Merge all observed_labels from all campaigns into one deduplicated list.
+- Merge all repeated_components, noting which appeared in multiple campaigns.
 
 Return ONLY valid JSON. No markdown fences. No commentary.`;
 
@@ -156,7 +152,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Build confirmed properties prefix for the audit prompt
+    // Build confirmed properties prefix
     let confirmedPrefix = "";
     if (confirmed_properties) {
       const parts: string[] = ["CONFIRMED PROPERTIES (from Figma/website -- these are exact, do not override them):\n"];
@@ -174,7 +170,7 @@ Deno.serve(async (req) => {
         const b = confirmed_properties.buttons;
         parts.push(`Button border-radius: ${b.border_radius}px, font-weight: ${b.font_weight}, font-style: ${b.font_style || "normal"}`);
       }
-      parts.push("\nUse these values as ground truth. Focus your visual audit on: layout patterns, voice/tone, emphasis patterns, photography style, component structures, section flow. Do NOT guess at font names or hex colors -- they have been confirmed above.");
+      parts.push("\nUse these values as ground truth. Focus your visual audit on: CTA label text, copy patterns, layout spacing, component structures, voice/tone, photography style. Do NOT guess at font names or hex colors -- they have been confirmed above.");
       confirmedPrefix = parts.join("\n") + "\n\n";
     }
 
@@ -198,7 +194,7 @@ Deno.serve(async (req) => {
     const campaignCount = campaignGroups.size;
     console.log(`Auditing ${campaignCount} campaigns (${images.length} total slices) for brand: ${brandName}`);
 
-    // === PASS 1: Per-campaign deep audit (parallel, Sonnet) ===
+    // === PASS 1: Per-campaign audit (parallel, Sonnet) ===
     const campaignEntries = Array.from(campaignGroups.entries());
     const batchSize = 3;
     const perCampaignResults: Array<{ campaignIndex: number; audit: any }> = [];
@@ -221,7 +217,7 @@ Deno.serve(async (req) => {
 
         imageContent.push({
           type: "text",
-          text: `${confirmedPrefix}Brand: ${brandName}. Industry: ${industry || "not specified"}. This campaign has ${slices.length} slices. Perform a comprehensive visual audit.`,
+          text: `${confirmedPrefix}Brand: ${brandName}. Industry: ${industry || "not specified"}. This campaign has ${slices.length} slices. Perform a comprehensive visual audit organized by the five rule categories.`,
         });
 
         const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -273,7 +269,7 @@ Deno.serve(async (req) => {
 
     console.log(`Pass 1 complete: ${perCampaignResults.length}/${campaignCount} campaigns audited`);
 
-    // === SYNTHESIS: Merge audits (text-only, Opus) ===
+    // === SYNTHESIS: Merge audits (text-only, Sonnet) ===
     const synthesisInput = perCampaignResults
       .map((r) => `=== Campaign ${r.campaignIndex + 1} Audit ===\n${JSON.stringify(r.audit, null, 2)}`)
       .join("\n\n");

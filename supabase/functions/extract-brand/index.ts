@@ -7,18 +7,18 @@ const corsHeaders = {
 };
 
 const EMAIL_DESIGN_QUALITY_FLOOR = `
-EMAIL DESIGN QUALITY FLOOR — These rules are NON-NEGOTIABLE and override brand references if they conflict:
+EMAIL DESIGN QUALITY FLOOR -- These rules are NON-NEGOTIABLE and override brand references if they conflict:
 
 LAYOUT:
 - Fluid width: width="100%" with max-width:600px, margin:0 auto. NEVER fixed width:600px.
 - Consistent padding: minimum 20px side padding on all content sections.
 - Generous section spacing: minimum 24px between major sections.
-- "Flowy" designs — minimize hard section cuts. Prefer gentle transitions with spacing, subtle background color shifts, or gradient-like progressions. Avoid abrupt color/style changes between sections.
+- "Flowy" designs -- minimize hard section cuts. Prefer gentle transitions with spacing, subtle background color shifts. Avoid abrupt color/style changes between sections.
 
 TYPOGRAPHY:
 - Body text MINIMUM 16px. Recommended 16-18px for mobile readability.
 - Line-height minimum 1.5 for body text.
-- Never use raw gray (#999 or similar) for body text — use the brand's text color or a slightly muted version.
+- Never use raw gray (#999 or similar) for body text -- use the brand's text color or a slightly muted version.
 - ALL text alignment within a section must be consistent.
 
 BUTTONS:
@@ -26,6 +26,7 @@ BUTTONS:
 - Auto width with 32-48px horizontal padding. NEVER full-width buttons.
 - Must have clear visual distinction from surrounding content.
 - Default to font-style: normal for CTA text. Italic CTAs are almost never correct.
+- CTA text must NEVER wrap to a second line. Include white-space: nowrap.
 
 LOGO:
 - Centered, max-width 150px, with padding above and below.
@@ -50,98 +51,161 @@ DARK MODE SAFETY:
 `;
 
 const HTML_GUIDE_TEMPLATE = `
-=== HTML BRAND GUIDE TEMPLATE REFERENCE ===
+=== HTML EMAIL DESIGN RULES TEMPLATE REFERENCE ===
 
-You MUST generate the brand guide HTML following this exact CSS architecture and HTML structure. This is the quality bar. The guide must look like a premium design deliverable, not a data dump.
+This is NOT a coffee-table brand book. This is a working reference document that prevents the five categories of mistakes that make emails look wrong. Every section exists to prevent a specific category of error.
 
 CSS ARCHITECTURE:
-- Use CSS custom properties for ALL brand colors (--brand-accent, --black, --white, --gray-50 through --gray-900)
-- Load Google Fonts via <link> in <head> (the brand's heading font, body font, plus JetBrains Mono for code/labels)
-- Use clamp() for responsive font sizes on cover and section titles
-- Include a responsive @media (max-width: 768px) block that collapses grids to single column
+- CSS custom properties for ALL brand colors (--brand-accent, --brand-accent-dark, --black, --white, --g50 through --g900)
+- Load ACTUAL brand fonts via Google Fonts <link> in <head> (NOT fallbacks -- the real font names)
+- Always include JetBrains Mono for spec labels and code blocks
+- Responsive @media (max-width: 768px) block
+- clamp() for responsive font sizes on cover and section titles
 
-REQUIRED CSS CLASSES AND PATTERNS:
+PAGE STRUCTURE:
 
-1. COVER SECTION (.cover):
-   - Full-viewport dark background (--gray-900)
-   - Centered brand name, large title with one word in brand accent + italic using <em>, subtitle, meta line
-   - Subtle blurred accent circle using ::before pseudo-element (600px circle, blur(200px), opacity 0.05)
-   - Meta line uses monospace font (JetBrains Mono), shows "Prepared by [name] · [date] · v1.0"
+Cover (full viewport, dark bg)
+  Brand name (muted gray)
+  "Email Design Rules" (white, large)
+  Prepared by / date (JetBrains Mono)
 
-2. STICKY NAV (.sticky-nav):
-   - position: sticky; top: 0; z-index: 100
-   - White background, bottom border, brand name on left, section links as uppercase monospace labels
-   - Links: COLOR, TYPOGRAPHY, BUTTONS, LAYOUT, COMPONENTS, PHOTOGRAPHY, VOICE, RULES
-   - Horizontal scroll on mobile with hidden scrollbar
+Sticky Nav
+  Section anchor links (JetBrains Mono, uppercase, small)
 
-3. SECTION PATTERN (.section):
-   - 80px vertical padding, 60px horizontal (48px/24px on mobile)
-   - Each section has: .section-label (monospace, uppercase, "01 / COLOR"), .section-title (serif, large), .section-desc (max-width 640px, muted color)
+Section 1: CTA Rules          <-- MOST IMPORTANT, COMES FIRST
+Section 2: Typography & Color
+Section 3: Spacing & Sizing
+Section 4: Copy Rules
+Section 5: Repeated Components
+Section 6: Do's and Don'ts
 
-4. COLOR PALETTE SECTION:
-   - .subgroup-label for "PRIMARY COLORS" and "SUPPORTING NEUTRALS"
-   - .color-card with .color-swatch (140px tall, color fill, hex label at bottom) + .color-info (name + usage description)
-   - Use .color-hex.on-dark (white text with subtle white bg) or .color-hex.on-light (dark text with subtle dark bg)
-   - Grid of 3 for primary, grid of 4 for supporting neutrals
-   - End with .callout block (dark bg, accent title, muted body) showing "Color Ratio Rule"
+Footer (dark bg)
+  Brand name / living document note
 
-5. TYPOGRAPHY SECTION:
-   - .specimen-card with .specimen-preview (live rendered text in the actual font) + .specimen-info (tags showing font name/stack + description)
-   - Grid of 2: heading font specimen on left, body font specimen on right
-   - .type-scale-table: role / size+weight / live preview columns for Hero Headline, Section Header, Subhead, Body, CTA Label, Fine Print
-   - End with .callout showing "Emphasis Pattern" (how italic/bold is used)
+SECTION PATTERNS:
 
-6. BUTTON SYSTEM SECTION:
-   - .button-card with .button-preview (live rendered CTA button) + .button-label-card (variant name + monospace spec note)
-   - Grid of 3: Primary CTA, Primary CTA (Short), Primary CTA on Dark (dark preview bg)
-   - Actual rendered button must use the EXACT brand button styles (fill, border, radius, weight, font-style: normal)
-   - .code-block: dark background, syntax-highlighted CSS spec with .comment, .sel, .prop, .val classes
-   - End with .callout showing "CTA Copy Patterns" with examples from the audit
+Cover: Full-viewport dark section. Brand's accent color as a subtle blurred glow (600px circle, blur(200px), opacity 0.05). Simple and clean.
 
-7. LAYOUT SECTION:
-   - .wireframe-grid (grid of 3): Each wireframe shows an email type structure
-   - .wireframe with .wireframe-title + .wireframe-body containing stacked .wf-block elements
-   - Block types: .wf-block.accent (brand accent), .wf-block.dark (dark bg), .wf-block.light (white with border), .wf-block.image (gray placeholder), .wf-block.cta (accent with border, pill shape, centered)
-   - Below wireframes: spacing system with .spacing-row (colored bar + monospace label) showing the spacing scale
+Section Header: Every section has:
+  Label: "01 / CTA Rules" (JetBrains Mono, uppercase, small, tracked, muted)
+  Title: h2 in display font
+  Desc: 1-2 sentences max. What this section prevents.
 
-8. REUSABLE COMPONENTS SECTION:
-   - .component-card with .component-preview (mini rendered component) + .component-info (name + description)
-   - Grid of 2 or 3 depending on component count
-   - Include ALL observed components: announcement bars, review cards (with condition tags, stars, quoted title, body, author), benefit stacks (icon circles + text rows), founder story blocks (dark bg, serif headline), stat callouts (large number with accent highlight), risk reversal/guarantee blocks, product+text splits, comparison grids, standard footer (dark bg, brand wordmark, social SVG icons, legal text)
-   - Use SVG line icons for any icon representation — NEVER emojis
-   - Social icons in footer component must be actual SVG paths (Facebook, Instagram, TikTok, YouTube, etc.)
+=== SECTION 1: CTA RULES (MOST IMPORTANT) ===
 
-9. PHOTOGRAPHY DIRECTION SECTION:
-   - .photo-card with .photo-gradient (120px tall, CSS gradient representing the mood) + .photo-info (style name + description)
-   - Grid of 3 photography styles (e.g., "Product on Neutral", "Lifestyle / In-Use", "People / Results")
-   - Below: .rules-grid with Do's and Don'ts cards for photography
-   - .rule-card.do (light green bg) and .rule-card.dont (light red bg) with + and - prefixes
+This section must be comprehensive and airtight. Three representations that MUST all be consistent:
 
-10. VOICE & TONE SECTION:
-    - .voice-table: Attribute / What It Sounds Like / What It Doesn't Sound Like columns
-    - 4-5 brand voice attributes with real examples from the audit findings
-    - Below: .formula-group sections showing headline formulas by category (Low-Effort Promise, Perspective Shift, Quiet Confidence, Social Proof, etc.) with live-rendered headlines using the brand's heading font, including <em> for italic emphasis words
-    - End with .callout showing "Messaging Pillars" (numbered list of brand messaging strategies)
+1. Live-rendered button examples in cards:
+   - Standard CTA on light background
+   - CTA on dark background (if observed)
+   - Short label vs long label
+   - Each button sits in a card with a spec note below (JetBrains Mono listing key properties)
+   - Buttons MUST use: correct font-family (ACTUAL brand font), correct font-weight, font-style:normal (default), correct fill, correct border (if brand uses a stroke it MUST be visible), correct border-radius, correct padding, white-space:nowrap
 
-11. DESIGN RULES SECTION:
-    - .subgroup-label "DESIGN" + .rules-grid with Do and Don't cards
-    - .subgroup-label "COPY" + .rules-grid with Do and Don't cards
-    - Each rule item is specific and derived from observed patterns
-    - Include quality floor overrides where applicable: "Brand references showed X, but we recommend Y for better performance."
+2. CSS code block with syntax coloring:
+   - .comment (green), .prop (blue), .val (orange/brown), .sel (gold)
+   - Values MUST match the rendered buttons above
 
-12. GUIDE FOOTER:
-    - Dark background, brand name in serif, "living document" note, credit line in monospace
+3. Hard rules callout (dark bg card):
+   - CTA text must never wrap (white-space: nowrap)
+   - CTA must always be [sentence/uppercase/title case -- from audit]
+   - CTA must always have [border/no border -- from audit]
+   - Max recommended label length: [N chars, from longest observed]
 
-CRITICAL GENERATION RULES:
-- NEVER use emojis anywhere. Use SVG line icons for icon representations.
-- NEVER include <img> tags or image file references. The guide is 100% self-contained.
-- NEVER include a "Sample Campaigns" or "Reference Emails" section.
-- ALL CTA button examples MUST use font-style: normal unless italic was explicitly confirmed in the audit.
-- The code block CSS spec must EXACTLY match the rendered button examples.
-- Match the brand's actual conventions (sentence case vs title case, alignment, etc.)
-- No em dashes -- use -- or reword.
-- The guide itself must feel like a premium design agency deliverable.
-- Use generous whitespace, clean typography, and consistent spacing throughout.
+4. Observed CTA labels list:
+   - Every CTA label found in reference emails, rendered in actual CTA font at actual size and weight
+
+=== SECTION 2: TYPOGRAPHY & COLOR ===
+
+Typography specimens (two cards):
+- Headline/display font: render an ACTUAL headline from the reference emails in the actual font. Tag pills showing font name and fallback.
+- Body font: render ACTUAL body copy. Same tag pills.
+
+Emphasis pattern callout (dark card):
+- When italic is used in headlines (selective words? never?)
+- When bold is used in body (what kinds of phrases?)
+- Examples pulled from reference emails with emphasis visually applied
+
+Color palette grid:
+- Color cards with swatch (120-140px tall), hex code pill overlaid, color name + usage below
+- Group into brand colors and neutrals
+- Include EVERY observed color including star rating color, footer text, muted text
+- CRITICAL: star ratings use OBSERVED color. NEVER default to gold (#FFD700)
+
+=== SECTION 3: SPACING & SIZING ===
+
+Spacing scale visualization:
+- Horizontal bars at increasing widths, labeled with px value and usage context
+- Brand accent at ~70% opacity for bars
+- Values: inline gaps, content side padding, headline-to-subhead, body-to-CTA, section-to-section, dark section padding
+
+Sizing rules (simple spec table):
+- Email max width
+- Headline font size range
+- Body font size
+- CTA label font size
+- CTA button width behavior
+- Image treatment (full-bleed vs padded, corner radius)
+
+NO wireframe diagrams. NO "email anatomy" illustrations. Just the numbers.
+
+=== SECTION 4: COPY RULES ===
+
+Voice attributes table (3 columns):
+| Attribute | Sounds like | Doesn't sound like |
+Pull "sounds like" from ACTUAL reference email copy. 3-5 rows max.
+
+Headline formulas:
+- Group observed headlines into patterns
+- Render each in actual display font
+- 2-3 examples per pattern
+
+Bold usage rules:
+- What gets bolded in body copy? Product claims? Pain points? Stats?
+- Show examples from reference emails
+
+CTA copy patterns:
+- List observed labels
+- Note pattern: action-oriented? Casual? Includes product name?
+
+NO "messaging pillars." NO "brand philosophy." Just patterns.
+
+=== SECTION 5: REPEATED COMPONENTS ===
+
+Grid of component cards. Each card has:
+- Preview area (g50 bg) showing mini-rendered version
+- Component name + description below
+
+CRITICAL RULES:
+- ONLY include components actually observed in reference emails
+- Use ACTUAL content from reference emails (real review text, real names, real headlines, real CTA labels, real addresses)
+- Star ratings use OBSERVED color (NEVER gold by default)
+- NO emojis. Use SVG line icons where needed
+- Social icons must match ACTUAL platforms observed
+- Footer address must be ACTUAL address from emails
+
+=== SECTION 6: DO'S AND DON'TS ===
+
+Two grids: Design do's/don'ts, Copy do's/don'ts.
+- Green-tinted bg for do's, red-tinted bg for don'ts
+- Plus prefix for do's, dash prefix for don'ts
+- Every rule derived from observed patterns. NO generic design advice.
+- Specific rules like: "CTA text must never wrap", "Star ratings use black not gold", "No emojis", "Bold in body is for product claims only"
+
+WHAT NOT TO INCLUDE:
+- No <img> tags referencing uploaded files
+- No "Reference Library" or "Sample Campaigns" sections
+- No emojis anywhere
+- No placeholder text -- use real brand copy
+- No "Photography Direction" section
+- No "Email Layout System" wireframe section
+- No "Messaging Pillars" or brand philosophy prose
+- No gold (#FFD700) stars unless confirmed
+- No font-style:italic on CTA buttons unless explicitly confirmed
+- No colors that don't appear in the brand palette
+- No social platform icons that weren't in the reference emails
+- No components that weren't observed in reference emails
+- No em dashes (use -- or reword)
 `;
 
 const SPEC_PROMPT = `You are building a structured email brand spec from confirmed audit findings.
@@ -150,45 +214,59 @@ You will receive confirmed audit findings (JSON) from a visual analysis of the b
 
 Return ONLY valid JSON (no markdown fences, no commentary) with these two keys:
 
-"extraction" — structured brand values for programmatic use:
+"extraction" -- structured brand values for programmatic use:
 {
-  "colors": { "canvas": "#hex", "text_primary": "#hex", "text_secondary": "#hex", "accent": "#hex", "dark_card": "#hex or null", "button_border": "#hex" },
-  "fonts": { "heading": "name", "heading_stack": "CSS stack", "body": "name", "body_stack": "CSS stack", "google_fonts_url": "URL or null" },
+  "colors": { "canvas": "#hex", "text_primary": "#hex", "text_secondary": "#hex", "accent": "#hex", "dark_card": "#hex or null", "button_border": "#hex", "star_rating": "#hex (use observed, NEVER default to gold)" },
+  "fonts": { "heading": "exact name", "heading_stack": "CSS stack", "body": "exact name", "body_stack": "CSS stack", "google_fonts_url": "URL or null" },
   "spacing": { "canvas_width": 600, "side_padding": number, "card_inset": number, "card_radius": number, "section_gap": number },
-  "buttons": { "primary_bg": "#hex", "primary_text": "#hex", "border_color": "#hex", "border_width": "Xpx", "border_radius": "Xpx", "padding": "Xpx Ypx" },
+  "buttons": { "primary_bg": "#hex", "primary_text": "#hex", "border_color": "#hex", "border_width": "Xpx", "border_radius": "Xpx", "padding": "Xpx Ypx", "font_weight": "number", "font_style": "normal", "text_case": "sentence|uppercase|title", "white_space": "nowrap" },
   "layout": { "contrast_sections": "description", "background": "#hex or gradient" },
   "voice": { "tone": "string", "headline_structure": "string", "cta_style": "string", "urgency_level": "string", "notable_rules": [] },
   "confidence": { "overall": "high|medium|low", "low_confidence_fields": [] }
 }
 
-"system_prompt" — a complete, copy-paste-ready prompt for generating on-brand emails. Must include exact hex codes, px values, font stacks, layout rules, and the quality floor rules. This prompt should be detailed enough that an AI could build a matching email from it alone.
+"system_prompt" -- a complete, copy-paste-ready prompt for generating on-brand emails. Must include exact hex codes, px values, font stacks, layout rules, CTA rules (including white-space:nowrap), and the quality floor rules. This prompt should be detailed enough that an AI could build a matching email from it alone.
+
+CRITICAL:
+- CTA font-style defaults to NORMAL. Only mark italic if explicitly confirmed.
+- Star rating color uses what was OBSERVED. Never default to gold.
+- Every value must come from the audit. Do not fabricate.
 
 Apply the quality floor rules. If the brand audit shows practices that violate the floor (e.g., 12px body text, full-width buttons), override with the floor values and note the override in the system_prompt.`;
 
-const GUIDE_PROMPT = `You are generating a comprehensive, self-contained HTML email brand design guide document.
+const GUIDE_PROMPT = `You are generating a self-contained HTML email design rules document.
+
+This is NOT a coffee-table brand book. This is a working reference that prevents the five categories of mistakes that make emails look wrong: CTA rules, typography/color, spacing/sizing, copy rules, and component rules.
 
 You will receive:
 1. Confirmed audit findings (JSON)
 2. Brand extraction spec (JSON)
 3. Brand name and industry
-4. An HTML template reference showing the exact CSS architecture and section structure to follow
+4. An HTML template reference showing the exact structure to follow
 
-Your output must be ONLY the raw HTML document — starting with <!DOCTYPE html> and ending with </html>. No JSON wrapping. No markdown fences. No commentary before or after.
+Your output must be ONLY the raw HTML document -- starting with <!DOCTYPE html> and ending with </html>. No JSON wrapping. No markdown fences. No commentary.
 
-The HTML must be a premium visual deliverable with:
-- Full-viewport cover section with brand name, blurred accent circle effect, and metadata
-- Sticky navigation bar with anchor links to each section
-- 8 full sections: Color Palette, Typography (with specimens and type scale table), Button System (with live rendered buttons, CSS code block, and copy patterns), Email Layout (wireframe diagrams built in HTML/CSS, spacing system), Reusable Components (mini rendered previews of every observed component), Photography Direction (gradient mood cards, do's/don'ts), Voice & Tone (attribute table, headline formulas with live-rendered examples, messaging pillars), Design Rules (do's/don'ts grids for design and copy)
-- Guide footer with brand name and credit
-- CSS custom properties for all brand colors
-- Google Fonts loaded via <link>
-- JetBrains Mono for monospace labels and code
-- Responsive design with mobile breakpoint
-- SVG icons where needed (never emojis)
-- No external images — entirely self-contained
-- The guide itself must look like it was designed by a premium agency
+The HTML must follow the template structure exactly:
+- Cover section with brand name, blurred accent glow
+- Sticky nav with anchor links
+- 6 sections: CTA Rules, Typography & Color, Spacing & Sizing, Copy Rules, Repeated Components, Do's and Don'ts
+- Guide footer
 
-Do NOT abbreviate or skip sections. Every section must be fully fleshed out with real content from the audit findings.`;
+CRITICAL GENERATION RULES:
+- NEVER fabricate values. Every hex code, font name, border weight, padding value must come from the audit or confirmed properties. If unknown, mark TBD.
+- NEVER use placeholder content. No "Shop the Collection", no "Premium quality materials", no "123 Main Street". Every piece of text must be pulled from actual reference emails in the audit.
+- CTA section is MOST IMPORTANT. Live buttons, CSS code block, and spec table must ALL be consistent and match exactly.
+- CTA buttons MUST include white-space:nowrap. CTA text must never wrap to a second line.
+- Star ratings MUST use the observed color from audit. NEVER default to gold (#FFD700).
+- NEVER use emojis anywhere. Use SVG line icons where needed.
+- NEVER use colors not in the brand palette.
+- Component previews must use ACTUAL brand content from audit (real review text, real names, real CTA labels).
+- ONLY include components that were actually observed in reference emails.
+- Social icons must match the actual platforms observed.
+- NO Photography Direction section, NO wireframe diagrams, NO Messaging Pillars prose.
+- No em dashes -- use -- or reword.
+- Load ACTUAL brand fonts via Google Fonts (not fallbacks).
+- The guide must feel like a premium, lean design reference -- not a bloated brand book.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -206,11 +284,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    // If brandId provided, support step-based processing to avoid runtime timeouts.
     if (brandId) {
       const mode = step === "guide" ? "guide" : step === "full" ? "full" : "spec";
 
-      // Run spec synchronously so the caller can reliably trigger guide generation next.
       if (mode === "spec") {
         await processSpecStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId, confirmed_properties);
         return new Response(JSON.stringify({ status: "spec_complete", brandId }), {
@@ -218,7 +294,6 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Guide generation can run in background while frontend polls DB.
       const promise = mode === "full"
         ? processExtraction(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId)
         : processGuideStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId);
@@ -233,7 +308,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Legacy synchronous mode (no brandId) - kept for backward compat
     const result = await processExtraction(ANTHROPIC_API_KEY, auditFindings, brandName, industry);
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -274,7 +348,6 @@ function stripRuntimeKeys(auditFindings: any) {
   if (!auditFindings || typeof auditFindings !== "object" || Array.isArray(auditFindings)) {
     return auditFindings;
   }
-
   const { _error, _status, ...rest } = auditFindings;
   return rest;
 }
@@ -286,12 +359,6 @@ async function runSpecCall(
   industry: string,
   confirmedProperties?: any,
 ) {
-  const anthropicHeaders = {
-    "Content-Type": "application/json",
-    "x-api-key": apiKey,
-    "anthropic-version": "2023-06-01",
-  };
-
   const auditJson = JSON.stringify(auditFindings, null, 2);
 
   let confirmedBlock = "";
@@ -302,7 +369,11 @@ async function runSpecCall(
   console.log(`[extract-brand] Call 1: Generating spec for ${brandName}`);
   const specResponse = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: anthropicHeaders,
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
       max_tokens: 8000,
@@ -334,25 +405,23 @@ async function runGuideCall(
   industry: string,
   extraction: any,
 ) {
-  const anthropicHeaders = {
-    "Content-Type": "application/json",
-    "x-api-key": apiKey,
-    "anthropic-version": "2023-06-01",
-  };
-
   const auditJson = JSON.stringify(auditFindings, null, 2);
 
   console.log(`[extract-brand] Call 2: Generating HTML guide for ${brandName}`);
   const guideResponse = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: anthropicHeaders,
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 36000,
+      max_tokens: 64000,
       system: GUIDE_PROMPT,
       messages: [{
         role: "user",
-        content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}\n\n=== BRAND EXTRACTION SPEC ===\n${JSON.stringify(extraction, null, 2)}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}\n\n${HTML_GUIDE_TEMPLATE}\n\nGenerate the FULL premium HTML brand guide document. Start with <!DOCTYPE html> and end with </html>. Do not abbreviate or skip sections.`,
+        content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}\n\n=== BRAND EXTRACTION SPEC ===\n${JSON.stringify(extraction, null, 2)}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}\n\n${HTML_GUIDE_TEMPLATE}\n\nGenerate the FULL email design rules HTML document. Start with <!DOCTYPE html> and end with </html>. Follow the template structure exactly. Do not skip sections. Use actual content from the audit -- no placeholder text.`,
       }],
     }),
   });
@@ -421,7 +490,6 @@ async function processGuideStep(
   let extraction = profile?.raw_extraction;
   const effectiveAudit = cleanedAudit ?? stripRuntimeKeys(profile?.audit_findings) ?? {};
 
-  // Fallback if spec step was skipped.
   if (!extraction) {
     const specParsed = await processSpecStep(apiKey, effectiveAudit, brandName, industry, brandId);
     extraction = specParsed.extraction;
@@ -470,7 +538,6 @@ async function processExtraction(
     brand_guide_html: guideHtml,
   };
 
-  // If async mode, save everything to DB
   if (brandId) {
     const sb = getSupabaseAdmin();
     await sb.from("brand_profiles").update({
