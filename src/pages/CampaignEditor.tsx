@@ -69,9 +69,12 @@ export default function CampaignEditor() {
         const campaign = c as unknown as Campaign;
         setCampaign(campaign);
         setNameValue(campaign.name);
-        if (campaign.brief) setBrief(campaign.brief);
-        if (campaign.goal) setGoal(campaign.goal);
-        if ((campaign as any).product_ids?.length) setSelectedProductIds((campaign as any).product_ids);
+        setBrief(campaign.brief ?? "");
+        setGoal(campaign.goal ?? "promotional");
+        setExtraCopy(campaign.extra_copy ?? "");
+        setSelectedProductIds(Array.isArray(campaign.product_ids) ? campaign.product_ids : []);
+        setPinnedAssetUrls(Array.isArray(campaign.pinned_asset_urls) ? campaign.pinned_asset_urls : []);
+        setSpeedMode(campaign.speed_mode === "fast" ? "fast" : "normal");
         const history = campaign.html_history;
         setCanUndo(Array.isArray(history) && history.length > 0);
       }
