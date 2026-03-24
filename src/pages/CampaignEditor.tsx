@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import ProductSelector from "@/components/brand/ProductSelector";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,6 +49,8 @@ export default function CampaignEditor() {
   const [chatInput, setChatInput] = useState("");
   const [sending, setSending] = useState(false);
   const [speedMode, setSpeedMode] = useState<"normal" | "fast" | "faster">("normal");
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [pinnedAssetUrls, setPinnedAssetUrls] = useState<string[]>([]);
   const [canUndo, setCanUndo] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const previewPanelRef = useRef<HTMLDivElement>(null);
@@ -130,7 +133,11 @@ export default function CampaignEditor() {
         "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
       },
-      body: JSON.stringify({ brandId, campaignId, brief, goal, copy: extraCopy || undefined, speedMode }),
+      body: JSON.stringify({
+        brandId, campaignId, brief, goal, copy: extraCopy || undefined, speedMode,
+        productIds: selectedProductIds.length > 0 ? selectedProductIds : undefined,
+        pinnedAssetUrls: pinnedAssetUrls.length > 0 ? pinnedAssetUrls : undefined,
+      }),
     }).catch(() => {}); // errors handled via polling
 
     // Poll campaign status until ready or error
@@ -420,6 +427,17 @@ export default function CampaignEditor() {
                     className="bg-card border-border"
                   />
                 </div>
+                {brandId && (
+                  <ProductSelector
+                    brandId={brandId}
+                    selectedProductIds={selectedProductIds}
+                    pinnedAssetUrls={pinnedAssetUrls}
+                    onSelectionChange={(ids, pinned) => {
+                      setSelectedProductIds(ids);
+                      setPinnedAssetUrls(pinned);
+                    }}
+                  />
+                )}
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 p-3 rounded-lg border border-border bg-background">
                     <Zap className={`w-4 h-4 ${speedMode !== "normal" ? "text-primary" : "text-muted-foreground"}`} />

@@ -264,6 +264,98 @@ export type Database = {
           },
         ]
       }
+      product_assets: {
+        Row: {
+          ai_category: string | null
+          brand_id: string
+          bucket: string
+          composition_notes: string | null
+          created_at: string
+          description: string | null
+          dominant_colors: string[] | null
+          filename: string | null
+          id: string
+          product_id: string
+          transparent_bg: boolean
+          url: string
+        }
+        Insert: {
+          ai_category?: string | null
+          brand_id: string
+          bucket: string
+          composition_notes?: string | null
+          created_at?: string
+          description?: string | null
+          dominant_colors?: string[] | null
+          filename?: string | null
+          id?: string
+          product_id: string
+          transparent_bg?: boolean
+          url: string
+        }
+        Update: {
+          ai_category?: string | null
+          brand_id?: string
+          bucket?: string
+          composition_notes?: string | null
+          created_at?: string
+          description?: string | null
+          dominant_colors?: string[] | null
+          filename?: string | null
+          id?: string
+          product_id?: string
+          transparent_bg?: boolean
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_assets_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_assets_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          brand_id: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+        }
+        Insert: {
+          brand_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+        }
+        Update: {
+          brand_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_preferences: {
         Row: {
           created_at: string
