@@ -38,6 +38,12 @@ BUTTONS:
 - Width: auto with horizontal padding. NEVER width:100%. Buttons must not stretch to fill the container.
 - Text: short enough to fit one line on 375px mobile
 
+FIRST FOLD CTA (mandatory):
+- Every email MUST have a CTA button visible within the first ~600px of vertical content (the "first fold")
+- This means: hero section → headline → brief supporting text → CTA, all within the first screenful
+- The first CTA should appear BEFORE any secondary content sections, product grids, or testimonials
+- Additional CTAs can appear later in the email, but the first one must be above the fold
+
 HEADLINES:
 - All multi-line headlines use hard <br> line breaks
 - Never rely on auto-wrapping — email clients reflow unpredictably
@@ -81,7 +87,7 @@ Your job: compare the HTML against the references and rules, then fix ANY issues
 CHECK EACH — fail ANY = must fix:
 1. Card/container border-radius must match the brand's specified card_radius EVERYWHERE — no sharp corners if the brand uses rounded
 2. Button border-radius and styling must match brand specs
-3. For EACH <img> tag: check if the image URL appears in the available asset catalog. If a tight-cropped variant exists and the original has excessive empty/negative space (>30%), REPLACE the src with the tight-cropped URL. If no cropped variant exists and the image looks bad, REMOVE the <img> tag entirely.
+3. For EACH <img> tag: verify the URL is from the brand's asset catalog. If the URL is fabricated (stock photo, unsplash, etc.), REMOVE the <img> tag entirely. Do NOT modify or transform image URLs.
 4. ALL images must have identical padding treatment — either ALL full-bleed OR ALL with equal side padding. NEVER mix
 5. Footer MUST exist as a SEPARATE section with: brand name, "Unsubscribe" link (href="#unsubscribe"), address placeholder
 6. Text alignment must be consistent within each section — no left-aligned bullets in a center-aligned section
@@ -230,57 +236,22 @@ Deno.serve(async (req) => {
       } catch { /* skip failed images */ }
     }
 
-    // Fetch ALL brand assets — let AI decide which to use
+    // Fetch ALL brand assets — use existing URLs directly (no rehosting needed)
     const { data: brandAssets } = await supabase
       .from("brand_assets")
-      .select("url, category")
+      .select("url, category, filename")
       .eq("brand_id", brandId);
 
-    const allAssetEntries: { url: string; category: string }[] = (brandAssets || [])
+    const hostedAssetEntries: { url: string; category: string }[] = (brandAssets || [])
       .filter((a: any) => typeof a.url === "string" && a.url.trim().length > 0)
       .slice(0, 15);
 
-    // Re-host all asset URLs to ImageKit
-    let hostedAssetEntries: { url: string; category: string }[] = [];
-    if (allAssetEntries.length > 0) {
-      const assetsHtml = allAssetEntries
-        .map((entry, index) => `<img src="${entry.url}" alt="asset-${index}" />`)
-        .join("\n");
-
-      const rehostedAssetsHtml = await rehostHtmlImagesWithImageKit(assetsHtml, {
-        campaignId,
-        imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
-        folder: "/campaign-studio/brand-assets",
-      });
-
-      const extractedAssetUrls = Array.from(
-        rehostedAssetsHtml.matchAll(/<img\b[^>]*?\bsrc=(["'])(.*?)\1/gi),
-      )
-        .map((match) => match[2])
-        .filter((url): url is string => Boolean(url));
-
-      if (extractedAssetUrls.length === allAssetEntries.length) {
-        hostedAssetEntries = allAssetEntries.map((entry, i) => ({
-          url: extractedAssetUrls[i],
-          category: entry.category,
-        }));
-      } else {
-        hostedAssetEntries = allAssetEntries.map((entry, i) => ({
-          url: extractedAssetUrls[i] || entry.url,
-          category: entry.category,
-        }));
-      }
-    }
-
-    // Build asset catalog with categories and ImageKit transform hints
+    // Build asset catalog — simple list with categories, no destructive cropping
     const assetCatalog = hostedAssetEntries.map((entry) => {
-      const baseUrl = entry.url;
       if (entry.category === "logo") {
-        return `[logo — display at max-width 150px, centered, DO NOT stretch or crop] ${baseUrl}`;
+        return `[logo — display at max-width 150px, centered, DO NOT stretch or crop] ${entry.url}`;
       }
-      const smartCrop = applyImageKitTransform(baseUrl, { width: 600, focus: "auto", crop: "maintain_ratio" });
-      const tightCrop = applyImageKitTransform(baseUrl, { width: 600, height: 400, focus: "auto", crop: "at_max" });
-      return `[${entry.category}] ${baseUrl}\n  → smart-cropped: ${smartCrop}\n  → tight-cropped: ${tightCrop}`;
+      return `[${entry.category}] ${entry.url}`;
     }).join("\n");
 
     const embeddableUrls = hostedAssetEntries.map((e) => e.url);
@@ -352,8 +323,8 @@ Deno.serve(async (req) => {
 1. The reference campaign screenshots above are STYLE REFERENCES ONLY. NEVER embed them as <img> tags.
 2. Never invent, guess, or use external stock image URLs (Unsplash, Pexels, etc).
 3. You are the CREATIVE DIRECTOR. Choose ONLY the images that best serve this campaign's story. You do NOT need to use every available image — be selective.
-4. Before using any image, consider if it has excessive empty space. If so, you MUST use the tight-cropped URL variant. If even the cropped version would look bad, skip the image entirely.
-5. For lifestyle/hero images, default to the tight-crop variant unless the full image is clearly well-composed with minimal negative space.
+4. Use the image URLs from the AVAILABLE BRAND ASSETS list exactly as provided. Do NOT modify, crop, or transform the URLs.
+5. If an image doesn't fit the campaign's story, skip it entirely rather than forcing it in.
 6. CONSISTENCY: Every image must have the same padding treatment — either ALL full-bleed or ALL with equal side padding. Never mix.`;
 
     if (hostedAssetEntries.length > 0) {
@@ -391,26 +362,8 @@ Deno.serve(async (req) => {
     let html = result.content?.[0]?.text || "";
     html = html.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
 
-    // Re-host any generated image URLs to ImageKit
-    html = await rehostHtmlImagesWithImageKit(html, {
-      campaignId,
-      imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
-      fallbackImageUrls: embeddableUrls,
-    });
-
-    // === PASS 2: QA Audit ===
+    // === PASS 2: QA Audit (text-only — no reference images, just rules + HTML) ===
     try {
-      const qaContent: any[] = [];
-
-      if (imageBlocks.length > 0) {
-        qaContent.push({
-          type: "text",
-          text: `Here are ${imageBlocks.length} brand reference campaign images. The generated email must match their design language exactly.`,
-        });
-        qaContent.push(...imageBlocks);
-      }
-
-      // Build custom QA items from brand + global checklists
       const allQaItems = [...brandQaChecklist, ...globalQaChecklist];
       const customQaSection = allQaItems.length > 0
         ? `\n\n=== CUSTOM QA CHECKLIST ITEMS ===\n${allQaItems.map((item, i) => `${i + 1}. ${item}`).join("\n")}`
@@ -419,12 +372,12 @@ Deno.serve(async (req) => {
       let qaText = `Brand design rules:\n${profile.system_prompt}\n\n=== SPECIFIC VALUES TO ENFORCE ===\ncard_radius: ${brandValues.card_radius}px\nbutton_radius: ${brandValues.button_radius}px\naccent_color: ${brandValues.accent_color}\ntext_color: ${brandValues.text_color}${customQaSection}`;
 
       if (assetCatalog) {
-        qaText += `\n\n=== AVAILABLE IMAGE VARIANTS ===\nFor any image that has excessive negative space, replace the URL with the tight-cropped variant below:\n${assetCatalog}`;
+        qaText += `\n\n=== AVAILABLE BRAND ASSETS ===\n${assetCatalog}`;
       }
 
       qaText += `\n\n=== GENERATED HTML TO AUDIT ===\n${html}`;
 
-      qaContent.push({ type: "text", text: qaText });
+      const qaContent: any[] = [{ type: "text", text: qaText }];
 
       const qaResponse = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
