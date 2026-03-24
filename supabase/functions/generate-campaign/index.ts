@@ -196,8 +196,8 @@ Deno.serve(async (req) => {
     campaignIdForError = campaignId;
 
     // Model selection based on speed mode
-    const GENERATION_MODEL = speedMode === "faster" ? "claude-haiku-4-5-20251001" : speedMode === "fast" ? "claude-sonnet-4-6" : "claude-opus-4-6";
-    const QA_MODEL = speedMode === "faster" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
+    const GENERATION_MODEL = speedMode === "fast" ? "claude-sonnet-4-5-20250929" : "claude-opus-4-6";
+    const QA_MODEL = "claude-sonnet-4-5-20250929";
 
     // Mark campaign as generating immediately (must complete before reads)
     await supabase.from("campaigns").update({ status: "generating" }).eq("id", campaignId);
@@ -242,8 +242,8 @@ Deno.serve(async (req) => {
       ? profile.reference_image_urls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
       : [];
 
-    // FIX 3: Cap reference images — 5 for normal and fast, 3 for faster
-    const maxRefs = speedMode === "faster" ? 3 : 5;
+    // Cap reference images at 5 for all modes
+    const maxRefs = 5;
     const selectedReferenceUrls = referenceUrls.slice(0, maxRefs);
 
     // FIX 4: Fetch all reference images in PARALLEL with chunked base64
@@ -463,8 +463,8 @@ You MUST feature these products prominently in the campaign. Use at least one im
       }
     }
 
-    // === PASS 2: QA Audit — JSON patch mode (FIX 7), skip in "faster" mode ===
-    if (speedMode !== "faster" && isCompleteHtml(html)) {
+    // === PASS 2: QA Audit — JSON patch mode ===
+    if (isCompleteHtml(html)) {
       try {
         const allQaItems = [...brandQaChecklist, ...globalQaChecklist];
         const customQaSection = allQaItems.length > 0

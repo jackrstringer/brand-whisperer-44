@@ -48,7 +48,7 @@ export default function CampaignEditor() {
 
   const [chatInput, setChatInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [speedMode, setSpeedMode] = useState<"normal" | "fast" | "faster">("normal");
+  const [speedMode, setSpeedMode] = useState<"normal" | "fast">("normal");
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [pinnedAssetUrls, setPinnedAssetUrls] = useState<string[]>([]);
   const [canUndo, setCanUndo] = useState(false);
@@ -66,9 +66,12 @@ export default function CampaignEditor() {
     const load = async () => {
       const { data: c } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
       if (c) {
-        const campaign = c as Campaign;
+        const campaign = c as unknown as Campaign;
         setCampaign(campaign);
         setNameValue(campaign.name);
+        if (campaign.brief) setBrief(campaign.brief);
+        if (campaign.goal) setGoal(campaign.goal);
+        if ((campaign as any).product_ids?.length) setSelectedProductIds((campaign as any).product_ids);
         const history = campaign.html_history;
         setCanUndo(Array.isArray(history) && history.length > 0);
       }
@@ -186,6 +189,12 @@ export default function CampaignEditor() {
         pinnedAssetUrls: pinnedAssetUrls.length > 0 ? pinnedAssetUrls : undefined,
       }),
     }).catch(() => {});
+
+    // Persist brief, goal, product_ids to campaign record
+    supabase.from("campaigns").update({
+      brief, goal,
+      product_ids: selectedProductIds.length > 0 ? selectedProductIds : null,
+    } as any).eq("id", campaignId).then(() => {});
 
     const pollInterval = setInterval(async () => {
       const { data } = await supabase
@@ -498,7 +507,7 @@ export default function CampaignEditor() {
                     <Zap className={`w-4 h-4 ${speedMode !== "normal" ? "text-primary" : "text-muted-foreground"}`} />
                     <span className="text-xs text-muted-foreground">Speed:</span>
                     <div className="flex gap-1 flex-1">
-                      {(["normal", "fast", "faster"] as const).map((mode) => (
+                      {(["normal", "fast"] as const).map((mode) => (
                         <button
                           key={mode}
                           onClick={() => setSpeedMode(mode)}
@@ -514,7 +523,7 @@ export default function CampaignEditor() {
                     </div>
                   </div>
                   <p className="text-[10px] text-muted-foreground text-center">
-                    {speedMode === "normal" ? "Opus 4.6 — highest quality" : speedMode === "fast" ? "Sonnet 4.6 — good quality, faster" : "Haiku 4.5 — fastest, lower quality"}
+                    {speedMode === "normal" ? "Opus 4.6 — highest quality" : "Sonnet 4.5 — good quality, faster"}
                   </p>
                   <Button
                     onClick={generateCampaign}
