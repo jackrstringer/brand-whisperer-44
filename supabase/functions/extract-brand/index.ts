@@ -367,28 +367,27 @@ async function runSpecCall(
   }
 
   console.log(`[extract-brand] Call 1: Generating spec for ${brandName}`);
-  const specResponse = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
+  const specResponse = await fetchWithRetry(
+    "https://api.anthropic.com/v1/messages",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 8000,
+        system: SPEC_PROMPT,
+        messages: [{
+          role: "user",
+          content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}${confirmedBlock}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}`,
+        }],
+      }),
     },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 8000,
-      system: SPEC_PROMPT,
-      messages: [{
-        role: "user",
-        content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}${confirmedBlock}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}`,
-      }],
-    }),
-  });
-
-  if (!specResponse.ok) {
-    const errText = await specResponse.text();
-    throw new Error(`Spec API error: ${specResponse.status} - ${errText}`);
-  }
+    "Spec",
+  );
 
   const specResult = await specResponse.json();
   const specText = specResult.content?.[0]?.text || "";
