@@ -112,16 +112,37 @@ export default function BrandSettings() {
   const handleUploadAsset = useCallback(async (category: string, files: FileList) => {
     if (!brandId || !files.length) return;
     setUploading(category);
-    for (const file of Array.from(files)) {
+    const uploadPromises = Array.from(files).map(async (file) => {
       const path = `${brandId}/${category}/${Date.now()}-${file.name}`;
       const { error: uploadErr } = await supabase.storage.from("brand-assets").upload(path, file);
-      if (uploadErr) { toast.error(`Upload failed: ${uploadErr.message}`); continue; }
+      if (uploadErr) { toast.error(`Upload failed: ${uploadErr.message}`); return; }
       const { data: urlData } = supabase.storage.from("brand-assets").getPublicUrl(path);
-      await supabase.from("brand_assets").insert({ brand_id: brandId, category, url: urlData.publicUrl, filename: file.name });
-      setAssets(prev => [...prev, { id: crypto.randomUUID(), url: urlData.publicUrl, category, filename: file.name }]);
-    }
+      const publicUrl = urlData.publicUrl;
+
+      // Analyze with AI
+      let description: string | undefined;
+      let dominant_colors: string[] | undefined;
+      let ai_category: string | undefined;
+      try {
+        const { data: analysis } = await supabase.functions.invoke("analyze-asset", {
+          body: { imageUrl: publicUrl, filename: file.name, userCategory: category },
+        });
+        if (analysis && !analysis.error) {
+          description = analysis.description;
+          dominant_colors = analysis.dominant_colors;
+          ai_category = analysis.suggested_category;
+        }
+      } catch {}
+
+      await supabase.from("brand_assets").insert({
+        brand_id: brandId, category, url: publicUrl, filename: file.name,
+        description, dominant_colors, ai_category,
+      } as any);
+      setAssets(prev => [...prev, { id: crypto.randomUUID(), url: publicUrl, category, filename: file.name }]);
+    });
+    await Promise.all(uploadPromises);
     setUploading(null);
-    toast.success("Assets uploaded");
+    toast.success("Assets uploaded & analyzed");
   }, [brandId]);
 
   const handleDeleteAsset = async (assetId: string) => {

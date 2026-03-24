@@ -236,23 +236,30 @@ Deno.serve(async (req) => {
       } catch { /* skip failed images */ }
     }
 
-    // Fetch ALL brand assets — use existing URLs directly (no rehosting needed)
+    // Fetch ALL brand assets with AI-generated descriptions
     const { data: brandAssets } = await supabase
       .from("brand_assets")
-      .select("url, category, filename")
+      .select("url, category, filename, description, dominant_colors, ai_category")
       .eq("brand_id", brandId);
 
-    const hostedAssetEntries: { url: string; category: string }[] = (brandAssets || [])
+    const hostedAssetEntries: { url: string; category: string; description?: string; dominant_colors?: string[]; ai_category?: string }[] = (brandAssets || [])
       .filter((a: any) => typeof a.url === "string" && a.url.trim().length > 0)
       .slice(0, 15);
 
-    // Build asset catalog — simple list with categories, no destructive cropping
-    const assetCatalog = hostedAssetEntries.map((entry) => {
-      if (entry.category === "logo") {
-        return `[logo — display at max-width 150px, centered, DO NOT stretch or crop] ${entry.url}`;
+    // Build rich asset catalog with descriptions for better AI selection
+    const assetCatalog = hostedAssetEntries.map((entry: any) => {
+      const parts: string[] = [];
+      const cat = entry.ai_category || entry.category;
+      if (cat === "logo") {
+        parts.push(`[logo — display at max-width 150px, centered, DO NOT stretch or crop]`);
+      } else {
+        parts.push(`[${cat}]`);
       }
-      return `[${entry.category}] ${entry.url}`;
-    }).join("\n");
+      parts.push(entry.url);
+      if (entry.description) parts.push(`  Description: ${entry.description}`);
+      if (entry.dominant_colors?.length) parts.push(`  Colors: ${entry.dominant_colors.join(", ")}`);
+      return parts.join("\n");
+    }).join("\n\n");
 
     const embeddableUrls = hostedAssetEntries.map((e) => e.url);
 

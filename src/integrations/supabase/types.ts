@@ -16,25 +16,34 @@ export type Database = {
     Tables: {
       brand_assets: {
         Row: {
+          ai_category: string | null
           brand_id: string
           category: string
           created_at: string
+          description: string | null
+          dominant_colors: string[] | null
           filename: string | null
           id: string
           url: string
         }
         Insert: {
+          ai_category?: string | null
           brand_id: string
           category: string
           created_at?: string
+          description?: string | null
+          dominant_colors?: string[] | null
           filename?: string | null
           id?: string
           url: string
         }
         Update: {
+          ai_category?: string | null
           brand_id?: string
           category?: string
           created_at?: string
+          description?: string | null
+          dominant_colors?: string[] | null
           filename?: string | null
           id?: string
           url?: string
