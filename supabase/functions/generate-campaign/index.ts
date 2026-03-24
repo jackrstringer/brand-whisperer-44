@@ -118,13 +118,14 @@ CHECK EACH — fail ANY = must fix:
 1. Card/container border-radius must match the brand's specified card_radius EVERYWHERE — no sharp corners if the brand uses rounded
 2. Button border-radius and styling must match brand specs
 3. For EACH <img> tag: verify the URL is from the brand's asset catalog. If the URL is fabricated (stock photo, unsplash, etc.), REMOVE the <img> tag entirely. Do NOT modify or transform image URLs.
-4. ALL images must have identical padding treatment — either ALL full-bleed OR ALL with equal side padding. NEVER mix
+4. ALL images must have identical padding treatment — either ALL full-bleed OR ALL with equal side padding (24-40px). NEVER mix. Default to padded unless brand references use full-bleed.
 5. Footer MUST exist as a SEPARATE section with: brand name, "Unsubscribe" link (href="#unsubscribe"), address placeholder
 6. Text alignment must be consistent within each section — no left-aligned bullets in a center-aligned section
 7. Colors must match brand palette — no generic grays (#999, #666) for body text
 8. No reference campaign screenshots embedded as <img> tags
 9. The outermost wrapper must use width:100% with max-width:600px — never fixed width:600px
 10. Every contrast card must have border-radius matching the brand
+11. The outermost body/wrapper background must be pure white (#ffffff) or transparent — NO grey or off-white padding frames around the email
 
 If ANY issues are found: return the CORRECTED complete HTML.
 If all checks pass: return the HTML unchanged.
