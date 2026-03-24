@@ -204,8 +204,9 @@ Deno.serve(async (req) => {
     const GENERATION_MODEL = speedMode === "fast" ? "claude-sonnet-4-5-20250929" : "claude-opus-4-6";
     const QA_MODEL = "claude-sonnet-4-5-20250929";
 
-    // Mark campaign as generating immediately (must complete before reads)
-    await supabase.from("campaigns").update({ status: "generating" }).eq("id", campaignId);
+    // Mark campaign as generating with start timestamp
+    const genStartedAt = new Date().toISOString();
+    await supabase.from("campaigns").update({ status: "generating", generation_started_at: genStartedAt, generation_duration_secs: null }).eq("id", campaignId);
 
     // FIX 2: Parallelize independent DB reads
     const [profileResult, brandResult] = await Promise.all([
