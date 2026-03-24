@@ -1,72 +1,137 @@
 
-## What’s actually failing (from current code + live data)
 
-1. **Product selection is reaching backend correctly**  
-   The generation request includes `productIds` (confirmed in network logs), so this is **not** a UI selection bug.
+# Campaign Generation Performance Audit -- 7 Fixes
 
-2. **Product images are getting dropped in generation output**  
-   For recent campaigns generated with selected products, stored HTML contains **zero** `/products/` image URLs.  
-   Root issue in `generate-campaign/index.ts`:
-   - Pass 1 prompt has conflicting wording (“use AVAILABLE BRAND ASSETS”) even when product assets are separately provided.
-   - Pass 2 QA only receives/whitelists **brand asset catalog**, not product assets, so product URLs are treated as invalid and removed/replaced.
+## Overview
 
-3. **Bottom clipping is primarily from truncated HTML being saved**  
-   Recent generated campaigns in DB are missing `</body>` and `</html>`.  
-   Current function accepts QA output if it merely contains `<table>` and length > 100, so truncated responses still get persisted.
+Seven targeted fixes across three files to eliminate timeouts, reduce latency, and improve reliability. No prompt content, creative direction, or model selection changes.
 
----
+## Fix 1: Increase max_tokens
 
-## Implementation plan
+**Files**: `generate-campaign/index.ts`, `edit-campaign/index.ts`
 
-### 1) Fix product imagery enforcement in `supabase/functions/generate-campaign/index.ts`
-- Build a unified `approvedAssetCatalog` = **brand assets + selected product assets**.
-- Rewrite image rules so they reference **approved assets** (not “brand assets only”).
-- Keep product block as hard requirement:
-  - If product selected and has assets, campaign must include at least one image URL from that product.
-- Add deterministic post-generation checks:
-  - Extract all `<img src>` URLs.
-  - Validate selected products each appear at least once (when assets exist).
+- `generate-campaign` Pass 1 (line 397): `8192` to `16384`
+- `generate-campaign` retry (line 428): `8192` to `16384`
+- `generate-campaign` QA pass (line 464): `8192` to `4096` (JSON patch output is much smaller)
+- `edit-campaign` (line 181): `8192` to `16384`
 
-### 2) Fix QA pass so it doesn’t remove product imagery
-- Update QA input text to include product asset URLs and product-level requirements.
-- Update QA rule language from “brand asset catalog” to “approved catalog”.
-- Only accept QA output when all are true:
-  - structurally complete HTML,
-  - product-image requirement still satisfied,
-  - no disallowed image hosts.
-- If QA output fails checks, keep Pass 1 HTML instead of overwriting it.
+## Fix 2: Parallelize DB queries
 
-### 3) Prevent clipped/incomplete campaigns from being saved
-- Add `isCompleteHtml()` guard (doctype/html/body close tags + basic validity checks).
-- Read Anthropic `stop_reason` and treat `max_tokens` (or incomplete structure) as truncation risk.
-- Recovery flow:
-  - If Pass 1 incomplete: retry once with a concise-generation instruction (fewer sections/leaner markup).
-  - If QA incomplete: discard QA output and use validated Pass 1.
-- Never persist incomplete HTML as `ready`; mark error with actionable message if no valid HTML obtained.
+**`generate-campaign/index.ts`** (lines 162-186): The brand_profiles and brands queries are independent reads. Run them in parallel, then chain user_preferences after brands resolves:
 
-### 4) Harden the editor preview against visual clipping (`src/pages/CampaignEditor.tsx`)
-- Improve iframe height syncing:
-  - re-measure on iframe load,
-  - re-measure after image loads inside iframe,
-  - attach a `ResizeObserver`/mutation-driven remeasure loop with debounce.
-- Remove/adjust hard clipping behavior from the preview wrapper so delayed image loads don’t visually cut bottom content.
+```typescript
+await supabase.from("campaigns").update({ status: "generating" }).eq("id", campaignId);
 
-### 5) Consistency hardening (same rule in edits)
-- Apply the same “approved catalog includes product assets” rule in `supabase/functions/edit-campaign/index.ts` so chat edits don’t later strip product imagery.
+const [profileResult, brandResult] = await Promise.all([
+  supabase.from("brand_profiles").select("*").eq("brand_id", brandId).single(),
+  supabase.from("brands").select("user_id").eq("id", brandId).single(),
+]);
+// then user_preferences chained after brandResult
+```
 
----
+**`edit-campaign/index.ts`** (lines 28-53): campaign, brand_profiles, brand_assets, and product_assets can be partially parallelized. Campaign must be fetched first (need brand_id), then the rest run in parallel.
 
-## Files to change
-1. `supabase/functions/generate-campaign/index.ts` (primary fix: prompt + QA + validation + truncation guards)  
-2. `src/pages/CampaignEditor.tsx` (preview height/clipping resilience)  
-3. `supabase/functions/edit-campaign/index.ts` (catalog consistency for post-generation edits)
+## Fix 3: Cap reference images
 
----
+**`generate-campaign/index.ts`** line 205: Change normal mode cap from `10` to `5`.
 
-## Verification plan
-1. Generate campaign with one selected product (no pinned images), only lifestyle bucket populated.  
-   - Confirm final HTML contains at least one `/products/{product_id}/...` URL.
-2. Confirm generated HTML always ends with valid closing tags (`</body></html>`).
-3. Scroll preview to bottom and verify footer/content are fully visible (no visual cut-off).
-4. Repeat in Normal + Fast modes.
-5. Run one chat edit on that campaign and verify product image remains allowed/retained.
+```typescript
+const maxRefs = speedMode === "faster" ? 3 : 5; // was 10 for normal
+```
+
+## Fix 4: Chunked base64 encoding
+
+**Both files**: Replace all `btoa(String.fromCharCode(...new Uint8Array(buf)))` with a chunked function to avoid stack overflow on large images.
+
+```typescript
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+```
+
+- `generate-campaign` line 216: replace `btoa(String.fromCharCode(...new Uint8Array(buf)))` with `arrayBufferToBase64(buf)`
+- `edit-campaign` line 90: same replacement
+
+## Fix 5: Skip rehosting for already-hosted URLs
+
+**`_shared/imagekit.ts`** `rehostHtmlImagesWithImageKit()` line 218: Already skips `ik.imagekit.io`. Add Supabase storage skip:
+
+```typescript
+if (/^https:\/\/ik\.imagekit\.io\//i.test(normalizedSource)) continue;
+if (/\.supabase\.co\/storage/i.test(normalizedSource)) continue;
+```
+
+**`edit-campaign/index.ts`** lines 55-96: The entire reference image rehosting block fetches images, uploads to ImageKit, extracts new URLs, then fetches again for base64. Replace with: check if URL is already permanent, skip rehost, fetch once for base64 only.
+
+**`edit-campaign/index.ts`** lines 196-200: The `rehostHtmlImagesWithImageKit` call on output HTML will now naturally skip permanent URLs thanks to the shared function fix.
+
+## Fix 6: AbortController timeout on Anthropic calls
+
+**Both files**: Add a `callAnthropic` helper with 120s timeout. On timeout, set campaign status to "error" with message "Generation timed out. Please try again with Fast mode."
+
+```typescript
+async function callAnthropic(body: object, apiKey: string, timeoutMs = 120000): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error.name === 'AbortError') throw new Error(`Anthropic API call timed out after ${timeoutMs/1000}s`);
+    throw error;
+  } finally { clearTimeout(timeout); }
+}
+```
+
+Replace all 4 `fetch("https://api.anthropic.com/...")` calls (3 in generate, 1 in edit) with `callAnthropic(...)`.
+
+## Fix 7: QA pass returns JSON patch instead of full HTML
+
+**`generate-campaign/index.ts`**: Replace the `QA_SYSTEM_PROMPT` (lines 108-133) with a new prompt requesting JSON output:
+
+```
+You are an email QA auditor. Return ONLY a JSON response:
+{
+  "passes_qa": true/false,
+  "issues": [{ "description": "...", "find": "exact substring", "replace": "corrected substring" }]
+}
+```
+
+The 8 check items from the instructions. QA `max_tokens` set to `4096`.
+
+**Response handler** (lines 467-484): Replace full-HTML acceptance with JSON parse + string patch application:
+
+```typescript
+const qaText = qaResult.content[0].text.trim();
+let qaData;
+try { qaData = JSON.parse(qaText); } catch { qaData = { passes_qa: true, issues: [] }; }
+
+let finalHtml = html;
+if (!qaData.passes_qa && qaData.issues?.length > 0) {
+  for (const issue of qaData.issues) {
+    if (issue.find && issue.replace && finalHtml.includes(issue.find)) {
+      finalHtml = finalHtml.replace(issue.find, issue.replace);
+    }
+  }
+}
+// Validate patched HTML still passes completeness + product checks, else keep original
+```
+
+## Files changed
+
+| File | Changes |
+|------|---------|
+| `supabase/functions/generate-campaign/index.ts` | Fixes 1-4, 6-7 |
+| `supabase/functions/edit-campaign/index.ts` | Fixes 1-2, 4-6 |
+| `supabase/functions/_shared/imagekit.ts` | Fix 5 (add Supabase storage skip) |
+
