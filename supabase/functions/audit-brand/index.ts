@@ -221,7 +221,7 @@ Deno.serve(async (req) => {
 
         imageContent.push({
           type: "text",
-          text: `Brand: ${brandName}. Industry: ${industry || "not specified"}. This campaign has ${slices.length} slices. Perform a comprehensive visual audit.`,
+          text: `${confirmedPrefix}Brand: ${brandName}. Industry: ${industry || "not specified"}. This campaign has ${slices.length} slices. Perform a comprehensive visual audit.`,
         });
 
         const response = await fetch("https://api.anthropic.com/v1/messages", {
