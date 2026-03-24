@@ -65,6 +65,8 @@ export default function BrandSetup() {
   // Step 2: Source selection
   const [selectedSources, setSelectedSources] = useState<SourceType[]>([]);
   const [websiteUrl, setWebsiteUrl] = useState("");
+  const [figmaUrl, setFigmaUrl] = useState("");
+  const [figmaToken, setFigmaToken] = useState("");
 
   // Step 3: Uploads
   const [campaignFiles, setCampaignFiles] = useState<File[]>([]);
