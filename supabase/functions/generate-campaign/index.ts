@@ -2,6 +2,24 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { rehostHtmlImagesWithImageKit, applyImageKitTransform, getImageSliceUrls, estimateImageHeight } from "../_shared/imagekit.ts";
 
+/** Strip any AI commentary and extract only the HTML document */
+function extractHtmlOnly(text: string): string {
+  let html = text.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
+  // If the response contains <!DOCTYPE or <html, extract from that point
+  const doctypeIdx = html.search(/<!DOCTYPE\s/i);
+  const htmlTagIdx = html.search(/<html[\s>]/i);
+  const startIdx = doctypeIdx >= 0 ? doctypeIdx : htmlTagIdx >= 0 ? htmlTagIdx : -1;
+  if (startIdx > 0) {
+    html = html.substring(startIdx);
+  }
+  // Trim anything after closing </html>
+  const endMatch = html.match(/<\/html\s*>/i);
+  if (endMatch && endMatch.index !== undefined) {
+    html = html.substring(0, endMatch.index + endMatch[0].length);
+  }
+  return html;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
@@ -98,7 +116,8 @@ CHECK EACH — fail ANY = must fix:
 
 If ANY issues are found: return the CORRECTED complete HTML.
 If all checks pass: return the HTML unchanged.
-Return ONLY HTML. No commentary. No markdown fences.`;
+
+CRITICAL: Return ONLY the raw HTML starting with <!DOCTYPE html>. Do NOT include any commentary, analysis, checklist results, or explanations before or after the HTML. No "I need to check..." or "Issues found:" text. ONLY the HTML document.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -366,8 +385,7 @@ Deno.serve(async (req) => {
     }
 
     const result = await response.json();
-    let html = result.content?.[0]?.text || "";
-    html = html.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
+    let html = extractHtmlOnly(result.content?.[0]?.text || "");
 
     // === PASS 2: QA Audit (text-only — no reference images, just rules + HTML) ===
     try {
@@ -403,8 +421,7 @@ Deno.serve(async (req) => {
 
       if (qaResponse.ok) {
         const qaResult = await qaResponse.json();
-        let qaHtml = qaResult.content?.[0]?.text || "";
-        qaHtml = qaHtml.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
+        const qaHtml = extractHtmlOnly(qaResult.content?.[0]?.text || "");
         if (qaHtml.length > 100 && qaHtml.includes("<table")) {
           html = qaHtml;
         }
