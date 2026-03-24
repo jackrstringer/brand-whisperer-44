@@ -187,13 +187,16 @@ export type Database = {
           brand_id: string
           brief: string | null
           created_at: string
+          extra_copy: string | null
           goal: string | null
           html: string | null
           html_history: Json | null
           id: string
           name: string
+          pinned_asset_urls: string[] | null
           product_ids: string[] | null
           reference_campaign_ids: string[] | null
+          speed_mode: string | null
           status: string
           updated_at: string
         }
@@ -201,13 +204,16 @@ export type Database = {
           brand_id: string
           brief?: string | null
           created_at?: string
+          extra_copy?: string | null
           goal?: string | null
           html?: string | null
           html_history?: Json | null
           id?: string
           name?: string
+          pinned_asset_urls?: string[] | null
           product_ids?: string[] | null
           reference_campaign_ids?: string[] | null
+          speed_mode?: string | null
           status?: string
           updated_at?: string
         }
@@ -215,13 +221,16 @@ export type Database = {
           brand_id?: string
           brief?: string | null
           created_at?: string
+          extra_copy?: string | null
           goal?: string | null
           html?: string | null
           html_history?: Json | null
           id?: string
           name?: string
+          pinned_asset_urls?: string[] | null
           product_ids?: string[] | null
           reference_campaign_ids?: string[] | null
+          speed_mode?: string | null
           status?: string
           updated_at?: string
         }
