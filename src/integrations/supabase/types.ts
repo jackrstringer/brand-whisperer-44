@@ -192,6 +192,7 @@ export type Database = {
           html_history: Json | null
           id: string
           name: string
+          product_ids: string[] | null
           reference_campaign_ids: string[] | null
           status: string
           updated_at: string
@@ -205,6 +206,7 @@ export type Database = {
           html_history?: Json | null
           id?: string
           name?: string
+          product_ids?: string[] | null
           reference_campaign_ids?: string[] | null
           status?: string
           updated_at?: string
@@ -218,6 +220,7 @@ export type Database = {
           html_history?: Json | null
           id?: string
           name?: string
+          product_ids?: string[] | null
           reference_campaign_ids?: string[] | null
           status?: string
           updated_at?: string
