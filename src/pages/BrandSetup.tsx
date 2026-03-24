@@ -565,7 +565,7 @@ export default function BrandSetup() {
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
         <div className="max-w-xl">
-          <SourceQuiz selected={selectedSources} onToggle={toggleSource} websiteUrl={websiteUrl} onWebsiteUrlChange={setWebsiteUrl} />
+          <SourceQuiz selected={selectedSources} onToggle={toggleSource} websiteUrl={websiteUrl} onWebsiteUrlChange={setWebsiteUrl} figmaUrl={figmaUrl} onFigmaUrlChange={setFigmaUrl} figmaToken={figmaToken} onFigmaTokenChange={setFigmaToken} />
           <div className="mt-8">
             <Button onClick={() => setStep("uploads")} disabled={selectedSources.length === 0} className="bg-primary text-primary-foreground hover:bg-primary/90">
               Next <ArrowRight className="w-4 h-4 ml-1" />
