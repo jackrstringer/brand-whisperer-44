@@ -66,9 +66,12 @@ export default function CampaignEditor() {
     const load = async () => {
       const { data: c } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
       if (c) {
-        const campaign = c as Campaign;
+        const campaign = c as unknown as Campaign;
         setCampaign(campaign);
         setNameValue(campaign.name);
+        if (campaign.brief) setBrief(campaign.brief);
+        if (campaign.goal) setGoal(campaign.goal);
+        if ((campaign as any).product_ids?.length) setSelectedProductIds((campaign as any).product_ids);
         const history = campaign.html_history;
         setCanUndo(Array.isArray(history) && history.length > 0);
       }
