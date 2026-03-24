@@ -118,13 +118,30 @@ export default function CampaignEditor() {
     setCampaign((c) => c ? { ...c, name: nameValue.trim() } : c);
   };
 
+  const [genStartTime, setGenStartTime] = useState<number | null>(null);
+  const [genElapsed, setGenElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!genStartTime) return;
+    const interval = setInterval(() => {
+      setGenElapsed(Math.floor((Date.now() - genStartTime) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [genStartTime]);
+
+  const formatTimer = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s.toString().padStart(2, "0")}`;
+  };
+
   const generateCampaign = async () => {
     if (!brandId || !campaignId || !brief.trim()) return;
     setGenerating(true);
+    setGenStartTime(Date.now());
+    setGenElapsed(0);
     setCampaign((c) => c ? { ...c, status: "generating" } : c);
 
-    // Fire-and-forget: kick off the edge function but don't wait for its response
-    // (it can take 2+ minutes with image processing + 2 AI passes)
     const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-campaign`;
     fetch(url, {
       method: "POST",
@@ -138,9 +155,8 @@ export default function CampaignEditor() {
         productIds: selectedProductIds.length > 0 ? selectedProductIds : undefined,
         pinnedAssetUrls: pinnedAssetUrls.length > 0 ? pinnedAssetUrls : undefined,
       }),
-    }).catch(() => {}); // errors handled via polling
+    }).catch(() => {});
 
-    // Poll campaign status until ready or error
     const pollInterval = setInterval(async () => {
       const { data } = await supabase
         .from("campaigns")
@@ -152,14 +168,17 @@ export default function CampaignEditor() {
         clearInterval(pollInterval);
         setCampaign(data as Campaign);
         setGenerating(false);
+        const elapsed = genStartTime ? Math.floor((Date.now() - genStartTime) / 1000) : 0;
+        setGenStartTime(null);
         setMessages((prev) => [
           ...prev,
-          { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: "Campaign generated", created_at: new Date().toISOString() },
+          { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Campaign generated in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
         ]);
       } else if (data.status === "error") {
         clearInterval(pollInterval);
         setCampaign(data as Campaign);
         setGenerating(false);
+        setGenStartTime(null);
         toast.error("Campaign generation failed. Please try again.");
         setMessages((prev) => [
           ...prev,
@@ -168,10 +187,10 @@ export default function CampaignEditor() {
       }
     }, 4000);
 
-    // Safety timeout after 5 minutes
     setTimeout(() => {
       clearInterval(pollInterval);
       setGenerating(false);
+      setGenStartTime(null);
       setCampaign((c) => c ? { ...c, status: "draft" } : c);
       toast.error("Generation timed out. Please try again.");
     }, 300000);
@@ -331,6 +350,10 @@ export default function CampaignEditor() {
           <div ref={previewPanelRef} className="h-full bg-card overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' as any }}>
             {isGenerating ? (
               <div className="max-w-[600px] mx-auto space-y-4 p-8 mt-12">
+                <div className="text-center mb-6">
+                  <p className="text-lg font-medium text-foreground tabular-nums">{formatTimer(genElapsed)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Generating campaign...</p>
+                </div>
                 <Skeleton className="h-8 w-3/4" />
                 <Skeleton className="h-48 w-full" />
                 <Skeleton className="h-4 w-full" />

@@ -24,6 +24,7 @@ export interface Campaign {
   html: string | null;
   html_history: any;
   status: string;
+  reference_campaign_ids: string[] | null;
   created_at: string;
   updated_at: string;
 }
