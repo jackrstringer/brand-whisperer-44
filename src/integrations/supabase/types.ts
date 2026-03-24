@@ -188,6 +188,8 @@ export type Database = {
           brief: string | null
           created_at: string
           extra_copy: string | null
+          generation_duration_secs: number | null
+          generation_started_at: string | null
           goal: string | null
           html: string | null
           html_history: Json | null
@@ -205,6 +207,8 @@ export type Database = {
           brief?: string | null
           created_at?: string
           extra_copy?: string | null
+          generation_duration_secs?: number | null
+          generation_started_at?: string | null
           goal?: string | null
           html?: string | null
           html_history?: Json | null
@@ -222,6 +226,8 @@ export type Database = {
           brief?: string | null
           created_at?: string
           extra_copy?: string | null
+          generation_duration_secs?: number | null
+          generation_started_at?: string | null
           goal?: string | null
           html?: string | null
           html_history?: Json | null
