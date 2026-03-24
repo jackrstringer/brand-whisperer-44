@@ -382,9 +382,10 @@ async function processSpecStep(
   brandName: string,
   industry: string,
   brandId: string,
+  confirmedProperties?: any,
 ) {
   const cleanedAudit = stripRuntimeKeys(auditFindings);
-  const specParsed = await runSpecCall(apiKey, cleanedAudit, brandName, industry);
+  const specParsed = await runSpecCall(apiKey, cleanedAudit, brandName, industry, confirmedProperties);
 
   const sb = getSupabaseAdmin();
   await sb.from("brand_profiles").update({
