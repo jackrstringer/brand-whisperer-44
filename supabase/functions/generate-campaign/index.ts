@@ -323,8 +323,8 @@ Deno.serve(async (req) => {
 1. The reference campaign screenshots above are STYLE REFERENCES ONLY. NEVER embed them as <img> tags.
 2. Never invent, guess, or use external stock image URLs (Unsplash, Pexels, etc).
 3. You are the CREATIVE DIRECTOR. Choose ONLY the images that best serve this campaign's story. You do NOT need to use every available image — be selective.
-4. Before using any image, consider if it has excessive empty space. If so, you MUST use the tight-cropped URL variant. If even the cropped version would look bad, skip the image entirely.
-5. For lifestyle/hero images, default to the tight-crop variant unless the full image is clearly well-composed with minimal negative space.
+4. Use the image URLs from the AVAILABLE BRAND ASSETS list exactly as provided. Do NOT modify, crop, or transform the URLs.
+5. If an image doesn't fit the campaign's story, skip it entirely rather than forcing it in.
 6. CONSISTENCY: Every image must have the same padding treatment — either ALL full-bleed or ALL with equal side padding. Never mix.`;
 
     if (hostedAssetEntries.length > 0) {
