@@ -216,6 +216,7 @@ export async function rehostHtmlImagesWithImageKit(
     const normalizedSource = normalizeImageSource(source);
     if (!normalizedSource) continue;
     if (/^https:\/\/ik\.imagekit\.io\//i.test(normalizedSource)) continue;
+    if (/\.supabase\.co\/storage/i.test(normalizedSource)) continue;
 
     const applyFallback = () => {
       if (fallbackImageUrls.length === 0) return;

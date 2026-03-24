@@ -5,19 +5,51 @@ import { rehostHtmlImagesWithImageKit } from "../_shared/imagekit.ts";
 /** Strip any AI commentary and extract only the HTML document */
 function extractHtmlOnly(text: string): string {
   let html = text.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
-  // If the response contains <!DOCTYPE or <html, extract from that point
   const doctypeIdx = html.search(/<!DOCTYPE\s/i);
   const htmlTagIdx = html.search(/<html[\s>]/i);
   const startIdx = doctypeIdx >= 0 ? doctypeIdx : htmlTagIdx >= 0 ? htmlTagIdx : -1;
   if (startIdx > 0) {
     html = html.substring(startIdx);
   }
-  // Trim anything after closing </html>
   const endMatch = html.match(/<\/html\s*>/i);
   if (endMatch && endMatch.index !== undefined) {
     html = html.substring(0, endMatch.index + endMatch[0].length);
   }
   return html;
+}
+
+/** Chunked base64 encoding to avoid stack overflow on large images */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+/** Anthropic API call with AbortController timeout */
+async function callAnthropic(body: object, apiKey: string, timeoutMs = 120000): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error.name === "AbortError") throw new Error(`Anthropic API call timed out after ${timeoutMs / 1000}s`);
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 const corsHeaders = {
@@ -105,32 +137,43 @@ FOOTER (required on every email):
 
 Return only complete HTML. No commentary. No markdown fences.`;
 
-const QA_SYSTEM_PROMPT = `You are a visual QA auditor for HTML emails.
-You will receive:
-1. Brand reference images (showing the correct design language)
-2. The brand's design rules
-3. Specific brand values (card radius, button radius, colors)
-4. The generated HTML email to audit
+const QA_SYSTEM_PROMPT = `You are an email QA auditor. You will receive a generated HTML email and brand rules.
+Audit the HTML against the rules and return ONLY a JSON response in this exact format:
 
-Your job: compare the HTML against the references and rules, then fix ANY issues.
+{
+  "passes_qa": true,
+  "issues": []
+}
 
-CHECK EACH — fail ANY = must fix:
-1. Card/container border-radius must match the brand's specified card_radius EVERYWHERE — no sharp corners if the brand uses rounded
-2. Button border-radius and styling must match brand specs
-3. For EACH <img> tag: verify the URL is from the brand's asset catalog. If the URL is fabricated (stock photo, unsplash, etc.), REMOVE the <img> tag entirely. Do NOT modify or transform image URLs.
-4. ALL images must have identical padding treatment — either ALL full-bleed OR ALL with equal side padding (24-40px). NEVER mix. Default to padded unless brand references use full-bleed.
-5. Footer MUST exist as a SEPARATE section with: brand name, "Unsubscribe" link (href="#unsubscribe"), address placeholder
-6. Text alignment must be consistent within each section — no left-aligned bullets in a center-aligned section
-7. Colors must match brand palette — no generic grays (#999, #666) for body text
-8. No reference campaign screenshots embedded as <img> tags
-9. The outermost wrapper must use width:100% with max-width:600px — never fixed width:600px
-10. Every contrast card must have border-radius matching the brand
-11. The outermost body/wrapper background must be pure white (#ffffff) or transparent — NO grey or off-white padding frames around the email
+OR if issues are found:
 
-If ANY issues are found: return the CORRECTED complete HTML.
-If all checks pass: return the HTML unchanged.
+{
+  "passes_qa": false,
+  "issues": [
+    {
+      "description": "Brief description of the issue",
+      "find": "exact string to find in the HTML",
+      "replace": "corrected string to replace it with"
+    }
+  ]
+}
 
-CRITICAL: Return ONLY the raw HTML starting with <!DOCTYPE html>. Do NOT include any commentary, analysis, checklist results, or explanations before or after the HTML. No "I need to check..." or "Issues found:" text. ONLY the HTML document.`;
+Rules:
+- If the HTML passes all checks, return {"passes_qa": true, "issues": []}
+- Each "find" value must be an EXACT substring that appears in the provided HTML. Do not paraphrase or approximate.
+- Each "replace" value must be the corrected version of that exact substring.
+- Only flag actual violations of the brand rules provided. Do not make stylistic suggestions.
+- Check these specific items against the brand values provided:
+  1. border-radius values match the brand's card_radius and button_radius
+  2. Colors match accent_color, text_color, and background_color
+  3. All product images from the required list are present in the HTML
+  4. Images use approved asset URLs from the catalog (no hallucinated URLs)
+  5. No emoji characters appear in the HTML
+  6. A CTA button appears in the first fold
+  7. Footer is present
+  8. The HTML is mobile-responsive (uses max-width, not fixed widths on outer tables)
+
+Return ONLY the JSON object. No markdown fences, no explanation, no preamble.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -156,28 +199,26 @@ Deno.serve(async (req) => {
     const GENERATION_MODEL = speedMode === "faster" ? "claude-haiku-4-5-20251001" : speedMode === "fast" ? "claude-sonnet-4-6" : "claude-opus-4-6";
     const QA_MODEL = speedMode === "faster" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
 
-    // Mark campaign as generating immediately
+    // Mark campaign as generating immediately (must complete before reads)
     await supabase.from("campaigns").update({ status: "generating" }).eq("id", campaignId);
 
-    // Fetch brand profile
-    const { data: profile, error: profileErr } = await supabase
-      .from("brand_profiles")
-      .select("*")
-      .eq("brand_id", brandId)
-      .single();
+    // FIX 2: Parallelize independent DB reads
+    const [profileResult, brandResult] = await Promise.all([
+      supabase.from("brand_profiles").select("*").eq("brand_id", brandId).single(),
+      supabase.from("brands").select("user_id").eq("id", brandId).single(),
+    ]);
 
-    if (profileErr || !profile) throw new Error("Brand profile not found");
+    const profile = profileResult.data;
+    if (profileResult.error || !profile) throw new Error("Brand profile not found");
 
-    // Fetch brand instructions and QA checklist
     const brandInstructions = (profile as any).brand_instructions || "";
     const brandQaChecklist: string[] = Array.isArray((profile as any).qa_checklist) ? (profile as any).qa_checklist : [];
 
-    // Fetch user preferences (global rules + QA)
-    const { data: brand } = await supabase.from("brands").select("user_id").eq("id", brandId).single();
+    // Chain user_preferences after brands (needs user_id)
     let globalRules = "";
     let globalQaChecklist: string[] = [];
-    if (brand?.user_id) {
-      const { data: prefs } = await supabase.from("user_preferences").select("preferences").eq("user_id", brand.user_id).single();
+    if (brandResult.data?.user_id) {
+      const { data: prefs } = await supabase.from("user_preferences").select("preferences").eq("user_id", brandResult.data.user_id).single();
       if (prefs?.preferences) {
         const p = prefs.preferences as any;
         globalRules = p.generation_rules || "";
@@ -201,11 +242,11 @@ Deno.serve(async (req) => {
       ? profile.reference_image_urls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
       : [];
 
-    // Cap reference images by speed mode to reduce processing time
-    const maxRefs = speedMode === "faster" ? 3 : speedMode === "fast" ? 5 : 10;
+    // FIX 3: Cap reference images — 5 for normal and fast, 3 for faster
+    const maxRefs = speedMode === "faster" ? 3 : 5;
     const selectedReferenceUrls = referenceUrls.slice(0, maxRefs);
 
-    // Fetch all reference images in PARALLEL (no ImageKit rehosting — use direct URLs)
+    // FIX 4: Fetch all reference images in PARALLEL with chunked base64
     const imagePromises = selectedReferenceUrls.map(async (url: string) => {
       try {
         const imgResp = await fetch(url);
@@ -213,7 +254,7 @@ Deno.serve(async (req) => {
         const contentType = imgResp.headers.get("content-type") || "image/png";
         const mediaType = contentType.split(";")[0].trim();
         const buf = await imgResp.arrayBuffer();
-        const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+        const b64 = arrayBufferToBase64(buf);
         return { type: "image" as const, source: { type: "base64" as const, media_type: mediaType, data: b64 } };
       } catch { return null; }
     });
@@ -282,7 +323,6 @@ You MUST feature these products prominently in the campaign. Use at least one im
               if (asset.composition_notes) productRequirements += `\n    Notes: ${asset.composition_notes}`;
               if (asset.dominant_colors?.length) productRequirements += `\n    Colors: ${(asset.dominant_colors as string[]).join(", ")}`;
 
-              // Add to unified catalog
               allProductAssetUrls.push(asset.url);
               const catParts = [`[product: ${product.name} — ${bucketLabel}]`, asset.url];
               if (asset.description) catParts.push(`  Description: ${asset.description}`);
@@ -319,12 +359,10 @@ You MUST feature these products prominently in the campaign. Use at least one im
     if (brandValues.text_color) brandValuesText += `\nBody text color: ${brandValues.text_color} — NEVER use generic gray (#999, #666, etc.)`;
     if (brandValues.background_color) brandValuesText += `\nBackground color: ${brandValues.background_color}`;
 
-    // Inject brand-specific instructions
     if (brandInstructions) {
       brandValuesText += `\n\n=== BRAND-SPECIFIC INSTRUCTIONS ===\n${brandInstructions}`;
     }
 
-    // Inject global generation rules
     if (globalRules) {
       brandValuesText += `\n\n=== GLOBAL GENERATION RULES ===\n${globalRules}`;
     }
@@ -376,7 +414,6 @@ You MUST feature these products prominently in the campaign. Use at least one im
       part3 += `\n\nNo brand asset images available. Use solid color blocks, gradients, or text-only sections instead. Do NOT include <img> tags.`;
     }
 
-    // === FEATURED PRODUCTS SECTION (already built above) ===
     if (productRequirements) {
       part3 += productRequirements;
     }
@@ -384,21 +421,13 @@ You MUST feature these products prominently in the campaign. Use at least one im
     part3 += `\n\nThe output must MATCH the brand's design language (colors, fonts, spacing, tone) from the references above, but the LAYOUT and STRUCTURE must be original and tailored to this specific campaign goal. Return only the complete HTML.`;
     userContent.push({ type: "text", text: part3 });
 
-    // === PASS 1: Generate ===
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: GENERATION_MODEL,
-        max_tokens: 8192,
-        system: UNIVERSAL_EMAIL_RULES,
-        messages: [{ role: "user", content: userContent }],
-      }),
-    });
+    // === PASS 1: Generate (FIX 1: max_tokens 16384, FIX 6: callAnthropic with timeout) ===
+    const response = await callAnthropic({
+      model: GENERATION_MODEL,
+      max_tokens: 16384,
+      system: UNIVERSAL_EMAIL_RULES,
+      messages: [{ role: "user", content: userContent }],
+    }, ANTHROPIC_API_KEY);
 
     if (!response.ok) {
       const errText = await response.text();
@@ -410,23 +439,23 @@ You MUST feature these products prominently in the campaign. Use at least one im
     const pass1StopReason = result.stop_reason;
     let html = extractHtmlOnly(result.content?.[0]?.text || "");
 
-    // === HTML COMPLETENESS CHECK ===
     function isCompleteHtml(h: string): boolean {
       return h.length > 200 && /<\/html\s*>/i.test(h) && /<\/body\s*>/i.test(h) && /<table/i.test(h);
     }
 
-    // If Pass 1 truncated, retry once with leaner instruction
+    // If Pass 1 truncated, retry once with leaner instruction (FIX 1: 16384 tokens)
     if (!isCompleteHtml(html) || pass1StopReason === "max_tokens") {
       console.warn("Pass 1 truncated (stop_reason:", pass1StopReason, "), retrying with concise prompt...");
       const retryContent = [{
         type: "text",
         text: `${brandValuesText}\n\nGenerate a concise ${goal} email. Brief: ${brief}\nKeep it to 3-4 sections max. Use fewer images. ${productRequirements}\n\nAVAILABLE ASSETS:\n${assetCatalog}\n\nReturn only complete HTML.`,
       }];
-      const retryResp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model: GENERATION_MODEL, max_tokens: 8192, system: UNIVERSAL_EMAIL_RULES, messages: [{ role: "user", content: retryContent }] }),
-      });
+      const retryResp = await callAnthropic({
+        model: GENERATION_MODEL,
+        max_tokens: 16384,
+        system: UNIVERSAL_EMAIL_RULES,
+        messages: [{ role: "user", content: retryContent }],
+      }, ANTHROPIC_API_KEY);
       if (retryResp.ok) {
         const retryResult = await retryResp.json();
         const retryHtml = extractHtmlOnly(retryResult.content?.[0]?.text || "");
@@ -434,7 +463,7 @@ You MUST feature these products prominently in the campaign. Use at least one im
       }
     }
 
-    // === PASS 2: QA Audit (skip in "faster" mode to save time) ===
+    // === PASS 2: QA Audit — JSON patch mode (FIX 7), skip in "faster" mode ===
     if (speedMode !== "faster" && isCompleteHtml(html)) {
       try {
         const allQaItems = [...brandQaChecklist, ...globalQaChecklist];
@@ -444,12 +473,10 @@ You MUST feature these products prominently in the campaign. Use at least one im
 
         let qaText = `Brand design rules:\n${profile.system_prompt}\n\n=== SPECIFIC VALUES TO ENFORCE ===\ncard_radius: ${brandValues.card_radius}px\nbutton_radius: ${brandValues.button_radius}px\naccent_color: ${brandValues.accent_color}\ntext_color: ${brandValues.text_color}${customQaSection}`;
 
-        // Unified catalog (brand + product assets) so QA doesn't strip product images
         if (assetCatalog) {
           qaText += `\n\n=== APPROVED ASSET CATALOG (brand + product assets — all are valid) ===\n${assetCatalog}`;
         }
 
-        // Product enforcement rule for QA
         if (allProductAssetUrls.length > 0) {
           qaText += `\n\n=== PRODUCT IMAGE REQUIREMENT ===\nThe following product image URLs MUST remain in the HTML. Do NOT remove them:\n${allProductAssetUrls.join("\n")}`;
         }
@@ -458,26 +485,47 @@ You MUST feature these products prominently in the campaign. Use at least one im
 
         const qaContent: any[] = [{ type: "text", text: qaText }];
 
-        const qaResponse = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
-          body: JSON.stringify({ model: QA_MODEL, max_tokens: 8192, system: QA_SYSTEM_PROMPT, messages: [{ role: "user", content: qaContent }] }),
-        });
+        // FIX 1: QA max_tokens 4096 (JSON patch is small), FIX 6: timeout
+        const qaResponse = await callAnthropic({
+          model: QA_MODEL,
+          max_tokens: 4096,
+          system: QA_SYSTEM_PROMPT,
+          messages: [{ role: "user", content: qaContent }],
+        }, ANTHROPIC_API_KEY);
 
         if (qaResponse.ok) {
           const qaResult = await qaResponse.json();
-          const qaStopReason = qaResult.stop_reason;
-          const qaHtml = extractHtmlOnly(qaResult.content?.[0]?.text || "");
+          const qaRawText = (qaResult.content?.[0]?.text || "").trim();
 
-          // Only accept QA output if it's complete AND preserves product images
-          const qaComplete = isCompleteHtml(qaHtml) && qaStopReason !== "max_tokens";
-          const qaPreservesProducts = allProductAssetUrls.length === 0 ||
-            allProductAssetUrls.some((url) => qaHtml.includes(url));
+          // FIX 7: Parse JSON patch response and apply fixes
+          let qaData: { passes_qa: boolean; issues: { description: string; find: string; replace: string }[] };
+          try {
+            // Strip markdown fences if present
+            const cleaned = qaRawText.replace(/^```json?\n?/i, "").replace(/\n?```$/i, "").trim();
+            qaData = JSON.parse(cleaned);
+          } catch {
+            console.warn("QA returned non-JSON, keeping Pass 1 HTML");
+            qaData = { passes_qa: true, issues: [] };
+          }
 
-          if (qaComplete && qaPreservesProducts) {
-            html = qaHtml;
-          } else {
-            console.warn("QA output rejected (complete:", qaComplete, "preserves products:", qaPreservesProducts, ") — keeping Pass 1");
+          if (!qaData.passes_qa && Array.isArray(qaData.issues) && qaData.issues.length > 0) {
+            let patchedHtml = html;
+            for (const issue of qaData.issues) {
+              if (issue.find && issue.replace && patchedHtml.includes(issue.find)) {
+                patchedHtml = patchedHtml.replace(issue.find, issue.replace);
+              }
+            }
+
+            // Validate patched HTML still passes completeness + product checks
+            const patchComplete = isCompleteHtml(patchedHtml);
+            const patchPreservesProducts = allProductAssetUrls.length === 0 ||
+              allProductAssetUrls.some((url) => patchedHtml.includes(url));
+
+            if (patchComplete && patchPreservesProducts) {
+              html = patchedHtml;
+            } else {
+              console.warn("QA patches broke HTML (complete:", patchComplete, "preserves products:", patchPreservesProducts, ") — keeping Pass 1");
+            }
           }
         } else {
           console.warn("QA pass failed, using first-pass HTML:", qaResponse.status);
