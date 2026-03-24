@@ -130,7 +130,7 @@ export default function CampaignEditor() {
         "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
         "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
       },
-      body: JSON.stringify({ brandId, campaignId, brief, goal, copy: extraCopy || undefined }),
+      body: JSON.stringify({ brandId, campaignId, brief, goal, copy: extraCopy || undefined, speedMode }),
     }).catch(() => {}); // errors handled via polling
 
     // Poll campaign status until ready or error
