@@ -239,7 +239,7 @@ export default function BrandSetup() {
       }
 
       // Image slicing (always)
-      const refFiles = getReferenceImageFiles().slice(0, 10);
+      const refFiles = getReferenceImageFiles().slice(0, 8);
       if (refFiles.length === 0) {
         const fallbackFiles = Object.values(assetCategories)
           .flatMap((cat) => cat.files.filter((f) => /\.(jpg|jpeg|png|webp)$/i.test(f.name)))
