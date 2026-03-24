@@ -91,7 +91,9 @@ export type Database = {
           brand_guide_url: string | null
           brand_id: string
           brand_instructions: string | null
+          confirmed_properties: Json | null
           created_at: string
+          extraction_sources: string[] | null
           id: string
           qa_checklist: Json | null
           raw_extraction: Json | null
@@ -104,7 +106,9 @@ export type Database = {
           brand_guide_url?: string | null
           brand_id: string
           brand_instructions?: string | null
+          confirmed_properties?: Json | null
           created_at?: string
+          extraction_sources?: string[] | null
           id?: string
           qa_checklist?: Json | null
           raw_extraction?: Json | null
@@ -117,7 +121,9 @@ export type Database = {
           brand_guide_url?: string | null
           brand_id?: string
           brand_instructions?: string | null
+          confirmed_properties?: Json | null
           created_at?: string
+          extraction_sources?: string[] | null
           id?: string
           qa_checklist?: Json | null
           raw_extraction?: Json | null
@@ -137,6 +143,7 @@ export type Database = {
       brands: {
         Row: {
           created_at: string
+          figma_url: string | null
           id: string
           industry: string | null
           name: string
@@ -146,6 +153,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          figma_url?: string | null
           id?: string
           industry?: string | null
           name: string
@@ -155,6 +163,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          figma_url?: string | null
           id?: string
           industry?: string | null
           name?: string
