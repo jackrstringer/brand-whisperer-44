@@ -441,7 +441,7 @@ export default function CampaignEditor() {
                     </div>
                   </div>
                   <p className="text-[10px] text-muted-foreground text-center">
-                    {speedMode === "normal" ? "Opus 4.6 — highest quality" : speedMode === "fast" ? "Sonnet 4.6 — good quality, faster" : "Haiku — fastest, lower quality"}
+                    {speedMode === "normal" ? "Opus 4.6 — highest quality" : speedMode === "fast" ? "Sonnet 4.6 — good quality, faster" : "Haiku 4.5 — fastest, lower quality"}
                   </p>
                   <Button
                     onClick={generateCampaign}
