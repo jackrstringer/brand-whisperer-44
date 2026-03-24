@@ -385,7 +385,8 @@ Deno.serve(async (req) => {
         .in("product_id", productIds);
 
       if (productRows && productRows.length > 0) {
-        let productSection = `\n\n=== FEATURED PRODUCTS (highlight these in the campaign) ===`;
+        let productSection = `\n\n=== FEATURED PRODUCTS (MUST USE — these products were specifically selected by the user) ===
+You MUST feature these products prominently in the campaign. Use at least one image per product. If no specific images are pinned as [MUST USE], choose the best available images yourself — but you MUST include product imagery. The user selected these products because they want them in the email.`;
         for (const product of productRows) {
           productSection += `\n\nProduct: ${product.name}`;
           if (product.description) productSection += `\nDescription: ${product.description}`;
