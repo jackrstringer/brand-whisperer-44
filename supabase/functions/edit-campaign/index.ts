@@ -25,11 +25,13 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 /** Anthropic API call with AbortController timeout */
-async function callAnthropic(body: object, apiKey: string, timeoutMs = 120000): Promise<Response> {
+async function callAnthropic(body: object, apiKey: string, timeoutMs = 240000): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const startMs = Date.now();
+  console.log(`[callAnthropic] model=${(body as any).model} max_tokens=${(body as any).max_tokens} timeout=${timeoutMs}ms`);
   try {
-    return await fetch("https://api.anthropic.com/v1/messages", {
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -39,8 +41,11 @@ async function callAnthropic(body: object, apiKey: string, timeoutMs = 120000): 
       body: JSON.stringify(body),
       signal: controller.signal,
     });
+    console.log(`[callAnthropic] completed in ${Date.now() - startMs}ms status=${resp.status}`);
+    return resp;
   } catch (error) {
-    if (error.name === "AbortError") throw new Error(`Anthropic API call timed out after ${timeoutMs / 1000}s`);
+    const elapsed = Date.now() - startMs;
+    if (error.name === "AbortError") throw new Error(`Anthropic API call timed out after ${Math.round(elapsed / 1000)}s`);
     throw error;
   } finally {
     clearTimeout(timeout);
