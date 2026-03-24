@@ -407,10 +407,35 @@ You MUST feature these products prominently in the campaign. Use at least one im
     }
 
     const result = await response.json();
+    const pass1StopReason = result.stop_reason;
     let html = extractHtmlOnly(result.content?.[0]?.text || "");
 
+    // === HTML COMPLETENESS CHECK ===
+    function isCompleteHtml(h: string): boolean {
+      return h.length > 200 && /<\/html\s*>/i.test(h) && /<\/body\s*>/i.test(h) && /<table/i.test(h);
+    }
+
+    // If Pass 1 truncated, retry once with leaner instruction
+    if (!isCompleteHtml(html) || pass1StopReason === "max_tokens") {
+      console.warn("Pass 1 truncated (stop_reason:", pass1StopReason, "), retrying with concise prompt...");
+      const retryContent = [{
+        type: "text",
+        text: `${brandValuesText}\n\nGenerate a concise ${goal} email. Brief: ${brief}\nKeep it to 3-4 sections max. Use fewer images. ${productRequirements}\n\nAVAILABLE ASSETS:\n${assetCatalog}\n\nReturn only complete HTML.`,
+      }];
+      const retryResp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({ model: GENERATION_MODEL, max_tokens: 8192, system: UNIVERSAL_EMAIL_RULES, messages: [{ role: "user", content: retryContent }] }),
+      });
+      if (retryResp.ok) {
+        const retryResult = await retryResp.json();
+        const retryHtml = extractHtmlOnly(retryResult.content?.[0]?.text || "");
+        if (isCompleteHtml(retryHtml)) html = retryHtml;
+      }
+    }
+
     // === PASS 2: QA Audit (skip in "faster" mode to save time) ===
-    if (speedMode !== "faster") {
+    if (speedMode !== "faster" && isCompleteHtml(html)) {
       try {
         const allQaItems = [...brandQaChecklist, ...globalQaChecklist];
         const customQaSection = allQaItems.length > 0
@@ -419,8 +444,14 @@ You MUST feature these products prominently in the campaign. Use at least one im
 
         let qaText = `Brand design rules:\n${profile.system_prompt}\n\n=== SPECIFIC VALUES TO ENFORCE ===\ncard_radius: ${brandValues.card_radius}px\nbutton_radius: ${brandValues.button_radius}px\naccent_color: ${brandValues.accent_color}\ntext_color: ${brandValues.text_color}${customQaSection}`;
 
+        // Unified catalog (brand + product assets) so QA doesn't strip product images
         if (assetCatalog) {
-          qaText += `\n\n=== AVAILABLE BRAND ASSETS ===\n${assetCatalog}`;
+          qaText += `\n\n=== APPROVED ASSET CATALOG (brand + product assets — all are valid) ===\n${assetCatalog}`;
+        }
+
+        // Product enforcement rule for QA
+        if (allProductAssetUrls.length > 0) {
+          qaText += `\n\n=== PRODUCT IMAGE REQUIREMENT ===\nThe following product image URLs MUST remain in the HTML. Do NOT remove them:\n${allProductAssetUrls.join("\n")}`;
         }
 
         qaText += `\n\n=== GENERATED HTML TO AUDIT ===\n${html}`;
@@ -429,24 +460,24 @@ You MUST feature these products prominently in the campaign. Use at least one im
 
         const qaResponse = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": ANTHROPIC_API_KEY,
-            "anthropic-version": "2023-06-01",
-          },
-          body: JSON.stringify({
-            model: QA_MODEL,
-            max_tokens: 8192,
-            system: QA_SYSTEM_PROMPT,
-            messages: [{ role: "user", content: qaContent }],
-          }),
+          headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+          body: JSON.stringify({ model: QA_MODEL, max_tokens: 8192, system: QA_SYSTEM_PROMPT, messages: [{ role: "user", content: qaContent }] }),
         });
 
         if (qaResponse.ok) {
           const qaResult = await qaResponse.json();
+          const qaStopReason = qaResult.stop_reason;
           const qaHtml = extractHtmlOnly(qaResult.content?.[0]?.text || "");
-          if (qaHtml.length > 100 && qaHtml.includes("<table")) {
+
+          // Only accept QA output if it's complete AND preserves product images
+          const qaComplete = isCompleteHtml(qaHtml) && qaStopReason !== "max_tokens";
+          const qaPreservesProducts = allProductAssetUrls.length === 0 ||
+            allProductAssetUrls.some((url) => qaHtml.includes(url));
+
+          if (qaComplete && qaPreservesProducts) {
             html = qaHtml;
+          } else {
+            console.warn("QA output rejected (complete:", qaComplete, "preserves products:", qaPreservesProducts, ") — keeping Pass 1");
           }
         } else {
           console.warn("QA pass failed, using first-pass HTML:", qaResponse.status);
@@ -454,6 +485,12 @@ You MUST feature these products prominently in the campaign. Use at least one im
       } catch (qaErr) {
         console.warn("QA pass error, using first-pass HTML:", qaErr);
       }
+    }
+
+    // Final guard: never persist incomplete HTML
+    if (!isCompleteHtml(html)) {
+      await supabase.from("campaigns").update({ status: "error" }).eq("id", campaignId);
+      throw new Error("Generated HTML was incomplete. Please try again.");
     }
 
     // Derive a short campaign name from the brief

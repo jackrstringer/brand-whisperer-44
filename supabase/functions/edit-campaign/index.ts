@@ -101,10 +101,23 @@ Deno.serve(async (req) => {
       .select("url, category")
       .eq("brand_id", campaign.brand_id);
 
-    const embeddableUrls = (brandAssets || [])
+    const brandAssetUrls = (brandAssets || [])
       .map((a: any) => a.url)
       .filter((url: string) => typeof url === "string" && url.trim().length > 0)
       .slice(0, 15);
+
+    // Also fetch ALL product assets for this brand so edits don't strip them
+    const { data: productAssets } = await supabase
+      .from("product_assets")
+      .select("url")
+      .eq("brand_id", campaign.brand_id);
+
+    const productAssetUrls = (productAssets || [])
+      .map((a: any) => a.url)
+      .filter((url: string) => typeof url === "string" && url.trim().length > 0);
+
+    // Unified approved catalog
+    const embeddableUrls = [...brandAssetUrls, ...productAssetUrls];
 
     // Extract brand values for QA enforcement
     const rawExtraction = profile.raw_extraction as Record<string, any> | null;
