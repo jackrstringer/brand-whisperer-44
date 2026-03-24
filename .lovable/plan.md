@@ -1,42 +1,128 @@
 
 
-# Single-Call Audit + Parallel Asset Categorization
+# Product Asset Library for Campaign Generation
 
-## Problem
+## What We're Building
 
-The audit currently makes **one Anthropic API call per campaign image** (up to 8 calls), then a synthesis call. That's 9 sequential/batched API calls taking 2-3 minutes. Claude supports up to 20 images per message — there's no reason not to send them all at once.
+A product-level asset management system that lets users define specific products, upload images per product in 3 buckets (Transparent BG, Lifestyle, Misc Hero Shots), and then select which products/images to feature during campaign creation. The AI gets access to all product assets and can transform them (background removal, cropping) via ImageKit when needed.
 
-Additionally, asset categorization (logo, product, lifestyle) is happening inline during brand setup, blocking the flow. It should be fire-and-forget since it's only needed later for campaign generation.
+## Database Changes
 
-## Changes
+### New table: `products`
+- `id` (uuid, PK)
+- `brand_id` (uuid, FK to brands, cascade delete)
+- `name` (text, not null) -- e.g. "Chrome Showerhead"
+- `description` (text, nullable) -- brief product description
+- `created_at` (timestamptz)
 
-### 1. `supabase/functions/audit-brand/index.ts` — Single API call
+RLS: same pattern as brand_assets (user owns the parent brand).
 
-Replace the current two-pass architecture (per-campaign audit + synthesis) with **one single API call**:
+### New table: `product_assets`
+- `id` (uuid, PK)
+- `product_id` (uuid, FK to products, cascade delete)
+- `brand_id` (uuid, FK to brands, cascade delete) -- denormalized for easier querying
+- `bucket` (text, not null) -- one of: `transparent_bg`, `lifestyle`, `hero_shots`
+- `url` (text, not null)
+- `filename` (text, nullable)
+- `description` (text, nullable) -- AI-generated
+- `dominant_colors` (text[], nullable)
+- `ai_category` (text, nullable)
+- `composition_notes` (text, nullable)
+- `transparent_bg` (boolean, default false) -- AI-detected
+- `created_at` (timestamptz)
 
-- Build one message containing ALL images from ALL campaigns, with text delimiters between campaigns (e.g., "--- Campaign 1 (3 slices) ---", "--- Campaign 2 (2 slices) ---")
-- Send all images + the confirmed properties prefix in one Sonnet call
-- The prompt asks for the unified audit directly — no synthesis pass needed
-- Set `max_tokens: 8000` to accommodate the larger single response
-- Remove all the per-campaign batching code, the synthesis call, and the post-processing border-force logic (per the previously approved plan to fix that)
+RLS: same brand-ownership pattern.
 
-This cuts the API calls from ~9 down to **1**.
+## UI Changes
 
-### 2. `src/pages/BrandSetup.tsx` — Fire-and-forget asset analysis
+### 1. CampaignEditor.tsx -- Product Selection Submenu
 
-Currently `generateGuideFromAudit` uploads assets and calls `analyze-asset` for each one, awaiting results before continuing. Change this:
+In the draft panel (right side, before the Generate button), add a collapsible "Products" section:
 
-- Asset uploads + AI analysis should be **fire-and-forget** — start the uploads/analysis in parallel but don't `await` them before proceeding to guide generation
-- The brand analysis flow only needs: reference campaign images + logo. Nothing else.
-- `getReferenceImageFiles()` already separates campaign files from asset files — only send campaign files + logo to the audit
-- Asset categorization results get written to DB asynchronously; they'll be available when campaigns are generated later
+- **Collapsed state**: "Products (optional)" header with chevron
+- **Expanded state**:
+  - Dropdown/multi-select of existing products for this brand
+  - "Add New Product" button that opens an inline form:
+    - Product name input
+    - 3 upload zones (Transparent BG PNGs, Lifestyle, Misc Hero Shots) using the existing ResourceUploader pattern
+    - Each upload triggers fire-and-forget `analyze-asset` call, writes to `product_assets`
+    - Save button creates the product record + assets
+  - Once products are selected, show thumbnails of their assets
+  - Optional: click individual images to pin specific ones as "must use"
 
-### 3. Remove border-force post-processing
+- Pass `selectedProductIds` and optionally `pinnedAssetUrls` to the `generate-campaign` call
 
-Lines 371-456 of `audit-brand/index.ts` contain the border evidence aggregation and force-override logic. This gets deleted since we're doing a single call and the AI should just report what it sees without post-processing overrides.
+### 2. New Component: `ProductSelector.tsx`
 
-## Files to Change
+Handles:
+- Fetching products for a brand
+- Multi-select with thumbnails
+- "Add Product" inline flow with 3-bucket upload
+- Individual image pinning (click to select specific images)
 
-1. **`supabase/functions/audit-brand/index.ts`** — Collapse to single API call, remove synthesis pass, remove border-force logic
-2. **`src/pages/BrandSetup.tsx`** — Make asset upload/analysis fire-and-forget, don't block guide generation on it
+### 3. New Component: `ProductCreator.tsx`
+
+Inline form for creating a new product:
+- Name input
+- 3 ResourceUploader instances for the 3 buckets
+- On save: creates product row, uploads files to `brand-assets` storage bucket under `{brandId}/products/{productId}/{bucket}/`, inserts `product_assets` rows, fires off `analyze-asset` for each
+
+## Edge Function Changes
+
+### `generate-campaign/index.ts`
+
+Accept new params: `productIds?: string[]`, `pinnedAssetUrls?: string[]`
+
+When products are specified:
+1. Fetch `product_assets` for the given product IDs
+2. Fetch parent `products` for names/descriptions
+3. Build a `FEATURED PRODUCTS` section in the prompt:
+   - Product name + description
+   - Available images per product with AI descriptions
+   - If user pinned specific images, mark them as "MUST USE"
+4. Add instruction: "If no transparent-background image exists for a product but one is needed, you may append ImageKit bg-removal transform `?tr=bg-remove` to any product image URL."
+5. The existing brand-level asset catalog remains available as supplementary
+
+### `analyze-asset/index.ts`
+
+No changes needed -- already handles all the metadata we need. The `transparent_bg` field is already returned and will be stored in `product_assets`.
+
+## ImageKit Transforms Available to AI
+
+Add to the prompt instructions that the AI can append these ImageKit URL transforms when needed:
+- `?tr=bg-remove` -- remove background (for when user only uploaded non-transparent images)
+- Standard width/height transforms already exist in `_shared/imagekit.ts`
+
+No destructive auto-cropping. The AI chooses what to do based on composition notes in the asset metadata.
+
+## Files to Create/Modify
+
+1. **Database migration** -- Create `products` and `product_assets` tables with RLS
+2. **`src/components/brand/ProductSelector.tsx`** -- New: product multi-select + image pinning
+3. **`src/components/brand/ProductCreator.tsx`** -- New: inline product creation with 3-bucket uploads
+4. **`src/pages/CampaignEditor.tsx`** -- Add collapsible Products section in draft panel, pass product data to generate call
+5. **`supabase/functions/generate-campaign/index.ts`** -- Accept product IDs, fetch product assets, build product-specific prompt sections
+6. **`src/lib/types.ts`** -- Add Product and ProductAsset interfaces
+
+## Flow Summary
+
+```text
+Campaign Brief Panel
+  |
+  +-- Products (collapsible)
+  |     +-- [Select existing products] (multi-select dropdown)
+  |     +-- [+ Add New Product]
+  |     |     +-- Name: "Chrome Showerhead"
+  |     |     +-- Transparent BG: [upload zone]
+  |     |     +-- Lifestyle: [upload zone]
+  |     |     +-- Hero Shots: [upload zone]
+  |     |     +-- [Save Product]
+  |     +-- Selected product thumbnails
+  |     +-- (click individual images to pin as "must use")
+  |
+  +-- Brief textarea
+  +-- Goal selector
+  +-- Speed mode
+  +-- [Generate Campaign]
+```
 
