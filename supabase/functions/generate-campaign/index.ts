@@ -362,26 +362,8 @@ Deno.serve(async (req) => {
     let html = result.content?.[0]?.text || "";
     html = html.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
 
-    // Re-host any generated image URLs to ImageKit
-    html = await rehostHtmlImagesWithImageKit(html, {
-      campaignId,
-      imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
-      fallbackImageUrls: embeddableUrls,
-    });
-
-    // === PASS 2: QA Audit ===
+    // === PASS 2: QA Audit (text-only — no reference images, just rules + HTML) ===
     try {
-      const qaContent: any[] = [];
-
-      if (imageBlocks.length > 0) {
-        qaContent.push({
-          type: "text",
-          text: `Here are ${imageBlocks.length} brand reference campaign images. The generated email must match their design language exactly.`,
-        });
-        qaContent.push(...imageBlocks);
-      }
-
-      // Build custom QA items from brand + global checklists
       const allQaItems = [...brandQaChecklist, ...globalQaChecklist];
       const customQaSection = allQaItems.length > 0
         ? `\n\n=== CUSTOM QA CHECKLIST ITEMS ===\n${allQaItems.map((item, i) => `${i + 1}. ${item}`).join("\n")}`
@@ -390,12 +372,12 @@ Deno.serve(async (req) => {
       let qaText = `Brand design rules:\n${profile.system_prompt}\n\n=== SPECIFIC VALUES TO ENFORCE ===\ncard_radius: ${brandValues.card_radius}px\nbutton_radius: ${brandValues.button_radius}px\naccent_color: ${brandValues.accent_color}\ntext_color: ${brandValues.text_color}${customQaSection}`;
 
       if (assetCatalog) {
-        qaText += `\n\n=== AVAILABLE IMAGE VARIANTS ===\nFor any image that has excessive negative space, replace the URL with the tight-cropped variant below:\n${assetCatalog}`;
+        qaText += `\n\n=== AVAILABLE BRAND ASSETS ===\n${assetCatalog}`;
       }
 
       qaText += `\n\n=== GENERATED HTML TO AUDIT ===\n${html}`;
 
-      qaContent.push({ type: "text", text: qaText });
+      const qaContent: any[] = [{ type: "text", text: qaText }];
 
       const qaResponse = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
