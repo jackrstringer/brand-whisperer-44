@@ -7,21 +7,48 @@ const corsHeaders = {
 };
 
 const KLAVIYO_API_BASE = "https://a.klaviyo.com/api";
-const KLAVIYO_REVISION = "2024-10-15";
+const KLAVIYO_DEFAULT_REVISION = "2024-10-15";
+const TEMPLATE_CREATE_REVISION = "2025-01-15";
+const CAMPAIGN_REVISION = "2025-10-15";
+const JSON_API_CONTENT_TYPE = "application/vnd.api+json";
 
-async function klaviyoFetch(path: string, apiKey: string, options: RequestInit = {}) {
+type KlaviyoFetchOptions = RequestInit & {
+  revision?: string;
+  contentType?: string;
+  accept?: string;
+};
+
+function formatKlaviyoError(status: number, data: any) {
+  const firstError = Array.isArray(data?.errors) ? data.errors[0] : null;
+  if (!firstError) return `Klaviyo API error ${status}: ${JSON.stringify(data)}`;
+
+  const detail = firstError.detail || firstError.title || "Unknown error";
+  const pointer = firstError?.source?.pointer;
+  return `Klaviyo API error ${status}: ${detail}${pointer ? ` (${pointer})` : ""}`;
+}
+
+async function klaviyoFetch(path: string, apiKey: string, options: KlaviyoFetchOptions = {}) {
+  const {
+    revision = KLAVIYO_DEFAULT_REVISION,
+    contentType = "application/json",
+    accept = "application/json",
+    headers,
+    ...rest
+  } = options;
+
   const res = await fetch(`${KLAVIYO_API_BASE}${path}`, {
-    ...options,
+    ...rest,
     headers: {
       "Authorization": `Klaviyo-API-Key ${apiKey}`,
-      "revision": KLAVIYO_REVISION,
-      "Content-Type": "application/json",
-      "Accept": "application/json",
-      ...(options.headers || {}),
+      "revision": revision,
+      "Content-Type": contentType,
+      "Accept": accept,
+      ...(headers || {}),
     },
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(`Klaviyo API error ${res.status}: ${JSON.stringify(data)}`);
+
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(formatKlaviyoError(res.status, data));
   return data;
 }
 
@@ -139,73 +166,117 @@ serve(async (req) => {
     }
 
     if (action === "create-campaign") {
-      const { name, html, subjectLine, previewText, listIds, segmentIds, excludeListIds, excludeSegmentIds, campaignId } = body;
+      const { name, html, subjectLine, previewText, segmentIds, excludeSegmentIds, campaignId } = body;
       if (!name || !html) throw new Error("name and html are required");
 
-      // Validate at least one audience target
-      const allIncluded = [...(listIds || []), ...(segmentIds || [])];
-      if (allIncluded.length === 0) throw new Error("Select at least one list or segment to include.");
+      const includedSegments = Array.isArray(segmentIds)
+        ? segmentIds.filter((id: unknown): id is string => typeof id === "string" && id.trim().length > 0)
+        : [];
+      const excludedSegments = Array.isArray(excludeSegmentIds)
+        ? excludeSegmentIds.filter((id: unknown): id is string => typeof id === "string" && id.trim().length > 0)
+        : [];
+
+      if (includedSegments.length === 0) throw new Error("Select at least one segment to include.");
+
+      const normalizedSubject = typeof subjectLine === "string" ? subjectLine : String(subjectLine ?? name);
+      const normalizedPreviewText = typeof previewText === "string" ? previewText : String(previewText ?? "");
+      const content = {
+        subject: normalizedSubject || name,
+        preview_text: normalizedPreviewText,
+      };
 
       // Step 1: Create template
       console.log("[create-campaign] Step 1: Creating template...");
       const templateData = await klaviyoFetch("/templates", apiKey, {
         method: "POST",
+        revision: TEMPLATE_CREATE_REVISION,
         body: JSON.stringify({
-          data: { type: "template", attributes: { name: `${name} - Template`, html, editor_type: "CODE" } },
+          data: { type: "template", attributes: { name: `${name} - Template`, html, editor_type: "USER_DRAGGABLE" } },
         }),
       });
       const templateId = templateData.data.id;
       console.log("[create-campaign] Template created:", templateId);
 
-      // Step 2: Create campaign with correct v2024-10-15 payload
-      // audiences.included/excluded must be arrays of string IDs
-      // campaign-messages uses attributes.definition wrapper
-      // send_strategy uses method: "immediate" for drafts
-      const audiences: any = {
-        included: allIncluded,
-      };
-      const allExcluded = [...(excludeListIds || []), ...(excludeSegmentIds || [])];
-      if (allExcluded.length > 0) {
-        audiences.excluded = allExcluded;
-      }
+      const buildCampaignPayload = (useDefinition: boolean) => {
+        const audiences: { included: string[]; excluded?: string[] } = {
+          included: includedSegments,
+        };
+        if (excludedSegments.length > 0) {
+          audiences.excluded = excludedSegments;
+        }
 
-      const campaignPayload = {
-        data: {
-          type: "campaign",
-          attributes: {
-            name,
-            audiences,
-            "campaign-messages": {
-              data: [{
-                type: "campaign-message",
-                attributes: {
-                  definition: {
-                    channel: "email",
-                    label: name,
-                    content: {
-                      subject: subjectLine || name,
-                      preview_text: previewText || "",
-                    },
-                  },
-                },
-              }],
-            },
-            send_strategy: {
-              method: "immediate",
+        const messageAttributes = useDefinition
+          ? {
+              definition: {
+                channel: "email",
+                label: name,
+                content,
+              },
+            }
+          : {
+              channel: "email",
+              label: name,
+              content,
+            };
+
+        return {
+          data: {
+            type: "campaign",
+            attributes: {
+              name,
+              audiences,
+              send_strategy: {
+                method: "immediate",
+              },
+              send_options: {
+                use_smart_sending: true,
+              },
+              "campaign-messages": {
+                data: [{
+                  type: "campaign-message",
+                  attributes: messageAttributes,
+                }],
+              },
             },
           },
-        },
+        };
       };
 
+      const createCampaign = async (payload: unknown) => {
+        return await klaviyoFetch("/campaigns", apiKey, {
+          method: "POST",
+          revision: CAMPAIGN_REVISION,
+          contentType: JSON_API_CONTENT_TYPE,
+          accept: JSON_API_CONTENT_TYPE,
+          body: JSON.stringify(payload),
+        });
+      };
+
+      let usedDefinitionShape = true;
+      let campaignPayload = buildCampaignPayload(usedDefinitionShape);
       console.log("[create-campaign] Step 2: Creating campaign with payload:", JSON.stringify(campaignPayload, null, 2));
+
       let campaignResult: any;
       try {
-        campaignResult = await klaviyoFetch("/campaigns", apiKey, {
-          method: "POST",
-          body: JSON.stringify(campaignPayload),
-        });
-      } catch (e: any) {
-        throw new Error(`create-campaign failed: ${e.message}`);
+        campaignResult = await createCampaign(campaignPayload);
+      } catch (primaryError: any) {
+        const primaryMessage = primaryError?.message || "Unknown campaign creation error";
+        const shouldFallback = primaryMessage.includes("/attributes/channel") || primaryMessage.includes("/attributes/definition");
+
+        if (!shouldFallback) {
+          throw new Error(`create-campaign failed: ${primaryMessage}`);
+        }
+
+        console.warn("[create-campaign] Falling back to legacy campaign-message shape for compatibility.");
+        usedDefinitionShape = false;
+        campaignPayload = buildCampaignPayload(usedDefinitionShape);
+        console.log("[create-campaign] Step 2b: Retrying with compatibility payload:", JSON.stringify(campaignPayload, null, 2));
+
+        try {
+          campaignResult = await createCampaign(campaignPayload);
+        } catch (fallbackError: any) {
+          throw new Error(`create-campaign failed: ${fallbackError?.message || "Unknown campaign creation error"}`);
+        }
       }
 
       const klaviyoCampaignId = campaignResult.data.id;
@@ -218,19 +289,26 @@ serve(async (req) => {
       if (!messageId) {
         console.log("[create-campaign] Step 3: Fetching campaign messages as fallback...");
         try {
-          const msgsResult = await klaviyoFetch(`/campaigns/${klaviyoCampaignId}/campaign-messages`, apiKey);
+          const msgsResult = await klaviyoFetch(`/campaigns/${klaviyoCampaignId}/campaign-messages`, apiKey, {
+            revision: CAMPAIGN_REVISION,
+            contentType: JSON_API_CONTENT_TYPE,
+            accept: JSON_API_CONTENT_TYPE,
+          });
           messageId = msgsResult.data?.[0]?.id;
         } catch (e: any) {
           console.error("[create-campaign] Failed to fetch campaign messages:", e.message);
         }
       }
 
-      // Step 4: Assign template to campaign message
+      // Step 4 + Step 5: Assign template and re-apply subject/preview on the message
       if (messageId) {
         console.log("[create-campaign] Step 4: Assigning template to message:", messageId);
         try {
           await klaviyoFetch("/campaign-message-assign-template", apiKey, {
             method: "POST",
+            revision: CAMPAIGN_REVISION,
+            contentType: JSON_API_CONTENT_TYPE,
+            accept: JSON_API_CONTENT_TYPE,
             body: JSON.stringify({
               data: {
                 type: "campaign-message",
@@ -245,6 +323,39 @@ serve(async (req) => {
           });
         } catch (e: any) {
           throw new Error(`assign-template failed: ${e.message}`);
+        }
+
+        const messageAttributes = usedDefinitionShape
+          ? {
+              definition: {
+                channel: "email",
+                label: name,
+                content,
+              },
+            }
+          : {
+              channel: "email",
+              label: name,
+              content,
+            };
+
+        console.log("[create-campaign] Step 5: Updating message subject and preview text...");
+        try {
+          await klaviyoFetch(`/campaign-messages/${messageId}`, apiKey, {
+            method: "PATCH",
+            revision: CAMPAIGN_REVISION,
+            contentType: JSON_API_CONTENT_TYPE,
+            accept: JSON_API_CONTENT_TYPE,
+            body: JSON.stringify({
+              data: {
+                type: "campaign-message",
+                id: messageId,
+                attributes: messageAttributes,
+              },
+            }),
+          });
+        } catch (e: any) {
+          throw new Error(`update-message failed: ${e.message}`);
         }
       } else {
         console.warn("[create-campaign] No message ID found — template not assigned.");
@@ -261,7 +372,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         templateId,
         klaviyoCampaignId,
-        klaviyoEditUrl: `https://www.klaviyo.com/campaign/${klaviyoCampaignId}/content`,
+        klaviyoEditUrl: `https://www.klaviyo.com/email-template-editor/campaign/${klaviyoCampaignId}/content/edit`,
         success: true,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
