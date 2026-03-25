@@ -666,8 +666,43 @@ export default function CampaignEditor() {
                   </div>
                 )}
 
-                <div className="p-4 border-t border-border">
+                <div
+                  ref={chatDropRef}
+                  className="p-4 border-t border-border"
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={(e) => { e.preventDefault(); e.stopPropagation(); addChatAttachments(Array.from(e.dataTransfer.files)); }}
+                >
+                  {chatAttachmentPreviews.length > 0 && (
+                    <div className="flex gap-1.5 flex-wrap mb-2">
+                      {chatAttachmentPreviews.map((src, i) => (
+                        <div key={i} className="relative group w-10 h-10 rounded border border-border overflow-hidden">
+                          <img src={src} alt="" className="w-full h-full object-cover" />
+                          <button
+                            onClick={() => removeChatAttachment(i)}
+                            className="absolute top-0 right-0 bg-background/80 rounded-bl p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex gap-2">
+                    <button
+                      onClick={() => chatFileInputRef.current?.click()}
+                      className="shrink-0 p-2 text-muted-foreground hover:text-foreground transition-colors"
+                      title="Attach images"
+                    >
+                      <Paperclip className="w-4 h-4" />
+                    </button>
+                    <input
+                      ref={chatFileInputRef}
+                      type="file"
+                      multiple
+                      accept=".jpg,.jpeg,.png,.webp,.gif"
+                      onChange={(e) => { if (e.target.files) addChatAttachments(Array.from(e.target.files)); e.target.value = ""; }}
+                      className="hidden"
+                    />
                     <Textarea
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
@@ -678,7 +713,7 @@ export default function CampaignEditor() {
                     />
                     <Button
                       onClick={sendMessage}
-                      disabled={!chatInput.trim() || sending}
+                      disabled={(!chatInput.trim() && chatAttachments.length === 0) || sending}
                       size="icon"
                       className="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 active:scale-[0.98] transition-all"
                     >
