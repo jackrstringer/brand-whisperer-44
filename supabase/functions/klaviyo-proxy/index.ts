@@ -151,7 +151,7 @@ serve(async (req) => {
       });
       const templateId = templateData.data.id;
 
-      // 2. Create campaign
+      // 2. Create campaign (without template — assigned separately)
       const includedFilters: any[] = [];
       if (listIds?.length) {
         includedFilters.push(...listIds.map((id: string) => ({ type: "list", id })));
@@ -185,7 +185,6 @@ serve(async (req) => {
                   content: {
                     subject: subjectLine || name,
                     preview_text: previewText || "",
-                    template_id: templateId,
                   },
                 },
               }],
@@ -203,17 +202,41 @@ serve(async (req) => {
         body: JSON.stringify(campaignPayload),
       });
 
+      const klaviyoCampaignId = campaignResult.data.id;
+
+      // 3. Get the campaign message ID from the response
+      const messageId = campaignResult.data.relationships?.["campaign-messages"]?.data?.[0]?.id;
+
+      // 4. Assign template to campaign message
+      if (messageId) {
+        await klaviyoFetch("/campaign-message-assign-template", apiKey, {
+          method: "POST",
+          body: JSON.stringify({
+            data: {
+              type: "campaign-message",
+              id: messageId,
+              relationships: {
+                template: {
+                  data: { type: "template", id: templateId },
+                },
+              },
+            },
+          }),
+        });
+      }
+
       // Update our campaign record
       if (campaignId) {
         await supabase.from("campaigns").update({
           klaviyo_template_id: templateId,
-          klaviyo_campaign_id: campaignResult.data.id,
+          klaviyo_campaign_id: klaviyoCampaignId,
         }).eq("id", campaignId);
       }
 
       return new Response(JSON.stringify({
         templateId,
-        klaviyoCampaignId: campaignResult.data.id,
+        klaviyoCampaignId,
+        klaviyoEditUrl: `https://www.klaviyo.com/campaign/${klaviyoCampaignId}/content`,
         success: true,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
