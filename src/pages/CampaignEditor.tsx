@@ -262,18 +262,61 @@ export default function CampaignEditor() {
     }, 300000);
   };
 
+  const addChatAttachments = useCallback((files: File[]) => {
+    const imageFiles = files.filter(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f.name));
+    if (imageFiles.length === 0) return;
+    setChatAttachments(prev => [...prev, ...imageFiles]);
+    setChatAttachmentPreviews(prev => [...prev, ...imageFiles.map(f => URL.createObjectURL(f))]);
+  }, []);
+
+  const removeChatAttachment = useCallback((index: number) => {
+    setChatAttachmentPreviews(prev => { URL.revokeObjectURL(prev[index]); return prev.filter((_, i) => i !== index); });
+    setChatAttachments(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const addDraftRefImages = useCallback((files: File[]) => {
+    const imageFiles = files.filter(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f.name));
+    if (imageFiles.length === 0) return;
+    setDraftRefImages(prev => [...prev, ...imageFiles]);
+    setDraftRefPreviews(prev => [...prev, ...imageFiles.map(f => URL.createObjectURL(f))]);
+  }, []);
+
+  const removeDraftRefImage = useCallback((index: number) => {
+    setDraftRefPreviews(prev => { URL.revokeObjectURL(prev[index]); return prev.filter((_, i) => i !== index); });
+    setDraftRefImages(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
   const sendMessage = async () => {
-    if (!campaignId || !chatInput.trim() || !campaign?.html) return;
+    if (!campaignId || !brandId || (!chatInput.trim() && chatAttachments.length === 0) || !campaign?.html) return;
     const userMsg = chatInput.trim();
+    const attachedFiles = [...chatAttachments];
     setChatInput("");
+    setChatAttachments([]);
+    setChatAttachmentPreviews(prev => { prev.forEach(u => URL.revokeObjectURL(u)); return []; });
     setSending(true);
+
+    const displayContent = attachedFiles.length > 0
+      ? `${userMsg}${userMsg ? "\n" : ""}[${attachedFiles.length} image${attachedFiles.length > 1 ? "s" : ""} attached]`
+      : userMsg;
+
     setMessages((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), campaign_id: campaignId, role: "user", content: userMsg, created_at: new Date().toISOString() },
+      { id: crypto.randomUUID(), campaign_id: campaignId, role: "user", content: displayContent, created_at: new Date().toISOString() },
     ]);
     try {
+      // Upload attached images first
+      let attachedImageUrls: string[] = [];
+      if (attachedFiles.length > 0) {
+        attachedImageUrls = await uploadChatImages(attachedFiles, brandId, campaignId);
+      }
+
       const { data, error } = await supabase.functions.invoke("edit-campaign", {
-        body: { campaignId, message: userMsg, currentHtml: campaign.html },
+        body: {
+          campaignId,
+          message: userMsg,
+          currentHtml: campaign.html,
+          ...(attachedImageUrls.length > 0 ? { attachedImageUrls } : {}),
+        },
       });
       if (error) throw new Error(error.message || "Edit failed");
       if (data?.error) throw new Error(data.error);
