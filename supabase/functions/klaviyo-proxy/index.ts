@@ -189,9 +189,9 @@ serve(async (req) => {
                 },
               }],
             },
-            "send-strategy": {
+            send_strategy: {
               method: "static",
-              "options-static": { datetime: null },
+              options_static: { datetime: null },
             },
           },
         },
