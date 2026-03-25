@@ -6,11 +6,24 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, Send, Undo2, Zap } from "lucide-react";
+import { ArrowLeft, Download, Send, Undo2, Zap, Paperclip, X, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import type { Campaign, ChatMessage } from "@/lib/types";
+
+async function uploadChatImages(files: File[], brandId: string, campaignId: string): Promise<string[]> {
+  const urls: string[] = [];
+  for (const file of files) {
+    const ext = file.name.split(".").pop() || "png";
+    const path = `${brandId}/campaigns/${campaignId}/chat/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type });
+    if (error) { console.error("Upload error:", error); continue; }
+    const { data } = supabase.storage.from("brand-assets").getPublicUrl(path);
+    urls.push(data.publicUrl);
+  }
+  return urls;
+}
 
 const IMG_SRC_TAG_REGEX = /<img\b([^>]*?)\bsrc=(["'])(.*?)\2([^>]*)>/gi;
 const BROKEN_IMAGE_HOST_REGEX = /^(https?:\/\/(images\.unsplash\.com|source\.unsplash\.com|picsum\.photos))/i;
@@ -49,6 +62,13 @@ export default function CampaignEditor() {
   const [chatInput, setChatInput] = useState("");
   const [sending, setSending] = useState(false);
   const speedMode = "normal";
+  const [chatAttachments, setChatAttachments] = useState<File[]>([]);
+  const [chatAttachmentPreviews, setChatAttachmentPreviews] = useState<string[]>([]);
+  const [draftRefImages, setDraftRefImages] = useState<File[]>([]);
+  const [draftRefPreviews, setDraftRefPreviews] = useState<string[]>([]);
+  const chatFileInputRef = useRef<HTMLInputElement>(null);
+  const draftFileInputRef = useRef<HTMLInputElement>(null);
+  const chatDropRef = useRef<HTMLDivElement>(null);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [pinnedAssetUrls, setPinnedAssetUrls] = useState<string[]>([]);
   const [canUndo, setCanUndo] = useState(false);
@@ -178,6 +198,16 @@ export default function CampaignEditor() {
     setGenElapsed(0);
     setCampaign((c) => c ? { ...c, status: "generating" } : c);
 
+    // Upload any draft reference images
+    let draftRefUrls: string[] = [];
+    if (draftRefImages.length > 0) {
+      draftRefUrls = await uploadChatImages(draftRefImages, brandId, campaignId);
+      setDraftRefImages([]);
+      setDraftRefPreviews(prev => { prev.forEach(u => URL.revokeObjectURL(u)); return []; });
+    }
+
+    const allPinned = [...pinnedAssetUrls, ...draftRefUrls];
+
     const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-campaign`;
     fetch(url, {
       method: "POST",
@@ -189,7 +219,7 @@ export default function CampaignEditor() {
       body: JSON.stringify({
         brandId, campaignId, brief, goal, copy: extraCopy || undefined, speedMode,
         productIds: selectedProductIds.length > 0 ? selectedProductIds : undefined,
-        pinnedAssetUrls: pinnedAssetUrls.length > 0 ? pinnedAssetUrls : undefined,
+        pinnedAssetUrls: allPinned.length > 0 ? allPinned : undefined,
       }),
     }).catch(() => {});
 
@@ -242,18 +272,61 @@ export default function CampaignEditor() {
     }, 300000);
   };
 
+  const addChatAttachments = useCallback((files: File[]) => {
+    const imageFiles = files.filter(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f.name));
+    if (imageFiles.length === 0) return;
+    setChatAttachments(prev => [...prev, ...imageFiles]);
+    setChatAttachmentPreviews(prev => [...prev, ...imageFiles.map(f => URL.createObjectURL(f))]);
+  }, []);
+
+  const removeChatAttachment = useCallback((index: number) => {
+    setChatAttachmentPreviews(prev => { URL.revokeObjectURL(prev[index]); return prev.filter((_, i) => i !== index); });
+    setChatAttachments(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const addDraftRefImages = useCallback((files: File[]) => {
+    const imageFiles = files.filter(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f.name));
+    if (imageFiles.length === 0) return;
+    setDraftRefImages(prev => [...prev, ...imageFiles]);
+    setDraftRefPreviews(prev => [...prev, ...imageFiles.map(f => URL.createObjectURL(f))]);
+  }, []);
+
+  const removeDraftRefImage = useCallback((index: number) => {
+    setDraftRefPreviews(prev => { URL.revokeObjectURL(prev[index]); return prev.filter((_, i) => i !== index); });
+    setDraftRefImages(prev => prev.filter((_, i) => i !== index));
+  }, []);
+
   const sendMessage = async () => {
-    if (!campaignId || !chatInput.trim() || !campaign?.html) return;
+    if (!campaignId || !brandId || (!chatInput.trim() && chatAttachments.length === 0) || !campaign?.html) return;
     const userMsg = chatInput.trim();
+    const attachedFiles = [...chatAttachments];
     setChatInput("");
+    setChatAttachments([]);
+    setChatAttachmentPreviews(prev => { prev.forEach(u => URL.revokeObjectURL(u)); return []; });
     setSending(true);
+
+    const displayContent = attachedFiles.length > 0
+      ? `${userMsg}${userMsg ? "\n" : ""}[${attachedFiles.length} image${attachedFiles.length > 1 ? "s" : ""} attached]`
+      : userMsg;
+
     setMessages((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), campaign_id: campaignId, role: "user", content: userMsg, created_at: new Date().toISOString() },
+      { id: crypto.randomUUID(), campaign_id: campaignId, role: "user", content: displayContent, created_at: new Date().toISOString() },
     ]);
     try {
+      // Upload attached images first
+      let attachedImageUrls: string[] = [];
+      if (attachedFiles.length > 0) {
+        attachedImageUrls = await uploadChatImages(attachedFiles, brandId, campaignId);
+      }
+
       const { data, error } = await supabase.functions.invoke("edit-campaign", {
-        body: { campaignId, message: userMsg, currentHtml: campaign.html },
+        body: {
+          campaignId,
+          message: userMsg,
+          currentHtml: campaign.html,
+          ...(attachedImageUrls.length > 0 ? { attachedImageUrls } : {}),
+        },
       });
       if (error) throw new Error(error.message || "Edit failed");
       if (data?.error) throw new Error(data.error);
@@ -509,6 +582,44 @@ export default function CampaignEditor() {
                     }}
                   />
                 )}
+
+                {/* Reference images for this campaign */}
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Reference images (optional)</label>
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onDrop={(e) => { e.preventDefault(); e.stopPropagation(); addDraftRefImages(Array.from(e.dataTransfer.files)); }}
+                    onClick={() => draftFileInputRef.current?.click()}
+                    className="border border-dashed border-border rounded-lg p-4 text-center hover:border-primary/50 transition-colors cursor-pointer"
+                  >
+                    <ImageIcon className="w-4 h-4 mx-auto mb-1 text-muted-foreground" />
+                    <p className="text-[11px] text-muted-foreground">Drop reference images or click to browse</p>
+                    <input
+                      ref={draftFileInputRef}
+                      type="file"
+                      multiple
+                      accept=".jpg,.jpeg,.png,.webp,.gif"
+                      onChange={(e) => { if (e.target.files) addDraftRefImages(Array.from(e.target.files)); e.target.value = ""; }}
+                      className="hidden"
+                    />
+                  </div>
+                  {draftRefPreviews.length > 0 && (
+                    <div className="flex gap-1.5 flex-wrap">
+                      {draftRefPreviews.map((src, i) => (
+                        <div key={i} className="relative group w-12 h-12 rounded border border-border overflow-hidden">
+                          <img src={src} alt="" className="w-full h-full object-cover" />
+                          <button
+                            onClick={() => removeDraftRefImage(i)}
+                            className="absolute top-0 right-0 bg-background/80 rounded-bl p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="space-y-3">
                   <Button
                     onClick={generateCampaign}
@@ -555,8 +666,43 @@ export default function CampaignEditor() {
                   </div>
                 )}
 
-                <div className="p-4 border-t border-border">
+                <div
+                  ref={chatDropRef}
+                  className="p-4 border-t border-border"
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={(e) => { e.preventDefault(); e.stopPropagation(); addChatAttachments(Array.from(e.dataTransfer.files)); }}
+                >
+                  {chatAttachmentPreviews.length > 0 && (
+                    <div className="flex gap-1.5 flex-wrap mb-2">
+                      {chatAttachmentPreviews.map((src, i) => (
+                        <div key={i} className="relative group w-10 h-10 rounded border border-border overflow-hidden">
+                          <img src={src} alt="" className="w-full h-full object-cover" />
+                          <button
+                            onClick={() => removeChatAttachment(i)}
+                            className="absolute top-0 right-0 bg-background/80 rounded-bl p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex gap-2">
+                    <button
+                      onClick={() => chatFileInputRef.current?.click()}
+                      className="shrink-0 p-2 text-muted-foreground hover:text-foreground transition-colors"
+                      title="Attach images"
+                    >
+                      <Paperclip className="w-4 h-4" />
+                    </button>
+                    <input
+                      ref={chatFileInputRef}
+                      type="file"
+                      multiple
+                      accept=".jpg,.jpeg,.png,.webp,.gif"
+                      onChange={(e) => { if (e.target.files) addChatAttachments(Array.from(e.target.files)); e.target.value = ""; }}
+                      className="hidden"
+                    />
                     <Textarea
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
@@ -567,7 +713,7 @@ export default function CampaignEditor() {
                     />
                     <Button
                       onClick={sendMessage}
-                      disabled={!chatInput.trim() || sending}
+                      disabled={(!chatInput.trim() && chatAttachments.length === 0) || sending}
                       size="icon"
                       className="bg-primary text-primary-foreground hover:bg-primary/90 shrink-0 active:scale-[0.98] transition-all"
                     >
