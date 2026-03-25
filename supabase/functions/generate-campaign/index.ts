@@ -353,8 +353,19 @@ Deno.serve(async (req) => {
         .in("product_id", productIds);
 
       if (productRows && productRows.length > 0) {
+        const isSingleProduct = productRows.length === 1;
         productRequirements = `\n\n=== FEATURED PRODUCTS (MUST USE — these products were specifically selected by the user) ===
 You MUST feature these products prominently in the campaign. Use at least one image per product. If no specific images are pinned as [MUST USE], choose the best available images yourself — but you MUST include product imagery. The user selected these products because they want them in the email.`;
+
+        if (isSingleProduct) {
+          productRequirements += `\n\nSINGLE PRODUCT FOCUS: Only one product is selected. This product's imagery must be PRIMARY throughout the entire campaign — use it as the hero image, and feature it prominently in every visual section. The product IS the campaign. Do NOT use generic lifestyle imagery as the hero; the product imagery should dominate.`;
+        } else {
+          productRequirements += `\n\nMULTIPLE PRODUCTS: ${productRows.length} products are selected. Disperse product imagery throughout the campaign in dedicated sections (e.g., product grid, alternating spotlights). For the hero section, use a lifestyle/brand image instead of a single product shot. Each product should get its own visual moment, but the hero can be broader.`;
+        }
+
+        if (matchProductColors) {
+          productRequirements += `\n\nCOLOR THEME MATCHING: The user has requested that the email's color theme match the featured product imagery. Analyze the dominant colors from the product assets below and use them as accent colors, section backgrounds, and CTA colors throughout the email — while keeping the design on-brand.`;
+        }
         for (const product of productRows) {
           productRequirements += `\n\nProduct: ${product.name}`;
           if (product.description) productRequirements += `\nDescription: ${product.description}`;
