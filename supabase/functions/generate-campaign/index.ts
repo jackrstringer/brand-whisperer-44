@@ -588,11 +588,24 @@ You MUST feature these products prominently in the campaign. Use at least one im
       throw new Error("Generated HTML was incomplete. Please try again.");
     }
 
-    // Derive a short campaign name from the brief
-    const briefWords = brief.trim().split(/\s+/);
-    const campaignName = briefWords.length <= 8
-      ? brief.trim()
-      : briefWords.slice(0, 8).join(" ") + "...";
+    // Derive a short campaign name from the brief — but only if the campaign
+    // doesn't already have a meaningful name (i.e. one set at creation time).
+    const { data: existingCamp } = await supabase
+      .from("campaigns")
+      .select("name")
+      .eq("id", campaignId)
+      .single();
+
+    const existingName = existingCamp?.name || "";
+    const isDefaultName = !existingName || existingName === "New Campaign" || existingName === "Untitled";
+
+    let campaignName = existingName;
+    if (isDefaultName) {
+      const briefWords = brief.trim().split(/\s+/);
+      campaignName = briefWords.length <= 8
+        ? brief.trim()
+        : briefWords.slice(0, 8).join(" ") + "…";
+    }
 
     const durationSecs = Math.round((Date.now() - new Date(genStartedAt).getTime()) / 1000);
 
