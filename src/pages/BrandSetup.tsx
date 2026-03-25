@@ -383,6 +383,13 @@ export default function BrandSetup() {
         } as any);
         if (profileError) throw profileError;
 
+        // Fire-and-forget: slice reference images for generation use
+        const sliceBrandId = brandId!;
+        const sliceImageUrls = [...imageUrls];
+        sliceAndUploadReferenceImages(user.id, sliceBrandId, sliceImageUrls)
+          .then((sliceUrls) => saveSliceUrls(sliceBrandId, sliceUrls))
+          .catch((e) => console.warn("Slice upload failed (non-blocking):", e));
+
         // Fire-and-forget: upload asset files and analyze with AI in background
         // This does NOT block guide generation — results are needed later for campaign building
         const assetBrandId = brandId!;
