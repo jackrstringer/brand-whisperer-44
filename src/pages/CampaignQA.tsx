@@ -140,6 +140,10 @@ export default function CampaignQA() {
   };
 
   const pushToKlaviyo = async (mode: "template" | "campaign") => {
+    if (mode === "campaign" && sendListIds.length === 0 && sendSegmentIds.length === 0) {
+      toast.error("Select at least one list or segment before creating a campaign.");
+      return;
+    }
     setPushing(true);
     try {
       const action = mode === "template" ? "create-template" : "create-campaign";
@@ -150,12 +154,12 @@ export default function CampaignQA() {
           campaignId,
           name: campaign.name,
           html: campaign.html,
-          subjectLine,
-          previewText,
-          listIds: sendListIds,
-          segmentIds: sendSegmentIds,
-          excludeListIds,
-          excludeSegmentIds,
+          subjectLine: subjectLine || "",
+          previewText: previewText || "",
+          listIds: sendListIds || [],
+          segmentIds: sendSegmentIds || [],
+          excludeListIds: excludeListIds || [],
+          excludeSegmentIds: excludeSegmentIds || [],
         },
       });
       if (error || data?.error) throw new Error(data?.error || error?.message);
