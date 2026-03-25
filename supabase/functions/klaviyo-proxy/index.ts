@@ -146,7 +146,7 @@ serve(async (req) => {
       const templateData = await klaviyoFetch("/templates", apiKey, {
         method: "POST",
         body: JSON.stringify({
-          data: { type: "template", attributes: { name: `${name} - Template`, html } },
+          data: { type: "template", attributes: { name: `${name} - Template`, html, editor_type: "CODE" } },
         }),
       });
       const templateId = templateData.data.id;
