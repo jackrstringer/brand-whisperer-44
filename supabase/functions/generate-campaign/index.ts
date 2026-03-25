@@ -272,6 +272,11 @@ Deno.serve(async (req) => {
         const contentType = imgResp.headers.get("content-type") || "image/png";
         const mediaType = contentType.split(";")[0].trim();
         const buf = await imgResp.arrayBuffer();
+        // Anthropic limit: 5MB base64. Skip images that exceed it.
+        if (buf.byteLength > 3_800_000) {
+          console.log(`[generate-campaign] Skipping oversized reference image (${(buf.byteLength / 1_000_000).toFixed(1)}MB): ${url.substring(0, 80)}`);
+          return null;
+        }
         const b64 = arrayBufferToBase64(buf);
         return { type: "image" as const, source: { type: "base64" as const, media_type: mediaType, data: b64 } };
       } catch { return null; }
