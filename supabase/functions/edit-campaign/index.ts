@@ -193,9 +193,10 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
 
     const userContent: any[] = [];
     if (imageBlocks.length > 0) userContent.push(...imageBlocks);
+    const hasUserAttached = userAttachedUrls.length > 0;
     const imageRulesText = embeddableUrls.length > 0
-      ? `Image URL rules:\n- Reference screenshots above are for STYLE only — never embed them.\n- Never invent or use external stock URLs.\n- For <img src> values, use ONLY from these approved asset URLs:\n${embeddableUrls.join("\n")}`
-      : "Image URL rules:\n- No approved image URLs exist, so do not add new <img> tags.";
+      ? `Image URL rules:\n${hasUserAttached ? "- The first images above are USER-ATTACHED reference images for this specific edit request. Use them as visual reference for the requested change.\n" : ""}- Brand reference screenshots are for STYLE only — never embed them.\n- Never invent or use external stock URLs.\n- For <img src> values, use ONLY from these approved asset URLs:\n${embeddableUrls.join("\n")}${hasUserAttached ? "\n" + userAttachedUrls.join("\n") : ""}`
+      : `Image URL rules:\n${hasUserAttached ? "- The images above are USER-ATTACHED reference images. You may use their URLs as <img src> values if appropriate.\n" + userAttachedUrls.join("\n") + "\n" : ""}- No other approved image URLs exist, so do not add new <img> tags.`;
 
     let extraRules = "";
     if (brandInstructions) extraRules += `\n\nBrand-specific instructions:\n${brandInstructions}`;
