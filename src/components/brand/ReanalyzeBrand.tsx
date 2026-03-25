@@ -166,6 +166,14 @@ export default function ReanalyzeBrand({ brandId, brandName, industry }: Reanaly
       setNeedsConfirmation(data.needs_confirmation || []);
       setProgressValue(100);
       setProgressMessage("Audit complete!");
+
+      // Fire-and-forget: re-slice and upload reference images for generation use
+      if (user?.id) {
+        sliceAndUploadReferenceImages(user.id, brandId, urls)
+          .then((sliceUrls) => saveSliceUrls(brandId, sliceUrls))
+          .catch((e) => console.warn("Slice re-upload failed (non-blocking):", e));
+      }
+
       setTimeout(() => setPhase("audit_review"), 500);
     } catch (err: any) {
       toast.error(err.message || "Re-analysis failed");
