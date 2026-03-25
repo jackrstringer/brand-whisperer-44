@@ -139,36 +139,63 @@ export default function CampaignQA() {
     URL.revokeObjectURL(url);
   };
 
+  const getKlaviyoErrorMessage = (raw: string) => {
+    if (!raw) return "Klaviyo request failed.";
+
+    const wrappedMatch = raw.match(/Error,\s*(\{[\s\S]*\})$/);
+    if (wrappedMatch?.[1]) {
+      try {
+        const parsed = JSON.parse(wrappedMatch[1]);
+        if (typeof parsed?.error === "string") return parsed.error;
+      } catch {
+        return raw;
+      }
+    }
+
+    return raw;
+  };
+
   const pushToKlaviyo = async (mode: "template" | "campaign") => {
-    if (mode === "campaign" && sendListIds.length === 0 && sendSegmentIds.length === 0) {
-      toast.error("Select at least one list or segment before creating a campaign.");
+    const includedSegments = (sendSegmentIds || []).filter(Boolean);
+    const excludedSegments = (excludeSegmentIds || []).filter(Boolean);
+
+    if (mode === "campaign" && includedSegments.length === 0) {
+      toast.error("Select at least one segment before creating a campaign.");
       return;
     }
+
     setPushing(true);
     try {
       const action = mode === "template" ? "create-template" : "create-campaign";
+
+      const payload = {
+        action,
+        brandId,
+        campaignId,
+        name: campaign.name,
+        html: campaign.html,
+        subjectLine: subjectLine || "",
+        previewText: previewText || "",
+        listIds: mode === "campaign" ? [] : (sendListIds || []),
+        segmentIds: mode === "campaign" ? includedSegments : (sendSegmentIds || []),
+        excludeListIds: mode === "campaign" ? [] : (excludeListIds || []),
+        excludeSegmentIds: mode === "campaign" ? excludedSegments : (excludeSegmentIds || []),
+      };
+
       const { data, error } = await supabase.functions.invoke("klaviyo-proxy", {
-        body: {
-          action,
-          brandId,
-          campaignId,
-          name: campaign.name,
-          html: campaign.html,
-          subjectLine: subjectLine || "",
-          previewText: previewText || "",
-          listIds: sendListIds || [],
-          segmentIds: sendSegmentIds || [],
-          excludeListIds: excludeListIds || [],
-          excludeSegmentIds: excludeSegmentIds || [],
-        },
+        body: payload,
       });
-      if (error || data?.error) throw new Error(data?.error || error?.message);
+
+      if (error || data?.error) {
+        throw new Error(getKlaviyoErrorMessage(data?.error || error?.message || ""));
+      }
+
       toast.success(mode === "template" ? "Template pushed to Klaviyo" : "Campaign created in Klaviyo");
       if (mode === "campaign" && data?.klaviyoEditUrl) {
         window.open(data.klaviyoEditUrl, "_blank");
       }
     } catch (e: any) {
-      toast.error(e.message);
+      toast.error(getKlaviyoErrorMessage(e?.message || ""));
     } finally {
       setPushing(false);
     }
