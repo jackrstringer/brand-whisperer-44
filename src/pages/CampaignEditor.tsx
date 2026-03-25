@@ -100,6 +100,10 @@ export default function CampaignEditor() {
         setExtraCopy(campaign.extra_copy ?? "");
         setSelectedProductIds(Array.isArray(campaign.product_ids) ? campaign.product_ids : []);
         setPinnedAssetUrls(Array.isArray(campaign.pinned_asset_urls) ? campaign.pinned_asset_urls : []);
+        setSubjectLine((campaign as any).subject_line || "");
+        setPreviewText((campaign as any).preview_text || "");
+        setSendListIds(Array.isArray((campaign as any).send_list_ids) ? (campaign as any).send_list_ids : []);
+        setSendSegmentIds(Array.isArray((campaign as any).send_segment_ids) ? (campaign as any).send_segment_ids : []);
         // speedMode is always "normal" now
         const history = campaign.html_history;
         setCanUndo(Array.isArray(history) && history.length > 0);
