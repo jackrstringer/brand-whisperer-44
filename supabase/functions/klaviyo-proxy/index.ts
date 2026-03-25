@@ -142,7 +142,12 @@ serve(async (req) => {
       const { name, html, subjectLine, previewText, listIds, segmentIds, excludeListIds, excludeSegmentIds, campaignId } = body;
       if (!name || !html) throw new Error("name and html are required");
 
-      // 1. Create template
+      // Validate at least one audience target
+      const allIncluded = [...(listIds || []), ...(segmentIds || [])];
+      if (allIncluded.length === 0) throw new Error("Select at least one list or segment to include.");
+
+      // Step 1: Create template
+      console.log("[create-campaign] Step 1: Creating template...");
       const templateData = await klaviyoFetch("/templates", apiKey, {
         method: "POST",
         body: JSON.stringify({
@@ -150,79 +155,99 @@ serve(async (req) => {
         }),
       });
       const templateId = templateData.data.id;
+      console.log("[create-campaign] Template created:", templateId);
 
-      // 2. Create campaign (without template — assigned separately)
-      const includedFilters: any[] = [];
-      if (listIds?.length) {
-        includedFilters.push(...listIds.map((id: string) => ({ type: "list", id })));
-      }
-      if (segmentIds?.length) {
-        includedFilters.push(...segmentIds.map((id: string) => ({ type: "segment", id })));
-      }
-      const excludedFilters: any[] = [];
-      if (excludeListIds?.length) {
-        excludedFilters.push(...excludeListIds.map((id: string) => ({ type: "list", id })));
-      }
-      if (excludeSegmentIds?.length) {
-        excludedFilters.push(...excludeSegmentIds.map((id: string) => ({ type: "segment", id })));
+      // Step 2: Create campaign with correct v2024-10-15 payload
+      // audiences.included/excluded must be arrays of string IDs
+      // campaign-messages uses attributes.definition wrapper
+      // send_strategy uses method: "immediate" for drafts
+      const audiences: any = {
+        included: allIncluded,
+      };
+      const allExcluded = [...(excludeListIds || []), ...(excludeSegmentIds || [])];
+      if (allExcluded.length > 0) {
+        audiences.excluded = allExcluded;
       }
 
-      const campaignPayload: any = {
+      const campaignPayload = {
         data: {
           type: "campaign",
           attributes: {
             name,
-            audiences: {
-              included: includedFilters.length > 0 ? includedFilters : undefined,
-              excluded: excludedFilters.length > 0 ? excludedFilters : undefined,
-            },
+            audiences,
             "campaign-messages": {
               data: [{
                 type: "campaign-message",
                 attributes: {
-                  channel: "email",
-                  label: name,
-                  content: {
-                    subject: subjectLine || name,
-                    preview_text: previewText || "",
+                  definition: {
+                    channel: "email",
+                    label: name,
+                    content: {
+                      subject: subjectLine || name,
+                      preview_text: previewText || "",
+                    },
                   },
                 },
               }],
             },
             send_strategy: {
-              method: "static",
-              options_static: { datetime: null },
+              method: "immediate",
             },
           },
         },
       };
 
-      const campaignResult = await klaviyoFetch("/campaigns", apiKey, {
-        method: "POST",
-        body: JSON.stringify(campaignPayload),
-      });
+      console.log("[create-campaign] Step 2: Creating campaign with payload:", JSON.stringify(campaignPayload, null, 2));
+      let campaignResult: any;
+      try {
+        campaignResult = await klaviyoFetch("/campaigns", apiKey, {
+          method: "POST",
+          body: JSON.stringify(campaignPayload),
+        });
+      } catch (e: any) {
+        throw new Error(`create-campaign failed: ${e.message}`);
+      }
 
       const klaviyoCampaignId = campaignResult.data.id;
+      console.log("[create-campaign] Campaign created:", klaviyoCampaignId);
 
-      // 3. Get the campaign message ID from the response
-      const messageId = campaignResult.data.relationships?.["campaign-messages"]?.data?.[0]?.id;
+      // Step 3: Get the campaign message ID
+      let messageId = campaignResult.data.relationships?.["campaign-messages"]?.data?.[0]?.id;
 
-      // 4. Assign template to campaign message
+      // Fallback: fetch messages if not in relationships
+      if (!messageId) {
+        console.log("[create-campaign] Step 3: Fetching campaign messages as fallback...");
+        try {
+          const msgsResult = await klaviyoFetch(`/campaigns/${klaviyoCampaignId}/campaign-messages`, apiKey);
+          messageId = msgsResult.data?.[0]?.id;
+        } catch (e: any) {
+          console.error("[create-campaign] Failed to fetch campaign messages:", e.message);
+        }
+      }
+
+      // Step 4: Assign template to campaign message
       if (messageId) {
-        await klaviyoFetch("/campaign-message-assign-template", apiKey, {
-          method: "POST",
-          body: JSON.stringify({
-            data: {
-              type: "campaign-message",
-              id: messageId,
-              relationships: {
-                template: {
-                  data: { type: "template", id: templateId },
+        console.log("[create-campaign] Step 4: Assigning template to message:", messageId);
+        try {
+          await klaviyoFetch("/campaign-message-assign-template", apiKey, {
+            method: "POST",
+            body: JSON.stringify({
+              data: {
+                type: "campaign-message",
+                id: messageId,
+                relationships: {
+                  template: {
+                    data: { type: "template", id: templateId },
+                  },
                 },
               },
-            },
-          }),
-        });
+            }),
+          });
+        } catch (e: any) {
+          throw new Error(`assign-template failed: ${e.message}`);
+        }
+      } else {
+        console.warn("[create-campaign] No message ID found — template not assigned.");
       }
 
       // Update our campaign record
