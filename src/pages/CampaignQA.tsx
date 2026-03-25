@@ -160,6 +160,9 @@ export default function CampaignQA() {
       });
       if (error || data?.error) throw new Error(data?.error || error?.message);
       toast.success(mode === "template" ? "Template pushed to Klaviyo" : "Campaign created in Klaviyo");
+      if (mode === "campaign" && data?.klaviyoEditUrl) {
+        window.open(data.klaviyoEditUrl, "_blank");
+      }
     } catch (e: any) {
       toast.error(e.message);
     } finally {
