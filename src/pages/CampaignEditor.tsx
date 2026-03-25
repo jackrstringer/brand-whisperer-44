@@ -1,12 +1,14 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ProductSelector from "@/components/brand/ProductSelector";
+import SegmentSelector from "@/components/brand/SegmentSelector";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, Send, Undo2, Zap, Paperclip, X, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Download, Send, Undo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -72,6 +74,10 @@ export default function CampaignEditor() {
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [pinnedAssetUrls, setPinnedAssetUrls] = useState<string[]>([]);
   const [canUndo, setCanUndo] = useState(false);
+  const [subjectLine, setSubjectLine] = useState("");
+  const [previewText, setPreviewText] = useState("");
+  const [sendListIds, setSendListIds] = useState<string[]>([]);
+  const [sendSegmentIds, setSendSegmentIds] = useState<string[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const previewPanelRef = useRef<HTMLDivElement>(null);
 
@@ -94,6 +100,10 @@ export default function CampaignEditor() {
         setExtraCopy(campaign.extra_copy ?? "");
         setSelectedProductIds(Array.isArray(campaign.product_ids) ? campaign.product_ids : []);
         setPinnedAssetUrls(Array.isArray(campaign.pinned_asset_urls) ? campaign.pinned_asset_urls : []);
+        setSubjectLine((campaign as any).subject_line || "");
+        setPreviewText((campaign as any).preview_text || "");
+        setSendListIds(Array.isArray((campaign as any).send_list_ids) ? (campaign as any).send_list_ids : []);
+        setSendSegmentIds(Array.isArray((campaign as any).send_segment_ids) ? (campaign as any).send_segment_ids : []);
         // speedMode is always "normal" now
         const history = campaign.html_history;
         setCanUndo(Array.isArray(history) && history.length > 0);
@@ -231,6 +241,10 @@ export default function CampaignEditor() {
       speed_mode: speedMode,
       product_ids: selectedProductIds.length > 0 ? selectedProductIds : null,
       pinned_asset_urls: pinnedAssetUrls.length > 0 ? pinnedAssetUrls : null,
+      subject_line: subjectLine || null,
+      preview_text: previewText || null,
+      send_list_ids: sendListIds.length > 0 ? sendListIds : null,
+      send_segment_ids: sendSegmentIds.length > 0 ? sendSegmentIds : null,
     } as any).eq("id", campaignId);
 
     const pollInterval = setInterval(async () => {
@@ -459,6 +473,14 @@ export default function CampaignEditor() {
           <Button variant="outline" size="sm" onClick={exportHtml} disabled={!campaign?.html} className="active:scale-[0.98] transition-all">
             <Download className="w-3 h-3 mr-1" /> Export HTML
           </Button>
+          <Button
+            size="sm"
+            onClick={() => navigate(`/brands/${brandId}/campaigns/${campaignId}/qa`)}
+            disabled={!campaign?.html}
+            className="active:scale-[0.98] transition-all"
+          >
+            <ClipboardCheck className="w-3 h-3 mr-1" /> Review & Send
+          </Button>
         </div>
       </div>
 
@@ -580,6 +602,46 @@ export default function CampaignEditor() {
                       setSelectedProductIds(ids);
                       setPinnedAssetUrls(pinned);
                     }}
+                  />
+                )}
+
+                {/* Subject Line & Preview Text */}
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Subject Line</label>
+                  <div className="relative">
+                    <Input
+                      value={subjectLine}
+                      onChange={(e) => setSubjectLine(e.target.value)}
+                      placeholder="e.g. Don't miss our biggest sale..."
+                      className="bg-card border-border pr-12"
+                    />
+                    <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] tabular-nums ${subjectLine.length > 60 ? "text-amber-400" : "text-muted-foreground"}`}>
+                      {subjectLine.length}/60
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Preview Text</label>
+                  <div className="relative">
+                    <Input
+                      value={previewText}
+                      onChange={(e) => setPreviewText(e.target.value)}
+                      placeholder="Short preview shown in inbox..."
+                      className="bg-card border-border pr-12"
+                    />
+                    <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] tabular-nums ${previewText.length > 90 ? "text-amber-400" : "text-muted-foreground"}`}>
+                      {previewText.length}/90
+                    </span>
+                  </div>
+                </div>
+
+                {/* Segment selector */}
+                {brandId && (
+                  <SegmentSelector
+                    brandId={brandId}
+                    selectedListIds={sendListIds}
+                    selectedSegmentIds={sendSegmentIds}
+                    onSelectionChange={(l, s) => { setSendListIds(l); setSendSegmentIds(s); }}
                   />
                 )}
 

@@ -13,6 +13,7 @@ import BrandGuide from "./pages/BrandGuide";
 import GlobalSettings from "./pages/GlobalSettings";
 import CampaignsList from "./pages/CampaignsList";
 import CampaignEditor from "./pages/CampaignEditor";
+import CampaignQA from "./pages/CampaignQA";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 
@@ -46,6 +47,7 @@ function AppRoutes() {
       <Route path="/brands/:brandId/settings" element={<ProtectedLayout><BrandSettings /></ProtectedLayout>} />
       <Route path="/brands/:brandId/guide" element={<ProtectedLayout><BrandGuide /></ProtectedLayout>} />
       <Route path="/brands/:brandId/campaigns/:campaignId" element={<ProtectedRoute><CampaignEditor /></ProtectedRoute>} />
+      <Route path="/brands/:brandId/campaigns/:campaignId/qa" element={<ProtectedRoute><CampaignQA /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedLayout><GlobalSettings /></ProtectedLayout>} />
       <Route path="*" element={<NotFound />} />
     </Routes>

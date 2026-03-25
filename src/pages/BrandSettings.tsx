@@ -11,6 +11,7 @@ import { Trash2, Plus, X, Loader2 } from "lucide-react";
 import ReanalyzeBrand from "@/components/brand/ReanalyzeBrand";
 import AssetManager from "@/components/brand/AssetManager";
 import ProductManager from "@/components/brand/ProductManager";
+import KlaviyoSetup from "@/components/brand/KlaviyoSetup";
 import { toast } from "sonner";
 
 interface BrandAsset {
@@ -104,6 +105,7 @@ export default function BrandSettings() {
           <TabsTrigger value="products">Products</TabsTrigger>
           <TabsTrigger value="instructions">Instructions</TabsTrigger>
           <TabsTrigger value="qa">QA Checklist</TabsTrigger>
+          <TabsTrigger value="klaviyo">Klaviyo</TabsTrigger>
           <TabsTrigger value="analysis">Analysis</TabsTrigger>
         </TabsList>
 
@@ -155,6 +157,10 @@ export default function BrandSettings() {
             </div>
           </div>
           <Button onClick={saveInstructions} disabled={saving}>Save Checklist</Button>
+        </TabsContent>
+
+        <TabsContent value="klaviyo">
+          {brandId && <KlaviyoSetup brandId={brandId} />}
         </TabsContent>
 
         <TabsContent value="analysis">
