@@ -183,8 +183,47 @@ Deno.serve(async (req) => {
       slices.sort((a, b) => a.sliceIndex - b.sliceIndex);
     }
 
+    // Cap total slices to avoid Anthropic 413 request_too_large errors
+    // Anthropic's max payload is ~20MB; each base64 image slice can be 1-3MB
+    const MAX_TOTAL_SLICES = 12;
+    let totalSliceCount = 0;
+    for (const [, slices] of campaignGroups) totalSliceCount += slices.length;
+    
+    if (totalSliceCount > MAX_TOTAL_SLICES) {
+      console.log(`Too many slices (${totalSliceCount}), trimming to ${MAX_TOTAL_SLICES}`);
+      // Distribute slices evenly across campaigns, prioritizing earlier campaigns
+      const campaignKeys = Array.from(campaignGroups.keys()).sort((a, b) => a - b);
+      let remaining = MAX_TOTAL_SLICES;
+      for (const key of campaignKeys) {
+        const slices = campaignGroups.get(key)!;
+        const allowedForThis = Math.max(1, Math.floor(remaining / (campaignKeys.indexOf(key) === campaignKeys.length - 1 ? 1 : Math.ceil(campaignKeys.length / 2))));
+        const cap = Math.min(slices.length, Math.max(1, allowedForThis));
+        if (slices.length > cap) {
+          // Keep first and last slices, sample middle
+          const kept = [slices[0]];
+          if (cap > 2) {
+            const step = (slices.length - 2) / (cap - 2);
+            for (let i = 1; i < cap - 1; i++) {
+              kept.push(slices[Math.round(1 + (i - 1) * step)]);
+            }
+          }
+          if (cap > 1) kept.push(slices[slices.length - 1]);
+          campaignGroups.set(key, kept);
+        }
+        remaining -= campaignGroups.get(key)!.length;
+        if (remaining <= 0) {
+          // Remove remaining campaigns
+          for (const laterKey of campaignKeys.slice(campaignKeys.indexOf(key) + 1)) {
+            campaignGroups.delete(laterKey);
+          }
+          break;
+        }
+      }
+    }
+
     const campaignCount = campaignGroups.size;
-    console.log(`Auditing ${campaignCount} campaigns (${images.length} total slices) in SINGLE call for brand: ${brandName}`);
+    const finalSliceCount = Array.from(campaignGroups.values()).reduce((s, v) => s + v.length, 0);
+    console.log(`Auditing ${campaignCount} campaigns (${finalSliceCount} slices) in SINGLE call for brand: ${brandName}`);
 
     // Build one message with ALL images
     const imageContent: any[] = [];
