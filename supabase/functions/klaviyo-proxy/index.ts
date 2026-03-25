@@ -120,7 +120,7 @@ serve(async (req) => {
         body: JSON.stringify({
           data: {
             type: "template",
-            attributes: { name, html },
+            attributes: { name, html, editor_type: "CODE" },
           },
         }),
       });
@@ -139,29 +139,32 @@ serve(async (req) => {
     }
 
     if (action === "create-campaign") {
-      const { name, html, subjectLine, previewText, listIds, segmentIds, campaignId } = body;
+      const { name, html, subjectLine, previewText, listIds, segmentIds, excludeListIds, excludeSegmentIds, campaignId } = body;
       if (!name || !html) throw new Error("name and html are required");
 
       // 1. Create template
       const templateData = await klaviyoFetch("/templates", apiKey, {
         method: "POST",
         body: JSON.stringify({
-          data: { type: "template", attributes: { name: `${name} - Template`, html } },
+          data: { type: "template", attributes: { name: `${name} - Template`, html, editor_type: "CODE" } },
         }),
       });
       const templateId = templateData.data.id;
 
       // 2. Create campaign
-      const audienceFilters: any[] = [];
+      const includedFilters: any[] = [];
       if (listIds?.length) {
-        audienceFilters.push(...listIds.map((id: string) => ({
-          type: "list", id
-        })));
+        includedFilters.push(...listIds.map((id: string) => ({ type: "list", id })));
       }
       if (segmentIds?.length) {
-        audienceFilters.push(...segmentIds.map((id: string) => ({
-          type: "segment", id
-        })));
+        includedFilters.push(...segmentIds.map((id: string) => ({ type: "segment", id })));
+      }
+      const excludedFilters: any[] = [];
+      if (excludeListIds?.length) {
+        excludedFilters.push(...excludeListIds.map((id: string) => ({ type: "list", id })));
+      }
+      if (excludeSegmentIds?.length) {
+        excludedFilters.push(...excludeSegmentIds.map((id: string) => ({ type: "segment", id })));
       }
 
       const campaignPayload: any = {
@@ -170,8 +173,8 @@ serve(async (req) => {
           attributes: {
             name,
             audiences: {
-              included: audienceFilters.length > 0 ? audienceFilters : undefined,
-              excluded: [],
+              included: includedFilters.length > 0 ? includedFilters : undefined,
+              excluded: excludedFilters.length > 0 ? excludedFilters : undefined,
             },
             "campaign-messages": {
               data: [{

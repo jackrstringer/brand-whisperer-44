@@ -225,6 +225,8 @@ export type Database = {
           brand_id: string
           brief: string | null
           created_at: string
+          exclude_list_ids: string[] | null
+          exclude_segment_ids: string[] | null
           extra_copy: string | null
           generation_duration_secs: number | null
           generation_started_at: string | null
@@ -250,6 +252,8 @@ export type Database = {
           brand_id: string
           brief?: string | null
           created_at?: string
+          exclude_list_ids?: string[] | null
+          exclude_segment_ids?: string[] | null
           extra_copy?: string | null
           generation_duration_secs?: number | null
           generation_started_at?: string | null
@@ -275,6 +279,8 @@ export type Database = {
           brand_id?: string
           brief?: string | null
           created_at?: string
+          exclude_list_ids?: string[] | null
+          exclude_segment_ids?: string[] | null
           extra_copy?: string | null
           generation_duration_secs?: number | null
           generation_started_at?: string | null
