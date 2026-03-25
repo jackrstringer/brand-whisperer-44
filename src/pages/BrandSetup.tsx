@@ -15,6 +15,7 @@ import SourceQuiz, { type SourceType } from "@/components/brand/SourceQuiz";
 import ResourceUploader from "@/components/brand/ResourceUploader";
 import AssetCategoryUploader, { type AssetCategory } from "@/components/brand/AssetCategoryUploader";
 import type { BrandExtraction } from "@/lib/types";
+import { sliceAndUploadReferenceImages, saveSliceUrls } from "@/lib/imageSlicing";
 
 type Step = "info" | "sources" | "uploads" | "auditing" | "audit_review" | "generating_guide" | "guide_review";
 
