@@ -449,8 +449,17 @@ async function runGuideCall(
     if (docStart > -1) guideHtml = guideHtml.substring(docStart);
   }
 
+  guideHtml = normalizeGuideHtmlSpacing(guideHtml);
+
   console.log(`[extract-brand] Call 2 complete. Guide HTML length: ${guideHtml.length}`);
   return guideHtml;
+}
+
+function normalizeGuideHtmlSpacing(html: string) {
+  return html
+    .replace(/min-height:\s*100vh\s*;/gi, "min-height: 340px;")
+    .replace(/padding:\s*4rem\s+2rem\s*;/gi, "padding: 2.75rem 2rem;")
+    .replace(/margin-bottom:\s*3rem\s*;/gi, "margin-bottom: 1.75rem;");
 }
 
 async function processSpecStep(
