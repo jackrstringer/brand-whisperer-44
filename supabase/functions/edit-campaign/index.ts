@@ -26,30 +26,41 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 
 /** Anthropic API call with AbortController timeout */
 async function callAnthropic(body: object, apiKey: string, timeoutMs = 240000): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const startMs = Date.now();
-  console.log(`[callAnthropic] model=${(body as any).model} max_tokens=${(body as any).max_tokens} timeout=${timeoutMs}ms`);
-  try {
-    const resp = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    console.log(`[callAnthropic] completed in ${Date.now() - startMs}ms status=${resp.status}`);
-    return resp;
-  } catch (error) {
-    const elapsed = Date.now() - startMs;
-    if (error.name === "AbortError") throw new Error(`Anthropic API call timed out after ${Math.round(elapsed / 1000)}s`);
-    throw error;
-  } finally {
-    clearTimeout(timeout);
+  const maxRetries = 2;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const startMs = Date.now();
+    console.log(`[callAnthropic] attempt=${attempt} model=${(body as any).model} max_tokens=${(body as any).max_tokens} timeout=${timeoutMs}ms`);
+    try {
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const elapsed = Date.now() - startMs;
+      console.log(`[callAnthropic] completed in ${elapsed}ms status=${resp.status}`);
+      if ((resp.status === 529 || resp.status === 503) && attempt < maxRetries) {
+        console.warn(`[callAnthropic] got ${resp.status}, retrying in ${(attempt + 1) * 5}s...`);
+        await resp.text();
+        await new Promise(r => setTimeout(r, (attempt + 1) * 5000));
+        continue;
+      }
+      return resp;
+    } catch (error) {
+      const elapsed = Date.now() - startMs;
+      if (error.name === "AbortError") throw new Error(`Anthropic API call timed out after ${Math.round(elapsed / 1000)}s`);
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+  throw new Error("callAnthropic: exhausted retries");
 }
 
 Deno.serve(async (req) => {
@@ -187,7 +198,7 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
 
     // FIX 1: max_tokens 16384, FIX 6: callAnthropic with timeout
     const response = await callAnthropic({
-      model: "claude-opus-4-6",
+      model: "claude-sonnet-4-6",
       max_tokens: 16384,
       system: systemMsg,
       messages: [{ role: "user", content: userContent }],
