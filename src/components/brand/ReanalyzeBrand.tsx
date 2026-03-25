@@ -164,8 +164,8 @@ export default function ReanalyzeBrand({ brandId, brandName, industry }: Reanaly
       setAuditFindings(data.audit);
       setInconsistencies(data.inconsistencies || []);
       setNeedsConfirmation(data.needs_confirmation || []);
-      setProgressValue(100);
-      setProgressMessage("Audit complete!");
+      setProgressValue(50);
+      setProgressMessage("Audit complete! Building guide...");
 
       // Fire-and-forget: re-slice and upload reference images for generation use
       if (user?.id) {
@@ -174,16 +174,24 @@ export default function ReanalyzeBrand({ brandId, brandName, industry }: Reanaly
           .catch((e) => console.warn("Slice re-upload failed (non-blocking):", e));
       }
 
-      setTimeout(() => setPhase("audit_review"), 500);
+      // Auto-proceed to guide generation (no confirmation step)
+      await autoGenerateGuide(data.audit);
     } catch (err: any) {
       toast.error(err.message || "Re-analysis failed");
       setPhase("idle");
     }
   };
 
-  const generateGuide = async () => {
+  const autoGenerateGuide = async (findings: any) => {
+    const effectiveFindings = findings || auditFindings;
+    if (!effectiveFindings) {
+      toast.error("No audit findings available");
+      setPhase("idle");
+      return;
+    }
+    setAuditFindings(effectiveFindings);
     setPhase("generating_guide");
-    setProgressValue(0);
+    setProgressValue(50);
     setProgressMessage(GUIDE_MESSAGES[0]);
 
     const interval = setInterval(() => {
@@ -199,18 +207,18 @@ export default function ReanalyzeBrand({ brandId, brandName, industry }: Reanaly
       // Save current audit findings to profile first
       await supabase
         .from("brand_profiles")
-        .update({ audit_findings: auditFindings, brand_guide_html: null } as any)
+        .update({ audit_findings: effectiveFindings, brand_guide_html: null } as any)
         .eq("brand_id", brandId);
 
       setProgressMessage("Building brand spec...");
       const { error: specError } = await supabase.functions.invoke("extract-brand", {
-        body: { auditFindings, brandName, industry, brandId, step: "spec" },
+        body: { auditFindings: effectiveFindings, brandName, industry, brandId, step: "spec" },
       });
       if (specError) throw new Error(specError.message || "Failed to build brand spec");
 
       setProgressMessage("Generating brand guide...");
       const { error: guideStartError } = await supabase.functions.invoke("extract-brand", {
-        body: { auditFindings, brandName, industry, brandId, step: "guide" },
+        body: { auditFindings: effectiveFindings, brandName, industry, brandId, step: "guide" },
       });
       if (guideStartError) throw new Error(guideStartError.message || "Failed to start guide generation");
 
@@ -391,78 +399,6 @@ export default function ReanalyzeBrand({ brandId, brandName, industry }: Reanaly
         </h3>
         <p className="text-sm text-muted-foreground">{progressMessage}</p>
         <Progress value={progressValue} className="h-1.5 max-w-md mx-auto" />
-      </div>
-    );
-  }
-
-  if (phase === "audit_review" && auditFindings) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold">Audit Results</h3>
-            <p className="text-sm text-muted-foreground">Review and edit findings, then regenerate the guide.</p>
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => { setAuditFindings(null); setPhase("idle"); }}>
-            <ArrowLeft className="w-4 h-4 mr-1" /> Cancel
-          </Button>
-        </div>
-
-        {needsConfirmation.length > 0 && (
-          <div className="p-4 rounded-lg border border-yellow-500/30 bg-yellow-500/5">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-4 h-4 text-yellow-500" />
-              <span className="text-sm font-medium text-yellow-500">Items needing confirmation</span>
-            </div>
-            <ul className="space-y-1">
-              {needsConfirmation.map((nc, i) => (
-                <li key={i} className="text-sm text-muted-foreground">
-                  <span className="font-mono text-xs">{nc.element}</span> — {nc.reason}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {inconsistencies.length > 0 && (
-          <div className="p-4 rounded-lg border border-blue-500/30 bg-blue-500/5">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-4 h-4 text-blue-500" />
-              <span className="text-sm font-medium text-blue-500">Inconsistencies</span>
-            </div>
-            <ul className="space-y-1">
-              {inconsistencies.map((inc, i) => (
-                <li key={i} className="text-sm text-muted-foreground">
-                  <span className="font-mono text-xs">{inc.element}</span> — {inc.description}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <div className="grid gap-4 md:grid-cols-2">
-          {AUDIT_SECTIONS.map(({ key, title }) => {
-            const sectionData = auditFindings[key];
-            if (!sectionData) return null;
-            return (
-              <Card key={key} className="bg-card border-border">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">{title}</CardTitle>
-                </CardHeader>
-                <CardContent>{renderAuditValue(key, sectionData)}</CardContent>
-              </Card>
-            );
-          })}
-        </div>
-
-        <div className="flex gap-3">
-          <Button onClick={generateGuide} className="bg-primary text-primary-foreground hover:bg-primary/90">
-            <Check className="w-4 h-4 mr-1.5" /> Confirm & Regenerate Guide
-          </Button>
-          <Button variant="outline" onClick={startReanalysis}>
-            <RefreshCw className="w-4 h-4 mr-1.5" /> Re-run Audit
-          </Button>
-        </div>
       </div>
     );
   }
