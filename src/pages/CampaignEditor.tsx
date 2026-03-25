@@ -233,6 +233,8 @@ export default function CampaignEditor() {
         brandId, campaignId, brief, goal, copy: extraCopy || undefined, speedMode,
         productIds: selectedProductIds.length > 0 ? selectedProductIds : undefined,
         pinnedAssetUrls: allPinned.length > 0 ? allPinned : undefined,
+        matchProductColors: matchProductColors || undefined,
+        designNotes: designNotes.trim() || undefined,
       }),
     }).catch(() => {});
 
