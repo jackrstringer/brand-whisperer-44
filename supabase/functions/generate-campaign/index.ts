@@ -425,6 +425,10 @@ You MUST feature these products prominently in the campaign. Use at least one im
       brandValuesText += `\n\n=== GLOBAL GENERATION RULES ===\n${globalRules}`;
     }
 
+    if (designNotes) {
+      brandValuesText += `\n\n=== USER DESIGN NOTES FOR THIS CAMPAIGN ===\n${designNotes}`;
+    }
+
     userContent.push({ type: "text", text: brandValuesText });
 
     // Goal-specific creative direction for structural variety
