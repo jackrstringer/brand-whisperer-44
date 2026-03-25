@@ -255,16 +255,23 @@ Deno.serve(async (req) => {
     };
 
     // Build reference image blocks for vision (style only — never embed)
+    // Prefer pre-sliced images (guaranteed under 5MB) over full originals
     const imageBlocks: any[] = [];
+    const sliceUrls = Array.isArray((profile as any).reference_slice_urls)
+      ? (profile as any).reference_slice_urls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
+      : [];
     const referenceUrls = Array.isArray(profile.reference_image_urls)
       ? profile.reference_image_urls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
       : [];
 
-    // Cap reference images at 5 for all modes
-    const maxRefs = 5;
-    const selectedReferenceUrls = referenceUrls.slice(0, maxRefs);
+    // Use slices if available (already sized for API), otherwise fall back to full images
+    const urlsToSend = sliceUrls.length > 0 ? sliceUrls : referenceUrls;
+    const maxRefs = sliceUrls.length > 0 ? 15 : 5; // Can send more slices since they're smaller
+    const selectedReferenceUrls = urlsToSend.slice(0, maxRefs);
 
-    // FIX 4: Fetch all reference images in PARALLEL with chunked base64
+    console.log(`[generate-campaign] Using ${sliceUrls.length > 0 ? 'slices' : 'full images'}: ${selectedReferenceUrls.length} reference images`);
+
+    // Fetch all reference images in PARALLEL with chunked base64
     const imagePromises = selectedReferenceUrls.map(async (url: string) => {
       try {
         const imgResp = await fetch(url);
@@ -272,9 +279,9 @@ Deno.serve(async (req) => {
         const contentType = imgResp.headers.get("content-type") || "image/png";
         const mediaType = contentType.split(";")[0].trim();
         const buf = await imgResp.arrayBuffer();
-        // Anthropic limit: 5MB base64. Skip images that exceed it.
-        if (buf.byteLength > 3_800_000) {
-          console.log(`[generate-campaign] Skipping oversized reference image (${(buf.byteLength / 1_000_000).toFixed(1)}MB): ${url.substring(0, 80)}`);
+        // Safety net: skip if still over 4.5MB raw (shouldn't happen with slices)
+        if (buf.byteLength > 4_500_000) {
+          console.log(`[generate-campaign] Skipping oversized image (${(buf.byteLength / 1_000_000).toFixed(1)}MB)`);
           return null;
         }
         const b64 = arrayBufferToBase64(buf);
