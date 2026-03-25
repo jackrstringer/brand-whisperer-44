@@ -11,6 +11,7 @@ import { Trash2, Plus, X, Loader2 } from "lucide-react";
 import ReanalyzeBrand from "@/components/brand/ReanalyzeBrand";
 import AssetManager from "@/components/brand/AssetManager";
 import ProductManager from "@/components/brand/ProductManager";
+import KlaviyoSetup from "@/components/brand/KlaviyoSetup";
 import { toast } from "sonner";
 
 interface BrandAsset {
