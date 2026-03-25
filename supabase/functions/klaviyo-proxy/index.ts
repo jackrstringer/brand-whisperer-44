@@ -139,7 +139,7 @@ serve(async (req) => {
     }
 
     if (action === "create-campaign") {
-      const { name, html, subjectLine, previewText, listIds, segmentIds, campaignId } = body;
+      const { name, html, subjectLine, previewText, listIds, segmentIds, excludeListIds, excludeSegmentIds, campaignId } = body;
       if (!name || !html) throw new Error("name and html are required");
 
       // 1. Create template
