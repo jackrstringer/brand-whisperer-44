@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Users, Save, Loader2 } from "lucide-react";
+import { Users, Save, Search } from "lucide-react";
 import { toast } from "sonner";
 
 interface KlaviyoItem {
@@ -18,10 +18,12 @@ interface Props {
   brandId: string;
   selectedListIds: string[];
   selectedSegmentIds: string[];
-  onSelectionChange: (listIds: string[], segmentIds: string[]) => void;
+  excludeListIds?: string[];
+  excludeSegmentIds?: string[];
+  onSelectionChange: (listIds: string[], segmentIds: string[], excludeListIds?: string[], excludeSegmentIds?: string[]) => void;
 }
 
-export default function SegmentSelector({ brandId, selectedListIds, selectedSegmentIds, onSelectionChange }: Props) {
+export default function SegmentSelector({ brandId, selectedListIds, selectedSegmentIds, excludeListIds = [], excludeSegmentIds = [], onSelectionChange }: Props) {
   const [connected, setConnected] = useState(false);
   const [lists, setLists] = useState<KlaviyoItem[]>([]);
   const [segments, setSegments] = useState<KlaviyoItem[]>([]);
@@ -29,6 +31,8 @@ export default function SegmentSelector({ brandId, selectedListIds, selectedSegm
   const [loading, setLoading] = useState(true);
   const [saveOpen, setSaveOpen] = useState(false);
   const [presetName, setPresetName] = useState("");
+  const [includeSearch, setIncludeSearch] = useState("");
+  const [excludeSearch, setExcludeSearch] = useState("");
 
   useEffect(() => {
     loadData();
@@ -53,20 +57,30 @@ export default function SegmentSelector({ brandId, selectedListIds, selectedSegm
     }
   };
 
-  const toggleList = (id: string) => {
+  const toggleIncludeList = (id: string) => {
     const next = selectedListIds.includes(id) ? selectedListIds.filter(x => x !== id) : [...selectedListIds, id];
-    onSelectionChange(next, selectedSegmentIds);
+    onSelectionChange(next, selectedSegmentIds, excludeListIds, excludeSegmentIds);
   };
 
-  const toggleSegment = (id: string) => {
+  const toggleIncludeSegment = (id: string) => {
     const next = selectedSegmentIds.includes(id) ? selectedSegmentIds.filter(x => x !== id) : [...selectedSegmentIds, id];
-    onSelectionChange(selectedListIds, next);
+    onSelectionChange(selectedListIds, next, excludeListIds, excludeSegmentIds);
+  };
+
+  const toggleExcludeList = (id: string) => {
+    const next = excludeListIds.includes(id) ? excludeListIds.filter(x => x !== id) : [...excludeListIds, id];
+    onSelectionChange(selectedListIds, selectedSegmentIds, next, excludeSegmentIds);
+  };
+
+  const toggleExcludeSegment = (id: string) => {
+    const next = excludeSegmentIds.includes(id) ? excludeSegmentIds.filter(x => x !== id) : [...excludeSegmentIds, id];
+    onSelectionChange(selectedListIds, selectedSegmentIds, excludeListIds, next);
   };
 
   const applyPreset = (presetId: string) => {
     const preset = presets.find(p => p.id === presetId);
     if (!preset) return;
-    onSelectionChange(preset.list_ids || [], preset.segment_ids || []);
+    onSelectionChange(preset.list_ids || [], preset.segment_ids || [], excludeListIds, excludeSegmentIds);
   };
 
   const savePreset = async () => {
@@ -87,7 +101,44 @@ export default function SegmentSelector({ brandId, selectedListIds, selectedSegm
   if (loading) return null;
   if (!connected) return null;
 
-  const totalSelected = selectedListIds.length + selectedSegmentIds.length;
+  const filterItems = (items: KlaviyoItem[], search: string) => {
+    if (!search.trim()) return items;
+    const q = search.toLowerCase();
+    return items.filter(item => (item.attributes?.name || item.id).toLowerCase().includes(q));
+  };
+
+  const totalIncluded = selectedListIds.length + selectedSegmentIds.length;
+  const totalExcluded = excludeListIds.length + excludeSegmentIds.length;
+  const filteredIncludeLists = filterItems(lists, includeSearch);
+  const filteredIncludeSegments = filterItems(segments, includeSearch);
+  const filteredExcludeLists = filterItems(lists, excludeSearch);
+  const filteredExcludeSegments = filterItems(segments, excludeSearch);
+
+  const renderCheckboxList = (
+    items: KlaviyoItem[],
+    selectedIds: string[],
+    toggle: (id: string) => void,
+    label: string,
+  ) => {
+    if (items.length === 0) return null;
+    return (
+      <div className="space-y-1">
+        <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
+        <div className="max-h-28 overflow-y-auto space-y-0.5 rounded border border-border p-1.5 bg-card">
+          {items.map(item => (
+            <label key={item.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-muted/50 rounded px-1.5 py-1">
+              <Checkbox
+                checked={selectedIds.includes(item.id)}
+                onCheckedChange={() => toggle(item.id)}
+                className="h-3.5 w-3.5"
+              />
+              <span className="truncate">{item.attributes?.name || item.id}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-3">
@@ -95,9 +146,10 @@ export default function SegmentSelector({ brandId, selectedListIds, selectedSegm
         <label className="text-xs text-muted-foreground flex items-center gap-1.5">
           <Users className="w-3.5 h-3.5" /> Audience
         </label>
-        {totalSelected > 0 && (
-          <Badge variant="secondary" className="text-[10px]">{totalSelected} selected</Badge>
-        )}
+        <div className="flex gap-1.5">
+          {totalIncluded > 0 && <Badge variant="secondary" className="text-[10px]">{totalIncluded} included</Badge>}
+          {totalExcluded > 0 && <Badge variant="destructive" className="text-[10px]">{totalExcluded} excluded</Badge>}
+        </div>
       </div>
 
       {presets.length > 0 && (
@@ -113,43 +165,39 @@ export default function SegmentSelector({ brandId, selectedListIds, selectedSegm
         </Select>
       )}
 
-      {lists.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Lists</p>
-          <div className="max-h-32 overflow-y-auto space-y-1 rounded border border-border p-2 bg-card">
-            {lists.map(l => (
-              <label key={l.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
-                <Checkbox
-                  checked={selectedListIds.includes(l.id)}
-                  onCheckedChange={() => toggleList(l.id)}
-                  className="h-3.5 w-3.5"
-                />
-                <span className="truncate">{l.attributes?.name || l.id}</span>
-              </label>
-            ))}
-          </div>
+      {/* Include section */}
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-foreground">Include</p>
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+          <Input
+            value={includeSearch}
+            onChange={e => setIncludeSearch(e.target.value)}
+            placeholder="Search lists & segments..."
+            className="h-7 text-xs pl-7 bg-card"
+          />
         </div>
-      )}
+        {renderCheckboxList(filteredIncludeLists, selectedListIds, toggleIncludeList, "Lists")}
+        {renderCheckboxList(filteredIncludeSegments, selectedSegmentIds, toggleIncludeSegment, "Segments")}
+      </div>
 
-      {segments.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Segments</p>
-          <div className="max-h-32 overflow-y-auto space-y-1 rounded border border-border p-2 bg-card">
-            {segments.map(s => (
-              <label key={s.id} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
-                <Checkbox
-                  checked={selectedSegmentIds.includes(s.id)}
-                  onCheckedChange={() => toggleSegment(s.id)}
-                  className="h-3.5 w-3.5"
-                />
-                <span className="truncate">{s.attributes?.name || s.id}</span>
-              </label>
-            ))}
-          </div>
+      {/* Exclude section */}
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-foreground">Exclude</p>
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+          <Input
+            value={excludeSearch}
+            onChange={e => setExcludeSearch(e.target.value)}
+            placeholder="Search to exclude..."
+            className="h-7 text-xs pl-7 bg-card"
+          />
         </div>
-      )}
+        {renderCheckboxList(filteredExcludeLists, excludeListIds, toggleExcludeList, "Lists")}
+        {renderCheckboxList(filteredExcludeSegments, excludeSegmentIds, toggleExcludeSegment, "Segments")}
+      </div>
 
-      {totalSelected > 0 && (
+      {totalIncluded > 0 && (
         <Button variant="ghost" size="sm" onClick={() => setSaveOpen(true)} className="text-xs h-7">
           <Save className="w-3 h-3 mr-1" /> Save as Preset
         </Button>

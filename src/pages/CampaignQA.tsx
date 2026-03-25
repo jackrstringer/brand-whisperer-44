@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ArrowLeft, Check, AlertTriangle, ExternalLink, Download, Send, FileUp } from "lucide-react";
+import { Loader2, ArrowLeft, Check, AlertTriangle, Download, Send, FileUp } from "lucide-react";
 import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import SegmentSelector from "@/components/brand/SegmentSelector";
 
 interface QAResult {
   links: {
@@ -40,6 +43,15 @@ export default function CampaignQA() {
   const [hasKlaviyo, setHasKlaviyo] = useState(false);
   const [pushing, setPushing] = useState(false);
 
+  // Editable fields
+  const [subjectLine, setSubjectLine] = useState("");
+  const [previewText, setPreviewText] = useState("");
+  const [sendListIds, setSendListIds] = useState<string[]>([]);
+  const [sendSegmentIds, setSendSegmentIds] = useState<string[]>([]);
+  const [excludeListIds, setExcludeListIds] = useState<string[]>([]);
+  const [excludeSegmentIds, setExcludeSegmentIds] = useState<string[]>([]);
+  const saveTimer = useRef<ReturnType<typeof setTimeout>>();
+
   useEffect(() => {
     if (!campaignId || !brandId) return;
     const load = async () => {
@@ -48,11 +60,48 @@ export default function CampaignQA() {
         supabase.from("klaviyo_connections").select("id").eq("brand_id", brandId).maybeSingle(),
       ]);
       setCampaign(c);
+      setSubjectLine(c?.subject_line || "");
+      setPreviewText(c?.preview_text || "");
+      setSendListIds(c?.send_list_ids || []);
+      setSendSegmentIds(c?.send_segment_ids || []);
+      setExcludeListIds((c as any)?.exclude_list_ids || []);
+      setExcludeSegmentIds((c as any)?.exclude_segment_ids || []);
       setHasKlaviyo(!!conn);
       setLoading(false);
     };
     load();
   }, [brandId, campaignId]);
+
+  const autoSave = useCallback((updates: Record<string, any>) => {
+    if (!campaignId) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      await supabase.from("campaigns").update(updates).eq("id", campaignId);
+    }, 800);
+  }, [campaignId]);
+
+  const handleSubjectLineChange = (val: string) => {
+    setSubjectLine(val);
+    autoSave({ subject_line: val });
+  };
+
+  const handlePreviewTextChange = (val: string) => {
+    setPreviewText(val);
+    autoSave({ preview_text: val });
+  };
+
+  const handleSegmentChange = (listIds: string[], segmentIds: string[], exclListIds?: string[], exclSegmentIds?: string[]) => {
+    setSendListIds(listIds);
+    setSendSegmentIds(segmentIds);
+    setExcludeListIds(exclListIds || []);
+    setExcludeSegmentIds(exclSegmentIds || []);
+    autoSave({
+      send_list_ids: listIds,
+      send_segment_ids: segmentIds,
+      exclude_list_ids: exclListIds || [],
+      exclude_segment_ids: exclSegmentIds || [],
+    });
+  };
 
   const runQA = async () => {
     if (!campaign?.html) return;
@@ -61,8 +110,8 @@ export default function CampaignQA() {
       const { data, error } = await supabase.functions.invoke("qa-campaign", {
         body: {
           html: campaign.html,
-          subjectLine: campaign.subject_line || "",
-          previewText: campaign.preview_text || "",
+          subjectLine: subjectLine,
+          previewText: previewText,
           brandId,
         },
       });
@@ -101,10 +150,12 @@ export default function CampaignQA() {
           campaignId,
           name: campaign.name,
           html: campaign.html,
-          subjectLine: campaign.subject_line,
-          previewText: campaign.preview_text,
-          listIds: campaign.send_list_ids,
-          segmentIds: campaign.send_segment_ids,
+          subjectLine,
+          previewText,
+          listIds: sendListIds,
+          segmentIds: sendSegmentIds,
+          excludeListIds,
+          excludeSegmentIds,
         },
       });
       if (error || data?.error) throw new Error(data?.error || error?.message);
@@ -123,6 +174,9 @@ export default function CampaignQA() {
   const StatusIcon = ({ passed }: { passed: boolean }) => passed
     ? <Check className="w-4 h-4 text-emerald-400" />
     : <AlertTriangle className="w-4 h-4 text-amber-400" />;
+
+  const slLength = subjectLine.length;
+  const ptLength = previewText.length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -155,8 +209,58 @@ export default function CampaignQA() {
           )}
         </div>
 
-        {/* Right - QA Results */}
-        <div className="w-[400px] border-l border-border overflow-y-auto p-5 space-y-4">
+        {/* Right - Settings & QA */}
+        <div className="w-[420px] border-l border-border overflow-y-auto p-5 space-y-5">
+
+          {/* Subject Line */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-foreground">Subject Line</label>
+              <span className={`text-[10px] ${slLength > 60 ? "text-amber-400" : "text-muted-foreground"}`}>
+                {slLength}/60
+              </span>
+            </div>
+            <Input
+              value={subjectLine}
+              onChange={e => handleSubjectLineChange(e.target.value)}
+              placeholder="Enter subject line..."
+              className="h-9 text-sm bg-card"
+            />
+          </div>
+
+          {/* Preview Text */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-foreground">Preview Text</label>
+              <span className={`text-[10px] ${ptLength > 90 ? "text-amber-400" : "text-muted-foreground"}`}>
+                {ptLength}/90
+              </span>
+            </div>
+            <Textarea
+              value={previewText}
+              onChange={e => handlePreviewTextChange(e.target.value)}
+              placeholder="Enter preview text..."
+              className="min-h-[60px] text-sm bg-card resize-none"
+              rows={2}
+            />
+          </div>
+
+          {/* Segment Selector */}
+          {brandId && (
+            <SegmentSelector
+              brandId={brandId}
+              selectedListIds={sendListIds}
+              selectedSegmentIds={sendSegmentIds}
+              excludeListIds={excludeListIds}
+              excludeSegmentIds={excludeSegmentIds}
+              onSelectionChange={handleSegmentChange}
+            />
+          )}
+
+          {/* Divider */}
+          <div className="border-t border-border" />
+
+          {/* QA Checks */}
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-medium">QA Checks</h2>
             {result && (
@@ -167,7 +271,7 @@ export default function CampaignQA() {
           </div>
 
           {running && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground py-8 justify-center">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground py-6 justify-center">
               <Loader2 className="w-4 h-4 animate-spin" /> Running QA checks...
             </div>
           )}
@@ -220,7 +324,7 @@ export default function CampaignQA() {
                 </CollapsibleContent>
               </Collapsible>
 
-              {/* Subject Line & Preview Text */}
+              {/* Subject Line & Preview Text QA */}
               <Collapsible defaultOpen={!result.subjectPreview.passed}>
                 <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg bg-card border border-border hover:bg-muted/50 transition-colors">
                   <div className="flex items-center gap-2">
