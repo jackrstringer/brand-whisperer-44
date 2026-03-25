@@ -108,6 +108,12 @@ This section must be comprehensive and airtight. Three representations that MUST
    - Each button sits in a card with a spec note below (JetBrains Mono listing key properties)
    - Buttons MUST use: correct font-family (ACTUAL brand font), correct font-weight, font-style:normal (default), correct fill, correct border (if brand uses a stroke it MUST be visible), correct border-radius, correct padding, white-space:nowrap
 
+IF the audit shows color_behavior = "campaign-reactive":
+   - Show the PRIMARY default CTA variant(s) first as the canonical examples.
+   - Then add a "Contextual Color Variants" subsection explaining that CTA fill/text colors adapt to each campaign's color theme.
+   - Show 3-5 observed color pairings as smaller example swatches (not full button cards).
+   - Include a rule: "CTA shape, radius, border, padding, font, and text-case remain constant. Only fill and text colors change to match the campaign theme."
+
 2. CSS code block with syntax coloring:
    - .comment (green), .prop (blue), .val (orange/brown), .sel (gold)
    - Values MUST match the rendered buttons above

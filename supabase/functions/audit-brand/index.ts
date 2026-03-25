@@ -37,7 +37,9 @@ The "audit" object must contain:
     "observed_labels": ["list every CTA label verbatim"],
     "max_label_length": "number of characters",
     "wraps_to_two_lines": false,
-    "notes": ""
+    "notes": "",
+    "color_behavior": "fixed | campaign-reactive",
+    "color_behavior_description": "If buttons appear in many different fill colors across campaigns (beyond 2-3 variants), describe the pattern: e.g. 'CTA fill color matches the campaign's primary section background color' or 'CTA adapts to each campaign's color theme'. If buttons use a fixed set of 1-3 colors, set color_behavior to 'fixed'."
   },
   "typography": {
     "headline_font_family": "exact name or [NEEDS CONFIRMATION]",
