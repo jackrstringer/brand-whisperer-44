@@ -152,6 +152,41 @@ export type Database = {
           },
         ]
       }
+      brand_segment_presets: {
+        Row: {
+          brand_id: string
+          created_at: string
+          id: string
+          list_ids: string[] | null
+          name: string
+          segment_ids: string[] | null
+        }
+        Insert: {
+          brand_id: string
+          created_at?: string
+          id?: string
+          list_ids?: string[] | null
+          name: string
+          segment_ids?: string[] | null
+        }
+        Update: {
+          brand_id?: string
+          created_at?: string
+          id?: string
+          list_ids?: string[] | null
+          name?: string
+          segment_ids?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_segment_presets_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brands: {
         Row: {
           created_at: string
@@ -197,12 +232,18 @@ export type Database = {
           html: string | null
           html_history: Json | null
           id: string
+          klaviyo_campaign_id: string | null
+          klaviyo_template_id: string | null
           name: string
           pinned_asset_urls: string[] | null
+          preview_text: string | null
           product_ids: string[] | null
           reference_campaign_ids: string[] | null
+          send_list_ids: string[] | null
+          send_segment_ids: string[] | null
           speed_mode: string | null
           status: string
+          subject_line: string | null
           updated_at: string
         }
         Insert: {
@@ -216,12 +257,18 @@ export type Database = {
           html?: string | null
           html_history?: Json | null
           id?: string
+          klaviyo_campaign_id?: string | null
+          klaviyo_template_id?: string | null
           name?: string
           pinned_asset_urls?: string[] | null
+          preview_text?: string | null
           product_ids?: string[] | null
           reference_campaign_ids?: string[] | null
+          send_list_ids?: string[] | null
+          send_segment_ids?: string[] | null
           speed_mode?: string | null
           status?: string
+          subject_line?: string | null
           updated_at?: string
         }
         Update: {
@@ -235,12 +282,18 @@ export type Database = {
           html?: string | null
           html_history?: Json | null
           id?: string
+          klaviyo_campaign_id?: string | null
+          klaviyo_template_id?: string | null
           name?: string
           pinned_asset_urls?: string[] | null
+          preview_text?: string | null
           product_ids?: string[] | null
           reference_campaign_ids?: string[] | null
+          send_list_ids?: string[] | null
+          send_segment_ids?: string[] | null
           speed_mode?: string | null
           status?: string
+          subject_line?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -281,6 +334,44 @@ export type Database = {
             columns: ["campaign_id"]
             isOneToOne: false
             referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      klaviyo_connections: {
+        Row: {
+          api_key_encrypted: string
+          brand_id: string
+          cached_lists: Json | null
+          cached_segments: Json | null
+          created_at: string
+          id: string
+          last_synced_at: string | null
+        }
+        Insert: {
+          api_key_encrypted: string
+          brand_id: string
+          cached_lists?: Json | null
+          cached_segments?: Json | null
+          created_at?: string
+          id?: string
+          last_synced_at?: string | null
+        }
+        Update: {
+          api_key_encrypted?: string
+          brand_id?: string
+          cached_lists?: Json | null
+          cached_segments?: Json | null
+          created_at?: string
+          id?: string
+          last_synced_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "klaviyo_connections_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: true
+            referencedRelation: "brands"
             referencedColumns: ["id"]
           },
         ]
