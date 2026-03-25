@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, Download, Send, Undo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -74,6 +75,8 @@ export default function CampaignEditor() {
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [pinnedAssetUrls, setPinnedAssetUrls] = useState<string[]>([]);
   const [canUndo, setCanUndo] = useState(false);
+  const [matchProductColors, setMatchProductColors] = useState(false);
+  const [designNotes, setDesignNotes] = useState("");
   const [subjectLine, setSubjectLine] = useState("");
   const [previewText, setPreviewText] = useState("");
   const [sendListIds, setSendListIds] = useState<string[]>([]);
@@ -230,6 +233,8 @@ export default function CampaignEditor() {
         brandId, campaignId, brief, goal, copy: extraCopy || undefined, speedMode,
         productIds: selectedProductIds.length > 0 ? selectedProductIds : undefined,
         pinnedAssetUrls: allPinned.length > 0 ? allPinned : undefined,
+        matchProductColors: matchProductColors || undefined,
+        designNotes: designNotes.trim() || undefined,
       }),
     }).catch(() => {});
 
@@ -680,6 +685,22 @@ export default function CampaignEditor() {
                       ))}
                     </div>
                   )}
+                </div>
+
+                {/* Branding & Design Adjustments */}
+                <div className="space-y-3">
+                  <label className="text-xs text-muted-foreground font-medium">Branding & Design</label>
+                  <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2.5">
+                    <span className="text-xs text-foreground">Match to Product Color Theme</span>
+                    <Switch checked={matchProductColors} onCheckedChange={setMatchProductColors} />
+                  </div>
+                  <Textarea
+                    value={designNotes}
+                    onChange={(e) => setDesignNotes(e.target.value)}
+                    placeholder="Any design notes — e.g. 'use dark background', 'keep it minimal'..."
+                    className="bg-card border-border min-h-[60px] text-sm"
+                    rows={2}
+                  />
                 </div>
 
                 <div className="space-y-3">
