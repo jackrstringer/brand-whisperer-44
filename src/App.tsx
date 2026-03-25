@@ -13,6 +13,7 @@ import BrandGuide from "./pages/BrandGuide";
 import GlobalSettings from "./pages/GlobalSettings";
 import CampaignsList from "./pages/CampaignsList";
 import CampaignEditor from "./pages/CampaignEditor";
+import CampaignQA from "./pages/CampaignQA";
 import AppLayout from "./components/AppLayout";
 import NotFound from "./pages/NotFound";
 
