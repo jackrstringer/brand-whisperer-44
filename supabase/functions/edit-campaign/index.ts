@@ -117,9 +117,16 @@ Deno.serve(async (req) => {
       ? profile.reference_image_urls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
       : [];
 
-    const hostedReferenceUrls = referenceUrls.slice(0, 3);
+    // Also include user-attached images from chat
+    const userAttachedUrls = Array.isArray(attachedImageUrls)
+      ? attachedImageUrls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
+      : [];
 
-    for (const url of hostedReferenceUrls) {
+    const hostedReferenceUrls = referenceUrls.slice(0, 3);
+    // Attached images go first so they're most prominent
+    const allImageUrls = [...userAttachedUrls.slice(0, 5), ...hostedReferenceUrls];
+
+    for (const url of allImageUrls) {
       try {
         const imgResp = await fetch(url);
         const contentType = imgResp.headers.get("content-type") || "image/png";
