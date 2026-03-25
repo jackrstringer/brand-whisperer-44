@@ -74,6 +74,10 @@ export default function CampaignEditor() {
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [pinnedAssetUrls, setPinnedAssetUrls] = useState<string[]>([]);
   const [canUndo, setCanUndo] = useState(false);
+  const [subjectLine, setSubjectLine] = useState("");
+  const [previewText, setPreviewText] = useState("");
+  const [sendListIds, setSendListIds] = useState<string[]>([]);
+  const [sendSegmentIds, setSendSegmentIds] = useState<string[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const previewPanelRef = useRef<HTMLDivElement>(null);
 
