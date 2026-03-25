@@ -255,7 +255,9 @@ Deno.serve(async (req) => {
     };
 
     // Build reference image blocks for vision (style only — never embed)
-    // Prefer pre-sliced images (guaranteed under 5MB) over full originals
+    // Prefer pre-sliced images (guaranteed under 5MB each, ~100-200KB JPEG slices)
+    // Claude API limits: 100 images/request, 5MB/image, 32MB total payload, 1568px optimal long edge
+    // Our slices are 600x1300 JPEG @ 0.85 = well within all limits
     const imageBlocks: any[] = [];
     const sliceUrls = Array.isArray((profile as any).reference_slice_urls)
       ? (profile as any).reference_slice_urls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
@@ -264,35 +266,50 @@ Deno.serve(async (req) => {
       ? profile.reference_image_urls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
       : [];
 
-    // Use slices if available (already sized for API), otherwise fall back to full images
+    // Use slices if available — can send many more since each is ~150KB
+    // With slices: send up to 40 (covers ~10-13 full campaigns at 3 slices each, well under 100 image limit and ~6MB total)
+    // Without slices: cap at 5 full images to stay under 32MB payload
     const urlsToSend = sliceUrls.length > 0 ? sliceUrls : referenceUrls;
-    const maxRefs = sliceUrls.length > 0 ? 15 : 5; // Can send more slices since they're smaller
+    const maxRefs = sliceUrls.length > 0 ? 40 : 5;
     const selectedReferenceUrls = urlsToSend.slice(0, maxRefs);
 
     console.log(`[generate-campaign] Using ${sliceUrls.length > 0 ? 'slices' : 'full images'}: ${selectedReferenceUrls.length} reference images`);
 
     // Fetch all reference images in PARALLEL with chunked base64
+    // Track cumulative payload to stay under 28MB (leaving 4MB headroom for text/prompt)
+    let totalPayloadBytes = 0;
+    const MAX_TOTAL_PAYLOAD = 28_000_000;
+
     const imagePromises = selectedReferenceUrls.map(async (url: string) => {
       try {
         const imgResp = await fetch(url);
         if (!imgResp.ok) return null;
-        const contentType = imgResp.headers.get("content-type") || "image/png";
+        const contentType = imgResp.headers.get("content-type") || "image/jpeg";
         const mediaType = contentType.split(";")[0].trim();
         const buf = await imgResp.arrayBuffer();
-        // Safety net: skip if still over 4.5MB raw (shouldn't happen with slices)
+        // Per-image safety: skip if over 4.5MB raw
         if (buf.byteLength > 4_500_000) {
           console.log(`[generate-campaign] Skipping oversized image (${(buf.byteLength / 1_000_000).toFixed(1)}MB)`);
           return null;
         }
         const b64 = arrayBufferToBase64(buf);
-        return { type: "image" as const, source: { type: "base64" as const, media_type: mediaType, data: b64 } };
+        return { type: "image" as const, source: { type: "base64" as const, media_type: mediaType, data: b64 }, _size: buf.byteLength };
       } catch { return null; }
     });
 
     const imageResults = await Promise.all(imagePromises);
     for (const result of imageResults) {
-      if (result) imageBlocks.push(result);
+      if (!result) continue;
+      const imgSize = (result as any)._size || 0;
+      if (totalPayloadBytes + imgSize > MAX_TOTAL_PAYLOAD) {
+        console.log(`[generate-campaign] Stopping at ${imageBlocks.length} images to stay under 28MB payload limit`);
+        break;
+      }
+      totalPayloadBytes += imgSize;
+      const { _size, ...block } = result as any;
+      imageBlocks.push(block);
     }
+    console.log(`[generate-campaign] Total reference image payload: ${(totalPayloadBytes / 1_000_000).toFixed(1)}MB across ${imageBlocks.length} images`);
 
     // Fetch ALL brand assets with AI-generated descriptions
     const { data: brandAssets } = await supabase
