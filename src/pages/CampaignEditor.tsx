@@ -48,7 +48,7 @@ export default function CampaignEditor() {
 
   const [chatInput, setChatInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [speedMode, setSpeedMode] = useState<"normal" | "fast">("normal");
+  const speedMode = "normal";
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [pinnedAssetUrls, setPinnedAssetUrls] = useState<string[]>([]);
   const [canUndo, setCanUndo] = useState(false);
@@ -74,7 +74,7 @@ export default function CampaignEditor() {
         setExtraCopy(campaign.extra_copy ?? "");
         setSelectedProductIds(Array.isArray(campaign.product_ids) ? campaign.product_ids : []);
         setPinnedAssetUrls(Array.isArray(campaign.pinned_asset_urls) ? campaign.pinned_asset_urls : []);
-        setSpeedMode(campaign.speed_mode === "fast" ? "fast" : "normal");
+        // speedMode is always "normal" now
         const history = campaign.html_history;
         setCanUndo(Array.isArray(history) && history.length > 0);
       }
@@ -510,28 +510,6 @@ export default function CampaignEditor() {
                   />
                 )}
                 <div className="space-y-3">
-                  <div className="flex items-center gap-2 p-3 rounded-lg border border-border bg-background">
-                    <Zap className={`w-4 h-4 ${speedMode !== "normal" ? "text-primary" : "text-muted-foreground"}`} />
-                    <span className="text-xs text-muted-foreground">Speed:</span>
-                    <div className="flex gap-1 flex-1">
-                      {(["normal", "fast"] as const).map((mode) => (
-                        <button
-                          key={mode}
-                          onClick={() => setSpeedMode(mode)}
-                          className={`flex-1 text-xs py-1.5 px-2 rounded-md transition-all capitalize ${
-                            speedMode === mode
-                              ? "bg-primary text-primary-foreground font-medium"
-                              : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                          }`}
-                        >
-                          {mode}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground text-center">
-                    {speedMode === "normal" ? "Opus 4.6 — highest quality" : "Sonnet 4.5 — good quality, faster"}
-                  </p>
                   <Button
                     onClick={generateCampaign}
                     disabled={!brief.trim() || generating}

@@ -212,8 +212,8 @@ Deno.serve(async (req) => {
     const { brandId, campaignId, brief, goal, copy, speedMode, productIds, pinnedAssetUrls: pinnedUrls } = await req.json();
     campaignIdForError = campaignId;
 
-    // Model selection based on speed mode
-    const GENERATION_MODEL = speedMode === "fast" ? "claude-sonnet-4-6" : "claude-opus-4-6";
+    // Always use Opus 4.6
+    const GENERATION_MODEL = "claude-opus-4-6";
     const QA_MODEL = "claude-sonnet-4-6";
 
     // Mark campaign as generating with start timestamp
