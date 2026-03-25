@@ -1,137 +1,127 @@
 
 
-# Campaign Generation Performance Audit -- 7 Fixes
+# Klaviyo Integration + Pre-Send QA System
 
 ## Overview
 
-Seven targeted fixes across three files to eliminate timeouts, reduce latency, and improve reliability. No prompt content, creative direction, or model selection changes.
+Connect each brand to a Klaviyo account via API key, enabling one-click export of campaigns as Klaviyo templates or live campaigns. Add subject line/preview text fields, segment/list selection with saved presets per brand, and a comprehensive pre-send QA review page.
 
-## Fix 1: Increase max_tokens
+## Architecture
 
-**Files**: `generate-campaign/index.ts`, `edit-campaign/index.ts`
-
-- `generate-campaign` Pass 1 (line 397): `8192` to `16384`
-- `generate-campaign` retry (line 428): `8192` to `16384`
-- `generate-campaign` QA pass (line 464): `8192` to `4096` (JSON patch output is much smaller)
-- `edit-campaign` (line 181): `8192` to `16384`
-
-## Fix 2: Parallelize DB queries
-
-**`generate-campaign/index.ts`** (lines 162-186): The brand_profiles and brands queries are independent reads. Run them in parallel, then chain user_preferences after brands resolves:
-
-```typescript
-await supabase.from("campaigns").update({ status: "generating" }).eq("id", campaignId);
-
-const [profileResult, brandResult] = await Promise.all([
-  supabase.from("brand_profiles").select("*").eq("brand_id", brandId).single(),
-  supabase.from("brands").select("user_id").eq("id", brandId).single(),
-]);
-// then user_preferences chained after brandResult
+```text
+┌─────────────┐     ┌──────────────────┐     ┌──────────────┐
+│  Campaign    │────▶│  QA Review Page  │────▶│  Send to     │
+│  Editor      │     │  (pre-send)      │     │  Klaviyo     │
+│              │     │                  │     │  Edge Fn     │
+│ + SL/PT      │     │ - Link audit     │     │              │
+│   fields     │     │ - Spell check    │     │ - Template   │
+│              │     │ - Visual check   │     │ - Campaign   │
+│ + Segment    │     │ - SL/PT check    │     │              │
+│   selector   │     │                  │     │              │
+└─────────────┘     └──────────────────┘     └──────────────┘
 ```
 
-**`edit-campaign/index.ts`** (lines 28-53): campaign, brand_profiles, brand_assets, and product_assets can be partially parallelized. Campaign must be fetched first (need brand_id), then the rest run in parallel.
+## Database Changes (1 migration)
 
-## Fix 3: Cap reference images
+1. **`klaviyo_connections` table** -- stores per-brand Klaviyo API key reference and cached lists/segments
+   - `id`, `brand_id` (FK), `api_key_name` (text, references the secret name), `cached_lists` (jsonb), `cached_segments` (jsonb), `last_synced_at`, `created_at`
 
-**`generate-campaign/index.ts`** line 205: Change normal mode cap from `10` to `5`.
+2. **`brand_segment_presets` table** -- saved segment/list combos per brand
+   - `id`, `brand_id`, `name` (text), `list_ids` (text[]), `segment_ids` (text[]), `created_at`
 
-```typescript
-const maxRefs = speedMode === "faster" ? 3 : 5; // was 10 for normal
-```
+3. **Add columns to `campaigns` table**:
+   - `subject_line` (text, nullable)
+   - `preview_text` (text, nullable)
+   - `send_list_ids` (text[], nullable)
+   - `send_segment_ids` (text[], nullable)
+   - `klaviyo_template_id` (text, nullable)
+   - `klaviyo_campaign_id` (text, nullable)
 
-## Fix 4: Chunked base64 encoding
+## Edge Functions (2 new)
 
-**Both files**: Replace all `btoa(String.fromCharCode(...new Uint8Array(buf)))` with a chunked function to avoid stack overflow on large images.
+### `klaviyo-proxy/index.ts`
+Single proxy edge function for all Klaviyo API calls. Uses the stored Klaviyo private API key (stored as a secret per brand, e.g. `KLAVIYO_KEY_{brandId short}`). Endpoints:
 
-```typescript
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
-}
-```
+- **GET /lists** -- fetches all lists from Klaviyo, caches in `klaviyo_connections`
+- **GET /segments** -- fetches all segments, caches
+- **POST /template** -- creates a Klaviyo template from campaign HTML
+- **POST /campaign** -- creates a Klaviyo campaign: creates template, creates campaign, assigns template to campaign message, assigns lists/segments as audiences
+- **POST /validate-key** -- tests the API key
 
-- `generate-campaign` line 216: replace `btoa(String.fromCharCode(...new Uint8Array(buf)))` with `arrayBufferToBase64(buf)`
-- `edit-campaign` line 90: same replacement
+Uses Klaviyo API revision `2026-01-15`. All calls go to `https://a.klaviyo.com/api/` with header `Authorization: Klaviyo-API-Key {key}` and `revision: 2026-01-15`.
 
-## Fix 5: Skip rehosting for already-hosted URLs
+### `qa-campaign/index.ts`
+Pre-send QA edge function. Receives campaign HTML + subject line + preview text. Uses AI (Lovable AI / Gemini Flash) to check:
+- Spelling/grammar in HTML body text
+- Spelling/grammar in subject line and preview text
+- Extracts all links, checks each is valid and within brand domain
+- Flags visual issues (missing alt tags, broken image patterns, empty sections)
 
-**`_shared/imagekit.ts`** `rehostHtmlImagesWithImageKit()` line 218: Already skips `ik.imagekit.io`. Add Supabase storage skip:
+Returns structured JSON with pass/fail per category and specific issues.
 
-```typescript
-if (/^https:\/\/ik\.imagekit\.io\//i.test(normalizedSource)) continue;
-if (/\.supabase\.co\/storage/i.test(normalizedSource)) continue;
-```
+## Frontend Changes
 
-**`edit-campaign/index.ts`** lines 55-96: The entire reference image rehosting block fetches images, uploads to ImageKit, extracts new URLs, then fetches again for base64. Replace with: check if URL is already permanent, skip rehost, fetch once for base64 only.
+### 1. Klaviyo Connection Setup (Brand Settings)
+New tab "Klaviyo" in `BrandSettings.tsx`:
+- Input field for Klaviyo Private API Key
+- "Connect" button that validates the key via `klaviyo-proxy` and stores it as a secret
+- Once connected: shows account status, "Sync Lists & Segments" button
+- The API key is stored using the `add_secret` tool pattern
 
-**`edit-campaign/index.ts`** lines 196-200: The `rehostHtmlImagesWithImageKit` call on output HTML will now naturally skip permanent URLs thanks to the shared function fix.
+### 2. Subject Line & Preview Text (Campaign Editor)
+Add to the campaign editor left panel (both in draft form and post-generation):
+- **Subject Line** input field (persisted to `campaigns.subject_line`)
+- **Preview Text** input field (persisted to `campaigns.preview_text`)
+- Character count indicators (SL recommended < 60 chars, PT < 90 chars)
 
-## Fix 6: AbortController timeout on Anthropic calls
+### 3. Segment/List Selector (Campaign Editor)
+Below SL/PT fields when a Klaviyo connection exists:
+- Multi-select for Lists and Segments (fetched from cached data)
+- "Save as Preset" button to store the current selection
+- Dropdown to load a saved preset
+- Persisted to `campaigns.send_list_ids` / `send_segment_ids`
 
-**Both files**: Add a `callAnthropic` helper with 120s timeout. On timeout, set campaign status to "error" with message "Generation timed out. Please try again with Fast mode."
+### 4. QA Review Page (`src/pages/CampaignQA.tsx`)
+New route: `/brands/:brandId/campaigns/:campaignId/qa`
 
-```typescript
-async function callAnthropic(body: object, apiKey: string, timeoutMs = 120000): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-  } catch (error) {
-    if (error.name === 'AbortError') throw new Error(`Anthropic API call timed out after ${timeoutMs/1000}s`);
-    throw error;
-  } finally { clearTimeout(timeout); }
-}
-```
+Accessed via "Review & Send" button in campaign editor (replaces/supplements current Export button).
 
-Replace all 4 `fetch("https://api.anthropic.com/...")` calls (3 in generate, 1 in edit) with `callAnthropic(...)`.
+Layout:
+- **Left column**: Campaign preview (reuse iframe renderer)
+- **Right column**: QA checklist with status indicators
 
-## Fix 7: QA pass returns JSON patch instead of full HTML
+QA Checks displayed:
+1. **Links Audit** -- table of all links found, each with status badge (valid/broken/external), domain match indicator
+2. **Content Spelling & Grammar** -- list of flagged issues in campaign body with location context
+3. **Subject Line & Preview Text** -- separate spell/grammar check, character length warnings
+4. **Visual Integrity** -- missing alt tags, empty sections, image load status
+5. **Brand Compliance** -- colors match brand palette, fonts correct
 
-**`generate-campaign/index.ts`**: Replace the `QA_SYSTEM_PROMPT` (lines 108-133) with a new prompt requesting JSON output:
+Each section shows green checkmark or red warning with details expandable.
 
-```
-You are an email QA auditor. Return ONLY a JSON response:
-{
-  "passes_qa": true/false,
-  "issues": [{ "description": "...", "find": "exact substring", "replace": "corrected substring" }]
-}
-```
+Bottom action bar:
+- "Export as Template" -- pushes HTML to Klaviyo as a template only
+- "Create Campaign" -- creates a full Klaviyo campaign with selected audiences, ready to schedule/send in Klaviyo
+- "Export HTML" -- existing download behavior
 
-The 8 check items from the instructions. QA `max_tokens` set to `4096`.
+### 5. Campaign Editor Top Bar Update
+Add "Review & Send" button next to existing "Export HTML" button. Navigates to QA page.
 
-**Response handler** (lines 467-484): Replace full-HTML acceptance with JSON parse + string patch application:
+## Secret Management
+The Klaviyo API key will be stored using the `add_secret` tool as `KLAVIYO_API_KEY`. Since this is a per-account (not per-brand) key in most Klaviyo setups, one key per user account is sufficient. If the user has multiple Klaviyo accounts, the `klaviyo_connections` table supports per-brand keys.
 
-```typescript
-const qaText = qaResult.content[0].text.trim();
-let qaData;
-try { qaData = JSON.parse(qaText); } catch { qaData = { passes_qa: true, issues: [] }; }
+## Files to Create/Modify
 
-let finalHtml = html;
-if (!qaData.passes_qa && qaData.issues?.length > 0) {
-  for (const issue of qaData.issues) {
-    if (issue.find && issue.replace && finalHtml.includes(issue.find)) {
-      finalHtml = finalHtml.replace(issue.find, issue.replace);
-    }
-  }
-}
-// Validate patched HTML still passes completeness + product checks, else keep original
-```
-
-## Files changed
-
-| File | Changes |
-|------|---------|
-| `supabase/functions/generate-campaign/index.ts` | Fixes 1-4, 6-7 |
-| `supabase/functions/edit-campaign/index.ts` | Fixes 1-2, 4-6 |
-| `supabase/functions/_shared/imagekit.ts` | Fix 5 (add Supabase storage skip) |
+| File | Action |
+|------|--------|
+| `supabase/migrations/xxx.sql` | New tables + campaign columns |
+| `supabase/functions/klaviyo-proxy/index.ts` | New edge function |
+| `supabase/functions/qa-campaign/index.ts` | New edge function |
+| `src/pages/CampaignQA.tsx` | New QA review page |
+| `src/pages/CampaignEditor.tsx` | Add SL/PT fields, segment selector, "Review & Send" button |
+| `src/pages/BrandSettings.tsx` | Add Klaviyo tab |
+| `src/components/brand/KlaviyoSetup.tsx` | New component for Klaviyo connection |
+| `src/components/brand/SegmentSelector.tsx` | New component for list/segment picker with presets |
+| `src/lib/types.ts` | Add new types |
+| `src/App.tsx` | Add QA route |
 
