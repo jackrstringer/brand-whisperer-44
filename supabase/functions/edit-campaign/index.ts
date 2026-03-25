@@ -125,7 +125,10 @@ Deno.serve(async (req) => {
         const contentType = imgResp.headers.get("content-type") || "image/png";
         const mediaType = contentType.split(";")[0].trim();
         const buf = await imgResp.arrayBuffer();
-        // FIX 4: Chunked base64 encoding
+        if (buf.byteLength > 3_800_000) {
+          console.log(`[edit-campaign] Skipping oversized image (${(buf.byteLength / 1_000_000).toFixed(1)}MB)`);
+          continue;
+        }
         const b64 = arrayBufferToBase64(buf);
         imageBlocks.push({
           type: "image",
