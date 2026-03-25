@@ -1,0 +1,1 @@
+ALTER TABLE public.campaigns ADD COLUMN IF NOT EXISTS exclude_list_ids text[], ADD COLUMN IF NOT EXISTS exclude_segment_ids text[];

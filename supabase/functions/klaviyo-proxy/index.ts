@@ -152,16 +152,19 @@ serve(async (req) => {
       const templateId = templateData.data.id;
 
       // 2. Create campaign
-      const audienceFilters: any[] = [];
+      const includedFilters: any[] = [];
       if (listIds?.length) {
-        audienceFilters.push(...listIds.map((id: string) => ({
-          type: "list", id
-        })));
+        includedFilters.push(...listIds.map((id: string) => ({ type: "list", id })));
       }
       if (segmentIds?.length) {
-        audienceFilters.push(...segmentIds.map((id: string) => ({
-          type: "segment", id
-        })));
+        includedFilters.push(...segmentIds.map((id: string) => ({ type: "segment", id })));
+      }
+      const excludedFilters: any[] = [];
+      if (excludeListIds?.length) {
+        excludedFilters.push(...excludeListIds.map((id: string) => ({ type: "list", id })));
+      }
+      if (excludeSegmentIds?.length) {
+        excludedFilters.push(...excludeSegmentIds.map((id: string) => ({ type: "segment", id })));
       }
 
       const campaignPayload: any = {
@@ -170,8 +173,8 @@ serve(async (req) => {
           attributes: {
             name,
             audiences: {
-              included: audienceFilters.length > 0 ? audienceFilters : undefined,
-              excluded: [],
+              included: includedFilters.length > 0 ? includedFilters : undefined,
+              excluded: excludedFilters.length > 0 ? excludedFilters : undefined,
             },
             "campaign-messages": {
               data: [{
