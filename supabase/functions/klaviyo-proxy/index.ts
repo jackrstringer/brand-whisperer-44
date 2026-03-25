@@ -120,7 +120,7 @@ serve(async (req) => {
         body: JSON.stringify({
           data: {
             type: "template",
-            attributes: { name, html },
+            attributes: { name, html, editor_type: "CODE" },
           },
         }),
       });
