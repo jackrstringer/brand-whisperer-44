@@ -684,6 +684,22 @@ export default function CampaignEditor() {
                   )}
                 </div>
 
+                {/* Branding & Design Adjustments */}
+                <div className="space-y-3">
+                  <label className="text-xs text-muted-foreground font-medium">Branding & Design</label>
+                  <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2.5">
+                    <span className="text-xs text-foreground">Match to Product Color Theme</span>
+                    <Switch checked={matchProductColors} onCheckedChange={setMatchProductColors} />
+                  </div>
+                  <Textarea
+                    value={designNotes}
+                    onChange={(e) => setDesignNotes(e.target.value)}
+                    placeholder="Any design notes — e.g. 'use dark background', 'keep it minimal'..."
+                    className="bg-card border-border min-h-[60px] text-sm"
+                    rows={2}
+                  />
+                </div>
+
                 <div className="space-y-3">
                   <Button
                     onClick={generateCampaign}
