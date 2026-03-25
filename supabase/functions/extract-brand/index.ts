@@ -64,7 +64,7 @@ CSS ARCHITECTURE:
 
 PAGE STRUCTURE:
 
-Cover (full viewport, dark bg)
+Cover (compact intro, dark bg, ~280-360px tall)
   Brand name (muted gray)
   "Email Design Rules" (white, large)
   Prepared by / date (JetBrains Mono)
@@ -84,7 +84,13 @@ Footer (dark bg)
 
 SECTION PATTERNS:
 
-Cover: Full-viewport dark section. Brand's accent color as a subtle blurred glow (600px circle, blur(200px), opacity 0.05). Simple and clean.
+Cover: Compact dark intro section (NOT full viewport). Brand's accent color as a subtle blurred glow (600px circle, blur(200px), opacity 0.05). Simple and clean.
+
+VERTICAL RHYTHM GUARDRAILS:
+- Never use min-height:100vh for the cover.
+- Keep title block spacing tight: ~8-20px between label/title/meta.
+- Keep section vertical padding in a 36-56px range.
+- Keep section intro paragraph bottom margin in a 20-32px range.
 
 Section Header: Every section has:
   Label: "01 / CTA Rules" (JetBrains Mono, uppercase, small, tracked, muted)
@@ -262,10 +268,12 @@ CRITICAL GENERATION RULES:
 - NEVER use colors not in the brand palette.
 - Component previews must use ACTUAL brand content from audit (real review text, real names, real CTA labels).
 - ONLY include components that were actually observed in reference emails.
+- DO NOT invent CTA button variants. Render only variants explicitly present in audit.cta_buttons.variants.
 - Social icons must match the actual platforms observed.
 - NO Photography Direction section, NO wireframe diagrams, NO Messaging Pillars prose.
 - No em dashes -- use -- or reword.
 - Load ACTUAL brand fonts via Google Fonts (not fallbacks).
+- Avoid excessive whitespace: never use min-height:100vh and avoid large top/bottom blank regions around headings.
 - The guide must feel like a premium, lean design reference -- not a bloated brand book.`;
 
 Deno.serve(async (req) => {
@@ -441,8 +449,17 @@ async function runGuideCall(
     if (docStart > -1) guideHtml = guideHtml.substring(docStart);
   }
 
+  guideHtml = normalizeGuideHtmlSpacing(guideHtml);
+
   console.log(`[extract-brand] Call 2 complete. Guide HTML length: ${guideHtml.length}`);
   return guideHtml;
+}
+
+function normalizeGuideHtmlSpacing(html: string) {
+  return html
+    .replace(/min-height:\s*100vh\s*;/gi, "min-height: 340px;")
+    .replace(/padding:\s*4rem\s+2rem\s*;/gi, "padding: 2.75rem 2rem;")
+    .replace(/margin-bottom:\s*3rem\s*;/gi, "margin-bottom: 1.75rem;");
 }
 
 async function processSpecStep(

@@ -67,7 +67,7 @@ export default function ReanalyzeBrand({ brandId, brandName, industry }: Reanaly
   const sliceImageFromUrl = (
     url: string,
     maxSliceHeight = 1300,
-    maxWidth = 600,
+    maxWidth = 900,
   ): Promise<Array<{ data: string; mediaType: string; sliceIndex: number; totalSlices: number }>> =>
     new Promise((resolve, reject) => {
       const img = new Image();
@@ -91,8 +91,8 @@ export default function ReanalyzeBrand({ brandId, brandName, industry }: Reanaly
           const ctx = canvas.getContext("2d")!;
           const origRatio = img.naturalWidth / width;
           ctx.drawImage(img, 0, sy * origRatio, img.naturalWidth, sh * origRatio, 0, 0, width, sh);
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-          results.push({ data: dataUrl.split(",")[1], mediaType: "image/jpeg", sliceIndex: i, totalSlices });
+          const dataUrl = canvas.toDataURL("image/png");
+          results.push({ data: dataUrl.split(",")[1], mediaType: "image/png", sliceIndex: i, totalSlices });
         }
         resolve(results);
       };

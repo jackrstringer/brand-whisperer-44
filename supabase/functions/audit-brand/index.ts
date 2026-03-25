@@ -153,16 +153,10 @@ Deno.serve(async (req) => {
       if (confirmed_properties.buttons) {
         const b = confirmed_properties.buttons;
         const radiusPart = b.border_radius != null ? `${b.border_radius}px` : "unknown";
-        parts.push(`Button border-radius: ${radiusPart}, font-weight: ${b.font_weight || "unknown"}, font-style: ${b.font_style || "normal"}`);
-        if (b.has_border === true) {
-          parts.push(`CTA has visible outer stroke: yes (confirmed from Figma)`);
-          if (b.border_color) parts.push(`CTA border color: ${b.border_color}`);
-          if (b.border_weight != null) parts.push(`CTA border weight: ${typeof b.border_weight === "number" ? `${b.border_weight}px` : b.border_weight}`);
-        } else if (b.has_border === false) {
-          parts.push(`CTA has visible outer stroke: no (confirmed from Figma)`);
-        }
+        parts.push(`Advisory (non-email source) button values: radius ${radiusPart}, font-weight ${b.font_weight || "unknown"}, font-style ${b.font_style || "normal"}`);
+        parts.push(`Treat CTA border/radius/shape as VISUAL-EVIDENCE-FIRST from the email campaigns. If advisory values conflict with campaign screenshots, trust screenshots and note conflict under needs_confirmation.`);
       }
-      parts.push("\nUse these values as ground truth. Focus your visual audit on: CTA label text, copy patterns, layout spacing, component structures, voice/tone, photography style. Do NOT guess at font names or hex colors -- they have been confirmed above.");
+      parts.push("\nUse confirmed fonts/colors as ground truth. For CTA borders, radius, and variant shapes, prioritize what is visibly present in campaign screenshots. Focus your visual audit on: CTA label text, copy patterns, layout spacing, component structures, voice/tone, photography style.");
       confirmedPrefix = parts.join("\n") + "\n\n";
     }
 
@@ -183,42 +177,64 @@ Deno.serve(async (req) => {
       slices.sort((a, b) => a.sliceIndex - b.sliceIndex);
     }
 
-    // Cap total slices to avoid Anthropic 413 request_too_large errors
-    // Anthropic's max payload is ~20MB; each base64 image slice can be 1-3MB
-    const MAX_TOTAL_SLICES = 12;
-    let totalSliceCount = 0;
-    for (const [, slices] of campaignGroups) totalSliceCount += slices.length;
-    
-    if (totalSliceCount > MAX_TOTAL_SLICES) {
-      console.log(`Too many slices (${totalSliceCount}), trimming to ${MAX_TOTAL_SLICES}`);
-      // Distribute slices evenly across campaigns, prioritizing earlier campaigns
-      const campaignKeys = Array.from(campaignGroups.keys()).sort((a, b) => a - b);
-      let remaining = MAX_TOTAL_SLICES;
+    // Cap slices using BOTH count and payload budget instead of aggressive fixed trimming.
+    // This preserves far more visual evidence while staying under request size limits.
+    const MAX_TOTAL_SLICES = 80;
+    const MAX_TOTAL_BASE64_BYTES = 24 * 1024 * 1024; // keep headroom for prompt text/metadata
+    const originalSliceCount = Array.from(campaignGroups.values()).reduce((sum, slices) => sum + slices.length, 0);
+
+    const campaignKeys = Array.from(campaignGroups.keys()).sort((a, b) => a - b);
+    const selectedGroups = new Map<number, Array<{ data: string; mediaType: string; sliceIndex: number; totalSlices: number }>>();
+    const nextIndex = new Map<number, number>();
+    for (const key of campaignKeys) {
+      selectedGroups.set(key, []);
+      nextIndex.set(key, 0);
+    }
+
+    let selectedCount = 0;
+    let selectedBytes = 0;
+
+    const tryAddSlice = (campaignKey: number, sliceIdx: number) => {
+      const slices = campaignGroups.get(campaignKey)!;
+      if (sliceIdx >= slices.length || selectedCount >= MAX_TOTAL_SLICES) return false;
+
+      const slice = slices[sliceIdx];
+      const approxBytes = Math.ceil((slice.data.length * 3) / 4);
+      if (selectedBytes + approxBytes > MAX_TOTAL_BASE64_BYTES) return false;
+
+      selectedGroups.get(campaignKey)!.push(slice);
+      selectedCount += 1;
+      selectedBytes += approxBytes;
+      nextIndex.set(campaignKey, sliceIdx + 1);
+      return true;
+    };
+
+    // Pass 1: guarantee at least one top slice per campaign when possible.
+    for (const key of campaignKeys) {
+      tryAddSlice(key, 0);
+    }
+
+    // Pass 2: round-robin remaining slices to keep broad campaign coverage.
+    let progress = true;
+    while (progress && selectedCount < MAX_TOTAL_SLICES && selectedBytes < MAX_TOTAL_BASE64_BYTES) {
+      progress = false;
       for (const key of campaignKeys) {
-        const slices = campaignGroups.get(key)!;
-        const allowedForThis = Math.max(1, Math.floor(remaining / (campaignKeys.indexOf(key) === campaignKeys.length - 1 ? 1 : Math.ceil(campaignKeys.length / 2))));
-        const cap = Math.min(slices.length, Math.max(1, allowedForThis));
-        if (slices.length > cap) {
-          // Keep first and last slices, sample middle
-          const kept = [slices[0]];
-          if (cap > 2) {
-            const step = (slices.length - 2) / (cap - 2);
-            for (let i = 1; i < cap - 1; i++) {
-              kept.push(slices[Math.round(1 + (i - 1) * step)]);
-            }
-          }
-          if (cap > 1) kept.push(slices[slices.length - 1]);
-          campaignGroups.set(key, kept);
+        const idx = nextIndex.get(key) ?? 0;
+        if (tryAddSlice(key, idx)) {
+          progress = true;
         }
-        remaining -= campaignGroups.get(key)!.length;
-        if (remaining <= 0) {
-          // Remove remaining campaigns
-          for (const laterKey of campaignKeys.slice(campaignKeys.indexOf(key) + 1)) {
-            campaignGroups.delete(laterKey);
-          }
-          break;
-        }
+        if (selectedCount >= MAX_TOTAL_SLICES || selectedBytes >= MAX_TOTAL_BASE64_BYTES) break;
       }
+    }
+
+    campaignGroups.clear();
+    for (const key of campaignKeys) {
+      const selected = selectedGroups.get(key) ?? [];
+      if (selected.length > 0) campaignGroups.set(key, selected);
+    }
+
+    if (selectedCount < originalSliceCount) {
+      console.log(`Trimmed slices from ${originalSliceCount} to ${selectedCount} (~${Math.round(selectedBytes / (1024 * 1024) * 10) / 10}MB payload)`);
     }
 
     const campaignCount = campaignGroups.size;
