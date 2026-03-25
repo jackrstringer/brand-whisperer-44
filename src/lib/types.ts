@@ -46,6 +46,7 @@ export interface Product {
   brand_id: string;
   name: string;
   description: string | null;
+  url: string | null;
   created_at: string;
 }
 
