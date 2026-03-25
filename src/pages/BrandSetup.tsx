@@ -531,9 +531,9 @@ export default function BrandSetup() {
       toast.success("Brand saved! Generating starter campaigns...");
 
       const starterCampaigns = [
-        { name: "Welcome Campaign", goal: "welcome", brief: "Create a warm welcome email for new subscribers. Introduce the brand, set expectations, and include a compelling CTA." },
-        { name: "Social Proof Campaign", goal: "social_proof", brief: "Build trust with customer testimonials, reviews, and social proof. Highlight key benefits and include a strong call to action." },
-        { name: "General Highlight Campaign", goal: "highlight", brief: "Showcase the brand's key products/services with compelling visuals and copy. Drive engagement and conversions." },
+        { name: "Welcome Email", goal: "welcome", brief: "Warm welcome for new subscribers introducing the brand with a compelling CTA." },
+        { name: "Social Proof", goal: "social_proof", brief: "Build trust with testimonials and reviews. Highlight key benefits." },
+        { name: "Brand Highlight", goal: "highlight", brief: "Showcase top products/services with compelling visuals and copy." },
       ];
 
       for (const sc of starterCampaigns) {
