@@ -198,7 +198,7 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
 
     // FIX 1: max_tokens 16384, FIX 6: callAnthropic with timeout
     const response = await callAnthropic({
-      model: "claude-opus-4-6",
+      model: "claude-sonnet-4-6",
       max_tokens: 16384,
       system: systemMsg,
       messages: [{ role: "user", content: userContent }],

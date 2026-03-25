@@ -213,8 +213,8 @@ Deno.serve(async (req) => {
     campaignIdForError = campaignId;
 
     // Model selection based on speed mode
-    const GENERATION_MODEL = speedMode === "fast" ? "claude-sonnet-4-5-20250929" : "claude-opus-4-6";
-    const QA_MODEL = "claude-sonnet-4-5-20250929";
+    const GENERATION_MODEL = speedMode === "fast" ? "claude-sonnet-4-6" : "claude-opus-4-6";
+    const QA_MODEL = "claude-sonnet-4-6";
 
     // Mark campaign as generating with start timestamp
     const genStartedAt = new Date().toISOString();
