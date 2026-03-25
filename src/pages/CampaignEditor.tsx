@@ -198,6 +198,16 @@ export default function CampaignEditor() {
     setGenElapsed(0);
     setCampaign((c) => c ? { ...c, status: "generating" } : c);
 
+    // Upload any draft reference images
+    let draftRefUrls: string[] = [];
+    if (draftRefImages.length > 0) {
+      draftRefUrls = await uploadChatImages(draftRefImages, brandId, campaignId);
+      setDraftRefImages([]);
+      setDraftRefPreviews(prev => { prev.forEach(u => URL.revokeObjectURL(u)); return []; });
+    }
+
+    const allPinned = [...pinnedAssetUrls, ...draftRefUrls];
+
     const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-campaign`;
     fetch(url, {
       method: "POST",
@@ -209,7 +219,7 @@ export default function CampaignEditor() {
       body: JSON.stringify({
         brandId, campaignId, brief, goal, copy: extraCopy || undefined, speedMode,
         productIds: selectedProductIds.length > 0 ? selectedProductIds : undefined,
-        pinnedAssetUrls: pinnedAssetUrls.length > 0 ? pinnedAssetUrls : undefined,
+        pinnedAssetUrls: allPinned.length > 0 ? allPinned : undefined,
       }),
     }).catch(() => {});
 
