@@ -582,6 +582,44 @@ export default function CampaignEditor() {
                     }}
                   />
                 )}
+
+                {/* Reference images for this campaign */}
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Reference images (optional)</label>
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onDrop={(e) => { e.preventDefault(); e.stopPropagation(); addDraftRefImages(Array.from(e.dataTransfer.files)); }}
+                    onClick={() => draftFileInputRef.current?.click()}
+                    className="border border-dashed border-border rounded-lg p-4 text-center hover:border-primary/50 transition-colors cursor-pointer"
+                  >
+                    <ImageIcon className="w-4 h-4 mx-auto mb-1 text-muted-foreground" />
+                    <p className="text-[11px] text-muted-foreground">Drop reference images or click to browse</p>
+                    <input
+                      ref={draftFileInputRef}
+                      type="file"
+                      multiple
+                      accept=".jpg,.jpeg,.png,.webp,.gif"
+                      onChange={(e) => { if (e.target.files) addDraftRefImages(Array.from(e.target.files)); e.target.value = ""; }}
+                      className="hidden"
+                    />
+                  </div>
+                  {draftRefPreviews.length > 0 && (
+                    <div className="flex gap-1.5 flex-wrap">
+                      {draftRefPreviews.map((src, i) => (
+                        <div key={i} className="relative group w-12 h-12 rounded border border-border overflow-hidden">
+                          <img src={src} alt="" className="w-full h-full object-cover" />
+                          <button
+                            onClick={() => removeDraftRefImage(i)}
+                            className="absolute top-0 right-0 bg-background/80 rounded-bl p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="space-y-3">
                   <Button
                     onClick={generateCampaign}
