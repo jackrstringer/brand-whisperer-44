@@ -62,6 +62,13 @@ export default function CampaignEditor() {
   const [chatInput, setChatInput] = useState("");
   const [sending, setSending] = useState(false);
   const speedMode = "normal";
+  const [chatAttachments, setChatAttachments] = useState<File[]>([]);
+  const [chatAttachmentPreviews, setChatAttachmentPreviews] = useState<string[]>([]);
+  const [draftRefImages, setDraftRefImages] = useState<File[]>([]);
+  const [draftRefPreviews, setDraftRefPreviews] = useState<string[]>([]);
+  const chatFileInputRef = useRef<HTMLInputElement>(null);
+  const draftFileInputRef = useRef<HTMLInputElement>(null);
+  const chatDropRef = useRef<HTMLDivElement>(null);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [pinnedAssetUrls, setPinnedAssetUrls] = useState<string[]>([]);
   const [canUndo, setCanUndo] = useState(false);
