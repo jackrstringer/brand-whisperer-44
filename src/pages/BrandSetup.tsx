@@ -15,6 +15,7 @@ import SourceQuiz, { type SourceType } from "@/components/brand/SourceQuiz";
 import ResourceUploader from "@/components/brand/ResourceUploader";
 import AssetCategoryUploader, { type AssetCategory } from "@/components/brand/AssetCategoryUploader";
 import type { BrandExtraction } from "@/lib/types";
+import { sliceAndUploadReferenceImages, saveSliceUrls } from "@/lib/imageSlicing";
 
 type Step = "info" | "sources" | "uploads" | "auditing" | "audit_review" | "generating_guide" | "guide_review";
 
@@ -382,6 +383,13 @@ export default function BrandSetup() {
           extraction_sources: extractionSrcs,
         } as any);
         if (profileError) throw profileError;
+
+        // Fire-and-forget: slice reference images for generation use
+        const sliceBrandId = brandId!;
+        const sliceImageUrls = [...imageUrls];
+        sliceAndUploadReferenceImages(user.id, sliceBrandId, sliceImageUrls)
+          .then((sliceUrls) => saveSliceUrls(sliceBrandId, sliceUrls))
+          .catch((e) => console.warn("Slice upload failed (non-blocking):", e));
 
         // Fire-and-forget: upload asset files and analyze with AI in background
         // This does NOT block guide generation — results are needed later for campaign building

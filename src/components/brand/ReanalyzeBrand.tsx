@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import { sliceAndUploadReferenceImages, saveSliceUrls } from "@/lib/imageSlicing";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,6 +50,7 @@ interface ReanalyzeBrandProps {
 }
 
 export default function ReanalyzeBrand({ brandId, brandName, industry }: ReanalyzeBrandProps) {
+  const { user } = useAuth();
   const [phase, setPhase] = useState<Phase>("idle");
   const [progressValue, setProgressValue] = useState(0);
   const [progressMessage, setProgressMessage] = useState("");
@@ -163,6 +166,14 @@ export default function ReanalyzeBrand({ brandId, brandName, industry }: Reanaly
       setNeedsConfirmation(data.needs_confirmation || []);
       setProgressValue(100);
       setProgressMessage("Audit complete!");
+
+      // Fire-and-forget: re-slice and upload reference images for generation use
+      if (user?.id) {
+        sliceAndUploadReferenceImages(user.id, brandId, urls)
+          .then((sliceUrls) => saveSliceUrls(brandId, sliceUrls))
+          .catch((e) => console.warn("Slice re-upload failed (non-blocking):", e));
+      }
+
       setTimeout(() => setPhase("audit_review"), 500);
     } catch (err: any) {
       toast.error(err.message || "Re-analysis failed");

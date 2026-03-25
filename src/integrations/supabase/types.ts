@@ -107,6 +107,7 @@ export type Database = {
           qa_checklist: Json | null
           raw_extraction: Json | null
           reference_image_urls: string[] | null
+          reference_slice_urls: string[] | null
           system_prompt: string | null
         }
         Insert: {
@@ -122,6 +123,7 @@ export type Database = {
           qa_checklist?: Json | null
           raw_extraction?: Json | null
           reference_image_urls?: string[] | null
+          reference_slice_urls?: string[] | null
           system_prompt?: string | null
         }
         Update: {
@@ -137,6 +139,7 @@ export type Database = {
           qa_checklist?: Json | null
           raw_extraction?: Json | null
           reference_image_urls?: string[] | null
+          reference_slice_urls?: string[] | null
           system_prompt?: string | null
         }
         Relationships: [
