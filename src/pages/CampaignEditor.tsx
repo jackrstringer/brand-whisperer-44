@@ -6,11 +6,24 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, Send, Undo2, Zap } from "lucide-react";
+import { ArrowLeft, Download, Send, Undo2, Zap, Paperclip, X, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import type { Campaign, ChatMessage } from "@/lib/types";
+
+async function uploadChatImages(files: File[], brandId: string, campaignId: string): Promise<string[]> {
+  const urls: string[] = [];
+  for (const file of files) {
+    const ext = file.name.split(".").pop() || "png";
+    const path = `${brandId}/campaigns/${campaignId}/chat/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from("brand-assets").upload(path, file, { contentType: file.type });
+    if (error) { console.error("Upload error:", error); continue; }
+    const { data } = supabase.storage.from("brand-assets").getPublicUrl(path);
+    urls.push(data.publicUrl);
+  }
+  return urls;
+}
 
 const IMG_SRC_TAG_REGEX = /<img\b([^>]*?)\bsrc=(["'])(.*?)\2([^>]*)>/gi;
 const BROKEN_IMAGE_HOST_REGEX = /^(https?:\/\/(images\.unsplash\.com|source\.unsplash\.com|picsum\.photos))/i;
