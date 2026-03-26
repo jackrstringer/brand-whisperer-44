@@ -1,9 +1,9 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { ChevronDown, ChevronUp, Plus, Package, Pin, Search, ShoppingBag } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Package, Pin, Search, ShoppingBag, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import ProductCreator from "./ProductCreator";
 import type { Product, ProductAsset } from "@/lib/types";
 
@@ -48,29 +48,22 @@ interface ProductSelectorProps {
 }
 
 function pickBestImage(images: ShopifyImage[], bestHeroImageId?: string | null): ShopifyImage | null {
-  // Filter to only usable product photos
   const usable = images.filter((i) => i.is_usable_product_photo === true && i.processing_status === "ready");
   if (usable.length === 0) return null;
 
-  // If best hero is set and exists in usable, use it
   if (bestHeroImageId) {
     const hero = usable.find((i) => i.id === bestHeroImageId);
     if (hero) return hero;
   }
 
-  // Priority: transparent bg product_isolated > white bg product_isolated > hero lifestyle > first ready
   const transparentIsolated = usable.find((i) => i.image_type === "product_isolated" && i.has_transparent_bg);
   if (transparentIsolated) return transparentIsolated;
-
   const whiteIsolated = usable.find((i) => i.image_type === "product_isolated" && i.has_white_bg);
   if (whiteIsolated) return whiteIsolated;
-
   const isolated = usable.find((i) => i.image_type === "product_isolated");
   if (isolated) return isolated;
-
   const heroLifestyle = usable.find((i) => i.image_type === "product_lifestyle" && i.usable_as_hero);
   if (heroLifestyle) return heroLifestyle;
-
   return usable[0];
 }
 
@@ -86,7 +79,6 @@ export default function ProductSelector({
   const [products, setProducts] = useState<Product[]>([]);
   const [assets, setAssets] = useState<Record<string, ProductAsset[]>>({});
 
-  // Shopify state
   const [hasShopify, setHasShopify] = useState(false);
   const [shopifyProducts, setShopifyProducts] = useState<ShopifyProduct[]>([]);
   const [shopifyImages, setShopifyImages] = useState<Record<string, ShopifyImage[]>>({});
@@ -156,7 +148,6 @@ export default function ProductSelector({
     if (selectedProductIds.length > 0) fetchAssetsForProducts(selectedProductIds);
   }, [selectedProductIds, fetchAssetsForProducts]);
 
-  // Emit shopify product changes
   useEffect(() => {
     if (!onShopifyProductsChange) return;
     const selected: SelectedShopifyProduct[] = selectedShopifyIds.map((id) => {
@@ -176,6 +167,20 @@ export default function ProductSelector({
     }).filter((p) => p.image_url);
     onShopifyProductsChange(selected);
   }, [selectedShopifyIds, shopifyProducts, shopifyImages, onShopifyProductsChange]);
+
+  // Only show Shopify products that have at least one usable image
+  const shopifyProductsWithImages = useMemo(() => {
+    return shopifyProducts.filter((sp) => {
+      const images = shopifyImages[sp.id] || [];
+      return pickBestImage(images, sp.best_hero_image_id) !== null;
+    });
+  }, [shopifyProducts, shopifyImages]);
+
+  const filteredShopifyProducts = useMemo(() => {
+    const pool = shopifyProductsWithImages;
+    if (!shopifySearch) return pool;
+    return pool.filter((p) => p.title.toLowerCase().includes(shopifySearch.toLowerCase()));
+  }, [shopifyProductsWithImages, shopifySearch]);
 
   const toggleProduct = (productId: string) => {
     const isSelected = selectedProductIds.includes(productId);
@@ -206,10 +211,6 @@ export default function ProductSelector({
     );
   };
 
-  const filteredShopifyProducts = shopifySearch
-    ? shopifyProducts.filter((p) => p.title.toLowerCase().includes(shopifySearch.toLowerCase()))
-    : shopifyProducts;
-
   const totalSelected = selectedProductIds.length + selectedShopifyIds.length;
 
   return (
@@ -232,13 +233,13 @@ export default function ProductSelector({
 
       {expanded && (
         <div className="border-t border-border p-3 space-y-3">
-          {/* Shopify products section */}
-          {hasShopify && shopifyProducts.length > 0 && (
+          {/* Shopify products section — 3-wide scrollable grid */}
+          {hasShopify && shopifyProductsWithImages.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
-                <ShoppingBag className="w-3 h-3" /> Shopify Products
+                <ShoppingBag className="w-3 h-3" /> Shopify Products ({shopifyProductsWithImages.length})
               </div>
-              {shopifyProducts.length > 5 && (
+              {shopifyProductsWithImages.length > 6 && (
                 <div className="relative">
                   <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
                   <Input
@@ -249,48 +250,45 @@ export default function ProductSelector({
                   />
                 </div>
               )}
-              <div className="max-h-48 overflow-y-auto space-y-1">
-                {filteredShopifyProducts.map((sp) => {
-                  const isSelected = selectedShopifyIds.includes(sp.id);
-                  const images = shopifyImages[sp.id] || [];
-                  const bestImage = pickBestImage(images, sp.best_hero_image_id);
-                  const thumbUrl = bestImage
-                    ? (bestImage.processed_url || bestImage.imagekit_url || bestImage.original_url)
-                    : null;
-
-                  return (
-                    <label key={sp.id} className="flex items-center gap-2 cursor-pointer p-1 rounded hover:bg-muted/50">
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => toggleShopifyProduct(sp.id)}
-                        disabled={!isSelected && selectedShopifyIds.length >= 3}
-                      />
-                      {thumbUrl && (
-                        <img src={thumbUrl} alt="" className="w-6 h-6 rounded object-cover flex-shrink-0" />
-                      )}
-                      <span className="text-xs font-medium truncate">{sp.title}</span>
-                    </label>
-                  );
-                })}
-              </div>
-              {selectedShopifyIds.length > 0 && (
-                <div className="flex gap-1.5 flex-wrap">
-                  {selectedShopifyIds.map((id) => {
-                    const sp = shopifyProducts.find((p) => p.id === id);
-                    const images = shopifyImages[id] || [];
-                    const bestImage = pickBestImage(images, sp?.best_hero_image_id);
+              <ScrollArea className="max-h-64">
+                <div className="grid grid-cols-3 gap-2">
+                  {filteredShopifyProducts.map((sp) => {
+                    const isSelected = selectedShopifyIds.includes(sp.id);
+                    const images = shopifyImages[sp.id] || [];
+                    const bestImage = pickBestImage(images, sp.best_hero_image_id);
                     const thumbUrl = bestImage
                       ? (bestImage.processed_url || bestImage.imagekit_url || bestImage.original_url)
                       : null;
+
                     return (
-                      <div key={id} className="flex items-center gap-1 bg-primary/10 rounded px-1.5 py-0.5">
-                        {thumbUrl && <img src={thumbUrl} alt="" className="w-4 h-4 rounded object-cover" />}
-                        <span className="text-[10px] font-medium">{sp?.title}</span>
-                      </div>
+                      <button
+                        key={sp.id}
+                        onClick={() => toggleShopifyProduct(sp.id)}
+                        disabled={!isSelected && selectedShopifyIds.length >= 3}
+                        className={`relative rounded-lg overflow-hidden border-2 transition-all ${
+                          isSelected
+                            ? "border-primary ring-1 ring-primary/30"
+                            : "border-border hover:border-muted-foreground"
+                        } ${!isSelected && selectedShopifyIds.length >= 3 ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}`}
+                      >
+                        {thumbUrl && (
+                          <div className="aspect-square bg-muted">
+                            <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-background/90 to-transparent p-1.5 pt-4">
+                          <p className="text-[10px] font-medium truncate text-foreground">{sp.title}</p>
+                        </div>
+                        {isSelected && (
+                          <div className="absolute top-1 right-1 bg-primary rounded-full p-0.5">
+                            <Check className="w-3 h-3 text-primary-foreground" />
+                          </div>
+                        )}
+                      </button>
                     );
                   })}
                 </div>
-              )}
+              </ScrollArea>
             </div>
           )}
 
@@ -306,9 +304,11 @@ export default function ProductSelector({
                 return (
                   <div key={product.id} className="space-y-2">
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <Checkbox
+                      <input
+                        type="checkbox"
                         checked={isSelected}
-                        onCheckedChange={() => toggleProduct(product.id)}
+                        onChange={() => toggleProduct(product.id)}
+                        className="rounded border-border"
                       />
                       <span className="text-xs font-medium">{product.name}</span>
                       {product.description && (

@@ -90,16 +90,22 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
     return t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   };
 
+  // Filter out products with zero ready images
+  const productsWithImages = products.filter((p) => {
+    const prodImages = images[p.id] || [];
+    return prodImages.some((i) => i.processing_status === "ready");
+  });
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium">Shopify Products ({products.length})</h3>
+        <h3 className="text-sm font-medium">Shopify Products ({productsWithImages.length})</h3>
         <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
           <Switch checked={showRejected} onCheckedChange={setShowRejected} className="scale-75" />
           Show rejected
         </label>
       </div>
-      {products.map((product) => {
+      {productsWithImages.map((product) => {
         const prodImages = images[product.id] || [];
         const readyImages = prodImages.filter((i) => i.processing_status === "ready");
         const rescuedImages = readyImages.filter((i) => i.rescue_strategy && !i.is_usable_product_photo);
