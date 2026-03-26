@@ -105,7 +105,7 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
           Show rejected
         </label>
       </div>
-      {products.map((product) => {
+      {productsWithImages.map((product) => {
         const prodImages = images[product.id] || [];
         const readyImages = prodImages.filter((i) => i.processing_status === "ready");
         const rescuedImages = readyImages.filter((i) => i.rescue_strategy && !i.is_usable_product_photo);
