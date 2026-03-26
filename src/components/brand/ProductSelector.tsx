@@ -253,7 +253,7 @@ export default function ProductSelector({
                 {filteredShopifyProducts.map((sp) => {
                   const isSelected = selectedShopifyIds.includes(sp.id);
                   const images = shopifyImages[sp.id] || [];
-                  const bestImage = pickBestImage(images);
+                  const bestImage = pickBestImage(images, sp.best_hero_image_id);
                   const thumbUrl = bestImage
                     ? (bestImage.processed_url || bestImage.imagekit_url || bestImage.original_url)
                     : null;
