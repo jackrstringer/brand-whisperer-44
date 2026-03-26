@@ -108,6 +108,7 @@ export default function BrandSettings() {
           <TabsTrigger value="instructions">Instructions</TabsTrigger>
           <TabsTrigger value="qa">QA Checklist</TabsTrigger>
           <TabsTrigger value="klaviyo">Klaviyo</TabsTrigger>
+          <TabsTrigger value="shopify">Shopify</TabsTrigger>
           <TabsTrigger value="analysis">Analysis</TabsTrigger>
         </TabsList>
 
