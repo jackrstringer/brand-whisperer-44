@@ -122,7 +122,7 @@ export default function ProductSelector({
 
     const { data: imgs } = await supabase
       .from("shopify_product_images")
-      .select("id, product_id, original_url, imagekit_url, processed_url, image_type, subject_description, variant_shown, usable_as_hero, usable_as_product_shot, has_transparent_bg, has_white_bg, processing_status")
+      .select("id, product_id, original_url, imagekit_url, processed_url, image_type, subject_description, variant_shown, usable_as_hero, usable_as_product_shot, has_transparent_bg, has_white_bg, processing_status, is_usable_product_photo")
       .eq("brand_id", brandId);
 
     const grouped: Record<string, ShopifyImage[]> = {};
