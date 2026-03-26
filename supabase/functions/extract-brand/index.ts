@@ -237,7 +237,49 @@ Return ONLY valid JSON (no markdown fences, no commentary) with these two keys:
   "confidence": { "overall": "high|medium|low", "low_confidence_fields": [] }
 }
 
-"system_prompt" -- a complete, copy-paste-ready prompt for generating on-brand emails. Must include exact hex codes, px values, font stacks, layout rules, CTA rules (including white-space:nowrap), and the quality floor rules. This prompt should be detailed enough that an AI could build a matching email from it alone.
+"system_prompt" -- a complete, copy-paste-ready prompt for generating on-brand emails. Structure the system_prompt in this order:
+
+1. CAMPAIGN COLOR SYSTEM (first — governs everything else)
+   State the system type. Describe exactly what changes per campaign and what stays fixed.
+
+2. CANVAS AND LAYOUT
+   Exact values only.
+
+3. FONT LOADING
+   Exact Google Fonts <link> tags if applicable.
+   If custom fonts: state they cannot be loaded via Google Fonts.
+   For each font: role, name, complete CSS fallback stack.
+
+4. TYPOGRAPHY RULES
+   For each text element: all CSS properties.
+   For headlines: use the word-count/length-based sizing rule, NOT a px range.
+
+5. COLOR TOKENS
+   Every color as a labeled token with exact hex and usage.
+   Flag campaign-reactive colors explicitly.
+
+6. CTA SYSTEM
+   System overview first.
+   Then each variant: complete CSS + whether color is fixed or reactive.
+   Observed CTA labels list.
+
+7. LOGO PLACEMENT
+   Exact rules: dedicated bar vs integrated, light/dark usage, padding, footer treatment.
+
+8. COMPONENT LIBRARY
+   Each component: description + complete inline CSS.
+
+9. CAMPAIGN STRUCTURE TEMPLATE
+   Most common observed structure as an ordered block list.
+
+10. PROHIBITED PATTERNS
+    Explicit DO NOT list derived from audit observations.
+    Design prohibitions AND copy prohibitions.
+    Format as imperatives.
+
+Do not include general email development advice. Every rule must be traceable to the reference campaigns.
+
+Must include exact hex codes, px values, font stacks, layout rules, CTA rules (including white-space:nowrap), and the quality floor rules. This prompt should be detailed enough that an AI could build a matching email from it alone.
 
 CRITICAL:
 - CTA font-style defaults to NORMAL. Only mark italic if explicitly confirmed.
