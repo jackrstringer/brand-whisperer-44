@@ -1,68 +1,116 @@
 
 
-# Upgrade Brand Analysis Pipeline — Model, Prompts, and UX
+# Shopify Product Sync Integration
 
-Six changes across 3 files. All prompt/model/UX — no schema or architectural changes.
-
----
-
-## Changes
-
-### 1. `supabase/functions/audit-brand/index.ts`
-
-**Model upgrade**: Change `claude-sonnet-4-20250514` to `claude-opus-4-6-20260801`, `max_tokens: 8000` to `16000` (line 276-277).
-
-**Prompt expansion**: Add the following new schema fields to `SINGLE_PASS_AUDIT_PROMPT`:
-- `campaign_inventory` (total count, campaign types observed with frequency)
-- `campaign_color_system` (system_type, color inheritance, per-campaign examples)
-- `logo_usage` (dedicated bar, light/dark rules, footer treatment)
-- Expand `cta_buttons` with `cta_system_overview`, per-variant `is_color_campaign_reactive` + `observed_colors_across_campaigns`, and a `color_reactivity` sub-object
-- Replace `headline_size_range` with `headline_sizing_system` (rule description + observed examples)
-- Add `body_text_alignment` to typography
-
-Add new instruction paragraphs to the prompt for campaign color system detection, body text alignment verification, headline sizing rules, and logo placement analysis.
-
-### 2. `supabase/functions/extract-brand/index.ts`
-
-**SPEC_PROMPT** (line ~223-247): Append structured `system_prompt` ordering rules — 10 sections from Campaign Color System through Prohibited Patterns. Add instruction that every rule must be traceable to reference campaigns.
-
-**GUIDE_PROMPT** (line ~249-283): Add new mandatory sections:
-- Section 0A: Campaign Inventory
-- Section 0B: Campaign Color System (with live demo blocks)
-- Section 0C: Logo Usage
-- Restructure CTA section (system overview → base styles → variants → color reactivity → labels → non-negotiables)
-- Component section requirements (live example + CSS + color reactivity + usage context)
-- Font separation rule (guide chrome fonts vs campaign fonts)
-- Specificity rule (no ranges where rules exist)
-
-**Guide model upgrade** (line 432-434): Change `claude-sonnet-4-20250514` to `claude-opus-4-6-20260801`. Keep `max_tokens: 64000`.
-
-### 3. `src/pages/BrandSetup.tsx`
-
-**Progress messages** (lines 31-36): Update `GUIDE_MESSAGES` to reflect phase-based progress:
-```
-"Phase 1: Analyzing campaigns..."
-"Phase 2: Building brand spec..."
-"Phase 3: Generating brand guide (3-5 min)..."
-"Finalizing documentation..."
-```
-
-**Status messaging** (lines 832-842): Replace the generating_guide UI with:
-- Updated copy: "Deep brand analysis in progress. This typically takes 5-10 minutes for a complete brand guide."
-- "Go to dashboard" button that navigates to `/brands/{brandId}`
-- Live phase tracker showing 3 phases with running/complete/pending states and elapsed time per phase
-- Subtitle: "You can leave this page — we'll notify you here when it's ready."
-
-**Timeout** (line 453): Change `MAX_POLL_TIME` from `5 * 60 * 1000` to `15 * 60 * 1000`.
-
-Also apply the same timeout increase in `src/components/brand/ReanalyzeBrand.tsx` if it has a similar `MAX_POLL_TIME` constant.
+This is a custom Shopify integration for importing product imagery into the brand asset library — not for selling products, so the built-in Lovable Shopify connector does not apply here.
 
 ---
 
-## Technical notes
+## Scope
 
-- `claude-opus-4-6-20260801` is used via the same Anthropic API endpoint — no code changes needed beyond the model string.
-- The audit prompt additions are additive — existing schema fields are preserved; new fields are added alongside them.
-- The phase tracker in BrandSetup needs new state (`currentPhase`, `phaseTimings`) to track which step is active and render elapsed times.
-- No database migrations required.
+3 new database tables, 4 new edge functions, UI additions to Brand Settings and Campaign Editor. Requires two new secrets (SHOPIFY_API_KEY, SHOPIFY_API_SECRET).
+
+---
+
+## Phase 1: Database
+
+Create tables with RLS (users can only access data for brands they own):
+
+**shopify_connections** — stores OAuth tokens per brand
+- id, brand_id, shop_domain, access_token (encrypted), scope, connected_at, last_synced_at
+
+**shopify_products** — synced product catalog
+- id, brand_id, shopify_product_id, title, handle, product_type, tags[], variants (jsonb), status, shopify_updated_at, synced_at
+
+**shopify_product_images** — per-image with AI classification
+- id, brand_id, product_id (FK → shopify_products), shopify_image_id, original_url, imagekit_url, processed_url
+- Classification fields: image_type, has_white_bg, has_transparent_bg, background_type, subject_description, variant_shown, dominant_colors[], usable_as_hero, usable_as_product_shot, confidence, processing_status, classified_at
+
+RLS policies mirror existing pattern: `EXISTS (SELECT 1 FROM brands WHERE brands.id = X.brand_id AND brands.user_id = auth.uid())`.
+
+---
+
+## Phase 2: Secrets
+
+Request SHOPIFY_API_KEY and SHOPIFY_API_SECRET from user (obtained from Shopify Partner Dashboard app credentials).
+
+---
+
+## Phase 3: Edge Functions
+
+**shopify-install** — generates OAuth install URL
+- Input: `{ brandId, shopDomain }`
+- Returns: `{ installUrl }` pointing to Shopify's OAuth authorize endpoint
+
+**shopify-connect** — OAuth callback handler
+- Verifies HMAC, exchanges code for access_token
+- Saves to shopify_connections
+- Triggers initial sync
+
+**shopify-sync-products** — fetches all products + images via Shopify REST API
+- Paginates through `GET /admin/api/2024-01/products.json`
+- Upserts shopify_products and shopify_product_images
+- Rehosts images to ImageKit using existing `_shared/imagekit.ts`
+- Triggers classification for pending images
+
+**shopify-classify-images** — Claude vision classification + ImageKit bg-remove
+- Processes pending images in batches of 10
+- Classifies each image (type, background, usability, colors)
+- If `background_removal_recommended`: sets `processed_url = imagekit_url + "?tr=bg-remove"`
+- Updates processing_status to 'ready' or 'failed'
+
+---
+
+## Phase 4: UI Changes
+
+**Brand Settings — new "Shopify" tab:**
+- Not connected: shop domain input + "Connect Shopify" button → calls shopify-install → redirects to Shopify OAuth
+- Connected: shop domain display, last synced time, product/image counts, "Sync Now" button, "Disconnect" button
+
+**Brand Settings — Products tab enhancement:**
+- Show Shopify-synced products alongside manual products
+- Each product card shows image count, processing status badge, first ready thumbnail
+- Expandable image grid with type badges, descriptions, original/processed toggle
+
+**Campaign Editor — ProductSelector upgrade:**
+- If brand has Shopify connection + synced products: show searchable product dropdown with thumbnails
+- Auto-select best image per product (transparent > white bg > lifestyle hero > fallback)
+- User can manually swap images from product's image grid
+- Falls back to existing manual ProductSelector if no Shopify connection
+
+**Campaign generation payload:**
+- Pass `selected_products[]` with title, description, image_url, image_type, variant
+- Inject product image mandate into generate-campaign prompt
+
+---
+
+## Files Created/Modified
+
+| File | Action |
+|------|--------|
+| Migration SQL | Create 3 tables + RLS |
+| `supabase/functions/shopify-install/index.ts` | New |
+| `supabase/functions/shopify-connect/index.ts` | New |
+| `supabase/functions/shopify-sync-products/index.ts` | New |
+| `supabase/functions/shopify-classify-images/index.ts` | New |
+| `src/components/brand/ShopifySetup.tsx` | New — settings UI |
+| `src/components/brand/ShopifyProductGrid.tsx` | New — product/image browser |
+| `src/components/brand/ProductSelector.tsx` | Modified — Shopify-aware selection |
+| `src/pages/BrandSettings.tsx` | Modified — add Shopify tab |
+| `src/pages/CampaignEditor.tsx` | Modified — pass Shopify product data to generation |
+| `supabase/functions/generate-campaign/index.ts` | Modified — handle selected_products in prompt |
+
+---
+
+## Implementation Order
+
+1. Database migration (3 tables + RLS)
+2. Request SHOPIFY_API_KEY + SHOPIFY_API_SECRET secrets
+3. shopify-install + shopify-connect edge functions
+4. shopify-sync-products edge function
+5. shopify-classify-images edge function
+6. ShopifySetup component + BrandSettings tab
+7. ShopifyProductGrid component
+8. ProductSelector Shopify-aware upgrade
+9. Campaign generation payload wiring
 
