@@ -129,8 +129,9 @@ export default function BrandSettings() {
           {brandId && <AssetManager brandId={brandId} assets={assets} setAssets={setAssets} />}
         </TabsContent>
 
-        <TabsContent value="products">
+        <TabsContent value="products" className="space-y-6">
           {brandId && <ProductManager brandId={brandId} />}
+          {brandId && <ShopifyProductGrid brandId={brandId} />}
         </TabsContent>
 
         <TabsContent value="instructions" className="space-y-4">
