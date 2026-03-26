@@ -1,85 +1,68 @@
 
-## What I found (root cause)
-From the current code + live function logs, the failure is a **revision/schema mismatch**:
 
-- `klaviyo-proxy` is pinned to `revision: 2024-10-15`.
-- The campaign payload currently uses the newer `campaign-message.attributes.definition` shape.
-- Klaviyo is returning:
-  - `'channel' is a required field ... /attributes/channel`
-  - `'definition' is not a valid field ... /attributes/definition`
+# Upgrade Brand Analysis Pipeline — Model, Prompts, and UX
 
-So the function is mixing a **2025-style body** with a **2024 revision**.  
-Also, we currently send `Content-Type: application/json` globally, while campaign creation + template assignment should be `application/vnd.api+json`.
+Six changes across 3 files. All prompt/model/UX — no schema or architectural changes.
 
 ---
 
-## Client-side “Approve / Review & Send” flow (current + fix point)
-1. In `CampaignEditor.tsx`, **Review & Send** navigates to `/brands/:brandId/campaigns/:campaignId/qa`.
-2. In `CampaignQA.tsx`, user edits subject/preview/audience and clicks **Create Klaviyo Campaign**.
-3. `pushToKlaviyo("campaign")` invokes `klaviyo-proxy` with campaign HTML + SL/PT + include/exclude IDs.
-4. `klaviyo-proxy` runs template create → campaign create → assign template.
-5. On success, UI opens returned `klaviyoEditUrl`.
+## Changes
 
-Break is step 4 (campaign payload/header/revision compatibility).
+### 1. `supabase/functions/audit-brand/index.ts`
 
----
+**Model upgrade**: Change `claude-sonnet-4-20250514` to `claude-opus-4-6-20260801`, `max_tokens: 8000` to `16000` (line 276-277).
 
-## Implementation plan
+**Prompt expansion**: Add the following new schema fields to `SINGLE_PASS_AUDIT_PROMPT`:
+- `campaign_inventory` (total count, campaign types observed with frequency)
+- `campaign_color_system` (system_type, color inheritance, per-campaign examples)
+- `logo_usage` (dedicated bar, light/dark rules, footer treatment)
+- Expand `cta_buttons` with `cta_system_overview`, per-variant `is_color_campaign_reactive` + `observed_colors_across_campaigns`, and a `color_reactivity` sub-object
+- Replace `headline_size_range` with `headline_sizing_system` (rule description + observed examples)
+- Add `body_text_alignment` to typography
 
-### 1) Make Klaviyo request layer revision-aware and header-aware
-**File:** `supabase/functions/klaviyo-proxy/index.ts`
-- Refactor `klaviyoFetch(...)` to accept per-call:
-  - `revision`
-  - `contentType`
-  - `accept`
-- Keep defaults, but allow campaign endpoints to explicitly use:
-  - `Content-Type: application/vnd.api+json`
-  - `Accept: application/vnd.api+json`
+Add new instruction paragraphs to the prompt for campaign color system detection, body text alignment verification, headline sizing rules, and logo placement analysis.
 
-### 2) Use endpoint-specific revision compatibility
-**File:** `supabase/functions/klaviyo-proxy/index.ts`
-- Introduce constants:
-  - `TEMPLATE_REVISION = "2025-01-15"` (or unified 2025 revision)
-  - `CAMPAIGN_REVISION = "2025-10-15"`
-- Apply these per endpoint instead of one global revision constant.
+### 2. `supabase/functions/extract-brand/index.ts`
 
-### 3) Fix campaign payload shape by revision (primary + compatibility fallback)
-**File:** `supabase/functions/klaviyo-proxy/index.ts`
-- Primary create-campaign attempt: 2025 shape + vnd.api+json.
-- If Klaviyo returns schema-mismatch hints (channel/definition conflict), retry once with 2024-compatible message shape.
-- Preserve 3-step sequence:
-  1. create template
-  2. create campaign with inline campaign-messages
-  3. assign template to campaign message
-- Keep message ID extraction from relationships with fallback GET campaign-messages.
+**SPEC_PROMPT** (line ~223-247): Append structured `system_prompt` ordering rules — 10 sections from Campaign Color System through Prohibited Patterns. Add instruction that every rule must be traceable to reference campaigns.
 
-### 4) Align drag-and-drop behavior with your working app flow
-**File:** `supabase/functions/klaviyo-proxy/index.ts`
-- For `create-campaign` template creation, set `editor_type: "USER_DRAGGABLE"` (instead of CODE).
-- Keep `create-template` action behavior explicit (can remain CODE unless we intentionally switch it too).
-- Return editor URL as:
-  - `https://www.klaviyo.com/email-template-editor/campaign/{campaignId}/content/edit`
+**GUIDE_PROMPT** (line ~249-283): Add new mandatory sections:
+- Section 0A: Campaign Inventory
+- Section 0B: Campaign Color System (with live demo blocks)
+- Section 0C: Logo Usage
+- Restructure CTA section (system overview → base styles → variants → color reactivity → labels → non-negotiables)
+- Component section requirements (live example + CSS + color reactivity + usage context)
+- Font separation rule (guide chrome fonts vs campaign fonts)
+- Specificity rule (no ranges where rules exist)
 
-### 5) Tighten audience validation in QA submit
-**File:** `src/pages/CampaignQA.tsx`
-- Preflight validation before invoking function:
-  - require at least one included audience (and, if we follow your strict flow, enforce segment IDs specifically for campaign creation).
-- Keep include/exclude arrays explicit in request body.
-- Improve surfaced error messaging from function so pointer/detail is shown directly in toast.
+**Guide model upgrade** (line 432-434): Change `claude-sonnet-4-20250514` to `claude-opus-4-6-20260801`. Keep `max_tokens: 64000`.
 
-### 6) Improve observability for final debugging
-**File:** `supabase/functions/klaviyo-proxy/index.ts`
-- Add stage-specific error context:
-  - `create-template failed`
-  - `create-campaign failed`
-  - `assign-template failed`
-- Pass through Klaviyo error `detail` + `source.pointer` in function response.
+### 3. `src/pages/BrandSetup.tsx`
+
+**Progress messages** (lines 31-36): Update `GUIDE_MESSAGES` to reflect phase-based progress:
+```
+"Phase 1: Analyzing campaigns..."
+"Phase 2: Building brand spec..."
+"Phase 3: Generating brand guide (3-5 min)..."
+"Finalizing documentation..."
+```
+
+**Status messaging** (lines 832-842): Replace the generating_guide UI with:
+- Updated copy: "Deep brand analysis in progress. This typically takes 5-10 minutes for a complete brand guide."
+- "Go to dashboard" button that navigates to `/brands/{brandId}`
+- Live phase tracker showing 3 phases with running/complete/pending states and elapsed time per phase
+- Subtitle: "You can leave this page — we'll notify you here when it's ready."
+
+**Timeout** (line 453): Change `MAX_POLL_TIME` from `5 * 60 * 1000` to `15 * 60 * 1000`.
+
+Also apply the same timeout increase in `src/components/brand/ReanalyzeBrand.tsx` if it has a similar `MAX_POLL_TIME` constant.
 
 ---
 
-## Technical details (concise)
-- Current failure is not auth; template creation succeeds.
-- Current failure is schema compatibility in campaign step due revision/body mismatch.
-- Campaign endpoints should use `application/vnd.api+json`.
-- The 3-step flow itself is correct; only payload/header/revision compatibility needs hardening.
-- No DB migration needed for this fix.
+## Technical notes
+
+- `claude-opus-4-6-20260801` is used via the same Anthropic API endpoint — no code changes needed beyond the model string.
+- The audit prompt additions are additive — existing schema fields are preserved; new fields are added alongside them.
+- The phase tracker in BrandSetup needs new state (`currentPhase`, `phaseTimings`) to track which step is active and render elapsed times.
+- No database migrations required.
+
