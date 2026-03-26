@@ -114,7 +114,7 @@ export default function ProductSelector({
 
     const { data: prods } = await supabase
       .from("shopify_products")
-      .select("id, title, shopify_product_id")
+      .select("id, title, shopify_product_id, best_hero_image_id")
       .eq("brand_id", brandId)
       .eq("status", "active")
       .order("title");
