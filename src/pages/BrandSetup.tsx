@@ -29,9 +29,9 @@ const AUDIT_MESSAGES = [
 ];
 
 const GUIDE_MESSAGES = [
-  "Building brand spec...",
-  "Generating design system...",
-  "Creating brand guide...",
+  "Phase 1: Analyzing campaigns...",
+  "Phase 2: Building brand spec...",
+  "Phase 3: Generating brand guide (3-5 min)...",
   "Finalizing documentation...",
 ];
 
