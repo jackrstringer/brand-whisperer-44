@@ -522,6 +522,7 @@ export type Database = {
           classified_at: string | null
           confidence: string | null
           dominant_colors: string[] | null
+          has_salvageable_product: boolean | null
           has_text_overlay: boolean | null
           has_transparent_bg: boolean | null
           has_white_bg: boolean | null
@@ -534,6 +535,8 @@ export type Database = {
           processed_url: string | null
           processing_status: string
           product_id: string
+          rescue_strategy: string | null
+          rescue_transforms: string | null
           shopify_image_id: string | null
           subject_description: string | null
           usable_as_hero: boolean | null
@@ -546,6 +549,7 @@ export type Database = {
           classified_at?: string | null
           confidence?: string | null
           dominant_colors?: string[] | null
+          has_salvageable_product?: boolean | null
           has_text_overlay?: boolean | null
           has_transparent_bg?: boolean | null
           has_white_bg?: boolean | null
@@ -558,6 +562,8 @@ export type Database = {
           processed_url?: string | null
           processing_status?: string
           product_id: string
+          rescue_strategy?: string | null
+          rescue_transforms?: string | null
           shopify_image_id?: string | null
           subject_description?: string | null
           usable_as_hero?: boolean | null
@@ -570,6 +576,7 @@ export type Database = {
           classified_at?: string | null
           confidence?: string | null
           dominant_colors?: string[] | null
+          has_salvageable_product?: boolean | null
           has_text_overlay?: boolean | null
           has_transparent_bg?: boolean | null
           has_white_bg?: boolean | null
@@ -582,6 +589,8 @@ export type Database = {
           processed_url?: string | null
           processing_status?: string
           product_id?: string
+          rescue_strategy?: string | null
+          rescue_transforms?: string | null
           shopify_image_id?: string | null
           subject_description?: string | null
           usable_as_hero?: boolean | null
