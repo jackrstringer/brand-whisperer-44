@@ -163,6 +163,10 @@ export default function BrandSettings() {
           <Button onClick={saveInstructions} disabled={saving}>Save Checklist</Button>
         </TabsContent>
 
+        <TabsContent value="shopify">
+          {brandId && <ShopifySetup brandId={brandId} />}
+        </TabsContent>
+
         <TabsContent value="klaviyo">
           {brandId && <KlaviyoSetup brandId={brandId} />}
         </TabsContent>
