@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { ChevronDown, ChevronUp, Image as ImageIcon, Check, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Image as ImageIcon, Check, X, Wand2 } from "lucide-react";
 import { Loader2 } from "lucide-react";
 
 interface ShopifyProduct {
@@ -28,6 +28,9 @@ interface ShopifyImage {
   is_usable_product_photo: boolean | null;
   has_text_overlay: boolean | null;
   is_marketing_collateral: boolean | null;
+  has_salvageable_product: boolean | null;
+  rescue_strategy: string | null;
+  rescue_transforms: string | null;
 }
 
 export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
@@ -48,7 +51,7 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
 
       const { data: imgs } = await supabase
         .from("shopify_product_images")
-        .select("id, product_id, original_url, imagekit_url, processed_url, image_type, subject_description, processing_status, usable_as_hero, usable_as_product_shot, is_usable_product_photo, has_text_overlay, is_marketing_collateral")
+        .select("id, product_id, original_url, imagekit_url, processed_url, image_type, subject_description, processing_status, usable_as_hero, usable_as_product_shot, is_usable_product_photo, has_text_overlay, is_marketing_collateral, has_salvageable_product, rescue_strategy, rescue_transforms")
         .eq("brand_id", brandId);
 
       const grouped: Record<string, ShopifyImage[]> = {};
@@ -66,9 +69,20 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
   if (products.length === 0) return <p className="text-sm text-muted-foreground py-4">No Shopify products synced yet.</p>;
 
   const rejectionReason = (img: ShopifyImage) => {
-    if (img.is_marketing_collateral) return "Marketing collateral";
-    if (img.has_text_overlay) return "Has text overlay";
+    if (img.is_marketing_collateral) return "Unsalvageable collateral";
+    if (img.has_text_overlay) return "Text covers product";
     return "Not usable";
+  };
+
+  const rescueLabel = (strategy: string | null) => {
+    switch (strategy) {
+      case "bg_remove": return "BG removed";
+      case "smart_crop": return "AI cropped";
+      case "bg_remove_and_crop": return "BG removed + cropped";
+      case "crop_top": return "Top cropped";
+      case "crop_bottom": return "Bottom cropped";
+      default: return "Processed";
+    }
   };
 
   const typeLabel = (t: string | null) => {
@@ -87,10 +101,12 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
       </div>
       {products.map((product) => {
         const prodImages = images[product.id] || [];
-        const usableImages = prodImages.filter((i) => i.is_usable_product_photo === true || i.processing_status === "ready");
+        const readyImages = prodImages.filter((i) => i.processing_status === "ready");
+        const rescuedImages = readyImages.filter((i) => i.rescue_strategy && !i.is_usable_product_photo);
+        const cleanImages = readyImages.filter((i) => i.is_usable_product_photo === true);
         const rejectedImages = prodImages.filter((i) => i.processing_status === "rejected");
-        const displayImages = showRejected ? prodImages : usableImages;
-        const firstUsable = usableImages.find((i) => i.processing_status === "ready");
+        const displayImages = showRejected ? prodImages : readyImages;
+        const firstUsable = readyImages.find((i) => i.processing_status === "ready");
         const isExpanded = expandedId === product.id;
 
         return (
@@ -113,7 +129,7 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{product.title}</p>
                 <p className="text-[10px] text-muted-foreground">
-                  {usableImages.length} of {prodImages.length} images usable
+                  {cleanImages.length} clean{rescuedImages.length > 0 && ` + ${rescuedImages.length} rescued`} of {prodImages.length} images
                   {rejectedImages.length > 0 && ` • ${rejectedImages.length} rejected`}
                 </p>
               </div>
@@ -125,11 +141,12 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
                 {displayImages.map((img) => {
                   const isRejected = img.processing_status === "rejected";
                   const isReady = img.processing_status === "ready";
+                  const isRescued = isReady && img.rescue_strategy && !img.is_usable_product_photo;
                   const isBestHero = product.best_hero_image_id === img.id;
 
                   return (
                     <div key={img.id} className="space-y-1">
-                      <div className={`relative aspect-square rounded overflow-hidden border ${isRejected ? "border-destructive/30 opacity-50" : "border-border"}`}>
+                      <div className={`relative aspect-square rounded overflow-hidden border ${isRejected ? "border-destructive/30 opacity-50" : isRescued ? "border-amber-500/50" : "border-border"}`}>
                         <img
                           src={img.processed_url || img.imagekit_url || img.original_url}
                           alt=""
@@ -140,9 +157,14 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
                             <X className="w-6 h-6 text-destructive/60" />
                           </div>
                         )}
-                        {isReady && (
+                        {isReady && !isRescued && (
                           <div className="absolute top-1 left-1 bg-green-500 rounded-full p-0.5">
                             <Check className="w-2.5 h-2.5 text-white" />
+                          </div>
+                        )}
+                        {isRescued && (
+                          <div className="absolute top-1 left-1 bg-amber-500 rounded-full p-0.5">
+                            <Wand2 className="w-2.5 h-2.5 text-white" />
                           </div>
                         )}
                         {isBestHero && (
@@ -151,12 +173,17 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
                           </Badge>
                         )}
                       </div>
+                      {isRescued && (
+                        <Badge variant="outline" className="text-[8px] w-full justify-center border-amber-500/50 text-amber-600">
+                          {rescueLabel(img.rescue_strategy)}
+                        </Badge>
+                      )}
                       {isRejected && (
                         <Badge variant="destructive" className="text-[8px] w-full justify-center">
                           {rejectionReason(img)}
                         </Badge>
                       )}
-                      {!isRejected && img.image_type && (
+                      {!isRejected && !isRescued && img.image_type && (
                         <Badge variant="outline" className="text-[8px] w-full justify-center">
                           {typeLabel(img.image_type)}
                         </Badge>
