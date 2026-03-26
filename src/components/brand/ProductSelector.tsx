@@ -11,6 +11,7 @@ interface ShopifyProduct {
   id: string;
   title: string;
   shopify_product_id: string;
+  best_hero_image_id: string | null;
 }
 
 interface ShopifyImage {
@@ -27,6 +28,7 @@ interface ShopifyImage {
   has_transparent_bg: boolean | null;
   has_white_bg: boolean | null;
   processing_status: string;
+  is_usable_product_photo: boolean | null;
 }
 
 export interface SelectedShopifyProduct {
@@ -45,24 +47,31 @@ interface ProductSelectorProps {
   onShopifyProductsChange?: (products: SelectedShopifyProduct[]) => void;
 }
 
-function pickBestImage(images: ShopifyImage[]): ShopifyImage | null {
-  const ready = images.filter((i) => i.processing_status === "ready");
-  if (ready.length === 0) return images[0] || null;
+function pickBestImage(images: ShopifyImage[], bestHeroImageId?: string | null): ShopifyImage | null {
+  // Filter to only usable product photos
+  const usable = images.filter((i) => i.is_usable_product_photo === true && i.processing_status === "ready");
+  if (usable.length === 0) return null;
+
+  // If best hero is set and exists in usable, use it
+  if (bestHeroImageId) {
+    const hero = usable.find((i) => i.id === bestHeroImageId);
+    if (hero) return hero;
+  }
 
   // Priority: transparent bg product_isolated > white bg product_isolated > hero lifestyle > first ready
-  const transparentIsolated = ready.find((i) => i.image_type === "product_isolated" && i.has_transparent_bg);
+  const transparentIsolated = usable.find((i) => i.image_type === "product_isolated" && i.has_transparent_bg);
   if (transparentIsolated) return transparentIsolated;
 
-  const whiteIsolated = ready.find((i) => i.image_type === "product_isolated" && i.has_white_bg);
+  const whiteIsolated = usable.find((i) => i.image_type === "product_isolated" && i.has_white_bg);
   if (whiteIsolated) return whiteIsolated;
 
-  const isolated = ready.find((i) => i.image_type === "product_isolated");
+  const isolated = usable.find((i) => i.image_type === "product_isolated");
   if (isolated) return isolated;
 
-  const heroLifestyle = ready.find((i) => i.image_type === "product_lifestyle" && i.usable_as_hero);
+  const heroLifestyle = usable.find((i) => i.image_type === "product_lifestyle" && i.usable_as_hero);
   if (heroLifestyle) return heroLifestyle;
 
-  return ready[0];
+  return usable[0];
 }
 
 export default function ProductSelector({
@@ -105,7 +114,7 @@ export default function ProductSelector({
 
     const { data: prods } = await supabase
       .from("shopify_products")
-      .select("id, title, shopify_product_id")
+      .select("id, title, shopify_product_id, best_hero_image_id")
       .eq("brand_id", brandId)
       .eq("status", "active")
       .order("title");
@@ -113,7 +122,7 @@ export default function ProductSelector({
 
     const { data: imgs } = await supabase
       .from("shopify_product_images")
-      .select("id, product_id, original_url, imagekit_url, processed_url, image_type, subject_description, variant_shown, usable_as_hero, usable_as_product_shot, has_transparent_bg, has_white_bg, processing_status")
+      .select("id, product_id, original_url, imagekit_url, processed_url, image_type, subject_description, variant_shown, usable_as_hero, usable_as_product_shot, has_transparent_bg, has_white_bg, processing_status, is_usable_product_photo")
       .eq("brand_id", brandId);
 
     const grouped: Record<string, ShopifyImage[]> = {};
@@ -153,7 +162,7 @@ export default function ProductSelector({
     const selected: SelectedShopifyProduct[] = selectedShopifyIds.map((id) => {
       const product = shopifyProducts.find((p) => p.id === id);
       const images = shopifyImages[id] || [];
-      const bestImage = pickBestImage(images);
+      const bestImage = pickBestImage(images, product?.best_hero_image_id);
       const imageUrl = bestImage
         ? (bestImage.processed_url || bestImage.imagekit_url || bestImage.original_url)
         : "";
@@ -244,7 +253,7 @@ export default function ProductSelector({
                 {filteredShopifyProducts.map((sp) => {
                   const isSelected = selectedShopifyIds.includes(sp.id);
                   const images = shopifyImages[sp.id] || [];
-                  const bestImage = pickBestImage(images);
+                  const bestImage = pickBestImage(images, sp.best_hero_image_id);
                   const thumbUrl = bestImage
                     ? (bestImage.processed_url || bestImage.imagekit_url || bestImage.original_url)
                     : null;
@@ -269,7 +278,7 @@ export default function ProductSelector({
                   {selectedShopifyIds.map((id) => {
                     const sp = shopifyProducts.find((p) => p.id === id);
                     const images = shopifyImages[id] || [];
-                    const bestImage = pickBestImage(images);
+                    const bestImage = pickBestImage(images, sp?.best_hero_image_id);
                     const thumbUrl = bestImage
                       ? (bestImage.processed_url || bestImage.imagekit_url || bestImage.original_url)
                       : null;

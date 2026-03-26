@@ -16,12 +16,23 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-const CLASSIFICATION_PROMPT = `Classify this product image.
+const CLASSIFICATION_PROMPT = `Classify this product image. Be STRICT about filtering out marketing collateral.
+
+IMPORTANT RULES:
+- Images with ANY text overlay, marketing copy, testimonial quotes, benefit callouts, comparison charts, infographics, icons, badges, or graphic design elements are NOT usable product photos. These are marketing collateral.
+- Amazon A+ content panels, carousel ads, listicle graphics, before/after comparisons, and multi-panel layouts are marketing collateral.
+- Only clean photographs of the product — with or without models, with or without backgrounds — qualify as usable product photos.
+- A usable product photo should NEVER contain overlaid text, icons, or graphic elements.
+
 Return JSON:
 {
-  "image_type": "product_isolated" | "product_lifestyle" | "product_detail" | "group_shot" | "packaging" | "model_wearing" | "flat_lay" | "other",
+  "image_type": "product_isolated" | "product_lifestyle" | "product_detail" | "group_shot" | "packaging" | "model_wearing" | "flat_lay" | "marketing_collateral" | "other",
   "background_type": "white" | "transparent" | "studio" | "lifestyle" | "other",
   "has_clean_background": true/false,
+  "has_text_overlay": true/false,
+  "has_icons_or_graphics": true/false,
+  "is_marketing_collateral": true/false,
+  "is_usable_product_photo": true/false,
   "subject_description": "One sentence description of what is shown",
   "variant_shown": "string or null",
   "dominant_colors": ["#hex1", "#hex2"],
@@ -63,13 +74,17 @@ Deno.serve(async (req) => {
     }
 
     let classified = 0;
+    let rejected = 0;
     const BATCH_SIZE = 10;
+    const productIds = new Set<string>();
 
     for (let i = 0; i < images.length; i += BATCH_SIZE) {
       const batch = images.slice(i, i + BATCH_SIZE);
 
-      const results = await Promise.allSettled(batch.map(async (img) => {
+      await Promise.allSettled(batch.map(async (img) => {
         try {
+          productIds.add(img.product_id);
+
           // Mark as processing
           await supabase
             .from("shopify_product_images")
@@ -96,7 +111,7 @@ Deno.serve(async (req) => {
             body: JSON.stringify({
               model: "claude-sonnet-4-20250514",
               max_tokens: 1024,
-              system: "You are classifying a product image for an email marketing asset library. Analyze the image and return ONLY valid JSON matching the schema exactly.",
+              system: "You are classifying a product image for an email marketing asset library. Be STRICT: images with ANY text overlay, marketing copy, icons, badges, infographics, or graphic design elements are marketing collateral and NOT usable product photos. Only clean photographs qualify. Return ONLY valid JSON matching the schema exactly.",
               messages: [{
                 role: "user",
                 content: [
@@ -121,9 +136,11 @@ Deno.serve(async (req) => {
 
           const classification = JSON.parse(jsonMatch[0]);
 
-          // Determine processed_url with bg-remove if recommended
+          const isUsable = classification.is_usable_product_photo === true;
+
+          // Determine processed_url with bg-remove if recommended and usable
           let processedUrl = null;
-          if (classification.background_removal_recommended && img.imagekit_url) {
+          if (isUsable && classification.background_removal_recommended && img.imagekit_url) {
             processedUrl = img.imagekit_url.includes("?")
               ? `${img.imagekit_url}&tr=bg-remove`
               : `${img.imagekit_url}?tr=bg-remove`;
@@ -143,13 +160,17 @@ Deno.serve(async (req) => {
               usable_as_hero: classification.usable_as_hero,
               usable_as_product_shot: classification.usable_as_product_shot,
               confidence: classification.confidence,
+              has_text_overlay: classification.has_text_overlay || false,
+              is_marketing_collateral: classification.is_marketing_collateral || false,
+              is_usable_product_photo: isUsable,
               processed_url: processedUrl,
-              processing_status: "ready",
+              processing_status: isUsable ? "ready" : "rejected",
               classified_at: new Date().toISOString(),
             })
             .eq("id", img.id);
 
-          classified++;
+          if (isUsable) classified++;
+          else rejected++;
         } catch (err) {
           console.error(`Classification failed for image ${img.id}:`, err);
           await supabase
@@ -160,7 +181,49 @@ Deno.serve(async (req) => {
       }));
     }
 
-    return new Response(JSON.stringify({ classified, total: images.length }), {
+    // Post-classification curation: pick best hero per product
+    for (const productId of productIds) {
+      const { data: readyImages } = await supabase
+        .from("shopify_product_images")
+        .select("id, image_type, has_transparent_bg, has_white_bg, usable_as_hero, imagekit_url, processed_url")
+        .eq("product_id", productId)
+        .eq("is_usable_product_photo", true)
+        .in("processing_status", ["ready"]);
+
+      if (!readyImages || readyImages.length === 0) {
+        console.warn(`Product ${productId}: no usable images found`);
+        continue;
+      }
+
+      // Pick best hero: transparent isolated > white isolated > any isolated > hero lifestyle > first
+      let bestId: string | null = null;
+      const transparentIsolated = readyImages.find((i) => i.image_type === "product_isolated" && i.has_transparent_bg);
+      const whiteIsolated = readyImages.find((i) => i.image_type === "product_isolated" && i.has_white_bg);
+      const anyIsolated = readyImages.find((i) => i.image_type === "product_isolated");
+      const heroLifestyle = readyImages.find((i) => i.usable_as_hero);
+
+      const best = transparentIsolated || whiteIsolated || anyIsolated || heroLifestyle || readyImages[0];
+      bestId = best.id;
+
+      // If no transparent bg on best, auto-apply bg-remove
+      if (best && !best.has_transparent_bg && best.imagekit_url && !best.processed_url) {
+        const processedUrl = best.imagekit_url.includes("?")
+          ? `${best.imagekit_url}&tr=bg-remove`
+          : `${best.imagekit_url}?tr=bg-remove`;
+        await supabase
+          .from("shopify_product_images")
+          .update({ processed_url: processedUrl })
+          .eq("id", best.id);
+      }
+
+      // Update product with best hero
+      await supabase
+        .from("shopify_products")
+        .update({ best_hero_image_id: bestId })
+        .eq("id", productId);
+    }
+
+    return new Response(JSON.stringify({ classified, rejected, total: images.length }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
