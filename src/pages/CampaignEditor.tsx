@@ -609,6 +609,7 @@ export default function CampaignEditor() {
                       setSelectedProductIds(ids);
                       setPinnedAssetUrls(pinned);
                     }}
+                    onShopifyProductsChange={setSelectedShopifyProducts}
                   />
                 )}
 
