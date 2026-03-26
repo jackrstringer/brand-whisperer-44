@@ -480,6 +480,21 @@ You MUST feature these products prominently in the campaign. Use at least one im
       part3 += productRequirements;
     }
 
+    // Shopify product images injection
+    if (Array.isArray(shopifyProducts) && shopifyProducts.length > 0) {
+      part3 += `\n\n=== PRODUCT IMAGES TO FEATURE ===`;
+      for (const sp of shopifyProducts) {
+        part3 += `\n- ${sp.title}: ${sp.image_url}`;
+        if (sp.description) part3 += `\n  Description: ${sp.description}`;
+        if (sp.image_type) part3 += `\n  Image type: ${sp.image_type}`;
+        if (sp.variant) part3 += `\n  Variant: ${sp.variant}`;
+      }
+      part3 += `\n\nThese images MUST appear in the email. Use them as follows:
+- product_isolated or product_lifestyle: use as hero or mid-email product feature
+- Do not modify image URLs in any way
+- Do not use any other product image URLs`;
+    }
+
     part3 += `\n\nThe output must MATCH the brand's design language (colors, fonts, spacing, tone) from the references above, but the LAYOUT and STRUCTURE must be original and tailored to this specific campaign goal. Return only the complete HTML.`;
     userContent.push({ type: "text", text: part3 });
 
