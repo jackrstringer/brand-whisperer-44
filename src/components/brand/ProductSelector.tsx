@@ -162,7 +162,7 @@ export default function ProductSelector({
     const selected: SelectedShopifyProduct[] = selectedShopifyIds.map((id) => {
       const product = shopifyProducts.find((p) => p.id === id);
       const images = shopifyImages[id] || [];
-      const bestImage = pickBestImage(images);
+      const bestImage = pickBestImage(images, product?.best_hero_image_id);
       const imageUrl = bestImage
         ? (bestImage.processed_url || bestImage.imagekit_url || bestImage.original_url)
         : "";
