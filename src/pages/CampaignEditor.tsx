@@ -236,6 +236,7 @@ export default function CampaignEditor() {
         pinnedAssetUrls: allPinned.length > 0 ? allPinned : undefined,
         matchProductColors: matchProductColors || undefined,
         designNotes: designNotes.trim() || undefined,
+        shopifyProducts: selectedShopifyProducts.length > 0 ? selectedShopifyProducts : undefined,
       }),
     }).catch(() => {});
 
