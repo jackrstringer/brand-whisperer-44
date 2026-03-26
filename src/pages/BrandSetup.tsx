@@ -338,6 +338,7 @@ export default function BrandSetup() {
     if (!auditData || !user) { toast.error("No audit data available"); return; }
 
     setStep("generating_guide");
+    guideStartTimeRef.current = Date.now();
     setProgressValue(0);
     setProgressMessage(GUIDE_MESSAGES[0]);
 
