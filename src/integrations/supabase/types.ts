@@ -477,6 +477,175 @@ export type Database = {
           },
         ]
       }
+      shopify_connections: {
+        Row: {
+          access_token: string
+          brand_id: string
+          connected_at: string
+          id: string
+          last_synced_at: string | null
+          scope: string | null
+          shop_domain: string
+        }
+        Insert: {
+          access_token: string
+          brand_id: string
+          connected_at?: string
+          id?: string
+          last_synced_at?: string | null
+          scope?: string | null
+          shop_domain: string
+        }
+        Update: {
+          access_token?: string
+          brand_id?: string
+          connected_at?: string
+          id?: string
+          last_synced_at?: string | null
+          scope?: string | null
+          shop_domain?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_connections_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: true
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopify_product_images: {
+        Row: {
+          background_type: string | null
+          brand_id: string
+          classified_at: string | null
+          confidence: string | null
+          dominant_colors: string[] | null
+          has_transparent_bg: boolean | null
+          has_white_bg: boolean | null
+          id: string
+          image_type: string | null
+          imagekit_url: string | null
+          original_url: string
+          processed_url: string | null
+          processing_status: string
+          product_id: string
+          shopify_image_id: string | null
+          subject_description: string | null
+          usable_as_hero: boolean | null
+          usable_as_product_shot: boolean | null
+          variant_shown: string | null
+        }
+        Insert: {
+          background_type?: string | null
+          brand_id: string
+          classified_at?: string | null
+          confidence?: string | null
+          dominant_colors?: string[] | null
+          has_transparent_bg?: boolean | null
+          has_white_bg?: boolean | null
+          id?: string
+          image_type?: string | null
+          imagekit_url?: string | null
+          original_url: string
+          processed_url?: string | null
+          processing_status?: string
+          product_id: string
+          shopify_image_id?: string | null
+          subject_description?: string | null
+          usable_as_hero?: boolean | null
+          usable_as_product_shot?: boolean | null
+          variant_shown?: string | null
+        }
+        Update: {
+          background_type?: string | null
+          brand_id?: string
+          classified_at?: string | null
+          confidence?: string | null
+          dominant_colors?: string[] | null
+          has_transparent_bg?: boolean | null
+          has_white_bg?: boolean | null
+          id?: string
+          image_type?: string | null
+          imagekit_url?: string | null
+          original_url?: string
+          processed_url?: string | null
+          processing_status?: string
+          product_id?: string
+          shopify_image_id?: string | null
+          subject_description?: string | null
+          usable_as_hero?: boolean | null
+          usable_as_product_shot?: boolean | null
+          variant_shown?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_product_images_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shopify_product_images_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shopify_products: {
+        Row: {
+          brand_id: string
+          handle: string | null
+          id: string
+          product_type: string | null
+          shopify_product_id: string
+          shopify_updated_at: string | null
+          status: string | null
+          synced_at: string
+          tags: string[] | null
+          title: string
+          variants: Json | null
+        }
+        Insert: {
+          brand_id: string
+          handle?: string | null
+          id?: string
+          product_type?: string | null
+          shopify_product_id: string
+          shopify_updated_at?: string | null
+          status?: string | null
+          synced_at?: string
+          tags?: string[] | null
+          title: string
+          variants?: Json | null
+        }
+        Update: {
+          brand_id?: string
+          handle?: string | null
+          id?: string
+          product_type?: string | null
+          shopify_product_id?: string
+          shopify_updated_at?: string | null
+          status?: string | null
+          synced_at?: string
+          tags?: string[] | null
+          title?: string
+          variants?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shopify_products_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_preferences: {
         Row: {
           created_at: string
