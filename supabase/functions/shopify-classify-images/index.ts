@@ -16,14 +16,8 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-/**
- * Build an ImageKit transformation URL from an array of transform strings.
- * Each transform is like "e-bgremove", "w-600", "fo-auto", etc.
- * They get joined as: ?tr=e-bgremove:w-600:fo-auto
- */
 function buildImageKitUrl(baseUrl: string, transforms: string[]): string {
   if (!baseUrl || transforms.length === 0) return baseUrl;
-  // ImageKit chain transforms with commas in path-based or colons in query-based
   const trString = transforms.join(",");
   return baseUrl.includes("?")
     ? `${baseUrl}&tr=${trString}`
@@ -35,32 +29,25 @@ const CLASSIFICATION_PROMPT = `Analyze this product image for an email marketing
 Your job is to determine:
 1. What kind of image this is
 2. Whether it's immediately usable as a clean product photo
-3. If NOT immediately usable, whether the product is still visible and could be RESCUED via image processing
+3. If NOT immediately usable, whether the product could be rescued ONLY via background removal
 
-CRITICAL: Do NOT just reject images. Many images with text overlays, icons, or marketing elements still contain a perfectly good product photograph underneath. Your job is to identify SALVAGEABLE images and prescribe how to fix them.
-
-RESCUE STRATEGIES (when the image has issues but contains a visible product):
-- "bg_remove" — Remove background to isolate the product (works when product is clearly visible but has a cluttered/busy background or text around it)
-- "smart_crop" — Use AI smart cropping to focus on the product area, cutting away text/icons at edges (works when text/graphics are at the margins, not covering the product)
-- "bg_remove_and_crop" — Remove background AND crop to product (best for images where product is visible but surrounded by marketing elements)
-- "crop_top" — Crop away the top portion (text/headers at top, product at bottom)
-- "crop_bottom" — Crop away the bottom portion (text/callouts at bottom, product at top)
-- "none" — No rescue possible (product is completely obscured, or this is pure infographic/chart with no real product photo)
+CRITICAL RULES:
+- Images with ANY text overlay, marketing copy, testimonial quotes, benefit callouts, comparison charts, icons, badges, infographics, or graphic design elements are NOT usable product photos.
+- Only clean photographs of the product — with or without models, with or without backgrounds — qualify as usable product photos.
+- The ONLY rescue method available is BACKGROUND REMOVAL, which isolates the product silhouette and discards everything else (background, surrounding text, icons around the product).
+- Background removal CANNOT fix text or icons that are drawn DIRECTLY ON TOP of the product body itself. If text/icons are overlaid on the product surface, it is NOT salvageable.
+- Background removal CAN fix: text/icons in the background area, text below/above/beside the product, busy backgrounds, marketing borders.
 
 Return JSON:
 {
   "image_type": "product_isolated" | "product_lifestyle" | "product_detail" | "group_shot" | "packaging" | "model_wearing" | "flat_lay" | "marketing_collateral" | "other",
   "background_type": "white" | "transparent" | "studio" | "lifestyle" | "other",
-  "has_clean_background": true/false,
   "has_text_overlay": true/false,
   "has_icons_or_graphics": true/false,
   "is_marketing_collateral": true/false,
   "is_usable_product_photo": true/false (true ONLY if clean with zero text/icons/graphics),
-  "has_salvageable_product": true/false (true if a real product is visible in the image even if it has overlays — most product images with text ARE salvageable),
-  "rescue_strategy": "bg_remove" | "smart_crop" | "bg_remove_and_crop" | "crop_top" | "crop_bottom" | "none",
-  "rescue_notes": "Brief explanation of what processing would recover a usable product shot",
-  "product_position": "center" | "top" | "bottom" | "left" | "right" | "full" (where the actual product is in the frame),
-  "text_position": "top" | "bottom" | "overlay" | "margins" | "none" (where text/graphics are located),
+  "has_salvageable_product": true/false (true ONLY if a real product is clearly visible AND text/icons are NOT on the product body itself — meaning bg removal would isolate a clean product),
+  "text_position": "background" | "overlay" | "margins" | "none" ("overlay" = text is on the product body, "background"/"margins" = text is around/behind the product),
   "subject_description": "One sentence description of what is shown",
   "variant_shown": "string or null",
   "dominant_colors": ["#hex1", "#hex2"],
@@ -85,7 +72,6 @@ Deno.serve(async (req) => {
     );
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY")!;
 
-    // Fetch pending images
     let query = supabase
       .from("shopify_product_images")
       .select("*")
@@ -137,13 +123,14 @@ Deno.serve(async (req) => {
             body: JSON.stringify({
               model: "claude-sonnet-4-20250514",
               max_tokens: 1024,
-              system: `You are classifying product images for an email marketing asset library. 
+              system: `You are classifying product images for an email marketing asset library.
 
-KEY PRINCIPLE: Your goal is to MAXIMIZE usable product images, not reject them. Many images with text overlays or marketing elements still contain excellent product photography that can be rescued via image processing (background removal, smart cropping, etc.).
-
-- If the image is a clean product photo with no text/icons → mark as usable
-- If the image has text/icons BUT the product is clearly visible → mark as salvageable and prescribe a rescue strategy
-- Only mark as truly unsalvageable if the product is completely obscured or the image is purely a chart/infographic with no real product photograph
+STRICT RULES:
+- If the image is a clean product photo with no text/icons/graphics → is_usable_product_photo = true
+- If the image has text/icons but they are ONLY in the background/margins (not on the product body) AND a real product is clearly visible → has_salvageable_product = true (background removal will isolate the product)
+- If text/icons are overlaid DIRECTLY ON the product body → has_salvageable_product = false (background removal cannot fix this)
+- If the image is purely a chart, infographic, listicle, comparison table, or carousel ad with no real product photograph → has_salvageable_product = false
+- NOTHING with text should ever be marked as is_usable_product_photo = true
 
 Return ONLY valid JSON matching the schema exactly.`,
               messages: [{
@@ -168,33 +155,34 @@ Return ONLY valid JSON matching the schema exactly.`,
 
           const c = JSON.parse(jsonMatch[0]);
           const isUsable = c.is_usable_product_photo === true;
-          const isSalvageable = !isUsable && c.has_salvageable_product === true && c.rescue_strategy !== "none";
+          
+          // Only bg_remove is a valid rescue. Text on product body (overlay) = not salvageable.
+          const isSalvageable = !isUsable 
+            && c.has_salvageable_product === true 
+            && c.text_position !== "overlay";
 
-          // Build processed_url with appropriate ImageKit transforms
           let processedUrl: string | null = null;
           let rescueTransforms: string | null = null;
 
           if (img.imagekit_url) {
             if (isUsable && c.background_removal_recommended) {
-              // Clean photo but needs bg removal for hero use
               const transforms = ["e-bgremove"];
               processedUrl = buildImageKitUrl(img.imagekit_url, transforms);
               rescueTransforms = transforms.join(",");
             } else if (isSalvageable) {
-              // Salvageable image — apply rescue transforms
-              const transforms = buildRescueTransforms(c.rescue_strategy, c.product_position);
+              // Only strategy is bg_remove
+              const transforms = ["e-bgremove"];
               processedUrl = buildImageKitUrl(img.imagekit_url, transforms);
               rescueTransforms = transforms.join(",");
             }
           }
 
-          // Determine final status
           let processingStatus: string;
           if (isUsable) {
             processingStatus = "ready";
             classified++;
           } else if (isSalvageable) {
-            processingStatus = "ready"; // Rescued images are usable via processed_url
+            processingStatus = "ready";
             rescued++;
           } else {
             processingStatus = "rejected";
@@ -218,7 +206,7 @@ Return ONLY valid JSON matching the schema exactly.`,
               is_marketing_collateral: c.is_marketing_collateral || false,
               is_usable_product_photo: isUsable,
               has_salvageable_product: isSalvageable || isUsable,
-              rescue_strategy: isSalvageable ? c.rescue_strategy : null,
+              rescue_strategy: isSalvageable ? "bg_remove" : null,
               rescue_transforms: rescueTransforms,
               processed_url: processedUrl,
               processing_status: processingStatus,
@@ -244,7 +232,7 @@ Return ONLY valid JSON matching the schema exactly.`,
         .eq("processing_status", "ready");
 
       if (!readyImages || readyImages.length === 0) {
-        console.warn(`Product ${productId}: no usable or rescued images found`);
+        console.warn(`Product ${productId}: no usable images found`);
         continue;
       }
 
@@ -252,14 +240,12 @@ Return ONLY valid JSON matching the schema exactly.`,
       const cleanImages = readyImages.filter((i) => i.is_usable_product_photo === true);
       const pool = cleanImages.length > 0 ? cleanImages : readyImages;
 
-      // Pick best hero: transparent isolated > white isolated > any isolated > hero > first
       const transparentIsolated = pool.find((i) => i.image_type === "product_isolated" && i.has_transparent_bg);
       const whiteIsolated = pool.find((i) => i.image_type === "product_isolated" && i.has_white_bg);
       const anyIsolated = pool.find((i) => i.image_type === "product_isolated");
       const heroImg = pool.find((i) => i.usable_as_hero);
       const best = transparentIsolated || whiteIsolated || anyIsolated || heroImg || pool[0];
 
-      // Ensure best hero has a processed_url with bg removal
       if (best && !best.has_transparent_bg && best.imagekit_url && !best.processed_url) {
         const processedUrl = buildImageKitUrl(best.imagekit_url, ["e-bgremove"]);
         await supabase
@@ -282,39 +268,3 @@ Return ONLY valid JSON matching the schema exactly.`,
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
-
-/**
- * Build ImageKit transform array based on rescue strategy.
- * Uses ImageKit's AI capabilities:
- * - e-bgremove: AI background removal
- * - fo-auto: AI smart crop (focus on main subject)
- * - cm-extract with coordinates: extract a region
- */
-function buildRescueTransforms(strategy: string, productPosition?: string): string[] {
-  switch (strategy) {
-    case "bg_remove":
-      // Background removal isolates the product, effectively removing surrounding text/icons
-      return ["e-bgremove"];
-
-    case "smart_crop":
-      // AI smart crop focuses on the product, cutting away text at margins
-      return ["w-800", "h-800", "fo-auto", "c-maintain_ratio"];
-
-    case "bg_remove_and_crop":
-      // Best combo: remove bg first, then smart crop to tight product bounds
-      return ["e-bgremove", "w-800", "h-800", "fo-auto", "c-maintain_ratio"];
-
-    case "crop_top":
-      // Product is at bottom, crop away top text/headers
-      // Use smart crop focused on bottom portion
-      return ["w-800", "h-600", "fo-auto", "c-maintain_ratio"];
-
-    case "crop_bottom":
-      // Product is at top, crop away bottom text/callouts
-      return ["w-800", "h-600", "fo-auto", "c-maintain_ratio"];
-
-    default:
-      // Fallback: just try bg removal as it handles most cases
-      return ["e-bgremove"];
-  }
-}
