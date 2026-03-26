@@ -100,6 +100,7 @@ export default function BrandSetup() {
   const [brandGuideHtml, setBrandGuideHtml] = useState("");
   const [saving, setSaving] = useState(false);
   const guideIframeRef = useRef<HTMLIFrameElement>(null);
+  const guideStartTimeRef = useRef<number>(Date.now());
   const [guideIframeHeight, setGuideIframeHeight] = useState(800);
 
   // Sliced images cache for reuse across passes
