@@ -56,7 +56,9 @@ export default function ShopifySetup({ brandId }: { brandId: string }) {
       });
       if (error) throw new Error(error.message);
       if (data?.installUrl) {
-        window.location.href = data.installUrl;
+        window.open(data.installUrl, "_blank", "noopener,noreferrer");
+        toast.info("Shopify authorization opened in a new tab. Complete the process there, then return here.");
+        setConnecting(false);
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to start Shopify connection");
