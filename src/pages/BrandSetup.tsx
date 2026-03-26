@@ -830,13 +830,37 @@ export default function BrandSetup() {
   }
 
   if (step === "generating_guide") {
+    const elapsed = Math.round((Date.now() - (guideStartTimeRef.current || Date.now())) / 1000);
+    const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    const phases = [
+      { label: "Analyzing campaigns", status: progressValue < 30 ? "running" : "complete" },
+      { label: "Building brand spec", status: progressValue < 30 ? "pending" : progressValue < 60 ? "running" : "complete" },
+      { label: "Generating brand guide (3-5 min)", status: progressValue < 60 ? "pending" : progressValue < 95 ? "running" : "complete" },
+    ];
     return (
       <div className="min-h-screen bg-background p-6 md:p-12 flex flex-col items-center justify-center">
-        <div className="max-w-md w-full space-y-6 text-center">
-          <h2 className="text-xl font-semibold">Generating Brand Guide</h2>
-          <p className="text-sm text-muted-foreground">Building your comprehensive email design system...</p>
+        <div className="max-w-lg w-full space-y-6 text-center">
+          <h2 className="text-xl font-semibold">Deep Brand Analysis</h2>
+          <p className="text-sm text-muted-foreground">
+            Deep brand analysis in progress. This typically takes 5-10 minutes for a complete brand guide. You can leave this page — we'll notify you here when it's ready.
+          </p>
           <Progress value={progressValue} className="h-1.5" />
-          <p className="text-sm text-muted-foreground">{progressMessage}</p>
+          <div className="space-y-2 text-left">
+            {phases.map((p, i) => (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                {p.status === "complete" && <Check className="w-4 h-4 text-green-500 shrink-0" />}
+                {p.status === "running" && <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin shrink-0" />}
+                {p.status === "pending" && <div className="w-4 h-4 rounded-full border border-muted-foreground/30 shrink-0" />}
+                <span className={p.status === "pending" ? "text-muted-foreground" : ""}>{p.label}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">Elapsed: {formatTime(elapsed)}</p>
+          {earlyBrandId && (
+            <Button variant="outline" onClick={() => navigate(`/brands/${earlyBrandId}`)} className="mt-2">
+              Go to dashboard
+            </Button>
+          )}
         </div>
       </div>
     );
