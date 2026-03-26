@@ -209,7 +209,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { brandId, campaignId, brief, goal, copy, speedMode, productIds, pinnedAssetUrls: pinnedUrls, matchProductColors, designNotes } = await req.json();
+    const { brandId, campaignId, brief, goal, copy, speedMode, productIds, pinnedAssetUrls: pinnedUrls, matchProductColors, designNotes, shopifyProducts } = await req.json();
     campaignIdForError = campaignId;
 
     // Always use Opus 4.6
