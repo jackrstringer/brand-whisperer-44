@@ -28,6 +28,7 @@ interface ShopifyImage {
   has_transparent_bg: boolean | null;
   has_white_bg: boolean | null;
   processing_status: string;
+  is_usable_product_photo: boolean | null;
 }
 
 export interface SelectedShopifyProduct {
