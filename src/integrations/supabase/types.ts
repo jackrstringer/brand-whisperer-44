@@ -522,11 +522,14 @@ export type Database = {
           classified_at: string | null
           confidence: string | null
           dominant_colors: string[] | null
+          has_text_overlay: boolean | null
           has_transparent_bg: boolean | null
           has_white_bg: boolean | null
           id: string
           image_type: string | null
           imagekit_url: string | null
+          is_marketing_collateral: boolean | null
+          is_usable_product_photo: boolean | null
           original_url: string
           processed_url: string | null
           processing_status: string
@@ -543,11 +546,14 @@ export type Database = {
           classified_at?: string | null
           confidence?: string | null
           dominant_colors?: string[] | null
+          has_text_overlay?: boolean | null
           has_transparent_bg?: boolean | null
           has_white_bg?: boolean | null
           id?: string
           image_type?: string | null
           imagekit_url?: string | null
+          is_marketing_collateral?: boolean | null
+          is_usable_product_photo?: boolean | null
           original_url: string
           processed_url?: string | null
           processing_status?: string
@@ -564,11 +570,14 @@ export type Database = {
           classified_at?: string | null
           confidence?: string | null
           dominant_colors?: string[] | null
+          has_text_overlay?: boolean | null
           has_transparent_bg?: boolean | null
           has_white_bg?: boolean | null
           id?: string
           image_type?: string | null
           imagekit_url?: string | null
+          is_marketing_collateral?: boolean | null
+          is_usable_product_photo?: boolean | null
           original_url?: string
           processed_url?: string | null
           processing_status?: string
@@ -598,6 +607,7 @@ export type Database = {
       }
       shopify_products: {
         Row: {
+          best_hero_image_id: string | null
           brand_id: string
           handle: string | null
           id: string
@@ -611,6 +621,7 @@ export type Database = {
           variants: Json | null
         }
         Insert: {
+          best_hero_image_id?: string | null
           brand_id: string
           handle?: string | null
           id?: string
@@ -624,6 +635,7 @@ export type Database = {
           variants?: Json | null
         }
         Update: {
+          best_hero_image_id?: string | null
           brand_id?: string
           handle?: string | null
           id?: string
@@ -637,6 +649,13 @@ export type Database = {
           variants?: Json | null
         }
         Relationships: [
+          {
+            foreignKeyName: "shopify_products_best_hero_image_id_fkey"
+            columns: ["best_hero_image_id"]
+            isOneToOne: false
+            referencedRelation: "shopify_product_images"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "shopify_products_brand_id_fkey"
             columns: ["brand_id"]
