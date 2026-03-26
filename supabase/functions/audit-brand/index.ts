@@ -14,7 +14,43 @@ Return a JSON object with these top-level keys: "audit", "inconsistencies", "nee
 The "audit" object must contain:
 
 {
+  "campaign_inventory": {
+    "total_campaigns_analyzed": number,
+    "campaign_types_observed": [
+      {
+        "type": "e.g. product launch, sale/promo, welcome, editorial, review/social-proof",
+        "description": "what this campaign type looks like structurally",
+        "observed_in": ["Campaign 1", "Campaign 4"],
+        "frequency": "common | occasional | rare"
+      }
+    ]
+  },
+  "campaign_color_system": {
+    "system_type": "full_immersion | modular_cards | white_only | hybrid",
+    "color_inheritance_pattern": "Describe exactly which sections change color per campaign and which stay fixed. e.g. 'Hero background, CTA fill, and footer all adopt the campaign's primary color. Body sections remain white.'",
+    "is_color_theme_campaign_specific": true or false,
+    "color_change_scope": "Describe precisely: hero? footer? CTAs? all sections? Which elements inherit the campaign color?",
+    "observed_examples": [
+      {
+        "campaign": "Campaign 1",
+        "primary_campaign_color": "#hex",
+        "where_color_appears": ["hero background", "CTA fill", "footer background"]
+      }
+    ]
+  },
+  "logo_usage": {
+    "has_dedicated_logo_bar": true or false,
+    "logo_bar_background": "#hex or description",
+    "light_version_used_when": "description of when light/white logo is used",
+    "dark_version_used_when": "description of when dark logo is used",
+    "logo_in_footer": true or false,
+    "footer_logo_treatment": "description",
+    "approximate_header_width": "approximate px or percentage",
+    "has_secondary_mark": false,
+    "secondary_mark_description": "description or null"
+  },
   "cta_buttons": {
+    "cta_system_overview": "2-3 sentences describing the CTA system as a whole. e.g. 'Andar uses a single fixed CTA shape across all campaigns. Only the fill color changes to match the campaign theme.'",
     "variants": [
       {
         "name": "primary",
@@ -31,9 +67,16 @@ The "audit" object must contain:
         "text_case": "sentence | uppercase | title",
         "padding_vertical": "approximate px",
         "padding_horizontal": "approximate px",
-        "width_behavior": "auto | full-width | constrained"
+        "width_behavior": "auto | full-width | constrained",
+        "is_color_campaign_reactive": true or false,
+        "observed_colors_across_campaigns": ["#hex values seen for this variant across all campaigns"]
       }
     ],
+    "color_reactivity": {
+      "is_reactive": true or false,
+      "reactive_property": "fill only | fill and border | border only | none",
+      "reactive_to": "campaign primary color | section background | fixed palette"
+    },
     "observed_labels": ["list every CTA label verbatim"],
     "max_label_length": "number of characters",
     "wraps_to_two_lines": false,
@@ -46,12 +89,18 @@ The "audit" object must contain:
     "headline_weights": ["700", "900"],
     "headline_italic_pattern": "never | full headline | selective words (list which)",
     "headline_alignment": "centered | left-aligned | mixed",
-    "headline_size_range": "approximate px range",
+    "headline_sizing_system": {
+      "rule_description": "NOT a range. Describe the actual pattern: e.g. 'Shorter headlines use larger type. 1-2 words at ~100px, 3-4 words at ~60px, 5+ words at ~48px.'",
+      "observed_examples": [
+        { "text": "actual headline text", "approximate_size": "~60px" }
+      ]
+    },
     "body_font_family": "exact name or [NEEDS CONFIRMATION]",
     "body_weights": ["400", "700"],
     "body_bold_pattern": "description of what triggers bold",
     "body_size": "approximate px",
     "body_line_height": "tight | normal | loose",
+    "body_text_alignment": "left | center | right | mixed",
     "subhead_font": "same as headline | same as body | distinct",
     "subhead_weight": "string",
     "cta_label_font": "same as body | same as headline | distinct"
@@ -120,6 +169,14 @@ CRITICAL RULES:
 - For unified values across campaigns, use the MOST COMMON value (majority rules).
 - Note any inconsistencies between campaigns in the inconsistencies array.
 
+Campaign color system: Determine whether this brand uses full-color campaign immersion (entire email adopts one color — hero, CTAs, footer all inherit it) or a modular approach (white canvas with isolated color sections). This is the single most structurally important finding.
+
+Body text alignment: Examine each body text paragraph carefully. If the lines of text appear balanced around a center axis, report 'center'. Do not default to 'left' without verifying.
+
+Headline sizing: Do not report a range. Report the rule you observe. Look at how font size relates to headline length across campaigns.
+
+Logo: Note whether the logo sits in its own isolated bar (dedicated background, clear padding above and below) or integrates into the hero section sharing a background.
+
 Return ONLY valid JSON. No markdown fences. No commentary.`;
 
 Deno.serve(async (req) => {
@@ -179,10 +236,9 @@ Deno.serve(async (req) => {
       slices.sort((a, b) => a.sliceIndex - b.sliceIndex);
     }
 
-    // Cap slices using BOTH count and payload budget instead of aggressive fixed trimming.
-    // This preserves far more visual evidence while staying under request size limits.
+    // Cap slices using BOTH count and payload budget
     const MAX_TOTAL_SLICES = 80;
-    const MAX_TOTAL_BASE64_BYTES = 24 * 1024 * 1024; // keep headroom for prompt text/metadata
+    const MAX_TOTAL_BASE64_BYTES = 24 * 1024 * 1024;
     const originalSliceCount = Array.from(campaignGroups.values()).reduce((sum, slices) => sum + slices.length, 0);
 
     const campaignKeys = Array.from(campaignGroups.keys()).sort((a, b) => a - b);
@@ -211,12 +267,10 @@ Deno.serve(async (req) => {
       return true;
     };
 
-    // Pass 1: guarantee at least one top slice per campaign when possible.
     for (const key of campaignKeys) {
       tryAddSlice(key, 0);
     }
 
-    // Pass 2: round-robin remaining slices to keep broad campaign coverage.
     let progress = true;
     while (progress && selectedCount < MAX_TOTAL_SLICES && selectedBytes < MAX_TOTAL_BASE64_BYTES) {
       progress = false;
@@ -273,8 +327,8 @@ Deno.serve(async (req) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 8000,
+        model: "claude-opus-4-6-20260801",
+        max_tokens: 16000,
         system: SINGLE_PASS_AUDIT_PROMPT,
         messages: [{ role: "user", content: imageContent }],
       }),
@@ -294,9 +348,7 @@ Deno.serve(async (req) => {
 
     // Ensure expected structure
     if (!parsed.audit || typeof parsed.audit !== "object") {
-      // The model may have returned the audit at top level
       if (parsed.cta_buttons || parsed.typography) {
-        // Wrap it
         const wrapped = {
           audit: parsed,
           inconsistencies: parsed.inconsistencies || [],

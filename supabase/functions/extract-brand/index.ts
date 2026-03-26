@@ -237,7 +237,49 @@ Return ONLY valid JSON (no markdown fences, no commentary) with these two keys:
   "confidence": { "overall": "high|medium|low", "low_confidence_fields": [] }
 }
 
-"system_prompt" -- a complete, copy-paste-ready prompt for generating on-brand emails. Must include exact hex codes, px values, font stacks, layout rules, CTA rules (including white-space:nowrap), and the quality floor rules. This prompt should be detailed enough that an AI could build a matching email from it alone.
+"system_prompt" -- a complete, copy-paste-ready prompt for generating on-brand emails. Structure the system_prompt in this order:
+
+1. CAMPAIGN COLOR SYSTEM (first — governs everything else)
+   State the system type. Describe exactly what changes per campaign and what stays fixed.
+
+2. CANVAS AND LAYOUT
+   Exact values only.
+
+3. FONT LOADING
+   Exact Google Fonts <link> tags if applicable.
+   If custom fonts: state they cannot be loaded via Google Fonts.
+   For each font: role, name, complete CSS fallback stack.
+
+4. TYPOGRAPHY RULES
+   For each text element: all CSS properties.
+   For headlines: use the word-count/length-based sizing rule, NOT a px range.
+
+5. COLOR TOKENS
+   Every color as a labeled token with exact hex and usage.
+   Flag campaign-reactive colors explicitly.
+
+6. CTA SYSTEM
+   System overview first.
+   Then each variant: complete CSS + whether color is fixed or reactive.
+   Observed CTA labels list.
+
+7. LOGO PLACEMENT
+   Exact rules: dedicated bar vs integrated, light/dark usage, padding, footer treatment.
+
+8. COMPONENT LIBRARY
+   Each component: description + complete inline CSS.
+
+9. CAMPAIGN STRUCTURE TEMPLATE
+   Most common observed structure as an ordered block list.
+
+10. PROHIBITED PATTERNS
+    Explicit DO NOT list derived from audit observations.
+    Design prohibitions AND copy prohibitions.
+    Format as imperatives.
+
+Do not include general email development advice. Every rule must be traceable to the reference campaigns.
+
+Must include exact hex codes, px values, font stacks, layout rules, CTA rules (including white-space:nowrap), and the quality floor rules. This prompt should be detailed enough that an AI could build a matching email from it alone.
 
 CRITICAL:
 - CTA font-style defaults to NORMAL. Only mark italic if explicitly confirmed.
@@ -261,10 +303,53 @@ Your output must be ONLY the raw HTML document -- starting with <!DOCTYPE html> 
 The HTML must follow the template structure exactly:
 - Cover section with brand name, blurred accent glow
 - Sticky nav with anchor links
-- 6 sections: CTA Rules, Typography & Color, Spacing & Sizing, Copy Rules, Repeated Components, Do's and Don'ts
+- Sections as defined below
 - Guide footer
 
+SECTION ORDER:
+
+SECTION 0A — CAMPAIGN INVENTORY
+List every campaign type observed with: type name, description, which reference campaigns it includes, and what varies between types vs. what is constant across all of them.
+
+SECTION 0B — CAMPAIGN COLOR SYSTEM
+State the system type prominently.
+Describe exactly what changes per campaign and what stays fixed.
+Render live demo blocks showing the same email component (headline + CTA button) in 3-4 of the observed campaign colors.
+Document footer color inheritance rules.
+This section is mandatory — skip it only if the brand uses white-only.
+
+SECTION 0C — LOGO USAGE
+Show logo placement rules: dedicated bar vs. integrated into hero.
+Light vs. dark version usage rules with exact conditions.
+Padding values above and below in header.
+Footer logo treatment.
+
+SECTION 1: CTA RULES — restructure as:
+1. System overview (2-3 sentences describing the CTA system holistically)
+2. Base styles (the invariant properties — shape, radius, padding, font, text-case)
+3. Variants (each with live-rendered demo button + complete CSS)
+   - Clearly label which properties are fixed vs. campaign-reactive
+4. Color reactivity section
+   - If reactive: render the same button in 4+ campaign colors
+   - State exactly which properties change and which don't
+5. Observed CTA labels (verbatim, rendered in actual button font at actual size and weight)
+6. Non-negotiable rules callout (dark bg card with hard rules)
+
+SECTION 2: Typography & Color
+SECTION 3: Spacing & Sizing
+SECTION 4: Copy Rules
+SECTION 5: Repeated Components — each component must include:
+1. Live-rendered example using actual brand copy from the campaigns
+2. Complete CSS code block (inline-ready, all properties)
+3. Color reactivity note (does this component change with campaign color?)
+4. Usage context (where does this appear in the email?)
+If a component cannot be documented to this standard, omit it.
+
+SECTION 6: Do's and Don'ts
+
 CRITICAL GENERATION RULES:
+- FONT SEPARATION: Fonts used only in the guide's own UI chrome must not appear in the Typography section. Only document fonts observed in actual campaign emails. If uncertain, note it.
+- SPECIFICITY: Never use ranges where a rule exists. Never write 'varies' without documenting the rule that governs the variation. Every sentence must be a specific actionable rule, not advice.
 - NEVER fabricate values. Every hex code, font name, border weight, padding value must come from the audit or confirmed properties. If unknown, mark TBD.
 - NEVER use placeholder content. No "Shop the Collection", no "Premium quality materials", no "123 Main Street". Every piece of text must be pulled from actual reference emails in the audit.
 - CTA section is MOST IMPORTANT. Live buttons, CSS code block, and spec table must ALL be consistent and match exactly.
@@ -430,7 +515,7 @@ async function runGuideCall(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-opus-4-6-20260801",
       max_tokens: 64000,
       system: GUIDE_PROMPT,
       messages: [{

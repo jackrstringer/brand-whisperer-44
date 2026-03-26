@@ -224,7 +224,7 @@ export default function ReanalyzeBrand({ brandId, brandName, industry }: Reanaly
 
       // Poll for results
       const POLL_INTERVAL = 5000;
-      const MAX_POLL_TIME = 5 * 60 * 1000;
+      const MAX_POLL_TIME = 15 * 60 * 1000;
       const startTime = Date.now();
 
       const pollTimer = setInterval(async () => {
