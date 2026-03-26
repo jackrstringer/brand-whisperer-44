@@ -11,6 +11,7 @@ interface ShopifyProduct {
   id: string;
   title: string;
   shopify_product_id: string;
+  best_hero_image_id: string | null;
 }
 
 interface ShopifyImage {

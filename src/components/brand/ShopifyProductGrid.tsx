@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, ChevronUp, Image as ImageIcon } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { ChevronDown, ChevronUp, Image as ImageIcon, Check, X } from "lucide-react";
 import { Loader2 } from "lucide-react";
 
 interface ShopifyProduct {
@@ -10,6 +11,7 @@ interface ShopifyProduct {
   handle: string | null;
   product_type: string | null;
   status: string | null;
+  best_hero_image_id: string | null;
 }
 
 interface ShopifyImage {
@@ -23,6 +25,9 @@ interface ShopifyImage {
   processing_status: string;
   usable_as_hero: boolean | null;
   usable_as_product_shot: boolean | null;
+  is_usable_product_photo: boolean | null;
+  has_text_overlay: boolean | null;
+  is_marketing_collateral: boolean | null;
 }
 
 export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
@@ -30,19 +35,20 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
   const [images, setImages] = useState<Record<string, ShopifyImage[]>>({});
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showRejected, setShowRejected] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       const { data: prods } = await supabase
         .from("shopify_products")
-        .select("id, title, handle, product_type, status")
+        .select("id, title, handle, product_type, status, best_hero_image_id")
         .eq("brand_id", brandId)
         .order("title");
       setProducts((prods || []) as ShopifyProduct[]);
 
       const { data: imgs } = await supabase
         .from("shopify_product_images")
-        .select("id, product_id, original_url, imagekit_url, processed_url, image_type, subject_description, processing_status, usable_as_hero, usable_as_product_shot")
+        .select("id, product_id, original_url, imagekit_url, processed_url, image_type, subject_description, processing_status, usable_as_hero, usable_as_product_shot, is_usable_product_photo, has_text_overlay, is_marketing_collateral")
         .eq("brand_id", brandId);
 
       const grouped: Record<string, ShopifyImage[]> = {};
@@ -59,14 +65,10 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>;
   if (products.length === 0) return <p className="text-sm text-muted-foreground py-4">No Shopify products synced yet.</p>;
 
-  const statusColor = (s: string) => {
-    switch (s) {
-      case "ready": return "default";
-      case "pending": return "secondary";
-      case "processing": return "secondary";
-      case "failed": return "destructive";
-      default: return "secondary";
-    }
+  const rejectionReason = (img: ShopifyImage) => {
+    if (img.is_marketing_collateral) return "Marketing collateral";
+    if (img.has_text_overlay) return "Has text overlay";
+    return "Not usable";
   };
 
   const typeLabel = (t: string | null) => {
@@ -76,11 +78,19 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
 
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-medium mb-3">Shopify Products ({products.length})</h3>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-medium">Shopify Products ({products.length})</h3>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+          <Switch checked={showRejected} onCheckedChange={setShowRejected} className="scale-75" />
+          Show rejected
+        </label>
+      </div>
       {products.map((product) => {
         const prodImages = images[product.id] || [];
-        const readyCount = prodImages.filter((i) => i.processing_status === "ready").length;
-        const firstReady = prodImages.find((i) => i.processing_status === "ready");
+        const usableImages = prodImages.filter((i) => i.is_usable_product_photo === true || i.processing_status === "ready");
+        const rejectedImages = prodImages.filter((i) => i.processing_status === "rejected");
+        const displayImages = showRejected ? prodImages : usableImages;
+        const firstUsable = usableImages.find((i) => i.processing_status === "ready");
         const isExpanded = expandedId === product.id;
 
         return (
@@ -89,9 +99,9 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
               onClick={() => setExpandedId(isExpanded ? null : product.id)}
               className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors text-left"
             >
-              {firstReady ? (
+              {firstUsable ? (
                 <img
-                  src={firstReady.processed_url || firstReady.imagekit_url || firstReady.original_url}
+                  src={firstUsable.processed_url || firstUsable.imagekit_url || firstUsable.original_url}
                   alt=""
                   className="w-10 h-10 rounded object-cover flex-shrink-0"
                 />
@@ -103,39 +113,60 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{product.title}</p>
                 <p className="text-[10px] text-muted-foreground">
-                  {prodImages.length} images • {readyCount} ready
+                  {usableImages.length} of {prodImages.length} images usable
+                  {rejectedImages.length > 0 && ` • ${rejectedImages.length} rejected`}
                 </p>
               </div>
               {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
             </button>
 
-            {isExpanded && prodImages.length > 0 && (
+            {isExpanded && displayImages.length > 0 && (
               <div className="border-t border-border p-3 grid grid-cols-3 gap-2">
-                {prodImages.map((img) => (
-                  <div key={img.id} className="space-y-1">
-                    <div className="relative aspect-square rounded overflow-hidden border border-border">
-                      <img
-                        src={img.processed_url || img.imagekit_url || img.original_url}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                      <Badge
-                        variant={statusColor(img.processing_status) as any}
-                        className="absolute top-1 right-1 text-[8px] px-1 py-0"
-                      >
-                        {img.processing_status}
-                      </Badge>
+                {displayImages.map((img) => {
+                  const isRejected = img.processing_status === "rejected";
+                  const isReady = img.processing_status === "ready";
+                  const isBestHero = product.best_hero_image_id === img.id;
+
+                  return (
+                    <div key={img.id} className="space-y-1">
+                      <div className={`relative aspect-square rounded overflow-hidden border ${isRejected ? "border-destructive/30 opacity-50" : "border-border"}`}>
+                        <img
+                          src={img.processed_url || img.imagekit_url || img.original_url}
+                          alt=""
+                          className={`w-full h-full object-cover ${isRejected ? "grayscale" : ""}`}
+                        />
+                        {isRejected && (
+                          <div className="absolute inset-0 bg-destructive/10 flex items-center justify-center">
+                            <X className="w-6 h-6 text-destructive/60" />
+                          </div>
+                        )}
+                        {isReady && (
+                          <div className="absolute top-1 left-1 bg-green-500 rounded-full p-0.5">
+                            <Check className="w-2.5 h-2.5 text-white" />
+                          </div>
+                        )}
+                        {isBestHero && (
+                          <Badge className="absolute top-1 right-1 text-[7px] px-1 py-0 bg-primary">
+                            Hero
+                          </Badge>
+                        )}
+                      </div>
+                      {isRejected && (
+                        <Badge variant="destructive" className="text-[8px] w-full justify-center">
+                          {rejectionReason(img)}
+                        </Badge>
+                      )}
+                      {!isRejected && img.image_type && (
+                        <Badge variant="outline" className="text-[8px] w-full justify-center">
+                          {typeLabel(img.image_type)}
+                        </Badge>
+                      )}
+                      {img.subject_description && (
+                        <p className="text-[9px] text-muted-foreground line-clamp-2">{img.subject_description}</p>
+                      )}
                     </div>
-                    {img.image_type && (
-                      <Badge variant="outline" className="text-[8px] w-full justify-center">
-                        {typeLabel(img.image_type)}
-                      </Badge>
-                    )}
-                    {img.subject_description && (
-                      <p className="text-[9px] text-muted-foreground line-clamp-2">{img.subject_description}</p>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
