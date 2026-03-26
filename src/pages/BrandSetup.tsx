@@ -450,7 +450,7 @@ export default function BrandSetup() {
 
       // Step 3: Poll brand_profiles for brand_guide_html
       const POLL_INTERVAL = 5000;
-      const MAX_POLL_TIME = 5 * 60 * 1000; // 5 minutes
+      const MAX_POLL_TIME = 15 * 60 * 1000; // 15 minutes
       const startTime = Date.now();
 
       const pollForGuide = () => {
