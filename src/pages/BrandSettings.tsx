@@ -12,6 +12,8 @@ import ReanalyzeBrand from "@/components/brand/ReanalyzeBrand";
 import AssetManager from "@/components/brand/AssetManager";
 import ProductManager from "@/components/brand/ProductManager";
 import KlaviyoSetup from "@/components/brand/KlaviyoSetup";
+import ShopifySetup from "@/components/brand/ShopifySetup";
+import ShopifyProductGrid from "@/components/brand/ShopifyProductGrid";
 import { toast } from "sonner";
 
 interface BrandAsset {
@@ -106,6 +108,7 @@ export default function BrandSettings() {
           <TabsTrigger value="instructions">Instructions</TabsTrigger>
           <TabsTrigger value="qa">QA Checklist</TabsTrigger>
           <TabsTrigger value="klaviyo">Klaviyo</TabsTrigger>
+          <TabsTrigger value="shopify">Shopify</TabsTrigger>
           <TabsTrigger value="analysis">Analysis</TabsTrigger>
         </TabsList>
 
@@ -126,8 +129,9 @@ export default function BrandSettings() {
           {brandId && <AssetManager brandId={brandId} assets={assets} setAssets={setAssets} />}
         </TabsContent>
 
-        <TabsContent value="products">
+        <TabsContent value="products" className="space-y-6">
           {brandId && <ProductManager brandId={brandId} />}
+          {brandId && <ShopifyProductGrid brandId={brandId} />}
         </TabsContent>
 
         <TabsContent value="instructions" className="space-y-4">
@@ -157,6 +161,10 @@ export default function BrandSettings() {
             </div>
           </div>
           <Button onClick={saveInstructions} disabled={saving}>Save Checklist</Button>
+        </TabsContent>
+
+        <TabsContent value="shopify">
+          {brandId && <ShopifySetup brandId={brandId} />}
         </TabsContent>
 
         <TabsContent value="klaviyo">

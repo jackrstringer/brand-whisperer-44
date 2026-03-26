@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import ProductSelector from "@/components/brand/ProductSelector";
+import ProductSelector, { type SelectedShopifyProduct } from "@/components/brand/ProductSelector";
 import SegmentSelector from "@/components/brand/SegmentSelector";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -76,6 +76,7 @@ export default function CampaignEditor() {
   const [pinnedAssetUrls, setPinnedAssetUrls] = useState<string[]>([]);
   const [canUndo, setCanUndo] = useState(false);
   const [matchProductColors, setMatchProductColors] = useState(false);
+  const [selectedShopifyProducts, setSelectedShopifyProducts] = useState<SelectedShopifyProduct[]>([]);
   const [designNotes, setDesignNotes] = useState("");
   const [subjectLine, setSubjectLine] = useState("");
   const [previewText, setPreviewText] = useState("");
@@ -235,6 +236,7 @@ export default function CampaignEditor() {
         pinnedAssetUrls: allPinned.length > 0 ? allPinned : undefined,
         matchProductColors: matchProductColors || undefined,
         designNotes: designNotes.trim() || undefined,
+        shopifyProducts: selectedShopifyProducts.length > 0 ? selectedShopifyProducts : undefined,
       }),
     }).catch(() => {});
 
@@ -607,6 +609,7 @@ export default function CampaignEditor() {
                       setSelectedProductIds(ids);
                       setPinnedAssetUrls(pinned);
                     }}
+                    onShopifyProductsChange={setSelectedShopifyProducts}
                   />
                 )}
 
