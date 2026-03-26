@@ -46,24 +46,31 @@ interface ProductSelectorProps {
   onShopifyProductsChange?: (products: SelectedShopifyProduct[]) => void;
 }
 
-function pickBestImage(images: ShopifyImage[]): ShopifyImage | null {
-  const ready = images.filter((i) => i.processing_status === "ready");
-  if (ready.length === 0) return images[0] || null;
+function pickBestImage(images: ShopifyImage[], bestHeroImageId?: string | null): ShopifyImage | null {
+  // Filter to only usable product photos
+  const usable = images.filter((i) => i.is_usable_product_photo === true && i.processing_status === "ready");
+  if (usable.length === 0) return null;
+
+  // If best hero is set and exists in usable, use it
+  if (bestHeroImageId) {
+    const hero = usable.find((i) => i.id === bestHeroImageId);
+    if (hero) return hero;
+  }
 
   // Priority: transparent bg product_isolated > white bg product_isolated > hero lifestyle > first ready
-  const transparentIsolated = ready.find((i) => i.image_type === "product_isolated" && i.has_transparent_bg);
+  const transparentIsolated = usable.find((i) => i.image_type === "product_isolated" && i.has_transparent_bg);
   if (transparentIsolated) return transparentIsolated;
 
-  const whiteIsolated = ready.find((i) => i.image_type === "product_isolated" && i.has_white_bg);
+  const whiteIsolated = usable.find((i) => i.image_type === "product_isolated" && i.has_white_bg);
   if (whiteIsolated) return whiteIsolated;
 
-  const isolated = ready.find((i) => i.image_type === "product_isolated");
+  const isolated = usable.find((i) => i.image_type === "product_isolated");
   if (isolated) return isolated;
 
-  const heroLifestyle = ready.find((i) => i.image_type === "product_lifestyle" && i.usable_as_hero);
+  const heroLifestyle = usable.find((i) => i.image_type === "product_lifestyle" && i.usable_as_hero);
   if (heroLifestyle) return heroLifestyle;
 
-  return ready[0];
+  return usable[0];
 }
 
 export default function ProductSelector({
