@@ -16,7 +16,8 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 
 
-import type { Campaign, ChatMessage } from "@/lib/types";
+import type { Campaign, ChatMessage, VariantOption } from "@/lib/types";
+import VariantCards from "@/components/brand/VariantCards";
 import { captureEmailScreenshots } from "@/lib/visualQaCapture";
 
 async function uploadChatImages(files: File[], brandId: string, campaignId: string): Promise<string[]> {
