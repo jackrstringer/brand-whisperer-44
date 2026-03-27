@@ -220,6 +220,9 @@ export default function AdminLibrary() {
                       <DropdownMenuItem onClick={() => openEdit(item)}>
                         <Pencil className="w-3.5 h-3.5 mr-2" /> Edit
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => reanalyze(item)}>
+                        <Sparkles className="w-3.5 h-3.5 mr-2" /> Re-analyze
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => togglePublish(item)}>
                         {item.is_published ? <EyeOff className="w-3.5 h-3.5 mr-2" /> : <Eye className="w-3.5 h-3.5 mr-2" />}
                         {item.is_published ? "Unpublish" : "Publish"}
