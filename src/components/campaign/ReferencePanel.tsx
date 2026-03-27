@@ -6,14 +6,30 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, Heart } from "lucide-react";
 import { toast } from "sonner";
 
-function CampaignIframeThumbnail({ html, scale, width, title }: { html: string; scale: number; width: number; title?: string }) {
+const CAMPAIGN_RENDER_WIDTH = 470;
+const TARGET_COLUMN_WIDTH = 245;
+
+function CampaignIframeThumbnail({ html, title }: { html: string; title?: string }) {
   const [contentHeight, setContentHeight] = useState(800);
+  const [containerWidth, setContainerWidth] = useState(258);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const srcDoc = html.replace(
     /(<head[^>]*>)/i,
     '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;pointer-events:none;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;}img{max-width:100%!important;height:auto!important;}td{box-sizing:border-box!important;}</style>'
   );
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? 258;
+      setContainerWidth(Math.max(1, width));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const onLoad = useCallback(() => {
     const iframe = iframeRef.current;
@@ -26,27 +42,28 @@ function CampaignIframeThumbnail({ html, scale, width, title }: { html: string; 
         setContentHeight(h);
       };
       measure();
-      // Re-measure after images load
       const imgs = doc.querySelectorAll("img");
       imgs.forEach((img) => {
         if (!img.complete) img.addEventListener("load", measure, { once: true });
       });
-      setTimeout(measure, 500);
-      setTimeout(measure, 2000);
+      setTimeout(measure, 300);
+      setTimeout(measure, 1000);
+      setTimeout(measure, 2200);
     } catch {}
   }, []);
 
-  const scaledHeight = Math.round(contentHeight * scale);
+  const scale = Math.min(1, containerWidth / CAMPAIGN_RENDER_WIDTH);
+  const scaledHeight = Math.max(120, Math.round(contentHeight * scale));
 
   return (
-    <div className="w-full overflow-hidden" style={{ height: scaledHeight }}>
+    <div ref={containerRef} className="w-full overflow-hidden" style={{ height: scaledHeight }}>
       <iframe
         ref={iframeRef}
         srcDoc={srcDoc}
         sandbox="allow-same-origin"
         className="border-0 block bg-white pointer-events-none"
         style={{
-          width,
+          width: CAMPAIGN_RENDER_WIDTH,
           height: contentHeight,
           transform: `scale(${scale})`,
           transformOrigin: "top left",
@@ -59,8 +76,6 @@ function CampaignIframeThumbnail({ html, scale, width, title }: { html: string; 
   );
 }
 
-const COL_WIDTH = 260; // target column width in px
-
 function MasonryGrid({ children }: { children: React.ReactNode }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [cols, setCols] = useState(3);
@@ -70,14 +85,14 @@ function MasonryGrid({ children }: { children: React.ReactNode }) {
     if (!el) return;
     const observer = new ResizeObserver((entries) => {
       const w = entries[0]?.contentRect.width ?? 800;
-      setCols(Math.max(1, Math.floor(w / COL_WIDTH)));
+      setCols(Math.max(1, Math.floor(w / TARGET_COLUMN_WIDTH)));
     });
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
 
   return (
-    <div ref={containerRef} className="p-2" style={{ columnCount: cols, columnGap: 8 }}>
+    <div ref={containerRef} className="p-1" style={{ columnCount: cols, columnGap: 4 }}>
       {children}
     </div>
   );
@@ -305,20 +320,16 @@ export default function ReferencePanel({
               const saved = isSavedRef(item._source === "Mine" ? "campaign" : item._source === "Library" ? "library" : type, id);
               const refType: "library" | "campaign" = item._source === "Mine" ? "campaign" : item._source === "Library" ? "library" : type;
 
-              // For iframe rendering: 470px content scaled to ~258px card width = ~55% zoom
-              const iframeWidth = 470;
-              const iframeScale = 0.55;
-
               return (
                 <div
                   key={id}
-                  className={`relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all mb-2 ${
+                  className={`relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all mb-1 ${
                     isSelected ? "border-primary ring-2 ring-primary/20" : "border-transparent hover:border-border"
                   }`}
                   style={{ breakInside: "avoid" }}
                 >
                   {hasHtml ? (
-                    <CampaignIframeThumbnail html={item.html} scale={iframeScale} width={iframeWidth} title={item.title} />
+                    <CampaignIframeThumbnail html={item.html} title={item.title} />
                   ) : imageUrl ? (
                     <div style={{ aspectRatio: "470 / 470" }}>
                       <img
