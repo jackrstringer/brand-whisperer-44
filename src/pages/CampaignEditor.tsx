@@ -160,6 +160,22 @@ export default function CampaignEditor() {
         .eq("campaign_id", campaignId)
         .order("created_at", { ascending: true });
 
+      // Restore variant messages from tool_calls JSONB
+      const restoredMessages: ChatMessage[] = (msgs || []).map((m: any) => {
+        const msg: ChatMessage = {
+          id: m.id,
+          campaign_id: m.campaign_id,
+          role: m.role,
+          content: m.content,
+          created_at: m.created_at,
+        };
+        if (m.tool_calls?.type === "variants" && m.tool_calls?.data) {
+          msg.message_type = "variants";
+          msg.variant_data = m.tool_calls.data;
+        }
+        return msg;
+      });
+
       const { data: brandProfile } = await supabase
         .from("brand_profiles")
         .select("reference_image_urls")
