@@ -566,6 +566,10 @@ export default function CampaignEditor() {
             }
 
             if (eventType === "variants") {
+              // Discard any streaming text bubble — variant message replaces it
+              setStreamingText("");
+              streamingTextRef.current = "";
+              serverReply = "__VARIANTS_HANDLED__";
               setAgentState("idle");
               const variantMsg: ChatMessage = {
                 id: crypto.randomUUID(),
@@ -577,10 +581,6 @@ export default function CampaignEditor() {
                 variant_data: { message: data.message, variants: data.variants, applied_index: null },
               };
               setMessages(prev => [...prev, variantMsg]);
-              setStreamingText("");
-              streamingTextRef.current = "";
-              // Skip the normal done handler for variants
-              serverReply = data.message;
             }
 
             if (eventType === "done") {
