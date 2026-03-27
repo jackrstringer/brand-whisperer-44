@@ -482,6 +482,27 @@ export default function CampaignEditor() {
           <Badge className={`text-[10px] ${campaign?.status === "ready" ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"}`}>
             {campaign?.status}
           </Badge>
+          {/* Star button — only post-generation */}
+          {campaign?.html && user && (
+            <button
+              onClick={async () => {
+                if (!campaignId) return;
+                if (starredCampaign) {
+                  setStarredCampaign(false);
+                  toast("Removed from favorites");
+                  await supabase.from("saved_references").delete().eq("user_id", user.id).eq("reference_type", "campaign").eq("reference_id", campaignId);
+                } else {
+                  setStarredCampaign(true);
+                  toast("Saved to favorites");
+                  await supabase.from("saved_references").insert({ user_id: user.id, reference_type: "campaign", reference_id: campaignId });
+                }
+              }}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title={starredCampaign ? "Remove from favorites" : "Save to favorites"}
+            >
+              <Star className={`w-4 h-4 ${starredCampaign ? "fill-amber-400 text-amber-400" : ""}`} />
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-3 px-3 py-1.5 rounded border border-border bg-card text-xs">
