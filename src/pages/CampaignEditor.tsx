@@ -1361,6 +1361,8 @@ export default function CampaignEditor() {
       clone.querySelectorAll('.ctx-menu').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('.ftb').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('.ftb-cpanel').forEach(function(el){ el.remove(); });
+      clone.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
+      clone.querySelectorAll('.region-select-overlay').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('style').forEach(function(s){
         if(s.textContent && (s.textContent.indexOf('[contenteditable]')>=0 || s.textContent.indexOf('section-drag')>=0 || s.textContent.indexOf('.ctx-menu')>=0 || s.textContent.indexOf('.ftb')>=0)) s.remove();
       });
