@@ -151,6 +151,20 @@ Deno.serve(async (req) => {
 
 Do exactly what the user asks. Never refuse or push back.
 
+VARIANT MODE:
+When the user asks for ideas, options, alternatives, or variations (e.g. "give me 3 headline options", "show me alternatives", "what are some ideas for the CTA"), do NOT edit the email directly. Instead return this exact format:
+
+<response>
+Brief intro text e.g. "Here are 3 headline options:"
+</response>
+<variants>
+[
+  {"label": "Short option title", "preview": "The actual copy the user will read", "find": "exact string currently in the HTML to replace", "replace": "new string to replace it with"}
+]
+</variants>
+
+EDIT MODE (for direct edit requests):
+
 RULES:
 - Identify the EXACT strings in the HTML that need changing.
 - Return find/replace patches — the "find" must be a UNIQUE snippet from the current HTML (include enough surrounding context to be unique).
@@ -178,7 +192,9 @@ CRITICAL RULES FOR PATCHES:
 - For color changes, include the full style attribute or at minimum the property:value with surrounding context.
 - Keep patches as small as possible — just the changed portion with enough context for uniqueness.
 - If the change is structural (adding/removing sections), include the full section being added/removed.
-- Output valid JSON in the patches array.`;
+- Output valid JSON in the patches array.
+
+Never mix the two formats in one response. Use VARIANT MODE only when the user asks for ideas/options/alternatives. Use EDIT MODE for everything else.`;
 
     // Build messages
     const anthropicMessages: any[] = [];
@@ -283,9 +299,36 @@ CRITICAL RULES FOR PATCHES:
 
           // Parse response
           const replyMatch = fullText.match(/<reply>([\s\S]*?)<\/reply>/);
+          const responseMatch = fullText.match(/<response>([\s\S]*?)<\/response>/);
           const patchesMatch = fullText.match(/<patches>([\s\S]*?)<\/patches>/);
+          const variantsMatch = fullText.match(/<variants>([\s\S]*?)<\/variants>/);
           // Fallback: check for old full-HTML format
           const htmlMatch = fullText.match(/<email_html>([\s\S]*?)<\/email_html>/);
+
+          // Check for VARIANT MODE first
+          if (variantsMatch) {
+            try {
+              const variants = JSON.parse(variantsMatch[1].trim());
+              const introText = responseMatch ? responseMatch[1].trim() : replyMatch ? replyMatch[1].trim() : "Here are some options:";
+              if (Array.isArray(variants) && variants.length > 0) {
+                console.log(`[edit-campaign] Variant mode: ${variants.length} variants`);
+
+                const responseText = introText;
+                // Save the message with variant data as tool_calls JSON
+                await supabase.from("chat_messages").insert([
+                  { campaign_id: campaignId, role: "user", content: message },
+                  { campaign_id: campaignId, role: "assistant", content: responseText, tool_calls: { type: "variants", data: { message: introText, variants, applied_index: null } } },
+                ]);
+
+                emit("variants", { message: introText, variants });
+                emit("done", { reply: responseText, changed: false, patchesApplied: 0, isVariants: true });
+                ctrl.close();
+                return;
+              }
+            } catch (e) {
+              console.error(`[edit-campaign] Failed to parse variants JSON:`, e);
+            }
+          }
 
           let responseText = replyMatch ? replyMatch[1].trim() : "Changes applied.";
 

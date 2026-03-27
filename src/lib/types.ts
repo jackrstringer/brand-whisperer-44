@@ -33,12 +33,27 @@ export interface Campaign {
   updated_at: string;
 }
 
+export interface VariantOption {
+  label: string;
+  preview: string;
+  find: string;
+  replace: string;
+}
+
+export interface VariantData {
+  message: string;
+  variants: VariantOption[];
+  applied_index: number | null;
+}
+
 export interface ChatMessage {
   id: string;
   campaign_id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   created_at: string;
+  message_type?: 'text' | 'variants';
+  variant_data?: VariantData;
 }
 
 export interface Product {

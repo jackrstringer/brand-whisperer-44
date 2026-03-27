@@ -16,7 +16,8 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 
 
-import type { Campaign, ChatMessage } from "@/lib/types";
+import type { Campaign, ChatMessage, VariantOption } from "@/lib/types";
+import VariantCards from "@/components/brand/VariantCards";
 import { captureEmailScreenshots } from "@/lib/visualQaCapture";
 
 async function uploadChatImages(files: File[], brandId: string, campaignId: string): Promise<string[]> {
@@ -159,6 +160,22 @@ export default function CampaignEditor() {
         .eq("campaign_id", campaignId)
         .order("created_at", { ascending: true });
 
+      // Restore variant messages from tool_calls JSONB
+      const restoredMessages: ChatMessage[] = (msgs || []).map((m: any) => {
+        const msg: ChatMessage = {
+          id: m.id,
+          campaign_id: m.campaign_id,
+          role: m.role,
+          content: m.content,
+          created_at: m.created_at,
+        };
+        if (m.tool_calls?.type === "variants" && m.tool_calls?.data) {
+          msg.message_type = "variants";
+          msg.variant_data = m.tool_calls.data;
+        }
+        return msg;
+      });
+
       const { data: brandProfile } = await supabase
         .from("brand_profiles")
         .select("reference_image_urls")
@@ -170,7 +187,7 @@ export default function CampaignEditor() {
         : [];
 
       setPreviewFallbackUrls(fallbackUrls);
-      setMessages((msgs || []) as ChatMessage[]);
+      setMessages(restoredMessages);
       setLoading(false);
     };
     load();
@@ -546,19 +563,43 @@ export default function CampaignEditor() {
               setStreamingText(noChangeText);
             }
 
-            if (eventType === "done") {
+            if (eventType === "variants") {
               setAgentState("idle");
-              const finalText =
-                (typeof data?.reply === "string" && data.reply.trim()) ||
-                serverReply ||
-                streamingTextRef.current ||
-                "Changes applied.";
-              setMessages(prev => [
-                ...prev,
-                { id: crypto.randomUUID(), campaign_id: campaignId, role: "assistant", content: finalText, created_at: new Date().toISOString() },
-              ]);
+              const variantMsg: ChatMessage = {
+                id: crypto.randomUUID(),
+                campaign_id: campaignId,
+                role: "assistant",
+                content: data.message || "Here are some options:",
+                created_at: new Date().toISOString(),
+                message_type: "variants",
+                variant_data: { message: data.message, variants: data.variants, applied_index: null },
+              };
+              setMessages(prev => [...prev, variantMsg]);
               setStreamingText("");
               streamingTextRef.current = "";
+              // Skip the normal done handler for variants
+              serverReply = data.message;
+            }
+
+            if (eventType === "done") {
+              setAgentState("idle");
+              // Skip adding another message if variants already handled it
+              if (data?.isVariants) {
+                setStreamingText("");
+                streamingTextRef.current = "";
+              } else {
+                const finalText =
+                  (typeof data?.reply === "string" && data.reply.trim()) ||
+                  serverReply ||
+                  streamingTextRef.current ||
+                  "Changes applied.";
+                setMessages(prev => [
+                  ...prev,
+                  { id: crypto.randomUUID(), campaign_id: campaignId, role: "assistant", content: finalText, created_at: new Date().toISOString() },
+                ]);
+                setStreamingText("");
+                streamingTextRef.current = "";
+              }
             }
 
             if (eventType === "error") {
@@ -592,8 +633,38 @@ export default function CampaignEditor() {
       setAgentState("idle");
     }
   };
+  const handleApplyVariant = async (variant: VariantOption, index: number, messageId: string) => {
+    if (!campaign?.html || !campaignId) return;
+    const html = campaign.html;
+    if (!html.includes(variant.find)) {
+      toast.error("Could not find the text to replace — it may have already changed.");
+      return;
+    }
+    const newHtml = html.replace(variant.find, variant.replace);
+    // Save to history
+    const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
+    history.push(html);
+    await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
+    setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
+    setCanUndo(true);
 
-  // All versions: history entries + current html as the last version
+    // Update the message's applied_index
+    setMessages(prev => prev.map(m => {
+      if (m.id === messageId && m.variant_data) {
+        return { ...m, variant_data: { ...m.variant_data, applied_index: index } };
+      }
+      return m;
+    }));
+
+    // Persist applied_index to DB
+    await supabase.from("chat_messages").update({
+      tool_calls: { type: "variants", data: { message: messages.find(m => m.id === messageId)?.variant_data?.message || "", variants: messages.find(m => m.id === messageId)?.variant_data?.variants || [], applied_index: index } },
+    } as any).eq("id", messageId);
+
+    toast.success(`Applied: ${variant.label}`);
+  };
+
+
   const allVersions: string[] = (() => {
     const history = Array.isArray(campaign?.html_history) ? campaign.html_history as string[] : [];
     const current = campaign?.html || "";
@@ -1090,6 +1161,20 @@ export default function CampaignEditor() {
                         );
                       }
                       if (msg.role === "assistant") {
+                        // Variant messages don't count as edit versions
+                        if (msg.message_type === "variants" && msg.variant_data) {
+                          return (
+                            <div key={msg.id} className="flex justify-start">
+                              <div className="max-w-[90%] rounded-lg px-3 py-2 bg-card text-foreground">
+                                <VariantCards
+                                  variantData={msg.variant_data}
+                                  onApply={(variant, idx) => handleApplyVariant(variant, idx, msg.id)}
+                                  disabled={agentState !== "idle"}
+                                />
+                              </div>
+                            </div>
+                          );
+                        }
                         const thisEditIndex = editCount;
                         editCount++;
                         // Version index: editIndex + 1 maps to allVersions index (history[0]=v0, history[1]=v1 after edit 0, etc.)
@@ -1157,6 +1242,21 @@ export default function CampaignEditor() {
                     <Button variant="ghost" size="sm" onClick={handleUndo} className="text-muted-foreground hover:text-foreground">
                       <Undo2 className="w-3 h-3 mr-1" /> Undo last change
                     </Button>
+                  </div>
+                )}
+
+                {/* Quick prompt chips */}
+                {campaign?.html && agentState === "idle" && !sending && (
+                  <div className="px-4 pt-2 flex gap-1.5 flex-wrap">
+                    {["3 headline ideas", "CTA alternatives", "Vary the tone"].map((chip) => (
+                      <button
+                        key={chip}
+                        onClick={() => { setChatInput(chip); }}
+                        className="text-[11px] px-2.5 py-1 rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+                      >
+                        {chip}
+                      </button>
+                    ))}
                   </div>
                 )}
 
