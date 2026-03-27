@@ -821,33 +821,18 @@ export default function CampaignEditor() {
   const renderedWidth = Math.round(viewportWidth * zoomScale);
   const renderedHeight = Math.round(iframeContentHeight * zoomScale);
 
-  // When viewing a past version, show that version; otherwise show current
   const displayHtml = previewHtml || (activeVersionIndex !== null ? allVersions[activeVersionIndex] : campaign?.html);
   const htmlForPreview = displayHtml
     ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls)
     : "";
 
-  // Push content to iframe imperatively (no useEffect needed — avoids hook count issues)
-  if (htmlForPreview && htmlForPreview !== prevHtmlForPreviewRef.current) {
-    prevHtmlForPreviewRef.current = htmlForPreview;
-    const injectedHtml = htmlForPreview.replace(
-      /(<head[^>]*>)/i,
-      '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}</style>'
-    );
-    const iframe = iframeRef.current;
-    if (iframe?.contentWindow && iframeReadyRef.current) {
-      iframe.contentWindow.postMessage({ type: 'updateHtml', html: injectedHtml }, '*');
-    } else {
-      pendingHtmlRef.current = injectedHtml;
-    }
-  }
+  const srcdocHtml = htmlForPreview
+    ? htmlForPreview.replace(
+        /(<head[^>]*>)/i,
+        '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}</style>'
+      )
+    : "";
 
-  const shellHtml = `<!DOCTYPE html><html><head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;background:#fff;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}</style>
-</head><body>
-<script>window.addEventListener('message',function(e){if(e.data&&e.data.type==='updateHtml'){document.open();document.write(e.data.html);document.close();window.parent.postMessage({type:'iframeReady'},'*');}});</script>
-</body></html>`;
 
   return (
     <>
