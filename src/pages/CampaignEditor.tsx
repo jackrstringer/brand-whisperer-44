@@ -1138,6 +1138,16 @@ export default function CampaignEditor() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {campaign?.html && (
+            <div className="flex items-center gap-1 mr-1">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleUndo} disabled={!canUndo} title="Undo">
+                <Undo2 className="w-3.5 h-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRedo} disabled={redoStack.length === 0} title="Redo">
+                <Redo2 className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          )}
           <div className="flex items-center gap-3 px-3 py-1.5 rounded border border-border bg-card text-xs">
             <label className="flex items-center gap-1.5">
               <span className="text-muted-foreground">Render:</span>
