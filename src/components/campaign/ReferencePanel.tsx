@@ -223,9 +223,14 @@ export default function ReferencePanel({
             items.map((item: any) => {
               const id = item.id;
               const imageUrl = item.thumbnail_url || (item.image_urls?.[0]) || "";
+              const hasHtml = !!item.html;
               const isSelected = selectedReference?.id === id;
               const saved = isSavedRef(item._source === "Mine" ? "campaign" : item._source === "Library" ? "library" : type, id);
               const refType: "library" | "campaign" = item._source === "Mine" ? "campaign" : item._source === "Library" ? "library" : type;
+
+              // For iframe rendering: 470px content scaled to ~258px card width = ~55% zoom
+              const iframeWidth = 470;
+              const iframeScale = 0.55;
 
               return (
                 <div
@@ -233,23 +238,43 @@ export default function ReferencePanel({
                   className={`relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${
                     isSelected ? "border-primary ring-2 ring-primary/20" : "border-transparent hover:border-border"
                   }`}
-                  style={{ aspectRatio: "470 / 470" }}
                 >
-                  {imageUrl ? (
-                    <img
-                      src={imageUrl}
-                      alt=""
-                      className="w-full h-full object-cover object-top"
-                      loading="lazy"
-                    />
+                  {hasHtml ? (
+                    <div className="w-full overflow-hidden" style={{ height: 400 }}>
+                      <iframe
+                        srcDoc={item.html.replace(
+                          /(<head[^>]*>)/i,
+                          '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;overflow:hidden;pointer-events:none;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;}img{max-width:100%!important;height:auto!important;}td{box-sizing:border-box!important;}</style>'
+                        )}
+                        sandbox="allow-same-origin"
+                        className="border-0 block bg-white pointer-events-none"
+                        style={{
+                          width: iframeWidth,
+                          height: Math.round(400 / iframeScale),
+                          transform: `scale(${iframeScale})`,
+                          transformOrigin: "top left",
+                        }}
+                        title={item.title || "Campaign preview"}
+                        tabIndex={-1}
+                      />
+                    </div>
+                  ) : imageUrl ? (
+                    <div style={{ aspectRatio: "470 / 470" }}>
+                      <img
+                        src={imageUrl}
+                        alt=""
+                        className="w-full h-full object-cover object-top"
+                        loading="lazy"
+                      />
+                    </div>
                   ) : (
-                    <div className="w-full h-full bg-muted flex items-center justify-center">
+                    <div className="bg-muted flex items-center justify-center" style={{ aspectRatio: "470 / 470" }}>
                       <span className="text-[10px] text-muted-foreground">No preview</span>
                     </div>
                   )}
 
                   {/* Hover overlay */}
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 z-10">
                     <button
                       onClick={(e) => { e.stopPropagation(); toggleSave(refType, id); }}
                       className="absolute top-2 right-2 p-1.5 rounded-full bg-background/20 hover:bg-background/40 transition-colors"
