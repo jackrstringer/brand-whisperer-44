@@ -313,12 +313,17 @@ CRITICAL RULES FOR PATCHES:
             }
           } else if (htmlMatch) {
             // FALLBACK: full HTML mode (in case AI ignores patch format)
-            finalHtml = htmlMatch[1].trim();
-            console.log(`[edit-campaign] Fallback: full HTML mode (${finalHtml.length} chars)`);
-          } else if (!replyMatch) {
-            // No tags at all — treat as full HTML (backward compat)
-            finalHtml = fullText.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
+            const candidateHtml = htmlMatch[1].trim();
+            // Validate it actually looks like HTML before accepting
+            if (candidateHtml.includes("<") && (candidateHtml.includes("</") || candidateHtml.includes("/>"))) {
+              finalHtml = candidateHtml;
+              console.log(`[edit-campaign] Fallback: full HTML mode (${finalHtml.length} chars)`);
+            } else {
+              console.warn(`[edit-campaign] email_html content doesn't look like HTML, skipping`);
+            }
           }
+          // REMOVED: dangerous fallback that treated raw AI text as HTML
+          // This was causing campaign destruction when patch tags were malformed
 
           if (finalHtml && finalHtml !== currentHtml) {
             finalHtml = enforceNoStackingLayout(finalHtml);
