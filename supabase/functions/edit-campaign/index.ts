@@ -391,10 +391,44 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
                 console.log(`[edit-campaign] Patches: ${patches.length} provided, ${patchCount} applied`);
 
                 if (patchCount === 0) {
-                  // None matched — emit error but don't fail
-                  console.warn(`[edit-campaign] WARNING: 0 patches matched! Patch find strings didn't match HTML.`);
-                  emit("text_delta", { content: "\n\n⚠️ The patches couldn't be applied — retrying with full output..." });
-                  // TODO: could retry with full-HTML mode here
+                  // None matched — retry with full-HTML mode
+                  console.warn(`[edit-campaign] WARNING: 0 patches matched! Retrying with full-HTML mode...`);
+                  emit("text_delta", { content: "\n\n⚠️ Patches didn't match — retrying with full output..." });
+
+                  try {
+                    const retryResp = await fetch("https://api.anthropic.com/v1/messages", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "x-api-key": ANTHROPIC_API_KEY,
+                        "anthropic-version": "2023-06-01",
+                      },
+                      body: JSON.stringify({
+                        model: "claude-sonnet-4-6",
+                        max_tokens: 16384,
+                        system: `You are a surgical HTML email editor. Apply the user's requested edit and return the COMPLETE modified HTML wrapped in <email_html> tags. Also include a brief <reply> tag describing what you changed.\n\nFormat:\n<reply>What changed</reply>\n<email_html>...full modified HTML...</email_html>`,
+                        messages: anthropicMessages,
+                      }),
+                    });
+
+                    if (retryResp.ok) {
+                      const retryJson = await retryResp.json();
+                      const retryText = retryJson?.content?.[0]?.text || "";
+                      const retryHtmlMatch = retryText.match(/<email_html>([\s\S]*?)<\/email_html>/);
+                      const retryReplyMatch = retryText.match(/<reply>([\s\S]*?)<\/reply>/);
+                      if (retryHtmlMatch) {
+                        const retryHtml = retryHtmlMatch[1].trim();
+                        if (retryHtml.includes("<") && retryHtml.length > currentHtml.length * 0.3) {
+                          finalHtml = retryHtml;
+                          patchCount = 1; // mark as changed
+                          if (retryReplyMatch) responseText = retryReplyMatch[1].trim();
+                          console.log(`[edit-campaign] Full-HTML retry succeeded (${finalHtml.length} chars)`);
+                        }
+                      }
+                    }
+                  } catch (retryErr) {
+                    console.error(`[edit-campaign] Full-HTML retry failed:`, retryErr);
+                  }
                 }
               }
             } catch (e) {
