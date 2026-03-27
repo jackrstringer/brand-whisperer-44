@@ -584,13 +584,14 @@ Use the brand's own colors and typography — NOT the reference's colors.
 You may make minor adjustments to fit the brief, but the overall skeleton should clearly match the reference.`;
     }
 
-    part3 += `\n\n=== IMAGE RULES ===
+    part3 += `\n\n=== IMAGE & GRID LAYOUT RULES ===
 1. The reference campaign screenshots above are STYLE REFERENCES ONLY. NEVER embed them as <img> tags.
 2. Never invent, guess, or use external stock image URLs (Unsplash, Pexels, etc).
 3. You are the CREATIVE DIRECTOR. Choose ONLY the images that best serve this campaign's story. You do NOT need to use every available image — be selective.
 4. Use the image URLs from the AVAILABLE BRAND ASSETS list exactly as provided. Do NOT modify, crop, or transform the URLs.
 5. If an image doesn't fit the campaign's story, skip it entirely rather than forcing it in.
-6. CONSISTENCY: Every image must have the same padding treatment — either ALL full-bleed or ALL with equal side padding. Never mix.`;
+6. CONSISTENCY: Every image must have the same padding treatment — either ALL full-bleed or ALL with equal side padding. Never mix.
+7. CRITICAL NO-STACK RULE: Any side-by-side layout in the chosen reference (product grids, two-column image blocks, split text/image sections) MUST remain side-by-side at all viewport widths. Do NOT add media-query rules that convert these to single-column stacked blocks.`;
 
     if (hostedAssetEntries.length > 0) {
       part3 += `\n\nAVAILABLE BRAND ASSETS (use selectively — pick what serves the campaign):\n${assetCatalog}`;

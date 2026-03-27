@@ -286,6 +286,8 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
     const history = Array.isArray(campaign.html_history) ? campaign.html_history : [];
     history.push(campaign.html);
 
+    html = enforceNoStackingLayout(html);
+
     await supabase.from("campaigns").update({
       html,
       html_history: history,
