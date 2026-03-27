@@ -129,6 +129,10 @@ export default function CampaignEditor() {
   const [sendSegmentIds, setSendSegmentIds] = useState<string[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const previewPanelRef = useRef<HTMLDivElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const iframeReadyRef = useRef(false);
+  const pendingHtmlRef = useRef<string | null>(null);
+  const prevHtmlForPreviewRef = useRef<string>("");
 
   const [renderWidth, setRenderWidth] = useState(470);
   const [viewportWidth, setViewportWidth] = useState(470);
