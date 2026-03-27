@@ -465,7 +465,7 @@ export default function CampaignEditor() {
   }, []);
 
   const sendMessage = async () => {
-    if (!campaignId || !brandId || (!chatInput.trim() && chatAttachments.length === 0) || !campaign?.html) return;
+    if (!campaignId || !brandId || (!chatInput.trim() && chatAttachments.length === 0) || !(iframeOwnedHtmlRef.current || campaign?.html)) return;
     const userMsg = chatInput.trim();
     const attachedFiles = [...chatAttachments];
     setChatInput("");
@@ -506,7 +506,7 @@ export default function CampaignEditor() {
           body: JSON.stringify({
             campaignId,
             message: userMsg,
-            currentHtml: campaign.html,
+            currentHtml: iframeOwnedHtmlRef.current || campaign.html,
             ...(attachedImageUrls.length > 0 ? { attachedImageUrls } : {}),
             ...(selectedReference ? {
               reference: {
@@ -573,6 +573,7 @@ export default function CampaignEditor() {
 
             if (eventType === "html_patch") {
               setAgentState("editing");
+              iframeOwnedHtmlRef.current = null; // clear iframe ownership on chat edit
               setCampaign(c => c ? { ...c, html: data.html } : c);
               setCanUndo(true);
               setRedoStack([]);
@@ -925,7 +926,8 @@ export default function CampaignEditor() {
     if (!campaign || !campaignId) return;
     const history = campaign.html_history;
     if (!Array.isArray(history) || history.length === 0) return;
-    const currentHtml = campaign.html || "";
+    const currentHtml = iframeOwnedHtmlRef.current || campaign.html || "";
+    iframeOwnedHtmlRef.current = null; // flush iframe ownership
     const previousHtml = history[history.length - 1];
     const newHistory = history.slice(0, -1);
     await supabase.from("campaigns").update({ html: previousHtml, html_history: newHistory }).eq("id", campaignId);
@@ -982,10 +984,12 @@ export default function CampaignEditor() {
   };
   // Debounced inline-edit save
   const inlineEditTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track iframe-owned HTML to avoid reloading iframe on every keystroke
+  const iframeOwnedHtmlRef = useRef<string | null>(null);
 
   // Background edit: sends instruction to AI silently (no chat message)
   const sendBackgroundEdit = useCallback(async (instruction: string, onComplete?: () => void) => {
-    if (!campaignId || !brandId || !campaign?.html) return;
+    if (!campaignId || !brandId || !(iframeOwnedHtmlRef.current || campaign?.html)) return;
     try {
       const session = await supabase.auth.getSession();
       const token = session.data.session?.access_token;
@@ -1001,7 +1005,7 @@ export default function CampaignEditor() {
           body: JSON.stringify({
             campaignId,
             message: instruction,
-            currentHtml: campaign.html,
+            currentHtml: iframeOwnedHtmlRef.current || campaign.html,
             silent: true,
           }),
         }
@@ -1095,21 +1099,29 @@ export default function CampaignEditor() {
       if (e.data?.type !== "textEdited" || !e.data?.html) return;
       if (!campaignId || !campaign) return;
       const newHtml = e.data.html as string;
-      const currentHtml = campaign.html || "";
+      const currentHtml = iframeOwnedHtmlRef.current || campaign.html || "";
       if (newHtml === currentHtml) return;
+
+      // Track iframe's live HTML WITHOUT updating campaign state (prevents iframe reload)
+      iframeOwnedHtmlRef.current = newHtml;
 
       // Push to history for undo
       const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
       history.push(currentHtml);
-      setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
+      // Update history in state (but NOT html — that would reload iframe)
+      setCampaign(c => c ? { ...c, html_history: history } : c);
       setCanUndo(true);
       setRedoStack([]); // clear redo on new edit
 
-      // Debounced DB save
+      // Debounced DB save — persist both html and history
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
       inlineEditTimerRef.current = setTimeout(async () => {
         await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
-      }, 500);
+        // Silently sync campaign.html to match DB without triggering srcdoc recompute
+        // (srcdocHtml won't change because displayHtml hasn't changed)
+        setCampaign(c => c ? { ...c, html: newHtml } : c);
+        iframeOwnedHtmlRef.current = null;
+      }, 2000);
     };
     window.addEventListener("message", handler);
     return () => {
@@ -1221,13 +1233,97 @@ export default function CampaignEditor() {
         el.style.removeProperty('position');
         el.removeAttribute('data-section-name');
       });
+      clone.querySelectorAll('.ctx-menu').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('style').forEach(function(s){
-        if(s.textContent && (s.textContent.indexOf('[contenteditable]')>=0 || s.textContent.indexOf('section-drag')>=0)) s.remove();
+        if(s.textContent && (s.textContent.indexOf('[contenteditable]')>=0 || s.textContent.indexOf('section-drag')>=0 || s.textContent.indexOf('.ctx-menu')>=0)) s.remove();
       });
       window.parent.postMessage({ type: 'textEdited', html: clone.outerHTML }, '*');
-    }, 300);
+    }, 1500);
   }
   document.addEventListener('input', syncHtml);
+
+  /* --- RIGHT-CLICK CONTEXT MENU --- */
+  var ctxMenu = null;
+  var ctxTarget = null;
+  function removeCtxMenu(){ if(ctxMenu){ ctxMenu.remove(); ctxMenu = null; } ctxTarget = null; }
+  document.addEventListener('click', removeCtxMenu);
+  document.addEventListener('scroll', removeCtxMenu, true);
+
+  document.addEventListener('contextmenu', function(e){
+    e.preventDefault();
+    removeCtxMenu();
+    var el = e.target;
+    while(el && el !== document.body){
+      if(el.tagName && /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL|TD|TH|TR|TABLE|DIV|IMG)$/i.test(el.tagName)) break;
+      el = el.parentElement;
+    }
+    if(!el || el === document.body) return;
+    ctxTarget = el;
+
+    var menu = document.createElement('div');
+    menu.className = 'ctx-menu';
+    menu.style.cssText = 'position:fixed;z-index:99999;background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:4px 0;min-width:160px;box-shadow:0 8px 24px rgba(0,0,0,0.4);font-family:-apple-system,BlinkMacSystemFont,sans-serif;';
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = e.clientY + 'px';
+
+    function addItem(label, icon, fn){
+      var item = document.createElement('div');
+      item.style.cssText = 'padding:6px 12px;color:#e0e0e0;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:8px;';
+      item.innerHTML = '<span style="opacity:0.6;font-size:13px;">' + icon + '</span>' + label;
+      item.addEventListener('mouseenter', function(){ item.style.background = '#333'; });
+      item.addEventListener('mouseleave', function(){ item.style.background = 'none'; });
+      item.addEventListener('click', function(ev){ ev.stopPropagation(); removeCtxMenu(); fn(); });
+      menu.appendChild(item);
+    }
+    function addSep(){
+      var sep = document.createElement('div');
+      sep.style.cssText = 'height:1px;background:#333;margin:4px 0;';
+      menu.appendChild(sep);
+    }
+
+    /* Edit text — focus the element */
+    if(el.isContentEditable || /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL)$/i.test(el.tagName)){
+      addItem('Edit Text', '✏️', function(){
+        try { el.contentEditable = 'plaintext-only'; } catch(ex) { el.contentEditable = 'true'; }
+        el.focus();
+        var range = document.createRange();
+        range.selectNodeContents(el);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      });
+    }
+
+    /* Copy text */
+    if(el.textContent && el.textContent.trim()){
+      addItem('Copy Text', '📋', function(){
+        navigator.clipboard.writeText(el.textContent.trim()).catch(function(){});
+      });
+    }
+
+    addSep();
+
+    /* Duplicate element */
+    addItem('Duplicate', '⧉', function(){
+      var cloned = el.cloneNode(true);
+      el.parentNode.insertBefore(cloned, el.nextSibling);
+      syncHtml();
+    });
+
+    /* Delete element */
+    addItem('Delete', '🗑️', function(){
+      el.remove();
+      syncHtml();
+    });
+
+    document.body.appendChild(menu);
+    ctxMenu = menu;
+
+    /* Keep menu in viewport */
+    var rect = menu.getBoundingClientRect();
+    if(rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 8) + 'px';
+    if(rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 8) + 'px';
+  });
 
   /* --- SECTION DETECTION --- */
   var sections = [];
