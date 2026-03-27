@@ -1078,9 +1078,10 @@ export default function CampaignEditor() {
                   }}
                 >
                   <iframe
+                    ref={iframeRef}
                     key={`${renderWidth}-${viewportWidth}`}
-                    srcDoc={srcdocHtml}
-                    sandbox="allow-same-origin"
+                    srcDoc={shellHtml}
+                    sandbox="allow-same-origin allow-scripts"
                     className="border-0 block bg-white shadow-2xl"
                     style={{
                       width: renderWidth,
@@ -1089,13 +1090,15 @@ export default function CampaignEditor() {
                       transformOrigin: "top left",
                     }}
                     title="Email Preview"
-                    onLoad={(e) => {
-                      const iframe = e.currentTarget;
-                      measureIframeHeight(iframe);
-                      setupIframeObserver(iframe);
-                      window.setTimeout(() => measureIframeHeight(iframe), 300);
-                      window.setTimeout(() => measureIframeHeight(iframe), 1000);
-                      window.setTimeout(() => measureIframeHeight(iframe), 3000);
+                    onLoad={() => {
+                      iframeReadyRef.current = true;
+                      // Send initial content
+                      if (prevHtmlForPreviewRef.current) {
+                        iframeRef.current?.contentWindow?.postMessage({ type: 'updateHtml', html: prevHtmlForPreviewRef.current }, '*');
+                      } else if (pendingHtmlRef.current) {
+                        iframeRef.current?.contentWindow?.postMessage({ type: 'updateHtml', html: pendingHtmlRef.current }, '*');
+                        pendingHtmlRef.current = null;
+                      }
                     }}
                   />
                 </div>
