@@ -871,6 +871,7 @@ export default function CampaignEditor() {
           </div>
         </Panel>
       </PanelGroup>
+      </div>
     </div>
   );
 }

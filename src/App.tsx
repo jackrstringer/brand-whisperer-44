@@ -50,6 +50,7 @@ function AppRoutes() {
       <Route path="/brands/:brandId/campaigns/:campaignId" element={<ProtectedRoute><CampaignEditor /></ProtectedRoute>} />
       <Route path="/brands/:brandId/campaigns/:campaignId/qa" element={<ProtectedRoute><CampaignQA /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedLayout><GlobalSettings /></ProtectedLayout>} />
+      <Route path="/admin/library" element={<ProtectedRoute><AdminLibrary /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

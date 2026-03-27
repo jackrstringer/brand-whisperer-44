@@ -105,6 +105,24 @@ export function AppSidebar() {
             </SidebarGroupContent>
           </SidebarGroup>
         )}
+        {/* Admin section */}
+        {isAdmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel>{collapsed ? "A" : "Admin"}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink to="/admin/library" end activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">
+                      <Library className="mr-2 h-4 w-4 shrink-0" />
+                      {!collapsed && <span>Reference Library</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter>
