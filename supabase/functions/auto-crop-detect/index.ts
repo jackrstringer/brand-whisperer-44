@@ -10,7 +10,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { imageDataUrl, width, height } = await req.json();
+    const { imageDataUrl } = await req.json();
     if (!imageDataUrl) {
       return new Response(JSON.stringify({ error: "imageDataUrl required" }), {
         status: 400,
@@ -28,32 +28,16 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "google/gemini-2.5-flash-lite",
         messages: [
-          {
-            role: "system",
-            content: `You are an image analysis tool that detects unnecessary padding/margins around email campaign screenshots.
-
-Email campaigns are often screenshotted or exported with extra uniform-color padding on the left, right, top, or bottom edges. This padding is NOT part of the actual email design — it's blank space from the email client or export tool.
-
-Your job: analyze the image and determine how much padding exists on each side as a PERCENTAGE of the image dimensions.
-
-Rules:
-- Padding is a uniform or near-uniform color strip along an edge (white, gray, or any solid color)
-- The padding color may differ from section to section vertically (e.g. a dark header area has dark padding, a white body area has white padding) — what matters is that each row's edge pixels are uniform and not part of the email content
-- Do NOT crop into actual email content — be conservative
-- If there's no padding on a side, return 0
-- Common patterns: 5-15% padding on left and right sides, sometimes with matching top/bottom
-
-Respond with ONLY a JSON object: {"left": number, "right": number, "top": number, "bottom": number}
-Each value is a percentage (0-50) of the image dimension to crop from that side.`,
-          },
           {
             role: "user",
             content: [
               {
                 type: "text",
-                text: `Analyze this email campaign image (${width}x${height}px) and detect any padding/margins that should be cropped. Return the padding percentages as JSON.`,
+                text: `Look at this email campaign image. Does it have uniform-color padding (blank space) on BOTH the left AND right sides? This padding is extra space from the email client — not part of the email design itself. The padding is typically a single solid color (white, gray, or matching the email background) that runs the full height of the image on both edges.
+
+Answer with ONLY "yes" or "no".`,
               },
               {
                 type: "image_url",
@@ -66,38 +50,22 @@ Each value is a percentage (0-50) of the image dimension to crop from that side.
     });
 
     if (!resp.ok) {
-      const errText = await resp.text();
-      console.error("AI gateway error:", resp.status, errText);
-      return new Response(JSON.stringify({ left: 0, right: 0, top: 0, bottom: 0 }), {
+      console.error("AI gateway error:", resp.status);
+      return new Response(JSON.stringify({ hasPadding: false }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const aiResult = await resp.json();
-    const raw = aiResult.choices?.[0]?.message?.content || "";
+    const raw = (aiResult.choices?.[0]?.message?.content || "").trim().toLowerCase();
+    const hasPadding = raw.startsWith("yes");
 
-    // Parse JSON from response
-    const jsonMatch = raw.match(/\{[^}]+\}/);
-    if (!jsonMatch) {
-      return new Response(JSON.stringify({ left: 0, right: 0, top: 0, bottom: 0 }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
-    const result = {
-      left: Math.max(0, Math.min(50, Number(parsed.left) || 0)),
-      right: Math.max(0, Math.min(50, Number(parsed.right) || 0)),
-      top: Math.max(0, Math.min(50, Number(parsed.top) || 0)),
-      bottom: Math.max(0, Math.min(50, Number(parsed.bottom) || 0)),
-    };
-
-    return new Response(JSON.stringify(result), {
+    return new Response(JSON.stringify({ hasPadding }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("auto-crop-detect error:", e);
-    return new Response(JSON.stringify({ left: 0, right: 0, top: 0, bottom: 0 }), {
+    return new Response(JSON.stringify({ hasPadding: false }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
