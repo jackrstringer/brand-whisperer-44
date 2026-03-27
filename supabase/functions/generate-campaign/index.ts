@@ -29,6 +29,33 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+function enforceNoStackingLayout(html: string): string {
+  if (!html) return html;
+
+  let output = html;
+
+  // Remove common mobile-collapse rules that force side-by-side layouts into a single column
+  const collapseSelectorPattern = /\.(?:[a-z0-9_-]*?(?:grid|col|column|two-col|two_col|product|gift)[a-z0-9_-]*?(?:cell|col|column)?|(?:product-grid-cell|two-col-cell|gift-cell|column-cell|grid-cell))\s*\{[^}]*\}/gi;
+  output = output.replace(collapseSelectorPattern, (rule) => {
+    return rule
+      .replace(/display\s*:\s*block\s*!important;?/gi, "")
+      .replace(/width\s*:\s*100%\s*!important;?/gi, "")
+      .replace(/float\s*:\s*none\s*!important;?/gi, "")
+      .replace(/max-width\s*:\s*100%\s*!important;?/gi, "")
+      .replace(/;\s*;/g, ";");
+  });
+
+  // Force common multi-column classes to remain side-by-side at all breakpoints
+  if (/<head[^>]*>/i.test(output)) {
+    output = output.replace(
+      /(<head[^>]*>)/i,
+      `$1<style>.product-grid-cell,.two-col-cell,.gift-cell,.column-cell,.grid-cell{display:table-cell !important;vertical-align:top !important;}.product-grid-cell,.two-col-cell,.column-cell,.grid-cell{width:auto !important;}</style>`
+    );
+  }
+
+  return output;
+}
+
 /** Anthropic API call with AbortController timeout */
 async function callAnthropic(body: object, apiKey: string, timeoutMs = 240000): Promise<Response> {
   const maxRetries = 2;
@@ -557,13 +584,14 @@ Use the brand's own colors and typography — NOT the reference's colors.
 You may make minor adjustments to fit the brief, but the overall skeleton should clearly match the reference.`;
     }
 
-    part3 += `\n\n=== IMAGE RULES ===
+    part3 += `\n\n=== IMAGE & GRID LAYOUT RULES ===
 1. The reference campaign screenshots above are STYLE REFERENCES ONLY. NEVER embed them as <img> tags.
 2. Never invent, guess, or use external stock image URLs (Unsplash, Pexels, etc).
 3. You are the CREATIVE DIRECTOR. Choose ONLY the images that best serve this campaign's story. You do NOT need to use every available image — be selective.
 4. Use the image URLs from the AVAILABLE BRAND ASSETS list exactly as provided. Do NOT modify, crop, or transform the URLs.
 5. If an image doesn't fit the campaign's story, skip it entirely rather than forcing it in.
-6. CONSISTENCY: Every image must have the same padding treatment — either ALL full-bleed or ALL with equal side padding. Never mix.`;
+6. CONSISTENCY: Every image must have the same padding treatment — either ALL full-bleed or ALL with equal side padding. Never mix.
+7. CRITICAL NO-STACK RULE: Any side-by-side layout in the chosen reference (product grids, two-column image blocks, split text/image sections) MUST remain side-by-side at all viewport widths. Do NOT add media-query rules that convert these to single-column stacked blocks.`;
 
     if (hostedAssetEntries.length > 0) {
       part3 += `\n\nAVAILABLE BRAND ASSETS (use selectively — pick what serves the campaign):\n${assetCatalog}`;
@@ -739,6 +767,8 @@ You may make minor adjustments to fit the brief, but the overall skeleton should
     }
 
     const durationSecs = Math.round((Date.now() - new Date(genStartedAt).getTime()) / 1000);
+
+    html = enforceNoStackingLayout(html);
 
     await supabase.from("campaigns").update({
       html,

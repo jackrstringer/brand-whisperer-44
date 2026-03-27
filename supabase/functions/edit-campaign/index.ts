@@ -24,6 +24,31 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+function enforceNoStackingLayout(html: string): string {
+  if (!html) return html;
+
+  let output = html;
+
+  const collapseSelectorPattern = /\.(?:[a-z0-9_-]*?(?:grid|col|column|two-col|two_col|product|gift)[a-z0-9_-]*?(?:cell|col|column)?|(?:product-grid-cell|two-col-cell|gift-cell|column-cell|grid-cell))\s*\{[^}]*\}/gi;
+  output = output.replace(collapseSelectorPattern, (rule) => {
+    return rule
+      .replace(/display\s*:\s*block\s*!important;?/gi, "")
+      .replace(/width\s*:\s*100%\s*!important;?/gi, "")
+      .replace(/float\s*:\s*none\s*!important;?/gi, "")
+      .replace(/max-width\s*:\s*100%\s*!important;?/gi, "")
+      .replace(/;\s*;/g, ";");
+  });
+
+  if (/<head[^>]*>/i.test(output)) {
+    output = output.replace(
+      /(<head[^>]*>)/i,
+      `$1<style>.product-grid-cell,.two-col-cell,.gift-cell,.column-cell,.grid-cell{display:table-cell !important;vertical-align:top !important;}.product-grid-cell,.two-col-cell,.column-cell,.grid-cell{width:auto !important;}</style>`
+    );
+  }
+
+  return output;
+}
+
 /** Anthropic API call with AbortController timeout */
 async function callAnthropic(body: object, apiKey: string, timeoutMs = 240000): Promise<Response> {
   const maxRetries = 2;
@@ -260,6 +285,8 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
 
     const history = Array.isArray(campaign.html_history) ? campaign.html_history : [];
     history.push(campaign.html);
+
+    html = enforceNoStackingLayout(html);
 
     await supabase.from("campaigns").update({
       html,
