@@ -1045,37 +1045,6 @@ export default function CampaignEditor() {
     ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls)
     : "";
 
-  // Debounced inline-edit save
-  const inlineEditTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Listen for postMessage from iframe for inline text edits
-  useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      if (e.data?.type !== "textEdited" || !e.data?.html) return;
-      if (!campaignId || !campaign) return;
-      const newHtml = e.data.html as string;
-      const currentHtml = campaign.html || "";
-      if (newHtml === currentHtml) return;
-
-      // Push to history for undo
-      const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
-      history.push(currentHtml);
-      setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
-      setCanUndo(true);
-      setRedoStack([]); // clear redo on new edit
-
-      // Debounced DB save
-      if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
-      inlineEditTimerRef.current = setTimeout(async () => {
-        await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
-      }, 500);
-    };
-    window.addEventListener("message", handler);
-    return () => {
-      window.removeEventListener("message", handler);
-      if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
-    };
-  }, [campaignId, campaign]);
 
   const srcdocHtml = htmlForPreview
     ? htmlForPreview.replace(
