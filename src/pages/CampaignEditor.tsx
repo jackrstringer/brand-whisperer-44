@@ -2093,6 +2093,101 @@ export default function CampaignEditor() {
       });
     }
   }
+
+  /* --- CLICK-TO-SELECT ELEMENT --- */
+  var selectedEl = null;
+  function clearElSelection(){
+    if(selectedEl){ selectedEl.classList.remove('el-selected'); selectedEl = null; }
+    window.parent.postMessage({ type: 'elementDeselected' }, '*');
+  }
+
+  document.addEventListener('click', function(e){
+    if(ftbEl && ftbEl.contains(e.target)) return;
+    if(ftbColorPanel && ftbColorPanel.contains(e.target)) return;
+    if(ctxMenu && ctxMenu.contains(e.target)) return;
+
+    var el = e.target;
+    while(el && el !== document.body && el !== document.documentElement){
+      if(el.tagName && /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL|TD|TH|TR|TABLE|DIV|IMG|SECTION)$/i.test(el.tagName)) break;
+      el = el.parentElement;
+    }
+    if(!el || el === document.body || el === document.documentElement){
+      clearElSelection();
+      return;
+    }
+
+    if(selectedEl && selectedEl !== el) selectedEl.classList.remove('el-selected');
+    selectedEl = el;
+    el.classList.add('el-selected');
+
+    var text = el.textContent ? el.textContent.trim().slice(0, 300) : '';
+    var outerHTML = el.outerHTML ? el.outerHTML.slice(0, 1000) : '';
+    window.parent.postMessage({ type: 'elementSelected', tagName: el.tagName, text: text, outerHTML: outerHTML }, '*');
+  });
+
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && selectedEl && !ftbEl){
+      clearElSelection();
+    }
+  });
+
+  /* --- SHIFT+DRAG REGION SELECT --- */
+  var regionOverlay = null;
+  var regionStart = null;
+
+  document.addEventListener('mousedown', function(e){
+    if(!e.shiftKey) return;
+    if(ftbEl && ftbEl.contains(e.target)) return;
+    e.preventDefault();
+    regionStart = { x: e.clientX, y: e.clientY };
+    regionOverlay = document.createElement('div');
+    regionOverlay.className = 'region-select-overlay';
+    document.body.appendChild(regionOverlay);
+  });
+
+  document.addEventListener('mousemove', function(e){
+    if(!regionOverlay || !regionStart) return;
+    var x = Math.min(regionStart.x, e.clientX);
+    var y = Math.min(regionStart.y, e.clientY);
+    var w = Math.abs(e.clientX - regionStart.x);
+    var h = Math.abs(e.clientY - regionStart.y);
+    regionOverlay.style.left = x + 'px';
+    regionOverlay.style.top = y + 'px';
+    regionOverlay.style.width = w + 'px';
+    regionOverlay.style.height = h + 'px';
+  });
+
+  document.addEventListener('mouseup', function(e){
+    if(!regionOverlay || !regionStart) return;
+    var rect = {
+      left: Math.min(regionStart.x, e.clientX),
+      top: Math.min(regionStart.y, e.clientY),
+      right: Math.max(regionStart.x, e.clientX),
+      bottom: Math.max(regionStart.y, e.clientY)
+    };
+    regionOverlay.remove();
+    regionOverlay = null;
+    regionStart = null;
+
+    if(rect.right - rect.left < 10 || rect.bottom - rect.top < 10) return;
+
+    // Clear previous selections
+    document.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
+
+    var elements = [];
+    document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img,td,div').forEach(function(el){
+      var r = el.getBoundingClientRect();
+      if(r.width < 1 || r.height < 1) return;
+      if(r.right > rect.left && r.left < rect.right && r.bottom > rect.top && r.top < rect.bottom){
+        elements.push({ tagName: el.tagName, text: (el.textContent || '').trim().slice(0, 100) });
+        el.classList.add('el-selected');
+      }
+    });
+
+    if(elements.length > 0){
+      window.parent.postMessage({ type: 'regionSelected', elements: elements }, '*');
+    }
+  });
 })();
 <\/script></body>`
       )
