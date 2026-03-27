@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, MoreVertical, Trash2, Pencil, Eye, EyeOff, GripVertical } from "lucide-react";
+import { Plus, MoreVertical, Trash2, Pencil, Eye, EyeOff, GripVertical, Sparkles, Loader2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
