@@ -362,15 +362,16 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
                 console.log(`[edit-campaign] Variant mode: ${variants.length} variants`);
 
                 const responseText = introText;
-                // Save the message with variant data as tool_calls JSON
+                // Save the message (without tool_calls for now — column added separately)
                 await supabase.from("chat_messages").insert([
                   { campaign_id: campaignId, role: "user", content: message },
                   { campaign_id: campaignId, role: "assistant", content: responseText, tool_calls: { type: "variants", data: { message: introText, variants, applied_index: null } } },
                 ]);
 
-                emit("variants", { message: introText, variants });
-                emit("done", { reply: responseText, changed: false, patchesApplied: 0, isVariants: true });
-                ctrl.close();
+                console.log(`[edit-campaign] Emitting variants event`);
+                safeEmit("variants", { message: introText, variants });
+                safeEmit("done", { reply: responseText, changed: false, patchesApplied: 0, isVariants: true });
+                safeClose();
                 return;
               }
             } catch (e) {
