@@ -1068,11 +1068,12 @@ export default function CampaignEditor() {
   const srcdocHtml = htmlForPreview
     ? htmlForPreview.replace(
         /(<head[^>]*>)/i,
-        `$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}[contenteditable]:hover{outline:1px dashed rgba(128,128,128,0.4);outline-offset:2px;cursor:text;}[contenteditable]:focus{outline:2px solid rgba(99,102,241,0.5);outline-offset:2px;background:rgba(99,102,241,0.04);}</style>`
+        `$1<meta name="viewport" content="width=device-width, initial-scale=1"><script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"><\/script><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}[contenteditable]:hover{outline:1px dashed rgba(128,128,128,0.4);outline-offset:2px;cursor:text;}[contenteditable]:focus{outline:2px solid rgba(99,102,241,0.5);outline-offset:2px;background:rgba(99,102,241,0.04);}.section-drag-ghost{opacity:0.4;}.section-drag-handle{cursor:grab;}.section-drag-handle:active{cursor:grabbing;}.section-handle-bar{position:absolute;top:0;left:0;right:0;height:32px;z-index:9999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:space-between;padding:0 8px;opacity:0;transition:opacity 0.15s;pointer-events:none;}.section-wrap:hover .section-handle-bar{opacity:1;pointer-events:auto;}.section-handle-bar span{color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;opacity:0.8;}.section-handle-bar button{background:none;border:none;color:#fff;cursor:pointer;padding:4px;opacity:0.7;font-size:14px;}.section-handle-bar button:hover{opacity:1;}</style>`
       ).replace(
         /<\/body>/i,
         `<script>
 (function(){
+  /* --- TEXT EDITING --- */
   var blocks = ['TABLE','TR','TD','TH','DIV','UL','OL','IMG'];
   document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label').forEach(function(el){
     if(el.querySelector('img,table,div')) return;
@@ -1089,7 +1090,6 @@ export default function CampaignEditor() {
     document.execCommand('insertText', false, text);
   });
   document.addEventListener('keydown', function(e){
-    if(!e.target.isContentEditable) return;
     if((e.metaKey || e.ctrlKey) && e.key === 'z'){
       e.preventDefault();
       e.stopPropagation();
@@ -1102,7 +1102,7 @@ export default function CampaignEditor() {
     }
   });
   var timer = null;
-  document.addEventListener('input', function(){
+  function syncHtml(){
     clearTimeout(timer);
     timer = setTimeout(function(){
       var clone = document.documentElement.cloneNode(true);
@@ -1111,14 +1111,84 @@ export default function CampaignEditor() {
         el.removeAttribute('contenteditable');
         el.style.removeProperty('cursor');
       });
+      clone.querySelectorAll('.section-handle-bar').forEach(function(el){ el.remove(); });
+      clone.querySelectorAll('.section-wrap').forEach(function(el){
+        el.classList.remove('section-wrap');
+        el.style.removeProperty('position');
+        el.removeAttribute('data-section-name');
+      });
       clone.querySelectorAll('style').forEach(function(s){
-        if(s.textContent && s.textContent.indexOf('[contenteditable]')>=0) s.remove();
+        if(s.textContent && (s.textContent.indexOf('[contenteditable]')>=0 || s.textContent.indexOf('section-drag')>=0)) s.remove();
       });
       window.parent.postMessage({ type: 'textEdited', html: clone.outerHTML }, '*');
     }, 300);
-  });
+  }
+  document.addEventListener('input', syncHtml);
+
+  /* --- SECTION DETECTION --- */
+  var sections = [];
+  var walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_COMMENT, null, false);
+  var node;
+  while(node = walker.nextNode()){
+    var val = node.nodeValue.trim();
+    var match = val.match(/^SECTION:\\s*(.+)/i);
+    if(match){
+      var name = match[1].trim();
+      var el = node.nextElementSibling;
+      if(el) sections.push({ name: name, el: el, comment: node });
+    }
+  }
+
+  if(sections.length > 0){
+    var container = sections[0].el.parentElement;
+    sections.forEach(function(sec){
+      var el = sec.el;
+      el.style.position = 'relative';
+      el.classList.add('section-wrap');
+      el.setAttribute('data-section-name', sec.name);
+
+      var bar = document.createElement('div');
+      bar.className = 'section-handle-bar section-drag-handle';
+      bar.innerHTML = '<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:14px;cursor:grab;">⠿</span><span>' + sec.name + '</span></div><div style="display:flex;gap:2px;"><button class="sec-dup" title="Duplicate">⧉</button><button class="sec-del" title="Delete">✕</button></div>';
+      el.insertBefore(bar, el.firstChild);
+
+      bar.querySelector('.sec-dup').addEventListener('click', function(e){
+        e.stopPropagation();
+        window.parent.postMessage({ type: 'sectionDuplicated', sectionName: sec.name }, '*');
+      });
+      bar.querySelector('.sec-del').addEventListener('click', function(e){
+        e.stopPropagation();
+        el.remove();
+        syncHtml();
+        window.parent.postMessage({ type: 'sectionDeleted', sectionName: sec.name }, '*');
+      });
+    });
+
+    /* --- SORTABLEJS --- */
+    if(container && typeof Sortable !== 'undefined'){
+      Sortable.create(container, {
+        handle: '.section-drag-handle',
+        animation: 150,
+        ghostClass: 'section-drag-ghost',
+        onEnd: function(evt){
+          var newOrder = [];
+          container.querySelectorAll('[data-section-name]').forEach(function(el){
+            newOrder.push(el.dataset.sectionName);
+          });
+          syncHtml();
+          window.parent.postMessage({
+            type: 'sectionReordered',
+            newOrder: newOrder,
+            movedSection: evt.item.dataset.sectionName,
+            fromIndex: evt.oldIndex,
+            toIndex: evt.newIndex
+          }, '*');
+        }
+      });
+    }
+  }
 })();
-</script></body>`
+<\/script></body>`
       )
     : "";
 
