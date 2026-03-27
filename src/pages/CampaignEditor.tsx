@@ -795,7 +795,7 @@ export default function CampaignEditor() {
   const renderedHeight = Math.round(iframeContentHeight * zoomScale);
 
   // When viewing a past version, show that version; otherwise show current
-  const displayHtml = activeVersionIndex !== null ? allVersions[activeVersionIndex] : campaign?.html;
+  const displayHtml = previewHtml || (activeVersionIndex !== null ? allVersions[activeVersionIndex] : campaign?.html);
   const htmlForPreview = displayHtml
     ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls)
     : "";
