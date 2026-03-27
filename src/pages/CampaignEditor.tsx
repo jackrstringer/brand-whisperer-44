@@ -607,7 +607,7 @@ export default function CampaignEditor() {
                     <span className="truncate">{selectedReference.title}</span>
                     <Badge className="text-[9px] ml-auto bg-primary/20 text-primary">Strength {selectedReference.strength}</Badge>
                   </div>
-                )
+                )}
                 <div>
                   <h2 className="text-sm font-medium mb-4">Campaign Brief</h2>
                 </div>
