@@ -234,12 +234,28 @@ export default function AdminLibrary() {
               <div className="p-3">
                 <h3 className="text-sm font-medium truncate">{item.title}</h3>
                 <p className="text-xs text-muted-foreground truncate">{item.brand_name}</p>
-                <div className="flex items-center gap-1.5 mt-1.5">
+                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                   <Badge variant={item.is_published ? "default" : "secondary"} className="text-[9px]">
                     {item.is_published ? "Published" : "Draft"}
                   </Badge>
                   {item.category && (
                     <Badge variant="outline" className="text-[9px]">{item.category}</Badge>
+                  )}
+                  {item.industry && (
+                    <Badge variant="outline" className="text-[9px] bg-primary/5">{item.industry}</Badge>
+                  )}
+                  {item.campaign_type && (
+                    <Badge variant="outline" className="text-[9px]">
+                      {item.campaign_type === "flow" ? "Flow" : "Campaign"}
+                    </Badge>
+                  )}
+                  {item.message_type && (
+                    <Badge variant="outline" className="text-[9px]">{item.message_type}</Badge>
+                  )}
+                  {!item.ai_metadata && !item.industry && (
+                    <span className="text-[9px] text-muted-foreground italic flex items-center gap-0.5">
+                      <Sparkles className="w-2.5 h-2.5" /> Not analyzed
+                    </span>
                   )}
                 </div>
               </div>
