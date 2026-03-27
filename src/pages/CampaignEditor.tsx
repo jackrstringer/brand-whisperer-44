@@ -780,7 +780,8 @@ export default function CampaignEditor() {
     }
 
     if (!html.includes(findTarget)) return;
-    setPreviewHtml(html.replace(findTarget, variant.replace));
+    const useAll = variant.apply_all === true;
+    setPreviewHtml(useAll ? html.split(findTarget).join(variant.replace) : html.replace(findTarget, variant.replace));
   }, [campaign?.html, messages]);
 
   const handlePreviewClear = useCallback(() => {
