@@ -325,7 +325,11 @@ CRITICAL RULES FOR PATCHES:
           // REMOVED: dangerous fallback that treated raw AI text as HTML
           // This was causing campaign destruction when patch tags were malformed
 
-          if (finalHtml && finalHtml !== currentHtml) {
+          // Safety: don't save if result looks corrupted
+          const looksLikeHtml = finalHtml.includes("<!DOCTYPE") || finalHtml.includes("<html") || finalHtml.includes("<table") || finalHtml.includes("<div");
+          const tooSmall = finalHtml.length < currentHtml.length * 0.3; // lost >70% of content = corrupted
+          
+          if (finalHtml && finalHtml !== currentHtml && looksLikeHtml && !tooSmall) {
             finalHtml = enforceNoStackingLayout(finalHtml);
 
             const history = Array.isArray(campaign.html_history) ? campaign.html_history : [];
@@ -337,6 +341,9 @@ CRITICAL RULES FOR PATCHES:
             }).eq("id", campaignId);
 
             emit("html_patch", { html: finalHtml });
+          } else if (finalHtml !== currentHtml && (!looksLikeHtml || tooSmall)) {
+            console.error(`[edit-campaign] BLOCKED corrupted save! looksLikeHtml=${looksLikeHtml}, tooSmall=${tooSmall}, length=${finalHtml.length} vs original=${currentHtml.length}`);
+            emit("text_delta", { content: "\n\n⚠️ The edit produced corrupted output and was not saved. Your campaign is unchanged. Please try again with a simpler request." });
           }
 
           await supabase.from("chat_messages").insert([
