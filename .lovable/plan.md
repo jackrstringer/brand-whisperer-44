@@ -1,85 +1,73 @@
 
 
-## Plan: Robust Cross-Set Variant Apply & Preview
+## Plan: Element Selection with Chat Context & Visual Controls
 
-### Root Cause
+### What this adds
+1. **Click-to-select any element** in the preview — shows a persistent selection outline (not just text elements). Clicking a different element changes selection; clicking empty space deselects.
+2. **Selection context feeds into chat** — when an element is selected and the user types in chat, the message automatically includes the element's context (tag, text, outerHTML) so the AI knows what to edit.
+3. **Background color control** — the floating toolbar gains a background-color swatch (in addition to the existing text color swatch), using the same panel UI.
+4. **Frame alignment controls** — padding and margin quick-adjust buttons on the toolbar for the selected element.
+5. **Drag-to-select region** — hold Shift + click-drag to draw a rectangle; all elements within get grouped as a "region" selection that feeds into chat context.
 
-Both `handleApplyVariant` and `handlePreviewVariant` have the same flaw: they only track what changed **within a single variant set** (via `applied_index` / `applied_texts`). When you apply a variant from Set A, then try to preview or apply from Set B (which targets the same original text), Set B's `find` target is stale — the original text no longer exists in the HTML.
-
-### Solution: "Scan for live text" strategy
-
-Instead of only checking within a single message's `applied_texts`, build a helper that scans the current HTML to determine what text is actually live for a given variant set. The search order:
-
-1. Check if the original `find` text exists in the HTML → use it
-2. If not, check if any variant's `replace` from **this same set** exists in the HTML → use the first match
-3. If not, check `applied_texts` values from this set
-4. If nothing matches → the text was manually edited away; disable the set gracefully
-
-This single helper (`findLiveTarget`) is used by both `handleApplyVariant` and `handlePreviewVariant`, eliminating duplication and fixing both bugs at once.
-
-### Changes
+### Technical approach
 
 **File: `src/pages/CampaignEditor.tsx`**
 
-1. **Add `findLiveTarget` helper** — given a variant message and the current HTML, returns the string currently in the HTML that this set can replace, or `null` if nothing matches.
+#### 1. Element selection state (parent React side)
+- Add `selectedElementContext` state: `{ tagName, text, outerHTML, boundingRect } | null`
+- Listen for new postMessage type `elementSelected` from iframe
+- Listen for `elementDeselected` to clear
+- When user sends a chat message and `selectedElementContext` is set, prepend context to the prompt sent to the backend: `"[Targeting <H2> element: \"Shop Now\"]\n\n" + userMsg`
+- Show a small indicator chip above the chat input: `"Targeting: <H2> Shop Now..."` with an X to clear
 
-```text
-findLiveTarget(msg, html):
-  if html.includes(msg.variant_data.variants[0].find) → return find
-  for each variant in set: if html.includes(variant.replace) → return variant.replace
-  for each appliedText: if html.includes(text) → return text
-  return null
-```
+#### 2. Iframe script additions (inside the injected `<script>`)
 
-2. **Rewrite `handleApplyVariant`** — replace the existing find-target logic with a call to `findLiveTarget`. After applying, update `applied_texts` on the current message AND also update any other variant messages that share the same original `find` text (cross-set tracking).
+**Click-to-select (single element):**
+- On `click` of any element (not just contenteditable), if not already editing text, set a `selectedEl` variable
+- Apply a visual outline: `2px solid rgba(200,241,53,0.6)` with `outline-offset: 2px`
+- Post `elementSelected` message to parent with `{ tagName, text, outerHTML, computedStyles }`
+- Click on empty space or `Escape` → clear selection, post `elementDeselected`
+- Selected element gets the floating toolbar (extended with bg-color + alignment)
 
-3. **Rewrite `handlePreviewVariant`** — same `findLiveTarget` call, silently skip if no match (no error toast needed for preview).
+**Floating toolbar extensions:**
+- Add a second swatch for background-color (reuses `showColorPanel` with a mode param)
+- Add padding +/- buttons (adjust `padding` in 4px increments)
+- These controls work on any selected element, not just contenteditable text
 
-4. **Cross-set sync on apply** — after applying a variant, iterate all variant messages. For any message whose original `find` overlaps with the text that was just replaced, update that message's `applied_texts` to record the new state. This ensures future apply/preview from those sets will find the correct text.
+**Drag-to-select region (Shift+drag):**
+- On `mousedown` with Shift held, start tracking a selection rectangle
+- Draw a semi-transparent overlay rectangle as the user drags
+- On `mouseup`, find all elements whose bounding rect intersects the selection
+- Post `regionSelected` message with array of `{ tagName, text, outerHTML }` for all captured elements
+- Parent stores this as `selectedElementContext` with a combined description
 
-### What this fixes
-- Applying variant from Set B after Set A applied → works (finds the live text via scan)
-- Preview on hover for old sets → works (same scan logic)
-- Switching between variants within a set → still works (existing logic preserved)
-- Text manually edited away → graceful "not found" instead of silent failure
-
-### Technical detail
-
-```typescript
-function findLiveTarget(variantData: VariantData, html: string): string | null {
-  const originalFind = variantData.variants[0]?.find;
-  if (!originalFind) return null;
-  
-  // 1. Original text still present
-  if (html.includes(originalFind)) return originalFind;
-  
-  // 2. Any variant's replace text present (someone applied from this set)
-  const appliedTexts = variantData.applied_texts || {};
-  const appliedIdx = variantData.applied_index;
-  if (appliedIdx !== null && appliedIdx !== undefined) {
-    const liveText = appliedTexts[appliedIdx] 
-      || variantData.variants[appliedIdx]?.replace;
-    if (liveText && html.includes(liveText)) return liveText;
-  }
-  
-  // 3. Check all variant replaces (cross-set apply may have used one)
-  for (const v of variantData.variants) {
-    if (html.includes(v.replace)) return v.replace;
-  }
-  
-  // 4. Check all tracked applied texts
-  for (const text of Object.values(appliedTexts)) {
-    if (typeof text === 'string' && html.includes(text)) return text;
-  }
-  
-  return null;
+#### 3. CSS additions (in the injected styles)
+```css
+.el-selected {
+  outline: 2px solid rgba(200,241,53,0.6);
+  outline-offset: 2px;
+}
+.region-select-overlay {
+  position: fixed;
+  border: 1.5px dashed rgba(200,241,53,0.5);
+  background: rgba(200,241,53,0.05);
+  pointer-events: none;
+  z-index: 99997;
 }
 ```
 
-Both handlers become simple:
-```typescript
-const findTarget = findLiveTarget(msg.variant_data, html);
-if (!findTarget) { /* toast error or silently skip */ return; }
-// proceed with replace using findTarget
-```
+#### 4. Chat input context chip
+- Render a small chip above the textarea when `selectedElementContext` is set
+- Shows tag + truncated text: `"H2: Shop the Collection..."` with X to dismiss
+- Styled with the lime/indigo theme to match the Ideate pill
+
+### Changes summary
+
+| File | What changes |
+|------|-------------|
+| `src/pages/CampaignEditor.tsx` | Add `selectedElementContext` state, message listeners for `elementSelected`/`elementDeselected`/`regionSelected`, context injection in `sendMessage`, context chip UI above chat input, extend injected iframe script with click-to-select, bg-color swatch, padding controls, and shift-drag region select |
+
+### Not included (future)
+- Margin controls (just padding for now to keep scope tight)
+- Multi-element toolbar actions beyond chat context
 
