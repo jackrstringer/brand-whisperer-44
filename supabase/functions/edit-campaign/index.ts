@@ -299,9 +299,36 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
 
           // Parse response
           const replyMatch = fullText.match(/<reply>([\s\S]*?)<\/reply>/);
+          const responseMatch = fullText.match(/<response>([\s\S]*?)<\/response>/);
           const patchesMatch = fullText.match(/<patches>([\s\S]*?)<\/patches>/);
+          const variantsMatch = fullText.match(/<variants>([\s\S]*?)<\/variants>/);
           // Fallback: check for old full-HTML format
           const htmlMatch = fullText.match(/<email_html>([\s\S]*?)<\/email_html>/);
+
+          // Check for VARIANT MODE first
+          if (variantsMatch) {
+            try {
+              const variants = JSON.parse(variantsMatch[1].trim());
+              const introText = responseMatch ? responseMatch[1].trim() : replyMatch ? replyMatch[1].trim() : "Here are some options:";
+              if (Array.isArray(variants) && variants.length > 0) {
+                console.log(`[edit-campaign] Variant mode: ${variants.length} variants`);
+
+                const responseText = introText;
+                // Save the message with variant data as tool_calls JSON
+                await supabase.from("chat_messages").insert([
+                  { campaign_id: campaignId, role: "user", content: message },
+                  { campaign_id: campaignId, role: "assistant", content: responseText, tool_calls: { type: "variants", data: { message: introText, variants, applied_index: null } } },
+                ]);
+
+                emit("variants", { message: introText, variants });
+                emit("done", { reply: responseText, changed: false, patchesApplied: 0, isVariants: true });
+                ctrl.close();
+                return;
+              }
+            } catch (e) {
+              console.error(`[edit-campaign] Failed to parse variants JSON:`, e);
+            }
+          }
 
           let responseText = replyMatch ? replyMatch[1].trim() : "Changes applied.";
 
