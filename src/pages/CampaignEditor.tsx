@@ -1095,6 +1095,17 @@ export default function CampaignEditor() {
         return;
       }
 
+      // Ideate element from floating toolbar
+      if (e.data?.type === 'ideateElement') {
+        const { text, tagName } = e.data;
+        let prompt = '';
+        if (/^H[1-6]$/.test(tagName)) prompt = `Give me 5 alternative headline options for: "${text}"`;
+        else if (tagName === 'A' || tagName === 'BUTTON') prompt = `Give me 5 alternative CTA button text options for: "${text}"`;
+        else prompt = `Give me 5 alternative copy options for this text: "${text}"`;
+        setChatInput(prompt);
+        return;
+      }
+
       // Color replace from iframe
       if (e.data?.type === 'colorReplace') {
         handleColorReplace(e.data.oldHex, e.data.newHex);
@@ -1189,7 +1200,7 @@ export default function CampaignEditor() {
   const srcdocHtml = htmlForPreview
     ? htmlForPreview.replace(
         /(<head[^>]*>)/i,
-        `$1<meta name="viewport" content="width=device-width, initial-scale=1"><script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"><\/script><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}[contenteditable]:hover{outline:1px dashed rgba(128,128,128,0.4);outline-offset:2px;cursor:text;}[contenteditable]:focus{outline:2px solid rgba(99,102,241,0.5);outline-offset:2px;background:rgba(99,102,241,0.04);}.section-drag-ghost{opacity:0.4;}.section-drag-handle{cursor:grab;}.section-drag-handle:active{cursor:grabbing;}.section-handle-bar{position:absolute;top:0;left:0;right:0;height:32px;z-index:9999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:space-between;padding:0 8px;opacity:0;transition:opacity 0.15s;pointer-events:none;}.section-wrap:hover .section-handle-bar{opacity:1;pointer-events:auto;}.section-handle-bar span{color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;opacity:0.8;}.section-handle-bar button{background:none;border:none;color:#fff;cursor:pointer;padding:4px;opacity:0.7;font-size:14px;}.section-handle-bar button:hover{opacity:1;}</style>`
+        `$1<meta name="viewport" content="width=device-width, initial-scale=1"><script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"><\/script><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}[contenteditable]:hover{outline:1px dashed rgba(128,128,128,0.4);outline-offset:2px;cursor:text;}[contenteditable]:focus{outline:2px solid rgba(99,102,241,0.5);outline-offset:2px;background:rgba(99,102,241,0.04);}.section-drag-ghost{opacity:0.4;}.section-drag-handle{cursor:grab;}.section-drag-handle:active{cursor:grabbing;}.section-handle-bar{position:absolute;top:0;left:0;right:0;height:32px;z-index:9999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:space-between;padding:0 8px;opacity:0;transition:opacity 0.15s;pointer-events:none;}.section-wrap:hover .section-handle-bar{opacity:1;pointer-events:auto;}.section-handle-bar span{color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;opacity:0.8;}.section-handle-bar button{background:none;border:none;color:#fff;cursor:pointer;padding:4px;opacity:0.7;font-size:14px;}.section-handle-bar button:hover{opacity:1;}.ftb{position:fixed;z-index:99998;background:rgba(24,24,27,0.96);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:3px 4px;display:flex;align-items:center;gap:1px;box-shadow:0 4px 20px rgba(0,0,0,0.55);animation:ftb-in 0.15s ease-out;font-family:-apple-system,BlinkMacSystemFont,sans-serif;}@keyframes ftb-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}.ftb-btn{background:none;border:none;color:#aaa;width:28px;height:28px;border-radius:4px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all 0.1s;padding:0;}.ftb-btn:hover{background:rgba(255,255,255,0.1);color:#fff;}.ftb-btn.active{background:rgba(99,102,241,0.3);color:#818cf8;}.ftb-sep{width:1px;height:16px;background:rgba(255,255,255,0.12);margin:0 3px;flex-shrink:0;}.ftb-tag{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.05em;padding:2px 6px;white-space:nowrap;}.ftb-select{background:#2a2a2e;color:#ccc;border:1px solid rgba(255,255,255,0.15);border-radius:4px;font-size:11px;padding:2px 4px;cursor:pointer;outline:none;height:26px;}.ftb-select:hover{border-color:rgba(255,255,255,0.3);}.ftb-swatch{width:22px;height:22px;border-radius:4px;border:2px solid rgba(255,255,255,0.2);cursor:pointer;position:relative;transition:border-color 0.1s;}.ftb-swatch:hover{border-color:rgba(255,255,255,0.5);}.ftb-cpanel{position:absolute;top:calc(100% + 6px);background:rgba(24,24,27,0.97);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:8px;display:flex;flex-wrap:wrap;gap:4px;box-shadow:0 8px 24px rgba(0,0,0,0.5);min-width:140px;animation:ftb-in 0.1s ease-out;}.ftb-cpanel-swatch{width:24px;height:24px;border-radius:4px;border:2px solid transparent;cursor:pointer;transition:all 0.1s;}.ftb-cpanel-swatch:hover{border-color:rgba(255,255,255,0.5);transform:scale(1.15);}.ftb-cpanel-swatch.active{border-color:#818cf8;}.ftb-ideate{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap;transition:filter 0.1s;}.ftb-ideate:hover{filter:brightness(1.15);}</style>`
       ).replace(
         /<\/body>/i,
         `<script>
@@ -1253,13 +1264,326 @@ export default function CampaignEditor() {
         el.removeAttribute('data-section-name');
       });
       clone.querySelectorAll('.ctx-menu').forEach(function(el){ el.remove(); });
+      clone.querySelectorAll('.ftb').forEach(function(el){ el.remove(); });
+      clone.querySelectorAll('.ftb-cpanel').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('style').forEach(function(s){
-        if(s.textContent && (s.textContent.indexOf('[contenteditable]')>=0 || s.textContent.indexOf('section-drag')>=0 || s.textContent.indexOf('.ctx-menu')>=0)) s.remove();
+        if(s.textContent && (s.textContent.indexOf('[contenteditable]')>=0 || s.textContent.indexOf('section-drag')>=0 || s.textContent.indexOf('.ctx-menu')>=0 || s.textContent.indexOf('.ftb')>=0)) s.remove();
+      });
+      clone.querySelectorAll('font').forEach(function(f){
+        var span = document.createElement('span');
+        span.innerHTML = f.innerHTML;
+        if(f.color) span.style.color = f.color;
+        if(f.size) { var sizes = {1:'10px',2:'13px',3:'16px',4:'18px',5:'24px',6:'32px',7:'48px'}; span.style.fontSize = sizes[f.size]||f.size+'px'; }
+        f.replaceWith(span);
       });
       window.parent.postMessage({ type: 'textEdited', html: clone.outerHTML }, '*');
     }, 1500);
   }
   document.addEventListener('input', syncHtml);
+
+  /* --- FLOATING TOOLBAR --- */
+  var ftbEl = null;
+  var ftbTarget = null;
+  var ftbBlurTimer = null;
+  var ftbColorPanel = null;
+
+  function removeFtb(){
+    if(ftbEl){ ftbEl.remove(); ftbEl = null; }
+    if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; }
+    ftbTarget = null;
+  }
+
+  function getTagLabel(el){
+    var t = el.tagName;
+    if(/^H[1-6]$/.test(t)) return 'Heading';
+    if(t === 'A') return 'Link';
+    if(t === 'BUTTON') return 'Button';
+    if(t === 'LI') return 'List';
+    if(t === 'LABEL') return 'Label';
+    if(t === 'SPAN' && el.closest('a')) return 'Link';
+    return 'Body';
+  }
+
+  function positionFtb(bar, el){
+    var r = el.getBoundingClientRect();
+    var bw = bar.offsetWidth || 340;
+    var bh = bar.offsetHeight || 36;
+    var left = Math.max(4, Math.min(r.left + r.width/2 - bw/2, window.innerWidth - bw - 4));
+    if(r.top > bh + 8){
+      bar.style.top = (r.top - bh - 6) + 'px';
+    } else {
+      bar.style.top = (r.bottom + 6) + 'px';
+    }
+    bar.style.left = left + 'px';
+  }
+
+  function extractEmailColors(){
+    var colors = new Set();
+    var defaults = ['#000000','#ffffff','#333333','#666666','#999999','#ff0000','#0066cc','#00aa00'];
+    defaults.forEach(function(c){ colors.add(c); });
+    document.querySelectorAll('*').forEach(function(el){
+      var s = el.style;
+      if(s.color){ var c = rgbToHex(s.color); if(c) colors.add(c); }
+      if(s.backgroundColor){ var c = rgbToHex(s.backgroundColor); if(c) colors.add(c); }
+    });
+    var fromAttrs = document.querySelectorAll('[color],[bgcolor]');
+    fromAttrs.forEach(function(el){
+      if(el.getAttribute('color')){ var c = normalizeHex(el.getAttribute('color')); if(c) colors.add(c); }
+      if(el.getAttribute('bgcolor')){ var c = normalizeHex(el.getAttribute('bgcolor')); if(c) colors.add(c); }
+    });
+    return Array.from(colors).slice(0, 20);
+  }
+
+  function rgbToHex(rgb){
+    if(!rgb) return null;
+    if(rgb.charAt(0)==='#') return normalizeHex(rgb);
+    var m = rgb.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/);
+    if(!m) return null;
+    return '#' + [m[1],m[2],m[3]].map(function(x){ return parseInt(x).toString(16).padStart(2,'0'); }).join('');
+  }
+
+  function normalizeHex(h){
+    if(!h) return null;
+    h = h.trim();
+    if(h.charAt(0)!=='#') h = '#' + h;
+    if(h.length === 4) h = '#' + h[1]+h[1]+h[2]+h[2]+h[3]+h[3];
+    return h.toLowerCase();
+  }
+
+  function getCurrentFontSize(el){
+    return parseInt(window.getComputedStyle(el).fontSize) || 16;
+  }
+
+  function getCurrentAlignment(el){
+    var a = window.getComputedStyle(el).textAlign;
+    if(a === 'center') return 'center';
+    if(a === 'right' || a === 'end') return 'right';
+    return 'left';
+  }
+
+  function updateBIUState(bar){
+    try {
+      var bBtn = bar.querySelector('[data-ftb="bold"]');
+      var iBtn = bar.querySelector('[data-ftb="italic"]');
+      var uBtn = bar.querySelector('[data-ftb="underline"]');
+      if(bBtn) bBtn.classList.toggle('active', document.queryCommandState('bold'));
+      if(iBtn) iBtn.classList.toggle('active', document.queryCommandState('italic'));
+      if(uBtn) uBtn.classList.toggle('active', document.queryCommandState('underline'));
+    } catch(e){}
+  }
+
+  function showFtb(el){
+    removeFtb();
+    ftbTarget = el;
+
+    var bar = document.createElement('div');
+    bar.className = 'ftb';
+
+    // Tag label
+    var tag = document.createElement('span');
+    tag.className = 'ftb-tag';
+    tag.textContent = getTagLabel(el);
+    bar.appendChild(tag);
+
+    bar.appendChild(makeSep());
+
+    // Font size select
+    var sizeSelect = document.createElement('select');
+    sizeSelect.className = 'ftb-select';
+    sizeSelect.title = 'Font size';
+    var sizes = [10,12,13,14,16,18,20,24,28,32,40,48,64];
+    var currentSize = getCurrentFontSize(el);
+    sizes.forEach(function(s){
+      var opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = s + 'px';
+      if(s === currentSize) opt.selected = true;
+      sizeSelect.appendChild(opt);
+    });
+    // If current size not in list, add it
+    if(sizes.indexOf(currentSize) < 0){
+      var opt = document.createElement('option');
+      opt.value = currentSize;
+      opt.textContent = currentSize + 'px';
+      opt.selected = true;
+      sizeSelect.insertBefore(opt, sizeSelect.firstChild);
+    }
+    sizeSelect.addEventListener('change', function(){
+      var sel = window.getSelection();
+      if(!sel.rangeCount || sel.isCollapsed){
+        // No selection — apply to the whole element
+        el.style.fontSize = sizeSelect.value + 'px';
+      } else {
+        document.execCommand('fontSize', false, '7');
+        // Convert <font size=7> to <span style="font-size">
+        el.querySelectorAll('font[size="7"]').forEach(function(f){
+          var span = document.createElement('span');
+          span.style.fontSize = sizeSelect.value + 'px';
+          span.innerHTML = f.innerHTML;
+          f.replaceWith(span);
+        });
+      }
+      syncHtml();
+      el.focus();
+    });
+    sizeSelect.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+    bar.appendChild(sizeSelect);
+
+    // Text color swatch
+    var currentColor = window.getComputedStyle(el).color;
+    var swatchWrap = document.createElement('div');
+    swatchWrap.style.position = 'relative';
+    var swatch = document.createElement('div');
+    swatch.className = 'ftb-swatch';
+    swatch.style.backgroundColor = currentColor;
+    swatch.title = 'Text color';
+    swatch.addEventListener('click', function(e){
+      e.stopPropagation();
+      if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; return; }
+      var panel = document.createElement('div');
+      panel.className = 'ftb-cpanel';
+      var colors = extractEmailColors();
+      colors.forEach(function(hex){
+        var cs = document.createElement('div');
+        cs.className = 'ftb-cpanel-swatch';
+        cs.style.backgroundColor = hex;
+        cs.title = hex;
+        if(rgbToHex(currentColor) === hex) cs.classList.add('active');
+        cs.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          var sel = window.getSelection();
+          if(!sel.rangeCount || sel.isCollapsed){
+            el.style.color = hex;
+          } else {
+            document.execCommand('foreColor', false, hex);
+          }
+          swatch.style.backgroundColor = hex;
+          panel.remove();
+          ftbColorPanel = null;
+          syncHtml();
+          el.focus();
+        });
+        panel.appendChild(cs);
+      });
+      swatchWrap.appendChild(panel);
+      ftbColorPanel = panel;
+    });
+    swatchWrap.appendChild(swatch);
+    bar.appendChild(swatchWrap);
+
+    bar.appendChild(makeSep());
+
+    // Bold
+    var boldBtn = makeBtn('<b>B</b>', 'Bold');
+    boldBtn.setAttribute('data-ftb', 'bold');
+    boldBtn.addEventListener('click', function(e){ e.stopPropagation(); document.execCommand('bold'); updateBIUState(bar); syncHtml(); el.focus(); });
+    bar.appendChild(boldBtn);
+
+    // Italic
+    var italicBtn = makeBtn('<i>I</i>', 'Italic');
+    italicBtn.setAttribute('data-ftb', 'italic');
+    italicBtn.addEventListener('click', function(e){ e.stopPropagation(); document.execCommand('italic'); updateBIUState(bar); syncHtml(); el.focus(); });
+    bar.appendChild(italicBtn);
+
+    // Underline
+    var underlineBtn = makeBtn('<u>U</u>', 'Underline');
+    underlineBtn.setAttribute('data-ftb', 'underline');
+    underlineBtn.addEventListener('click', function(e){ e.stopPropagation(); document.execCommand('underline'); updateBIUState(bar); syncHtml(); el.focus(); });
+    bar.appendChild(underlineBtn);
+
+    bar.appendChild(makeSep());
+
+    // Text align
+    var alignIcons = { left:'≡', center:'☰', right:'≡' };
+    var currentAlign = getCurrentAlignment(el);
+    var alignBtn = makeBtn(alignIcons[currentAlign] || '≡', 'Alignment');
+    alignBtn.style.fontSize = '15px';
+    if(currentAlign === 'right') alignBtn.style.transform = 'scaleX(-1)';
+    alignBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var next = currentAlign === 'left' ? 'center' : currentAlign === 'center' ? 'right' : 'left';
+      el.style.textAlign = next;
+      currentAlign = next;
+      alignBtn.innerHTML = alignIcons[next];
+      if(next === 'right') alignBtn.style.transform = 'scaleX(-1)';
+      else alignBtn.style.transform = '';
+      syncHtml();
+      el.focus();
+    });
+    bar.appendChild(alignBtn);
+
+    bar.appendChild(makeSep());
+
+    // Ideate button
+    var ideateBtn = document.createElement('button');
+    ideateBtn.className = 'ftb-ideate';
+    ideateBtn.innerHTML = '✨ Ideate';
+    ideateBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      window.parent.postMessage({ type: 'ideateElement', text: el.textContent.trim(), tagName: el.tagName }, '*');
+    });
+    bar.appendChild(ideateBtn);
+
+    document.body.appendChild(bar);
+    ftbEl = bar;
+    positionFtb(bar, el);
+    updateBIUState(bar);
+  }
+
+  function makeBtn(html, title){
+    var btn = document.createElement('button');
+    btn.className = 'ftb-btn';
+    btn.innerHTML = html;
+    btn.title = title;
+    return btn;
+  }
+  function makeSep(){
+    var sep = document.createElement('div');
+    sep.className = 'ftb-sep';
+    return sep;
+  }
+
+  // Show toolbar on focus of editable elements
+  document.addEventListener('focus', function(e){
+    if(e.target && e.target.isContentEditable){
+      clearTimeout(ftbBlurTimer);
+      showFtb(e.target);
+    }
+  }, true);
+
+  // Hide toolbar on blur (delayed to allow toolbar button clicks)
+  document.addEventListener('blur', function(e){
+    if(e.target && e.target.isContentEditable){
+      ftbBlurTimer = setTimeout(function(){
+        removeFtb();
+      }, 250);
+    }
+  }, true);
+
+  // Keep toolbar alive when interacting with it
+  document.addEventListener('mousedown', function(e){
+    if(ftbEl && (ftbEl.contains(e.target) || (ftbColorPanel && ftbColorPanel.contains(e.target)))){
+      clearTimeout(ftbBlurTimer);
+    }
+  });
+
+  // Update B/I/U state on selection change
+  document.addEventListener('selectionchange', function(){
+    if(ftbEl) updateBIUState(ftbEl);
+  });
+
+  // Reposition on scroll
+  document.addEventListener('scroll', function(){
+    if(ftbEl && ftbTarget) positionFtb(ftbEl, ftbTarget);
+  }, true);
+
+  // Dismiss on Escape
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && ftbEl){
+      removeFtb();
+      if(document.activeElement && document.activeElement.isContentEditable) document.activeElement.blur();
+    }
+  });
 
   /* --- RIGHT-CLICK CONTEXT MENU --- */
   var ctxMenu = null;
