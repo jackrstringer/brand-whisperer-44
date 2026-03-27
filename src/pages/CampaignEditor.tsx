@@ -772,8 +772,8 @@ export default function CampaignEditor() {
   };
 
   const handlePreviewVariant = useCallback((variant: VariantOption, index: number, messageId: string) => {
-    if (!campaign?.html) return;
-    const html = campaign.html;
+    const html = iframeOwnedHtmlRef.current || campaign?.html;
+    if (!html) return;
     const msg = messages.find(m => m.id === messageId);
     const prevAppliedIndex = msg?.variant_data?.applied_index;
     const appliedTexts = msg?.variant_data?.applied_texts || {};
