@@ -271,7 +271,7 @@ export default function ReferencePanel({
 
       {/* Grid */}
       <ScrollArea className="flex-1">
-        <div className="grid grid-cols-3 gap-3 p-4">
+        <div className="p-4" style={{ columnCount: 3, columnGap: 12 }}>
           {gridData.flatMap(({ items, type }) =>
             items.map((item: any) => {
               const id = item.id;
