@@ -78,7 +78,7 @@ function CampaignIframeThumbnail({ html, title }: { html: string; title?: string
 
 function MasonryGrid({ children, cols }: { children: React.ReactNode; cols: number }) {
   return (
-    <div className="p-1" style={{ columnCount: cols, columnGap: 4 }}>
+    <div style={{ columnCount: cols, columnGap: 2, padding: 2 }}>
       {children}
     </div>
   );
