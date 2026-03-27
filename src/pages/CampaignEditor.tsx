@@ -392,6 +392,7 @@ export default function CampaignEditor() {
               id: selectedReference.id,
               image_urls: selectedReference.image_urls,
               strength: selectedReference.strength,
+              mode: selectedReference.mode,
             },
           } : {}),
         },
