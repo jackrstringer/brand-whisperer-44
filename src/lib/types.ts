@@ -38,6 +38,7 @@ export interface VariantOption {
   preview: string;
   find: string;
   replace: string;
+  apply_all?: boolean;
 }
 
 export interface VariantData {
