@@ -1218,7 +1218,7 @@ export default function CampaignEditor() {
     var hasBlock = Array.from(el.children).some(function(c){ return blocks.indexOf(c.tagName)>=0; });
     if(hasBlock) return;
     if(!el.textContent.trim()) return;
-    try { el.contentEditable = 'plaintext-only'; } catch(e) { el.contentEditable = 'true'; }
+    el.contentEditable = 'true';
     el.style.cursor = 'text';
   });
   document.addEventListener('paste', function(e){
@@ -1231,7 +1231,7 @@ export default function CampaignEditor() {
     var ae = document.activeElement;
     var isEditing = ae && (ae.isContentEditable || ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA');
     if((e.metaKey || e.ctrlKey) && e.key === 'z'){
-      if(isEditing) return; // let browser handle native undo/redo inside the text field
+      if(isEditing) return;
       e.preventDefault();
       e.stopPropagation();
       window.parent.postMessage({ type: e.shiftKey ? 'redo' : 'undo' }, '*');
@@ -1242,7 +1242,6 @@ export default function CampaignEditor() {
       e.stopPropagation();
       window.parent.postMessage({ type: 'redo' }, '*');
     }
-    // Cmd+A inside editable: select all text in that element only
     if((e.metaKey || e.ctrlKey) && e.key === 'a' && isEditing){
       e.preventDefault();
       e.stopPropagation();
@@ -1287,16 +1286,52 @@ export default function CampaignEditor() {
   }
   document.addEventListener('input', syncHtml);
 
+  /* --- SELECTION PERSISTENCE --- */
+  var savedRange = null;
+  document.addEventListener('selectionchange', function(){
+    var sel = window.getSelection();
+    if(sel && sel.rangeCount > 0){
+      var r = sel.getRangeAt(0);
+      if(ftbTarget && ftbTarget.contains(r.startContainer)){
+        savedRange = r.cloneRange();
+      }
+    }
+    if(ftbEl) updateBIUState(ftbEl);
+  });
+
+  function restoreSelection(){
+    if(!savedRange) return false;
+    try {
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(savedRange);
+      return true;
+    } catch(e){ return false; }
+  }
+
+  function applyCommand(cmd, value){
+    if(!ftbTarget) return;
+    restoreSelection();
+    ftbTarget.focus();
+    try { document.execCommand(cmd, false, value || null); } catch(e){}
+    syncHtml();
+    // Re-save the range after command
+    var sel = window.getSelection();
+    if(sel && sel.rangeCount > 0) savedRange = sel.getRangeAt(0).cloneRange();
+  }
+
   /* --- FLOATING TOOLBAR --- */
   var ftbEl = null;
   var ftbTarget = null;
   var ftbBlurTimer = null;
   var ftbColorPanel = null;
+  var recentColors = [];
 
   function removeFtb(){
     if(ftbEl){ ftbEl.remove(); ftbEl = null; }
     if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; }
     ftbTarget = null;
+    savedRange = null;
   }
 
   function getTagLabel(el){
@@ -1312,21 +1347,19 @@ export default function CampaignEditor() {
 
   function positionFtb(bar, el){
     var r = el.getBoundingClientRect();
-    var bw = bar.offsetWidth || 340;
-    var bh = bar.offsetHeight || 36;
+    var bw = bar.offsetWidth || 380;
+    var bh = bar.offsetHeight || 38;
     var left = Math.max(4, Math.min(r.left + r.width/2 - bw/2, window.innerWidth - bw - 4));
-    if(r.top > bh + 8){
-      bar.style.top = (r.top - bh - 6) + 'px';
+    if(r.top > bh + 12){
+      bar.style.top = (r.top - bh - 8) + 'px';
     } else {
-      bar.style.top = (r.bottom + 6) + 'px';
+      bar.style.top = (r.bottom + 8) + 'px';
     }
     bar.style.left = left + 'px';
   }
 
   function extractEmailColors(){
     var colors = new Set();
-    var defaults = ['#000000','#ffffff','#333333','#666666','#999999','#ff0000','#0066cc','#00aa00'];
-    defaults.forEach(function(c){ colors.add(c); });
     document.querySelectorAll('*').forEach(function(el){
       var s = el.style;
       if(s.color){ var c = rgbToHex(s.color); if(c) colors.add(c); }
@@ -1337,7 +1370,7 @@ export default function CampaignEditor() {
       if(el.getAttribute('color')){ var c = normalizeHex(el.getAttribute('color')); if(c) colors.add(c); }
       if(el.getAttribute('bgcolor')){ var c = normalizeHex(el.getAttribute('bgcolor')); if(c) colors.add(c); }
     });
-    return Array.from(colors).slice(0, 20);
+    return Array.from(colors).filter(function(c){ return c && c.length === 7; }).slice(0, 16);
   }
 
   function rgbToHex(rgb){
@@ -1378,6 +1411,123 @@ export default function CampaignEditor() {
     } catch(e){}
   }
 
+  function addRecentColor(hex){
+    hex = hex.toLowerCase();
+    recentColors = recentColors.filter(function(c){ return c !== hex; });
+    recentColors.unshift(hex);
+    if(recentColors.length > 8) recentColors = recentColors.slice(0, 8);
+  }
+
+  function showColorPanel(swatchWrap, swatch, el){
+    if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; return; }
+    var panel = document.createElement('div');
+    panel.className = 'ftb-cpanel';
+    var currentColor = rgbToHex(window.getComputedStyle(el).color) || '#000000';
+
+    function applyColor(hex){
+      addRecentColor(hex);
+      restoreSelection();
+      el.focus();
+      var sel = window.getSelection();
+      if(!sel || !sel.rangeCount || sel.isCollapsed){
+        el.style.color = hex;
+      } else {
+        document.execCommand('foreColor', false, hex);
+      }
+      swatch.style.backgroundColor = hex;
+      if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; }
+      syncHtml();
+    }
+
+    function makeSwatchEl(hex, isActive){
+      var cs = document.createElement('div');
+      cs.className = 'ftb-cpanel-swatch' + (isActive ? ' active' : '');
+      cs.style.backgroundColor = hex;
+      cs.title = hex;
+      cs.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
+      cs.addEventListener('click', function(ev){ ev.stopPropagation(); applyColor(hex); });
+      return cs;
+    }
+
+    // Default colors
+    var defaults = ['#000000','#ffffff','#333333','#666666','#999999','#cc0000','#ff6600','#ffcc00','#33cc33','#0066cc','#6633cc','#cc33cc'];
+    var defLabel = document.createElement('div');
+    defLabel.className = 'ftb-cpanel-label';
+    defLabel.textContent = 'Default';
+    panel.appendChild(defLabel);
+    var defRow = document.createElement('div');
+    defRow.className = 'ftb-cpanel-row';
+    defaults.forEach(function(hex){ defRow.appendChild(makeSwatchEl(hex, currentColor === hex)); });
+    panel.appendChild(defRow);
+
+    // Document colors
+    var docColors = extractEmailColors();
+    if(docColors.length > 0){
+      var docLabel = document.createElement('div');
+      docLabel.className = 'ftb-cpanel-label';
+      docLabel.textContent = 'Document';
+      panel.appendChild(docLabel);
+      var docRow = document.createElement('div');
+      docRow.className = 'ftb-cpanel-row';
+      docColors.forEach(function(hex){ docRow.appendChild(makeSwatchEl(hex, currentColor === hex)); });
+      panel.appendChild(docRow);
+    }
+
+    // Recent colors
+    if(recentColors.length > 0){
+      var recLabel = document.createElement('div');
+      recLabel.className = 'ftb-cpanel-label';
+      recLabel.textContent = 'Recent';
+      panel.appendChild(recLabel);
+      var recRow = document.createElement('div');
+      recRow.className = 'ftb-cpanel-row';
+      recentColors.forEach(function(hex){ recRow.appendChild(makeSwatchEl(hex, currentColor === hex)); });
+      panel.appendChild(recRow);
+    }
+
+    // Hex input + native picker
+    var hexRow = document.createElement('div');
+    hexRow.className = 'ftb-hex-row';
+    var hexLabel = document.createElement('span');
+    hexLabel.style.cssText = 'color:rgba(255,255,255,0.35);font-size:10px;font-weight:600;';
+    hexLabel.textContent = '#';
+    hexRow.appendChild(hexLabel);
+    var hexInput = document.createElement('input');
+    hexInput.type = 'text';
+    hexInput.className = 'ftb-hex-input';
+    hexInput.value = currentColor.replace('#','');
+    hexInput.maxLength = 6;
+    hexInput.placeholder = '000000';
+    hexInput.addEventListener('mousedown', function(ev){ ev.stopPropagation(); });
+    hexInput.addEventListener('keydown', function(ev){
+      ev.stopPropagation();
+      if(ev.key === 'Enter'){
+        var val = hexInput.value.trim().replace('#','');
+        if(/^[0-9a-fA-F]{3,6}$/.test(val)){
+          var hex = normalizeHex('#'+val);
+          applyColor(hex);
+        }
+      }
+    });
+    hexRow.appendChild(hexInput);
+    var nativePicker = document.createElement('input');
+    nativePicker.type = 'color';
+    nativePicker.className = 'ftb-hex-native';
+    nativePicker.value = currentColor;
+    nativePicker.addEventListener('mousedown', function(ev){ ev.stopPropagation(); });
+    nativePicker.addEventListener('input', function(){
+      hexInput.value = nativePicker.value.replace('#','');
+    });
+    nativePicker.addEventListener('change', function(){
+      applyColor(nativePicker.value);
+    });
+    hexRow.appendChild(nativePicker);
+    panel.appendChild(hexRow);
+
+    swatchWrap.appendChild(panel);
+    ftbColorPanel = panel;
+  }
+
   function showFtb(el){
     removeFtb();
     ftbTarget = el;
@@ -1406,7 +1556,6 @@ export default function CampaignEditor() {
       if(s === currentSize) opt.selected = true;
       sizeSelect.appendChild(opt);
     });
-    // If current size not in list, add it
     if(sizes.indexOf(currentSize) < 0){
       var opt = document.createElement('option');
       opt.value = currentSize;
@@ -1414,14 +1563,15 @@ export default function CampaignEditor() {
       opt.selected = true;
       sizeSelect.insertBefore(opt, sizeSelect.firstChild);
     }
+    sizeSelect.addEventListener('mousedown', function(e){ e.stopPropagation(); });
     sizeSelect.addEventListener('change', function(){
+      restoreSelection();
+      el.focus();
       var sel = window.getSelection();
-      if(!sel.rangeCount || sel.isCollapsed){
-        // No selection — apply to the whole element
+      if(!sel || !sel.rangeCount || sel.isCollapsed){
         el.style.fontSize = sizeSelect.value + 'px';
       } else {
         document.execCommand('fontSize', false, '7');
-        // Convert <font size=7> to <span style="font-size">
         el.querySelectorAll('font[size="7"]').forEach(function(f){
           var span = document.createElement('span');
           span.style.fontSize = sizeSelect.value + 'px';
@@ -1430,9 +1580,7 @@ export default function CampaignEditor() {
         });
       }
       syncHtml();
-      el.focus();
     });
-    sizeSelect.addEventListener('mousedown', function(e){ e.stopPropagation(); });
     bar.appendChild(sizeSelect);
 
     // Text color swatch
@@ -1443,36 +1591,10 @@ export default function CampaignEditor() {
     swatch.className = 'ftb-swatch';
     swatch.style.backgroundColor = currentColor;
     swatch.title = 'Text color';
+    swatch.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
     swatch.addEventListener('click', function(e){
       e.stopPropagation();
-      if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; return; }
-      var panel = document.createElement('div');
-      panel.className = 'ftb-cpanel';
-      var colors = extractEmailColors();
-      colors.forEach(function(hex){
-        var cs = document.createElement('div');
-        cs.className = 'ftb-cpanel-swatch';
-        cs.style.backgroundColor = hex;
-        cs.title = hex;
-        if(rgbToHex(currentColor) === hex) cs.classList.add('active');
-        cs.addEventListener('click', function(ev){
-          ev.stopPropagation();
-          var sel = window.getSelection();
-          if(!sel.rangeCount || sel.isCollapsed){
-            el.style.color = hex;
-          } else {
-            document.execCommand('foreColor', false, hex);
-          }
-          swatch.style.backgroundColor = hex;
-          panel.remove();
-          ftbColorPanel = null;
-          syncHtml();
-          el.focus();
-        });
-        panel.appendChild(cs);
-      });
-      swatchWrap.appendChild(panel);
-      ftbColorPanel = panel;
+      showColorPanel(swatchWrap, swatch, el);
     });
     swatchWrap.appendChild(swatch);
     bar.appendChild(swatchWrap);
@@ -1480,50 +1602,56 @@ export default function CampaignEditor() {
     bar.appendChild(makeSep());
 
     // Bold
-    var boldBtn = makeBtn('<b>B</b>', 'Bold');
+    var boldBtn = makeBtn('<b style="font-size:13px;">B</b>', 'Bold');
     boldBtn.setAttribute('data-ftb', 'bold');
-    boldBtn.addEventListener('click', function(e){ e.stopPropagation(); document.execCommand('bold'); updateBIUState(bar); syncHtml(); el.focus(); });
+    boldBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    boldBtn.addEventListener('click', function(e){ e.stopPropagation(); applyCommand('bold'); updateBIUState(bar); });
     bar.appendChild(boldBtn);
 
     // Italic
-    var italicBtn = makeBtn('<i>I</i>', 'Italic');
+    var italicBtn = makeBtn('<i style="font-size:13px;font-family:Georgia,serif;">I</i>', 'Italic');
     italicBtn.setAttribute('data-ftb', 'italic');
-    italicBtn.addEventListener('click', function(e){ e.stopPropagation(); document.execCommand('italic'); updateBIUState(bar); syncHtml(); el.focus(); });
+    italicBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    italicBtn.addEventListener('click', function(e){ e.stopPropagation(); applyCommand('italic'); updateBIUState(bar); });
     bar.appendChild(italicBtn);
 
     // Underline
-    var underlineBtn = makeBtn('<u>U</u>', 'Underline');
+    var underlineBtn = makeBtn('<u style="font-size:13px;">U</u>', 'Underline');
     underlineBtn.setAttribute('data-ftb', 'underline');
-    underlineBtn.addEventListener('click', function(e){ e.stopPropagation(); document.execCommand('underline'); updateBIUState(bar); syncHtml(); el.focus(); });
+    underlineBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    underlineBtn.addEventListener('click', function(e){ e.stopPropagation(); applyCommand('underline'); updateBIUState(bar); });
     bar.appendChild(underlineBtn);
 
     bar.appendChild(makeSep());
 
-    // Text align
-    var alignIcons = { left:'≡', center:'☰', right:'≡' };
+    // Text align — SVG icons
+    var alignSvgs = {
+      left: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>',
+      center: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>',
+      right: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></svg>'
+    };
     var currentAlign = getCurrentAlignment(el);
-    var alignBtn = makeBtn(alignIcons[currentAlign] || '≡', 'Alignment');
-    alignBtn.style.fontSize = '15px';
-    if(currentAlign === 'right') alignBtn.style.transform = 'scaleX(-1)';
+    var alignBtn = makeBtn(alignSvgs[currentAlign] || alignSvgs.left, 'Alignment');
+    alignBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
     alignBtn.addEventListener('click', function(e){
       e.stopPropagation();
       var next = currentAlign === 'left' ? 'center' : currentAlign === 'center' ? 'right' : 'left';
       el.style.textAlign = next;
       currentAlign = next;
-      alignBtn.innerHTML = alignIcons[next];
-      if(next === 'right') alignBtn.style.transform = 'scaleX(-1)';
-      else alignBtn.style.transform = '';
+      alignBtn.innerHTML = alignSvgs[next];
       syncHtml();
+      restoreSelection();
       el.focus();
     });
     bar.appendChild(alignBtn);
 
     bar.appendChild(makeSep());
 
-    // Ideate button
+    // Ideate button — stroke-only gradient border
     var ideateBtn = document.createElement('button');
     ideateBtn.className = 'ftb-ideate';
-    ideateBtn.innerHTML = '✨ Ideate';
+    ideateBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg> Ideate';
+    ideateBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
     ideateBtn.addEventListener('click', function(e){
       e.stopPropagation();
       window.parent.postMessage({ type: 'ideateElement', text: el.textContent.trim(), tagName: el.tagName }, '*');
@@ -1562,21 +1690,16 @@ export default function CampaignEditor() {
     if(e.target && e.target.isContentEditable){
       ftbBlurTimer = setTimeout(function(){
         removeFtb();
-      }, 250);
+      }, 300);
     }
   }, true);
 
-  // Keep toolbar alive when interacting with it — preventDefault stops blur from firing
+  // Keep toolbar alive when interacting with it
   document.addEventListener('mousedown', function(e){
     if(ftbEl && (ftbEl.contains(e.target) || (ftbColorPanel && ftbColorPanel.contains(e.target)))){
       e.preventDefault();
       clearTimeout(ftbBlurTimer);
     }
-  });
-
-  // Update B/I/U state on selection change
-  document.addEventListener('selectionchange', function(){
-    if(ftbEl) updateBIUState(ftbEl);
   });
 
   // Reposition on scroll
