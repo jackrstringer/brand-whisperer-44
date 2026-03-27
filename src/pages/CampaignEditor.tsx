@@ -1442,11 +1442,14 @@ export default function CampaignEditor() {
     var bw = bar.offsetWidth || 380;
     var bh = bar.offsetHeight || 38;
     var left = Math.max(4, Math.min(r.left + r.width/2 - bw/2, window.innerWidth - bw - 4));
+    var top;
     if(r.top > bh + 12){
-      bar.style.top = (r.top - bh - 8) + 'px';
+      top = r.top - bh - 8;
     } else {
-      bar.style.top = (r.bottom + 8) + 'px';
+      top = r.bottom + 8;
     }
+    top = Math.max(4, Math.min(top, window.innerHeight - bh - 4));
+    bar.style.top = top + 'px';
     bar.style.left = left + 'px';
   }
 
