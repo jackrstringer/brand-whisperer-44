@@ -985,6 +985,8 @@ export default function CampaignEditor() {
   // Listen for postMessage from iframe for inline text edits
   useEffect(() => {
     const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'undo') { handleUndo(); return; }
+      if (e.data?.type === 'redo') { handleRedo(); return; }
       if (e.data?.type !== "textEdited" || !e.data?.html) return;
       if (!campaignId || !campaign) return;
       const newHtml = e.data.html as string;
@@ -1009,7 +1011,7 @@ export default function CampaignEditor() {
       window.removeEventListener("message", handler);
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
     };
-  }, [campaignId, campaign]);
+  }, [campaignId, campaign, handleUndo, handleRedo]);
 
   if (loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
