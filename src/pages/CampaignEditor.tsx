@@ -607,10 +607,11 @@ export default function CampaignEditor() {
               setStreamingText("");
               streamingTextRef.current = "";
               setAgentState("idle");
-              setIdeateIndicator("done");
+              ideateActiveRef.current = false;
               serverReply = "__VARIANTS_HANDLED__";
               const msgId = crypto.randomUUID();
               streamingVariantMsgIdRef.current = msgId;
+              setIdeateMessageId(msgId); // this specific message gets the pill
               const variantMsg: ChatMessage = {
                 id: msgId,
                 campaign_id: campaignId,
