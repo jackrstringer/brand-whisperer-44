@@ -91,6 +91,7 @@ export default function CampaignEditor() {
   const [canUndo, setCanUndo] = useState(false);
   const [redoStack, setRedoStack] = useState<string[]>([]);
   const ideatePayloadRef = useRef<{ realPrompt: string; displayText: string } | null>(null);
+  const [ideateIndicator, setIdeateIndicator] = useState<"idle" | "thinking" | "done">("idle");
   const [activeVersionIndex, setActiveVersionIndex] = useState<number | null>(null); // null = latest
   const [matchProductColors, setMatchProductColors] = useState(false);
   const [selectedShopifyProducts, setSelectedShopifyProducts] = useState<SelectedShopifyProduct[]>([]);
@@ -491,6 +492,7 @@ export default function CampaignEditor() {
     setStreamingText("");
     streamingTextRef.current = "";
     setActiveVersionIndex(null);
+    if (!ideateOverride) setIdeateIndicator("idle");
 
     // Don't show a user message bubble for ideate requests
     if (!ideateOverride) {
@@ -604,6 +606,7 @@ export default function CampaignEditor() {
               setStreamingText("");
               streamingTextRef.current = "";
               setAgentState("idle");
+              setIdeateIndicator("done");
               serverReply = "__VARIANTS_HANDLED__";
               const msgId = crypto.randomUUID();
               streamingVariantMsgIdRef.current = msgId;
@@ -653,6 +656,7 @@ export default function CampaignEditor() {
               streamingTextRef.current = "";
               serverReply = "__VARIANTS_HANDLED__";
               setAgentState("idle");
+              setIdeateIndicator("done");
               const variantMsg: ChatMessage = {
                 id: crypto.randomUUID(),
                 campaign_id: campaignId,
@@ -1125,6 +1129,7 @@ export default function CampaignEditor() {
         const displayText = `✨ Ideate ${typeLabel}: "${shortText}"`;
 
         ideatePayloadRef.current = { realPrompt, displayText };
+        setIdeateIndicator("thinking");
         sendMessage();
         return;
       }
@@ -2387,11 +2392,44 @@ export default function CampaignEditor() {
                       </div>
                     </div>
                   )}
-                  {/* Agent state indicator */}
-                  {agentState !== "idle" && !streamingText && (
-                    <div className="flex justify-center my-2">
+                  {/* Ideate indicator pill */}
+                  {ideateIndicator !== "idle" && (
+                    <div className="flex justify-start my-2">
                       <div
-                        className="relative rounded-full px-5 py-2 text-xs font-medium flex items-center gap-2 overflow-hidden"
+                        className="relative rounded-full px-6 py-2 text-xs font-medium flex items-center gap-2.5 overflow-hidden"
+                        style={{
+                          background: ideateIndicator === "done"
+                            ? 'linear-gradient(135deg, rgba(200,241,53,0.12), rgba(99,102,241,0.06))'
+                            : 'linear-gradient(135deg, rgba(200,241,53,0.08), rgba(99,102,241,0.08))',
+                          border: '1px solid rgba(200,241,53,0.2)',
+                          ...(ideateIndicator === "thinking" ? { animation: 'ideate-pill-pulse 2s ease-in-out infinite' } : {}),
+                        }}
+                      >
+                        {ideateIndicator === "thinking" && (
+                          <span
+                            className="absolute inset-0 rounded-full opacity-40"
+                            style={{
+                              background: 'linear-gradient(90deg, transparent, rgba(200,241,53,0.15), transparent)',
+                              animation: 'ideate-pill-shimmer 2s ease-in-out infinite',
+                            }}
+                          />
+                        )}
+                        <Zap className="relative w-3 h-3" style={{ color: 'rgba(200,241,53,0.9)' }} />
+                        <span className="relative" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                          {ideateIndicator === "thinking" ? (
+                            <>Generating options<span className="inline-block w-4 text-left animate-pulse">...</span></>
+                          ) : (
+                            "Options generated"
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  {/* Agent state indicator (non-ideate) */}
+                  {agentState !== "idle" && !streamingText && ideateIndicator === "idle" && (
+                    <div className="flex justify-start my-2">
+                      <div
+                        className="relative rounded-full px-6 py-2 text-xs font-medium flex items-center gap-2.5 overflow-hidden"
                         style={{
                           background: 'linear-gradient(135deg, rgba(200,241,53,0.08), rgba(99,102,241,0.08))',
                           border: '1px solid rgba(200,241,53,0.2)',
@@ -2405,11 +2443,9 @@ export default function CampaignEditor() {
                             animation: 'ideate-pill-shimmer 2s ease-in-out infinite',
                           }}
                         />
-                        <span className="relative" style={{ color: 'rgba(200,241,53,0.9)' }}>
-                          {agentState === "thinking" ? "⚡" : "✏️"}
-                        </span>
+                        <Zap className="relative w-3 h-3" style={{ color: 'rgba(200,241,53,0.9)' }} />
                         <span className="relative" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                          {agentState === "thinking" ? "Ideating" : "Editing"}
+                          {agentState === "thinking" ? "Thinking" : "Editing"}
                           <span className="inline-block w-4 text-left animate-pulse">...</span>
                         </span>
                       </div>
