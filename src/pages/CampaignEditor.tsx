@@ -825,17 +825,20 @@ export default function CampaignEditor() {
             </label>
           </div>
 
-          <Button variant="outline" size="sm" onClick={exportHtml} disabled={!campaign?.html} className="active:scale-[0.98] transition-all">
-            <Download className="w-3 h-3 mr-1" /> Export HTML
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => navigate(`/brands/${brandId}/campaigns/${campaignId}/qa`)}
-            disabled={!campaign?.html}
-            className="active:scale-[0.98] transition-all"
-          >
-            <ClipboardCheck className="w-3 h-3 mr-1" /> Review & Send
-          </Button>
+          {campaign?.html && (
+            <>
+              <Button variant="outline" size="sm" onClick={exportHtml} className="active:scale-[0.98] transition-all">
+                <Download className="w-3 h-3 mr-1" /> Export HTML
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => navigate(`/brands/${brandId}/campaigns/${campaignId}/qa`)}
+                className="active:scale-[0.98] transition-all"
+              >
+                <ClipboardCheck className="w-3 h-3 mr-1" /> Review & Send
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
