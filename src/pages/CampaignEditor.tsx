@@ -2501,7 +2501,8 @@ export default function CampaignEditor() {
                 <div
                   style={{
                     width: renderedWidth,
-                    minHeight: renderedHeight,
+                    height: renderedHeight,
+                    position: 'relative',
                   }}
                 >
                   <iframe
