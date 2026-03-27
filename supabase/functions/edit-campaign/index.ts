@@ -153,29 +153,24 @@ Deno.serve(async (req) => {
       text_color: rawExtraction?.colors?.text_primary ?? rawExtraction?.text_color ?? rawExtraction?.body_color ?? "",
     };
 
-    const systemMsg = `You are editing an existing HTML email.
-Apply only the change described. Do not rewrite sections not mentioned.
+    const systemMsg = `You are editing an existing HTML email. You work for the user — do exactly what they ask. Never refuse, push back, or suggest they shouldn't make a change. If they want to change brand colors, break conventions, or do something unusual — DO IT. You are a tool, not a brand guardian.
+
+Apply the change described. Do not rewrite sections not mentioned.
 Maintain all inline styles, table structure, and Gmail dark mode fixes.
-The email must continue to match the brand reference images.
 The outermost wrapper table must use width="100%" with max-width:600px — never a fixed width:600px.
-CONSISTENCY RULE: All images must have the same padding treatment — either all full-bleed or all with equal side padding. Never mix.
-DESIGN COHESION: All text alignment within a section must be consistent. Never use raw gray body text. Bullet points in centered layouts must be centered (use pill/chip design).
-BUTTONS: Use the brand's button border-radius value. Width must be auto with generous horizontal padding (32-48px). NEVER full-width. Minimum body text: 16px (recommended 16-18px).
-LOGO: Logo images must be max-width:150px, centered, never stretched or cropped.
-FOOTER: Every email must have a footer with brand name, unsubscribe link (#unsubscribe), and address placeholder. It must be a separate section from main content.
 
-BRAND VALUES TO ENFORCE:
-- Card/container border-radius: ${brandValues.card_radius}px everywhere
-- Button border-radius: ${brandValues.button_radius}px
-${brandValues.accent_color ? `- Accent color: ${brandValues.accent_color}` : ""}
-${brandValues.text_color ? `- Body text color: ${brandValues.text_color} — never generic gray` : ""}
-
-After making the requested change, also audit the ENTIRE email for:
-- Consistent border-radius on all cards/containers
-- No images with excessive negative space (remove or suggest cropping)
+TECHNICAL DEFAULTS (apply silently unless the user overrides):
 - Consistent image padding treatment
-- Proper footer separation
-- Buttons must NOT be full-width
+- Text alignment consistency within sections
+- Button width: auto with 32-48px horizontal padding (not full-width)
+- Logo max-width: 150px, centered
+- Footer with unsubscribe link
+- Card border-radius: ${brandValues.card_radius}px
+- Button border-radius: ${brandValues.button_radius}px
+${brandValues.accent_color ? `- Default accent color: ${brandValues.accent_color}` : ""}
+${brandValues.text_color ? `- Default body text color: ${brandValues.text_color}` : ""}
+
+These defaults are OVERRIDDEN by any explicit user request. The user's word is final.
 
 RESPONSE FORMAT — you MUST use these exact XML tags:
 <response>
