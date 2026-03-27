@@ -107,6 +107,7 @@ export default function CampaignEditor() {
   const refScrollRef = useRef<HTMLDivElement>(null);
   const [syncingScroll, setSyncingScroll] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [dragSelect, setDragSelect] = useState<{ startX: number; startY: number; x: number; y: number; active: boolean } | null>(null);
 
   // Restore reference panel state from localStorage
   useEffect(() => {
