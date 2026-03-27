@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, Send, Undo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye } from "lucide-react";
+import { ArrowLeft, Download, Send, Undo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, RotateCcw } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -591,6 +591,28 @@ export default function CampaignEditor() {
     toast.success("Undo successful");
   };
 
+  const handleRevertToVersion = async (editIndex: number) => {
+    if (!campaign || !campaignId) return;
+    const history = Array.isArray(campaign.html_history) ? campaign.html_history : [];
+    if (history.length === 0) return;
+
+    // editIndex is the 0-based index of the assistant edit message
+    // history[editIndex] = the HTML that was current BEFORE that edit
+    // The result AFTER that edit = history[editIndex + 1] if it exists, else campaign.html
+    const isLastEdit = editIndex >= history.length - 1;
+    if (isLastEdit) {
+      toast("Already on this version");
+      return;
+    }
+
+    const targetHtml = history[editIndex + 1] as string;
+    const newHistory = history.slice(0, editIndex + 1);
+    await supabase.from("campaigns").update({ html: targetHtml, html_history: newHistory }).eq("id", campaignId);
+    setCampaign((c) => c ? { ...c, html: targetHtml, html_history: newHistory } : c);
+    setCanUndo(newHistory.length > 0);
+    toast.success("Reverted to this version");
+  };
+
   const exportHtml = () => {
     if (!campaign?.html) return;
     const blob = new Blob([campaign.html], { type: "text/html" });
@@ -1043,28 +1065,51 @@ export default function CampaignEditor() {
                   </div>
                 )}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
-                  {messages.map((msg) => {
-                    if (msg.role === "system") {
+                  {(() => {
+                    let editCount = 0;
+                    const historyLen = Array.isArray(campaign?.html_history) ? campaign.html_history.length : 0;
+                    return messages.map((msg) => {
+                      if (msg.role === "system") {
+                        return (
+                          <div key={msg.id} className="text-center">
+                            <span className={`text-xs px-2 py-1 rounded ${msg.content.includes("failed") || msg.content.includes("error") ? "text-red-400" : "text-muted-foreground"}`}>
+                              {msg.content}
+                            </span>
+                          </div>
+                        );
+                      }
+                      if (msg.role === "assistant") {
+                        const thisEditIndex = editCount;
+                        editCount++;
+                        const canRevert = historyLen > 0 && thisEditIndex < historyLen - 1;
+                        return (
+                          <div key={msg.id} className="flex justify-start group/msg">
+                            <div className="max-w-[80%]">
+                              <div className="rounded-lg px-3 py-2 text-sm bg-card text-foreground">
+                                {msg.content}
+                              </div>
+                              {canRevert && (
+                                <button
+                                  onClick={() => handleRevertToVersion(thisEditIndex)}
+                                  className="flex items-center gap-1 mt-1 px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground opacity-0 group-hover/msg:opacity-100 transition-opacity"
+                                >
+                                  <RotateCcw className="w-2.5 h-2.5" />
+                                  Revert to this version
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      }
                       return (
-                        <div key={msg.id} className="text-center">
-                          <span className={`text-xs px-2 py-1 rounded ${msg.content.includes("failed") || msg.content.includes("error") ? "text-red-400" : "text-muted-foreground"}`}>
+                        <div key={msg.id} className="flex justify-end">
+                          <div className="max-w-[80%] rounded-lg px-3 py-2 text-sm bg-background text-foreground">
                             {msg.content}
-                          </span>
+                          </div>
                         </div>
                       );
-                    }
-                    return (
-                      <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                        <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
-                          msg.role === "user"
-                            ? "bg-background text-foreground"
-                            : "bg-card text-foreground"
-                        }`}>
-                          {msg.content}
-                        </div>
-                      </div>
-                    );
-                  })}
+                    });
+                  })()}
                   {/* Streaming assistant message */}
                   {streamingText && (
                     <div className="flex justify-start">
