@@ -51,6 +51,11 @@ function replaceLikelyBrokenImageUrls(html: string, fallbackUrls: string[]): str
 export default function CampaignEditor() {
   const { brandId, campaignId } = useParams<{ brandId: string; campaignId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [selectedReference, setSelectedReference] = useState<SelectedReference | null>(null);
+  const { brandId, campaignId } = useParams<{ brandId: string; campaignId: string }>();
+  const navigate = useNavigate();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
