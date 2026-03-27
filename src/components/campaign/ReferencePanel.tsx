@@ -76,7 +76,7 @@ function CampaignIframeThumbnail({ html, title }: { html: string; title?: string
   );
 }
 
-function MasonryGrid({ children }: { children: React.ReactNode }) {
+function MasonryGrid({ children, columnWidth }: { children: React.ReactNode; columnWidth: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [cols, setCols] = useState(3);
 
@@ -85,11 +85,11 @@ function MasonryGrid({ children }: { children: React.ReactNode }) {
     if (!el) return;
     const observer = new ResizeObserver((entries) => {
       const w = entries[0]?.contentRect.width ?? 800;
-      setCols(Math.max(1, Math.floor(w / TARGET_COLUMN_WIDTH)));
+      setCols(Math.max(1, Math.floor(w / columnWidth)));
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [columnWidth]);
 
   return (
     <div ref={containerRef} className="p-1" style={{ columnCount: cols, columnGap: 4 }}>
