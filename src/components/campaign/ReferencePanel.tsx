@@ -76,7 +76,7 @@ function CampaignIframeThumbnail({ html, title }: { html: string; title?: string
   );
 }
 
-function MasonryGrid({ children }: { children: React.ReactNode }) {
+function MasonryGrid({ children, columnWidth }: { children: React.ReactNode; columnWidth: number }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [cols, setCols] = useState(3);
 
@@ -85,11 +85,11 @@ function MasonryGrid({ children }: { children: React.ReactNode }) {
     if (!el) return;
     const observer = new ResizeObserver((entries) => {
       const w = entries[0]?.contentRect.width ?? 800;
-      setCols(Math.max(1, Math.floor(w / TARGET_COLUMN_WIDTH)));
+      setCols(Math.max(1, Math.floor(w / columnWidth)));
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [columnWidth]);
 
   return (
     <div ref={containerRef} className="p-1" style={{ columnCount: cols, columnGap: 4 }}>
@@ -158,6 +158,7 @@ export default function ReferencePanel({
   const [savedRefs, setSavedRefs] = useState<SavedReference[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [categories, setCategories] = useState<string[]>([]);
+  const [zoomLevel, setZoomLevel] = useState(50); // 0-100 slider, maps to column width
 
   useEffect(() => {
     supabase
@@ -265,25 +266,41 @@ export default function ReferencePanel({
 
   const gridData = getGridItems();
 
+  // Zoom: 0 = very zoomed out (many cols, ~100px), 100 = zoomed in (1 col, full width ~800px)
+  // Map zoom 0-100 to column width 100-800
+  const columnWidth = 100 + (zoomLevel / 100) * 700;
+
   return (
     <div className="h-full flex flex-col">
-      {/* Header with tabs */}
-      <div className="shrink-0 border-b border-border px-4 pt-3 pb-0">
-        <h2 className="text-sm font-medium mb-2">Inspiration</h2>
-        <div className="flex gap-1">
-          {(["library", "mine", "saved"] as TabValue[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`text-[11px] px-3 py-1.5 rounded-t-md transition-colors ${
-                tab === t
-                  ? "bg-muted text-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {t === "library" ? "Library" : t === "mine" ? "My Campaigns" : "Saved"}
-            </button>
-          ))}
+      {/* Header with tabs + zoom */}
+      <div className="shrink-0 border-b border-border px-4 pt-2 pb-0">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="flex gap-1">
+            {(["library", "mine", "saved"] as TabValue[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`text-[11px] px-3 py-1.5 rounded-t-md transition-colors ${
+                  tab === t
+                    ? "bg-muted text-foreground font-medium"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t === "library" ? "Library" : t === "mine" ? "My Campaigns" : "Saved"}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-[10px] text-muted-foreground">Zoom</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={zoomLevel}
+              onChange={(e) => setZoomLevel(Number(e.target.value))}
+              className="w-20 h-1 accent-primary cursor-pointer"
+            />
+          </div>
         </div>
       </div>
 
@@ -310,7 +327,7 @@ export default function ReferencePanel({
 
       {/* Grid — responsive masonry using container width */}
       <ScrollArea className="flex-1">
-        <MasonryGrid>
+        <MasonryGrid columnWidth={columnWidth}>
           {gridData.flatMap(({ items, type }) =>
             items.map((item: any) => {
               const id = item.id;
