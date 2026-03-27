@@ -542,15 +542,19 @@ Think of it as: you are TRACING the reference layout, then painting over it with
 4. Never start every email the same way. Vary your openings: sometimes a full-bleed hero, sometimes a headline-first approach, sometimes a personal greeting, sometimes a provocative question.
 5. Section count should vary by campaign type — a welcome email might be 3-4 sections, a newsletter might be 6-8, an abandoned cart might be just 2.`;
     } else if (referenceMode === "dupe") {
-      part3 += `\n\n=== LAYOUT CLONING ACTIVE ===
-You are in DUPE mode. Do NOT vary the layout. Do NOT add creative structural changes.
-Replicate the reference campaign's layout section-for-section. The structure IS the reference.
+      part3 += `\n\n=== ⚠️ LAYOUT CLONING ACTIVE — THIS OVERRIDES ALL OTHER LAYOUT INSTRUCTIONS ⚠️ ===
+You are in DUPE mode. The reference campaign screenshot IS your layout blueprint.
+Do NOT vary the layout. Do NOT add creative structural changes. Do NOT add or remove sections.
+Do NOT rearrange anything. TRACE the reference layout exactly.
+Count the sections in the reference image. Your output must have the SAME count, SAME types, SAME order, SAME sizing.
+If your output has a different number of sections than the reference, you have FAILED.
 Use the brand's own colors and typography — NOT the reference's colors.`;
     } else {
-      part3 += `\n\n=== REFERENCE MODE ACTIVE ===
-Follow the reference campaign's structure, sizing, and layout closely.
+      part3 += `\n\n=== REFERENCE MODE ACTIVE — FOLLOW THE STRUCTURE ===
+The reference campaign screenshot defines your layout skeleton.
+Follow its structure, section sequence, image placements, sizing, and spacing closely.
 Use the brand's own colors and typography — NOT the reference's colors.
-You may make minor adjustments to fit the brief, but the overall skeleton should clearly match.`;
+You may make minor adjustments to fit the brief, but the overall skeleton should clearly match the reference.`;
     }
 
     part3 += `\n\n=== IMAGE RULES ===
