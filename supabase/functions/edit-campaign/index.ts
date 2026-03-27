@@ -325,8 +325,8 @@ The complete updated HTML here — no markdown fences, no commentary.
           }
 
           // Parse the complete response
-          const responseMatch = fullText.match(/<response>([\s\S]*?)<\/response>/);
-          const htmlMatch = fullText.match(/<html>([\s\S]*?)<\/html>/);
+          const responseMatch = fullText.match(/<reply>([\s\S]*?)<\/reply>/);
+          const htmlMatch = fullText.match(/<email_html>([\s\S]*?)<\/email_html>/);
 
           const responseText = responseMatch ? responseMatch[1].trim() : "Changes applied.";
           let html = htmlMatch ? htmlMatch[1].trim() : "";
