@@ -493,7 +493,7 @@ export default function CampaignEditor() {
     setStreamingText("");
     streamingTextRef.current = "";
     setActiveVersionIndex(null);
-    if (!ideateOverride) { setIdeateMessageId(null); ideateActiveRef.current = false; }
+    if (!ideateOverride) { setIdeateMessageId(null); ideateActive = false; }
 
     // Don't show a user message bubble for ideate requests
     if (!ideateOverride) {
@@ -607,7 +607,7 @@ export default function CampaignEditor() {
               setStreamingText("");
               streamingTextRef.current = "";
               setAgentState("idle");
-              ideateActiveRef.current = false;
+              ideateActive = false;
               serverReply = "__VARIANTS_HANDLED__";
               const msgId = crypto.randomUUID();
               streamingVariantMsgIdRef.current = msgId;
@@ -658,7 +658,7 @@ export default function CampaignEditor() {
               streamingTextRef.current = "";
               serverReply = "__VARIANTS_HANDLED__";
               setAgentState("idle");
-              ideateActiveRef.current = false;
+              ideateActive = false;
               const variantMsg: ChatMessage = {
                 id: crypto.randomUUID(),
                 campaign_id: campaignId,
@@ -1164,7 +1164,7 @@ export default function CampaignEditor() {
         const displayText = `✨ Ideate ${typeLabel}: "${shortText}"`;
 
         ideatePayloadRef.current = { realPrompt, displayText };
-        ideateActiveRef.current = true;
+        ideateActive = true;
         sendMessage();
         return;
       }
@@ -2464,7 +2464,7 @@ export default function CampaignEditor() {
                     </div>
                   )}
                   {/* Ideate indicator pill (shown while thinking, before variants arrive) */}
-                  {ideateActiveRef.current && !ideateMessageId && (
+                  {ideateActive && !ideateMessageId && (
                     <div className="flex justify-start my-2">
                       <div
                         className="relative rounded-full px-6 py-2 text-xs font-medium flex items-center gap-2.5 overflow-hidden"
@@ -2489,7 +2489,7 @@ export default function CampaignEditor() {
                     </div>
                   )}
                   {/* Agent state indicator (non-ideate) */}
-                  {agentState !== "idle" && !streamingText && !ideateActiveRef.current && (
+                  {agentState !== "idle" && !streamingText && !ideateActive && (
                     <div className="flex justify-start my-2">
                       <div
                         className="relative rounded-full px-6 py-2 text-xs font-medium flex items-center gap-2.5 overflow-hidden"
