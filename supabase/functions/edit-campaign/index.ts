@@ -332,6 +332,7 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
 
           const aiMs = Date.now() - aiStartMs;
           console.log(`[edit-campaign] AI stream: ${aiMs}ms | Output: ${fullText.length} chars`);
+          console.log(`[edit-campaign] fullText preview:`, fullText.slice(0, 300));
 
           // Parse response
           const replyMatch = fullText.match(/<reply>([\s\S]*?)<\/reply>/);
