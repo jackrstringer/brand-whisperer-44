@@ -593,6 +593,7 @@ export default function CampaignEditor() {
             }
 
             if (eventType === "done") {
+              receivedDone = true;
               setAgentState("idle");
               // Skip adding another message if variants already handled it
               if (data?.isVariants || serverReply === "__VARIANTS_HANDLED__") {
