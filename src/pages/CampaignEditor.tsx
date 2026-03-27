@@ -633,8 +633,38 @@ export default function CampaignEditor() {
       setAgentState("idle");
     }
   };
+  const handleApplyVariant = async (variant: VariantOption, index: number, messageId: string) => {
+    if (!campaign?.html || !campaignId) return;
+    const html = campaign.html;
+    if (!html.includes(variant.find)) {
+      toast.error("Could not find the text to replace — it may have already changed.");
+      return;
+    }
+    const newHtml = html.replace(variant.find, variant.replace);
+    // Save to history
+    const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
+    history.push(html);
+    await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
+    setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
+    setCanUndo(true);
 
-  // All versions: history entries + current html as the last version
+    // Update the message's applied_index
+    setMessages(prev => prev.map(m => {
+      if (m.id === messageId && m.variant_data) {
+        return { ...m, variant_data: { ...m.variant_data, applied_index: index } };
+      }
+      return m;
+    }));
+
+    // Persist applied_index to DB
+    await supabase.from("chat_messages").update({
+      tool_calls: { type: "variants", data: { message: messages.find(m => m.id === messageId)?.variant_data?.message || "", variants: messages.find(m => m.id === messageId)?.variant_data?.variants || [], applied_index: index } },
+    } as any).eq("id", messageId);
+
+    toast.success(`Applied: ${variant.label}`);
+  };
+
+
   const allVersions: string[] = (() => {
     const history = Array.isArray(campaign?.html_history) ? campaign.html_history as string[] : [];
     const current = campaign?.html || "";
