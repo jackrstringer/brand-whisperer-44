@@ -219,9 +219,15 @@ Brief intro text e.g. "Here are 3 headline options:"
 </response>
 <variants>
 [
-  {"label": "Short option title", "preview": "The actual copy the user will read", "find": "exact string currently in the HTML to replace", "replace": "new string to replace it with"}
+  {"label": "Short option title", "preview": "The actual copy the user will read", "find": "exact string currently in the HTML to replace", "replace": "new string to replace it with", "apply_all": true}
 ]
 </variants>
+
+CRITICAL VARIANT RULE — "apply_all" field:
+- Set "apply_all": true when the change is SYSTEMIC — it should apply to ALL matching instances in the email. This includes: color changes, background colors, font changes, typography, button styling, border radius, padding patterns, or any visual/formatting property that repeats across multiple elements for consistency.
+- Set "apply_all": false (or omit) when the change is LOCALIZED — it targets specific unique content like a single headline, a specific paragraph, or one particular section's text.
+- Example: changing CTA button color → apply_all: true (all CTAs should match). Rewriting a headline → apply_all: false (only that one headline).
+- When apply_all is true, the "find" should target the SPECIFIC style/attribute value that repeats (e.g. a background-color value with enough context), NOT the entire element.
 
 ${variantCount ? `IMPORTANT: Generate exactly ${variantCount} diverse variant options. Vary style, tone, length, and approach significantly across all options.` : ""}
 
