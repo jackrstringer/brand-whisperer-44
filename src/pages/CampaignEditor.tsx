@@ -669,7 +669,7 @@ export default function CampaignEditor() {
                   requestAnimationFrame(() => setSyncingScroll(false));
                 }}
               >
-                <div className="flex justify-center p-4">
+                <div className="flex justify-end p-1 pr-0.5 pt-4">
                   <div style={{ width: renderedWidth }}>
                     <p className="text-[10px] text-muted-foreground text-center mb-2 font-medium uppercase tracking-wider">Reference</p>
                     {selectedReference.image_urls?.length ? (
