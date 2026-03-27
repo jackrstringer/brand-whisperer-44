@@ -1741,7 +1741,9 @@ export default function CampaignEditor() {
       opt.selected = true;
       sizeSelect.insertBefore(opt, sizeSelect.firstChild);
     }
-    sizeSelect.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+    sizeSelect.addEventListener('mousedown', function(e){ e.stopPropagation(); clearTimeout(ftbBlurTimer); });
+    sizeSelect.addEventListener('focus', function(){ clearTimeout(ftbBlurTimer); });
+    sizeSelect.addEventListener('click', function(e){ e.stopPropagation(); clearTimeout(ftbBlurTimer); });
     sizeSelect.addEventListener('change', function(){
       restoreSelection();
       el.focus();
