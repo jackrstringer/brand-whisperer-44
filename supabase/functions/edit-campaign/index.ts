@@ -305,6 +305,9 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
           const decoder = new TextDecoder();
           let sseBuffer = "";
 
+          // Accumulate full response without streaming text_delta mid-stream.
+          // This prevents half-finished text bubbles when the response turns out
+          // to be a variant response instead of a patch response.
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -321,19 +324,7 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
               try {
                 const evt = JSON.parse(jsonStr);
                 if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
-                  const text = evt.delta.text;
-                  fullText += text;
-
-                  // Stream reply text
-                  const beforeThis = fullText.slice(0, fullText.length - text.length);
-                  const inReply = beforeThis.includes("<reply>") && !beforeThis.includes("</reply>");
-                  if (inReply) {
-                    let cleanDelta = text;
-                    if (cleanDelta.includes("</reply>")) {
-                      cleanDelta = cleanDelta.split("</reply>")[0];
-                    }
-                    if (cleanDelta) emit("text_delta", { content: cleanDelta });
-                  }
+                  fullText += evt.delta.text;
                 }
               } catch { /* skip */ }
             }
@@ -341,6 +332,7 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
 
           const aiMs = Date.now() - aiStartMs;
           console.log(`[edit-campaign] AI stream: ${aiMs}ms | Output: ${fullText.length} chars`);
+          console.log(`[edit-campaign] fullText preview:`, fullText.slice(0, 300));
 
           // Parse response
           const replyMatch = fullText.match(/<reply>([\s\S]*?)<\/reply>/);
@@ -376,6 +368,11 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
           }
 
           let responseText = replyMatch ? replyMatch[1].trim() : "Changes applied.";
+
+          // Emit the full reply text at once (no mid-stream text_delta)
+          if (responseText) {
+            emit("text_delta", { content: responseText });
+          }
 
           let finalHtml = currentHtml;
           let patchCount = 0;
