@@ -1774,6 +1774,28 @@ export default function CampaignEditor() {
     swatchWrap.appendChild(swatch);
     bar.appendChild(swatchWrap);
 
+    // Background color swatch
+    var currentBg = window.getComputedStyle(el).backgroundColor;
+    var bgSwatchWrap = document.createElement('div');
+    bgSwatchWrap.style.position = 'relative';
+    var bgSwatch = document.createElement('div');
+    bgSwatch.className = 'ftb-swatch';
+    var bgHex = rgbToHex(currentBg);
+    bgSwatch.style.backgroundColor = bgHex && currentBg !== 'rgba(0, 0, 0, 0)' ? currentBg : 'transparent';
+    if(!bgHex || currentBg === 'rgba(0, 0, 0, 0)'){
+      bgSwatch.style.backgroundImage = 'linear-gradient(45deg,#555 25%,transparent 25%,transparent 75%,#555 75%),linear-gradient(45deg,#555 25%,transparent 25%,transparent 75%,#555 75%)';
+      bgSwatch.style.backgroundSize = '8px 8px';
+      bgSwatch.style.backgroundPosition = '0 0,4px 4px';
+    }
+    bgSwatch.title = 'Background color';
+    bgSwatch.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    bgSwatch.addEventListener('click', function(e){
+      e.stopPropagation();
+      showBgColorPanel(bgSwatchWrap, bgSwatch, el);
+    });
+    bgSwatchWrap.appendChild(bgSwatch);
+    bar.appendChild(bgSwatchWrap);
+
     bar.appendChild(makeSep());
 
     // Bold
