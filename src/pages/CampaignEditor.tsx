@@ -557,22 +557,10 @@ export default function CampaignEditor() {
         </div>
       </div>
 
-      {/* Main Content — with reference panel + draggable split */}
+      {/* Main Content — draggable split */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Reference Panel */}
-        {brandId && campaignId && (
-          <ReferencePanel
-            brandId={brandId}
-            campaignId={campaignId}
-            isOpen={refPanelOpen}
-            onToggle={() => setRefPanelOpen((o) => !o)}
-            selectedReference={selectedReference}
-            onSelectReference={setSelectedReference}
-          />
-        )}
-
       <PanelGroup direction="horizontal" className="flex-1">
-        {/* Left Panel — Preview */}
+        {/* Left Panel — Preview or Inspiration */}
         <Panel defaultSize={60} minSize={25} maxSize={85}>
           <div ref={previewPanelRef} className="h-full bg-card overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' as any }}>
             {isGenerating ? (
@@ -620,6 +608,13 @@ export default function CampaignEditor() {
                   />
                 </div>
               </div>
+            ) : brandId && campaignId ? (
+              <ReferencePanel
+                brandId={brandId}
+                campaignId={campaignId}
+                selectedReference={selectedReference}
+                onSelectReference={setSelectedReference}
+              />
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
                 Generate a campaign to see the preview
