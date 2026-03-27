@@ -81,6 +81,21 @@ export default function CampaignEditor() {
   const [designNotes, setDesignNotes] = useState("");
   const [subjectLine, setSubjectLine] = useState("");
   const [previewText, setPreviewText] = useState("");
+  const [refPanelOpen, setRefPanelOpen] = useState(false);
+  const [selectedReference, setSelectedReference] = useState<SelectedReference | null>(null);
+
+  // Restore reference panel state from localStorage
+  useEffect(() => {
+    if (!campaignId) return;
+    try {
+      const stored = localStorage.getItem(`ref-panel-${campaignId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (typeof parsed.isOpen === "boolean") setRefPanelOpen(parsed.isOpen);
+        if (parsed.selectedReference) setSelectedReference(parsed.selectedReference);
+      }
+    } catch {}
+  }, [campaignId]);
   const [sendListIds, setSendListIds] = useState<string[]>([]);
   const [sendSegmentIds, setSendSegmentIds] = useState<string[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
