@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Eye } from "lucide-react";
+import { Check, Eye, MoreHorizontal, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { VariantData, VariantOption } from "@/lib/types";
 
@@ -8,10 +8,12 @@ interface VariantCardsProps {
   onApply: (variant: VariantOption, index: number) => void;
   onPreview?: (variant: VariantOption, index: number) => void;
   onPreviewClear?: () => void;
+  onMore?: () => void;
+  loadingMore?: boolean;
   disabled: boolean;
 }
 
-export default function VariantCards({ variantData, onApply, onPreview, onPreviewClear, disabled }: VariantCardsProps) {
+export default function VariantCards({ variantData, onApply, onPreview, onPreviewClear, onMore, loadingMore, disabled }: VariantCardsProps) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [hoveringIndex, setHoveringIndex] = useState<number | null>(null);
   const hasApplied = variantData.applied_index !== null;
@@ -72,20 +74,37 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
           );
         })}
       </div>
-      {(!hasApplied || (selectedIndex !== null && selectedIndex !== variantData.applied_index)) && (
-        <Button
-          size="sm"
-          disabled={selectedIndex === null || disabled}
-          onClick={() => {
-            if (selectedIndex !== null) {
-              onApply(variantData.variants[selectedIndex], selectedIndex);
-            }
-          }}
-          className="w-full mt-1"
-        >
-          {hasApplied ? "Switch to this option" : "Apply"}
-        </Button>
-      )}
+      <div className="flex gap-2">
+        {(!hasApplied || (selectedIndex !== null && selectedIndex !== variantData.applied_index)) && (
+          <Button
+            size="sm"
+            disabled={selectedIndex === null || disabled}
+            onClick={() => {
+              if (selectedIndex !== null) {
+                onApply(variantData.variants[selectedIndex], selectedIndex);
+              }
+            }}
+            className="flex-1 mt-1"
+          >
+            {hasApplied ? "Switch to this option" : "Apply"}
+          </Button>
+        )}
+        {onMore && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={disabled || loadingMore}
+            onClick={onMore}
+            className="mt-1"
+          >
+            {loadingMore ? (
+              <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Loading...</>
+            ) : (
+              <><MoreHorizontal className="w-3 h-3 mr-1" /> More</>
+            )}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

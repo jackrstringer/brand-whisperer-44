@@ -76,6 +76,8 @@ export default function CampaignEditor() {
   const [streamingText, setStreamingText] = useState("");
   const streamingTextRef = useRef("");
   const [agentState, setAgentState] = useState<"idle" | "thinking" | "editing">("idle");
+  const [loadingMoreVariants, setLoadingMoreVariants] = useState<string | null>(null); // messageId being loaded
+  const streamingVariantMsgIdRef = useRef<string | null>(null);
   const speedMode = "normal";
   const [chatAttachments, setChatAttachments] = useState<File[]>([]);
   const [chatAttachmentPreviews, setChatAttachmentPreviews] = useState<string[]>([]);
@@ -580,8 +582,56 @@ export default function CampaignEditor() {
               setStreamingText(noChangeText);
             }
 
+            if (eventType === "variants_start") {
+              // New streaming variant mode — create the message shell
+              setStreamingText("");
+              streamingTextRef.current = "";
+              setAgentState("idle");
+              serverReply = "__VARIANTS_HANDLED__";
+              const msgId = crypto.randomUUID();
+              streamingVariantMsgIdRef.current = msgId;
+              const variantMsg: ChatMessage = {
+                id: msgId,
+                campaign_id: campaignId,
+                role: "assistant",
+                content: data.message || "Here are some options:",
+                created_at: new Date().toISOString(),
+                message_type: "variants",
+                variant_data: { message: data.message || "Here are some options:", variants: [], applied_index: null },
+              };
+              setMessages(prev => [...prev, variantMsg]);
+            }
+
+            if (eventType === "variant_item") {
+              // Append a single variant to the streaming message
+              const msgId = streamingVariantMsgIdRef.current;
+              if (msgId && data.variant) {
+                setMessages(prev => prev.map(m => {
+                  if (m.id === msgId && m.variant_data) {
+                    return { ...m, variant_data: { ...m.variant_data, variants: [...m.variant_data.variants, data.variant] } };
+                  }
+                  return m;
+                }));
+              }
+            }
+
+            if (eventType === "variants_done") {
+              // Finalize the variant message with all variants
+              const msgId = streamingVariantMsgIdRef.current;
+              if (msgId && data.variants) {
+                setMessages(prev => prev.map(m => {
+                  if (m.id === msgId && m.variant_data) {
+                    return { ...m, variant_data: { ...m.variant_data, message: data.message, variants: data.variants } };
+                  }
+                  return m;
+                }));
+              }
+              streamingVariantMsgIdRef.current = null;
+              serverReply = "__VARIANTS_HANDLED__";
+            }
+
             if (eventType === "variants") {
-              // Discard any streaming text bubble — variant message replaces it
+              // Legacy non-streaming variant event
               setStreamingText("");
               streamingTextRef.current = "";
               serverReply = "__VARIANTS_HANDLED__";
@@ -735,6 +785,125 @@ export default function CampaignEditor() {
   const handlePreviewClear = useCallback(() => {
     setPreviewHtml(null);
   }, []);
+
+  const handleMoreVariants = useCallback(async (messageId: string) => {
+    if (!campaignId || !brandId || !campaign?.html) return;
+    const msg = messages.find(m => m.id === messageId);
+    if (!msg?.variant_data) return;
+
+    // Find the original user message that triggered these variants
+    const msgIndex = messages.findIndex(m => m.id === messageId);
+    let originalUserMsg = "";
+    for (let i = msgIndex - 1; i >= 0; i--) {
+      if (messages[i].role === "user") {
+        originalUserMsg = messages[i].content;
+        break;
+      }
+    }
+    if (!originalUserMsg) return;
+
+    setLoadingMoreVariants(messageId);
+
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edit-campaign`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            campaignId,
+            message: originalUserMsg,
+            currentHtml: campaign.html,
+            moreVariants: true,
+          }),
+        }
+      );
+
+      if (!response.ok) throw new Error(`Failed: ${response.status}`);
+
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("text/event-stream") && response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        // Create the new variant message immediately
+        const newMsgId = crypto.randomUUID();
+        const variantMsg: ChatMessage = {
+          id: newMsgId,
+          campaign_id: campaignId,
+          role: "assistant",
+          content: "Generating more options...",
+          created_at: new Date().toISOString(),
+          message_type: "variants",
+          variant_data: { message: "Generating more options...", variants: [], applied_index: null },
+        };
+        setMessages(prev => [...prev, variantMsg]);
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            if (buffer.trim()) buffer += "\n\n";
+            else break;
+          } else {
+            buffer += decoder.decode(value, { stream: true });
+          }
+
+          const blocks = buffer.split("\n\n");
+          buffer = blocks.pop() || "";
+
+          for (const block of blocks) {
+            if (!block.trim()) continue;
+            const eventLine = block.split("\n").find(l => l.startsWith("event:"));
+            const dataLine = block.split("\n").find(l => l.startsWith("data:"));
+            if (!eventLine || !dataLine) continue;
+
+            const eventType = eventLine.replace("event:", "").trim();
+            let data: any;
+            try { data = JSON.parse(dataLine.replace("data:", "").trim()); } catch { continue; }
+
+            if (eventType === "variants_start") {
+              setMessages(prev => prev.map(m => {
+                if (m.id === newMsgId && m.variant_data) {
+                  return { ...m, content: data.message, variant_data: { ...m.variant_data, message: data.message } };
+                }
+                return m;
+              }));
+            }
+
+            if (eventType === "variant_item" && data.variant) {
+              setMessages(prev => prev.map(m => {
+                if (m.id === newMsgId && m.variant_data) {
+                  return { ...m, variant_data: { ...m.variant_data, variants: [...m.variant_data.variants, data.variant] } };
+                }
+                return m;
+              }));
+            }
+
+            if (eventType === "variants_done" && data.variants) {
+              setMessages(prev => prev.map(m => {
+                if (m.id === newMsgId && m.variant_data) {
+                  return { ...m, content: data.message, variant_data: { ...m.variant_data, message: data.message, variants: data.variants } };
+                }
+                return m;
+              }));
+            }
+          }
+          if (done) break;
+        }
+      }
+    } catch (err: any) {
+      toast.error(`Failed to generate more options: ${err.message}`);
+    } finally {
+      setLoadingMoreVariants(null);
+    }
+  }, [campaignId, brandId, campaign?.html, messages]);
+
 
 
   const allVersions: string[] = (() => {
@@ -1265,6 +1434,8 @@ export default function CampaignEditor() {
                                   onApply={(variant, idx) => handleApplyVariant(variant, idx, msg.id)}
                                   onPreview={(variant, idx) => handlePreviewVariant(variant, idx, msg.id)}
                                   onPreviewClear={handlePreviewClear}
+                                  onMore={() => handleMoreVariants(msg.id)}
+                                  loadingMore={loadingMoreVariants === msg.id}
                                   disabled={agentState !== "idle"}
                                 />
                               </div>
