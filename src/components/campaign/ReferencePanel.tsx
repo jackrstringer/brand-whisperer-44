@@ -252,9 +252,9 @@ export default function ReferencePanel({
 
   const gridData = getGridItems();
 
-  // Zoom: 0 = very zoomed out (many cols, ~100px), 100 = zoomed in (1 col, full width ~800px)
-  // Map zoom 0-100 to column width 100-800
-  const columnWidth = 100 + (zoomLevel / 100) * 700;
+  // Zoom slider directly controls column count: 1 (zoomed in) to 8 (zoomed out)
+  // Slider value 0 = 8 cols (zoomed out), 100 = 1 col (zoomed in)
+  const cols = Math.round(8 - (zoomLevel / 100) * 7); // 8 at 0, 1 at 100
 
   return (
     <div className="h-full flex flex-col">
