@@ -333,7 +333,7 @@ export default function ReferencePanel({
             })
           )}
           {gridData.every(({ items }) => items.length === 0) && (
-            <p className="col-span-3 text-xs text-muted-foreground text-center py-12">
+            <p className="text-xs text-muted-foreground text-center py-12">
               {tab === "library" ? "No reference campaigns yet" : tab === "mine" ? "No completed campaigns yet" : "No saved references"}
             </p>
           )}
