@@ -7,6 +7,42 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const GENERIC_TITLE_PATTERNS = [
+  /^(image)(\s*\d*)?$/i,
+  /^(untitled campaign|untitled)(\s*\d*)?$/i,
+  /^(pasted image)(\s*\d*)?$/i,
+  /^screenshot(\s*\d*)?$/i,
+];
+
+const isGenericTitle = (title?: string | null) => {
+  const normalized = (title || "").trim();
+  if (!normalized) return true;
+  return GENERIC_TITLE_PATTERNS.some((pattern) => pattern.test(normalized));
+};
+
+const deriveReferenceTitle = (metadata: any) => {
+  const brand = (metadata?.brand_name || "").trim();
+  const messageType = (metadata?.message_type || "").trim();
+  const industry = (metadata?.industry || "").trim();
+  const campaignType = (metadata?.campaign_type || "").trim();
+
+  const secondary =
+    messageType && messageType !== "Other"
+      ? messageType
+      : industry
+      ? campaignType === "flow"
+        ? `${industry} Flow`
+        : `${industry} Campaign`
+      : campaignType === "flow"
+      ? "Flow"
+      : "Campaign";
+
+  if (brand && secondary) return `${brand} — ${secondary}`;
+  if (brand) return brand;
+  if (secondary) return secondary;
+  return "Reference Campaign";
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
