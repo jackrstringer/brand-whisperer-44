@@ -59,6 +59,30 @@ function CampaignIframeThumbnail({ html, scale, width, title }: { html: string; 
   );
 }
 
+const COL_WIDTH = 260; // target column width in px
+
+function MasonryGrid({ children }: { children: React.ReactNode }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [cols, setCols] = useState(3);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 800;
+      setCols(Math.max(1, Math.floor(w / COL_WIDTH)));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={containerRef} className="p-2" style={{ columnCount: cols, columnGap: 8 }}>
+      {children}
+    </div>
+  );
+}
+
 interface ReferenceCampaign {
   id: string;
   title: string;
