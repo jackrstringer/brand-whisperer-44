@@ -574,6 +574,7 @@ export default function CampaignEditor() {
               setAgentState("editing");
               setCampaign(c => c ? { ...c, html: data.html } : c);
               setCanUndo(true);
+              setRedoStack([]);
             }
 
             if (eventType === "no_change") {
