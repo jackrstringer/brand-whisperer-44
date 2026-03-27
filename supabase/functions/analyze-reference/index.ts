@@ -28,21 +28,28 @@ serve(async (req) => {
       image_url: { url },
     }));
 
-    const systemPrompt = `You are an expert email marketing analyst. You will be shown screenshots/slices of an email campaign. Analyze the campaign and extract structured metadata.
+    const systemPrompt = `You are an expert email marketing analyst specializing in DTC/ecommerce brands. You will be shown screenshots of an email campaign. Your job is to extract PRECISE, USEFUL metadata that helps people find relevant references.
+
+CRITICAL RULES:
+- Look at the ACTUAL content of the email. Read every word visible.
+- Identify the REAL brand name from logos, headers, or footer text — not generic guesses.
+- For industry: be SPECIFIC. "Beauty & Skincare" is different from "Fashion & Apparel". Look at what's being sold.
+- For message_type: look for behavioral triggers. Abandonment emails mention "still interested?" or "left something behind". Post-purchase emails say "your order" or "thank you for your purchase". Welcome emails say "welcome" or "nice to meet you". Billing reminders mention subscriptions or upcoming charges. Don't default to "Promotional" — most emails promote something, so dig deeper into the PURPOSE.
+- campaign_type: "flow" means it's triggered by user behavior (browse/cart abandonment, post-purchase, welcome series, winback, subscription renewal). "campaign" means it's a one-off blast (sale announcement, new collection, seasonal, newsletter).
 
 Return a JSON object with these exact fields:
-- brand_name: string - the brand name visible in the email (or best guess)
-- industry: string - one of: "Beauty & Skincare", "Fashion & Apparel", "Food & Beverage", "Health & Wellness", "Home & Living", "Technology", "Sports & Fitness", "Jewelry & Accessories", "Pet", "Baby & Kids", "Other"
-- campaign_type: string - either "campaign" (one-off blast) or "flow" (automated trigger-based)
-- message_type: string - one of: "Welcome", "Product Launch", "Sale / Promotion", "Browse Abandonment", "Cart Abandonment", "Post-Purchase", "Winback", "Back in Stock", "Seasonal / Holiday", "Newsletter", "VIP / Loyalty", "Referral", "Educational", "Other"
-- category: string - visual style category, one of: "Product Launch", "Seasonal", "Minimal", "Bold", "Editorial", "Lifestyle", "Promotional", "Re-engagement", "Other"
-- tags: string[] - 3-8 descriptive tags about visual style, layout patterns, and design techniques (e.g. "full-bleed imagery", "dark mode", "bold typography", "product grid", "lifestyle photography", "animated GIF", "single CTA")
-- extracted_copy: string - all visible text/copy from the email, preserving hierarchy (headlines first, then body, then CTAs). Use newlines to separate sections.
-- subject_line_guess: string | null - if a subject line is visible or can be inferred
-- cta_labels: string[] - all call-to-action button texts
-- color_palette: string[] - 3-5 dominant hex colors used
-- layout_notes: string - brief description of the layout structure (e.g. "Hero image with text overlay, 3-column product grid, single CTA footer")
-- tone: string - the writing tone (e.g. "Playful & casual", "Premium & aspirational", "Urgent & promotional")
+- brand_name: string - the ACTUAL brand name visible in the email
+- industry: string - one of: "Beauty & Skincare", "Fashion & Apparel", "Food & Beverage", "Health & Wellness", "Home & Living", "Technology", "Sports & Fitness", "Jewelry & Accessories", "Pet", "Baby & Kids", "Supplements", "CBD & Cannabis", "Automotive", "Travel & Hospitality", "Financial Services", "Subscription Box", "Other"
+- campaign_type: string - "campaign" or "flow" (see rules above)
+- message_type: string - be specific! One of: "Welcome", "New Arrival / Product Launch", "Sale / Discount", "Browse Abandonment", "Cart Abandonment", "Post-Purchase / Thank You", "Shipping / Delivery Update", "Winback / Re-engagement", "Back in Stock", "Seasonal / Holiday", "Newsletter / Editorial", "VIP / Loyalty", "Referral", "Educational / How-To", "Subscription Reminder / Billing", "Review Request", "Birthday / Anniversary", "Replenishment Reminder", "Other"
+- category: string - overall vibe: "Minimal", "Bold", "Editorial", "Lifestyle", "Seasonal / Holiday", "Dark Mode", "Luxury", "Playful", "Corporate", "Other"
+- tags: string[] - 3-6 tags about DESIGN TECHNIQUES visible in the email (e.g. "full-bleed hero", "product grid", "countdown timer", "animated GIF", "single CTA", "user-generated content", "social proof", "before-after", "ingredient spotlight")
+- extracted_copy: string - ALL visible text from the email, preserving hierarchy. Headlines first, body text, then CTA button labels. Separate sections with newlines.
+- subject_line_guess: string | null - only if visible or strongly implied
+- cta_labels: string[] - exact text of every CTA button
+- color_palette: string[] - 3-5 dominant hex colors
+- layout_notes: string - brief structural description
+- tone: string - writing tone (e.g. "Conversational & warm", "Urgent & scarcity-driven", "Premium & aspirational")
 
 Respond ONLY with the JSON object, no markdown or explanation.`;
 
