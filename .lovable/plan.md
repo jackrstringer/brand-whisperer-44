@@ -1,30 +1,57 @@
 
-Goal: make the editor stable and predictable (65% left / 35% right, no overlap), and make zoom actually shrink campaign cards so 8 fit across at max zoom-out.
 
-1) Lock the editor into two non-overlapping panes
-- In `src/pages/CampaignEditor.tsx`, remove the resizable panel usage for this screen.
-- Replace it with a fixed 2-column layout (`65%` left, `35%` right) using a single parent container with `min-w-0 overflow-hidden`.
-- Add strict clipping (`overflow-x-hidden`) on the left pane and `overflow-hidden` on the right pane so content can never paint into the other pane.
-- Keep the right pane exclusively for Campaign Brief UI.
+# ClickUp Task Import for Campaign Source
 
-2) Fix why zoom currently “does nothing”
-- In `src/components/campaign/ReferencePanel.tsx`, keep the 1–8 column zoom mapping but ensure the cards can physically shrink.
-- Root issue: iframe-based thumbnails have a fixed intrinsic width (`470px`) that can force overflow in masonry columns.
-- Update `CampaignIframeThumbnail` so the iframe is absolutely positioned inside a `relative w-full min-w-0 overflow-hidden` wrapper; wrapper width drives scale.
-- Ensure card wrappers also use `min-w-0 w-full` so column width always wins.
+## Summary
+Add a "Campaign Source" field to the campaign editor that accepts a ClickUp task URL. An edge function scrapes the task's name, description, and any linked ClickUp Docs content via the ClickUp API, then auto-populates the campaign brief, copy, and goal fields. The user can then edit freely before generating.
 
-3) Keep masonry dense with tighter spacing
-- Preserve masonry behavior (no large vertical holes) via CSS columns.
-- Reduce spacing to be very tight: e.g. container padding `0`, `columnGap: 2`, item bottom spacing `2px`.
-- Keep `breakInside: avoid` per item so full cards stay intact.
+## How It Works (User Perspective)
 
-4) Make zoom behavior explicit and reliable
-- Keep slider range 0–100 mapped to columns 8→1.
-- Display current column count next to zoom control (e.g. “8 wide”, “1 wide”) so the effect is visible/traceable.
-- Default zoom value set so initial view is practical (e.g. ~3 wide), but max zoom-out must force 8 columns.
+1. In Brand Settings, user adds their ClickUp Personal API Token (one-time setup per brand or globally)
+2. On the campaign creation form, a new "Import from ClickUp" field appears above the brief
+3. User pastes a ClickUp task URL (e.g. `https://app.clickup.com/t/abc123`)
+4. System fetches the task info and populates: brief (from task description), extra copy (from docs), goal (best guess from task name/tags), and campaign name
+5. User reviews, edits, attaches products/images as usual, then generates
 
-5) Validation pass (same route/screen)
-- Confirm no pane overlap at all states (draft/editor, with/without generated campaign).
-- At max zoom-out, verify 8 cards fit side-by-side in the left 65% pane (using current viewport scale).
-- At max zoom-in, verify 1 column.
-- Verify spacing remains tight both horizontally and vertically in Library / My Campaigns / Saved tabs.
+## Technical Plan
+
+### Step 1: Store ClickUp API Token
+- Add a `clickup_api_key` column to `brands` table (nullable text) via migration
+- Add a "ClickUp" tab or field in BrandSettings with a password input for the token
+- Token is stored per-brand so different brands can use different workspaces
+
+### Step 2: Edge Function — `clickup-fetch-task`
+- Accepts `{ brandId, taskUrl }` 
+- Parses task ID from URL (patterns: `/t/{taskId}`, `/{taskId}` at end)
+- Reads the brand's `clickup_api_key` from the DB
+- Calls ClickUp API `GET /v2/task/{taskId}` with `Authorization: {token}`
+- Extracts: `name`, `description`, `text_content`, `status`, `tags`, and linked doc IDs
+- If the task has linked ClickUp Docs, fetches those via `GET /v2/view/{viewId}` or doc pages endpoint to pull the document body text
+- Returns structured JSON: `{ name, brief, copy, suggestedGoal }`
+
+### Step 3: Campaign Editor UI Changes
+- Add a collapsible "Import from ClickUp" section at the top of the draft form (above the brief textarea)
+- Contains: a URL input field + "Import" button
+- On click: calls the edge function, shows a loading spinner
+- On success: populates `brief`, `extraCopy`, and `nameValue` with the returned data, shows a toast
+- Fields remain fully editable after import
+- If ClickUp token isn't configured for this brand, show a hint linking to Brand Settings
+
+### Step 4: Goal Mapping
+- The edge function uses simple keyword matching on task name/tags to suggest a goal (e.g., "launch" → product_launch, "welcome" → welcome, "cart" → abandoned_cart)
+- Falls back to "promotional" if no match
+
+## Files to Create/Modify
+
+| File | Change |
+|------|--------|
+| Migration | Add `clickup_api_key` to `brands` table |
+| `src/pages/BrandSettings.tsx` | Add ClickUp token input in Info or new tab |
+| `supabase/functions/clickup-fetch-task/index.ts` | New edge function |
+| `src/pages/CampaignEditor.tsx` | Add import-from-ClickUp UI section |
+
+## Security Considerations
+- ClickUp API token stored in the database (not as an env secret) since it's per-brand
+- Edge function validates the user session before accessing brand data
+- RLS on `brands` table already restricts access to the brand owner
+
