@@ -158,7 +158,7 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
         const allPending = hasNoUsable && pendingImages.length > 0;
 
         return (
-          <div key={product.id} className="border border-border rounded-lg overflow-hidden">
+          <div key={product.id} className={`border border-border rounded-lg overflow-hidden ${hasNoUsable && !allPending ? "opacity-50" : ""}`}>
             <button
               onClick={() => setExpandedId(isExpanded ? null : product.id)}
               className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors text-left"
@@ -169,16 +169,29 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
                   alt=""
                   className="w-10 h-10 rounded object-cover flex-shrink-0"
                 />
+              ) : allPending ? (
+                <div className="w-10 h-10 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                  <Clock className="w-4 h-4 text-muted-foreground animate-pulse" />
+                </div>
               ) : (
                 <div className="w-10 h-10 rounded bg-muted flex items-center justify-center flex-shrink-0">
-                  <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                  <Ban className="w-4 h-4 text-muted-foreground" />
                 </div>
               )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{product.title}</p>
                 <p className="text-[10px] text-muted-foreground">
-                  {cleanImages.length} clean{rescuedImages.length > 0 && ` + ${rescuedImages.length} rescued`} of {prodImages.length} images
-                  {rejectedImages.length > 0 && ` • ${rejectedImages.length} rejected`}
+                  {allPending ? (
+                    <span>{pendingImages.length} images awaiting classification</span>
+                  ) : hasNoUsable ? (
+                    <span>No usable images • {rejectedImages.length} rejected</span>
+                  ) : (
+                    <>
+                      {cleanImages.length} clean{rescuedImages.length > 0 && ` + ${rescuedImages.length} rescued`} of {prodImages.length} images
+                      {rejectedImages.length > 0 && ` • ${rejectedImages.length} rejected`}
+                      {pendingImages.length > 0 && ` • ${pendingImages.length} pending`}
+                    </>
+                  )}
                 </p>
               </div>
               {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
