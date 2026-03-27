@@ -900,8 +900,8 @@ export default function CampaignEditor() {
               </div>
             )}
           </div>
-        </ResizablePanel>
-      </ResizablePanelGroup>
+        </div>
+      </div>
     </div>
   );
 }

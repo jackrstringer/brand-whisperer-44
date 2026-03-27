@@ -328,7 +328,7 @@ export default function ReferencePanel({
                   className={`relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all min-w-0 w-full ${
                     isSelected ? "border-primary ring-2 ring-primary/20" : "border-transparent hover:border-border"
                   }`}
-                  style={{ breakInside: "avoid" }}
+                  style={{ breakInside: "avoid", marginBottom: 2 }}
                 >
                   {hasHtml ? (
                     <CampaignIframeThumbnail html={item.html} title={item.title} />
