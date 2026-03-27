@@ -38,6 +38,34 @@ function enforceNoStackingLayout(html: string): string {
   return output;
 }
 
+/**
+ * Apply find/replace patches to HTML.
+ * Each patch: { find: string, replace: string }
+ * Returns the patched HTML and count of patches applied.
+ */
+function applyPatches(html: string, patches: Array<{ find: string; replace: string }>): { html: string; applied: number } {
+  let result = html;
+  let applied = 0;
+  for (const patch of patches) {
+    if (!patch.find || typeof patch.find !== "string") continue;
+    // Try exact match first
+    if (result.includes(patch.find)) {
+      result = result.replace(patch.find, patch.replace);
+      applied++;
+    } else {
+      // Try whitespace-normalized match
+      const normalizedFind = patch.find.replace(/\s+/g, "\\s*");
+      try {
+        const regex = new RegExp(normalizedFind.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\s\*/g, '\\s*'), "g");
+        const before = result;
+        result = result.replace(regex, patch.replace);
+        if (result !== before) applied++;
+      } catch { /* skip bad regex */ }
+    }
+  }
+  return { html: result, applied };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -56,7 +84,7 @@ Deno.serve(async (req) => {
 
     const startMs = Date.now();
 
-    // Fetch campaign + profile + history in parallel (skip brand assets/products/references for edits)
+    // Fetch campaign + history in parallel
     const [campaignResult, historyResult] = await Promise.all([
       supabase.from("campaigns").select("*").eq("id", campaignId).single(),
       supabase.from("chat_messages").select("role, content").eq("campaign_id", campaignId).order("created_at", { ascending: false }).limit(10),
@@ -74,7 +102,6 @@ Deno.serve(async (req) => {
     const profile = profileResult.data;
     if (!profile) throw new Error("Brand profile not found");
 
-    // Fetch global rules if needed
     let globalRules = "";
     if (brandResult.data?.user_id) {
       const { data: prefs } = await supabase.from("user_preferences").select("preferences").eq("user_id", brandResult.data.user_id).single();
@@ -85,7 +112,7 @@ Deno.serve(async (req) => {
 
     const chatHistory = (historyResult.data || []).reverse();
 
-    // Only process user-attached images (skip brand references — they're already baked into the HTML)
+    // Only process user-attached images
     const imageBlocks: any[] = [];
     const userAttachedUrls = Array.isArray(attachedImageUrls)
       ? attachedImageUrls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
@@ -118,12 +145,15 @@ Deno.serve(async (req) => {
     if (brandInstructions) extraRules += `\nBrand instructions: ${brandInstructions}`;
     if (globalRules) extraRules += `\nGlobal rules: ${globalRules}`;
 
-    const systemMsg = `You are a fast HTML email editor. Do exactly what the user asks. Never refuse or push back.
+    // PATCH-BASED system prompt — AI returns only surgical find/replace patches
+    const systemMsg = `You are a surgical HTML email editor. You return ONLY the minimal patches needed — never the full HTML.
+
+Do exactly what the user asks. Never refuse or push back.
 
 RULES:
-- Edit ONLY what's requested. Do NOT rewrite unrelated sections.
-- Keep all existing inline styles, table structure, and image URLs intact.
-- Wrapper table: width="100%" max-width:600px.
+- Identify the EXACT strings in the HTML that need changing.
+- Return find/replace patches — the "find" must be a UNIQUE snippet from the current HTML (include enough surrounding context to be unique).
+- Keep patches minimal — only the lines that change.
 - Card radius: ${brandValues.card_radius}px. Button radius: ${brandValues.button_radius}px.
 ${brandValues.accent_color ? `- Default accent: ${brandValues.accent_color}` : ""}
 ${brandValues.text_color ? `- Default text color: ${brandValues.text_color}` : ""}
@@ -134,9 +164,20 @@ OUTPUT FORMAT — use these EXACT tags:
 <reply>
 Confirm what you changed in 1-2 sentences.
 </reply>
-<email_html>
-Complete updated HTML. No markdown. No commentary.
-</email_html>`;
+<patches>
+[
+  {"find": "exact string from current HTML", "replace": "replacement string"},
+  {"find": "another exact string", "replace": "its replacement"}
+]
+</patches>
+
+CRITICAL RULES FOR PATCHES:
+- "find" must be an EXACT substring of the current HTML — copy it precisely, including whitespace.
+- Include enough context in "find" to be unique (e.g., include the surrounding tag, not just a color value).
+- For color changes, include the full style attribute or at minimum the property:value with surrounding context.
+- Keep patches as small as possible — just the changed portion with enough context for uniqueness.
+- If the change is structural (adding/removing sections), include the full section being added/removed.
+- Output valid JSON in the patches array.`;
 
     // Build messages
     const anthropicMessages: any[] = [];
@@ -156,12 +197,13 @@ Complete updated HTML. No markdown. No commentary.
     anthropicMessages.push({ role: "user", content: userContent });
 
     const prepMs = Date.now() - startMs;
-    console.log(`[edit-campaign] Prep done in ${prepMs}ms, ${anthropicMessages.length} messages, ${imageBlocks.length} images`);
+    console.log(`[edit-campaign] Prep: ${prepMs}ms | ${anthropicMessages.length} msgs | ${imageBlocks.length} imgs | HTML: ${currentHtml.length} chars`);
 
     // Streaming Anthropic call
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 180000);
+    const timeout = setTimeout(() => controller.abort(), 120000);
 
+    const aiStartMs = Date.now();
     const anthropicResp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -171,7 +213,7 @@ Complete updated HTML. No markdown. No commentary.
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 12000,
+        max_tokens: 4096,
         system: systemMsg,
         messages: anthropicMessages,
         stream: true,
@@ -220,7 +262,7 @@ Complete updated HTML. No markdown. No commentary.
                   const text = evt.delta.text;
                   fullText += text;
 
-                  // Stream reply text as it arrives
+                  // Stream reply text
                   const beforeThis = fullText.slice(0, fullText.length - text.length);
                   const inReply = beforeThis.includes("<reply>") && !beforeThis.includes("</reply>");
                   if (inReply) {
@@ -235,39 +277,70 @@ Complete updated HTML. No markdown. No commentary.
             }
           }
 
-          const totalMs = Date.now() - startMs;
-          console.log(`[edit-campaign] Stream complete in ${totalMs}ms, ${fullText.length} chars`);
+          const aiMs = Date.now() - aiStartMs;
+          console.log(`[edit-campaign] AI stream: ${aiMs}ms | Output: ${fullText.length} chars`);
 
           // Parse response
           const replyMatch = fullText.match(/<reply>([\s\S]*?)<\/reply>/);
+          const patchesMatch = fullText.match(/<patches>([\s\S]*?)<\/patches>/);
+          // Fallback: check for old full-HTML format
           const htmlMatch = fullText.match(/<email_html>([\s\S]*?)<\/email_html>/);
 
           const responseText = replyMatch ? replyMatch[1].trim() : "Changes applied.";
-          let html = htmlMatch ? htmlMatch[1].trim() : "";
 
-          // Fallback: no tags → treat as HTML
-          if (!htmlMatch && !replyMatch) {
-            html = fullText.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
+          let finalHtml = currentHtml;
+          let patchCount = 0;
+
+          if (patchesMatch) {
+            // PATCH MODE — apply find/replace patches
+            try {
+              const patches = JSON.parse(patchesMatch[1].trim());
+              if (Array.isArray(patches) && patches.length > 0) {
+                const result = applyPatches(finalHtml, patches);
+                finalHtml = result.html;
+                patchCount = result.applied;
+                console.log(`[edit-campaign] Patches: ${patches.length} provided, ${patchCount} applied`);
+
+                if (patchCount === 0) {
+                  // None matched — emit error but don't fail
+                  console.warn(`[edit-campaign] WARNING: 0 patches matched! Patch find strings didn't match HTML.`);
+                  emit("text_delta", { content: "\n\n⚠️ The patches couldn't be applied — retrying with full output..." });
+                  // TODO: could retry with full-HTML mode here
+                }
+              }
+            } catch (e) {
+              console.error(`[edit-campaign] Failed to parse patches JSON:`, e);
+            }
+          } else if (htmlMatch) {
+            // FALLBACK: full HTML mode (in case AI ignores patch format)
+            finalHtml = htmlMatch[1].trim();
+            console.log(`[edit-campaign] Fallback: full HTML mode (${finalHtml.length} chars)`);
+          } else if (!replyMatch) {
+            // No tags at all — treat as full HTML (backward compat)
+            finalHtml = fullText.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
           }
 
-          if (html) {
-            html = enforceNoStackingLayout(html);
+          if (finalHtml && finalHtml !== currentHtml) {
+            finalHtml = enforceNoStackingLayout(finalHtml);
 
             const history = Array.isArray(campaign.html_history) ? campaign.html_history : [];
             history.push(campaign.html);
 
             await supabase.from("campaigns").update({
-              html,
+              html: finalHtml,
               html_history: history,
             }).eq("id", campaignId);
 
-            emit("html_patch", { html });
+            emit("html_patch", { html: finalHtml });
           }
 
           await supabase.from("chat_messages").insert([
             { campaign_id: campaignId, role: "user", content: message },
             { campaign_id: campaignId, role: "assistant", content: responseText },
           ]);
+
+          const totalMs = Date.now() - startMs;
+          console.log(`[edit-campaign] TOTAL: ${totalMs}ms | Prep: ${prepMs}ms | AI: ${aiMs}ms | Patches: ${patchCount}`);
 
           emit("done", {});
         } catch (err) {
