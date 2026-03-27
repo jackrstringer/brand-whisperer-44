@@ -236,7 +236,7 @@ export default function ReferencePanel({
       return item ? { ...item, _source: "Library" as const } : null;
     } else {
       const item = myCampaigns.find((c) => c.id === s.reference_id);
-      return item ? { id: item.id, title: item.name, brand_name: null, thumbnail_url: item.pinned_asset_urls?.[0] || "", image_urls: item.pinned_asset_urls || null, category: null, tags: null, _source: "Mine" as const } : null;
+      return item ? { id: item.id, title: item.name, brand_name: null, thumbnail_url: item.pinned_asset_urls?.[0] || "", image_urls: item.pinned_asset_urls || null, category: null, tags: null, html: item.html || null, _source: "Mine" as const } : null;
     }
   }).filter(Boolean);
 
@@ -321,6 +321,7 @@ export default function ReferencePanel({
               return (
                 <div
                   key={id}
+                  onClick={() => handleUseAsReference(refType, id, item.title || item.name || "", imageUrl, item.image_urls || [])}
                   className={`relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all min-w-0 w-full ${
                     isSelected ? "border-primary ring-2 ring-primary/20" : "border-transparent hover:border-border"
                   }`}
@@ -343,24 +344,20 @@ export default function ReferencePanel({
                     </div>
                   )}
 
-                  {/* Hover overlay */}
-                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 z-10">
+                  {/* Hover overlay — heart only */}
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                     <button
                       onClick={(e) => { e.stopPropagation(); toggleSave(refType, id); }}
-                      className="absolute top-2 right-2 p-1.5 rounded-full bg-background/20 hover:bg-background/40 transition-colors"
+                      className="p-1.5 rounded-full bg-background/20 hover:bg-background/40 transition-colors"
                     >
                       <Heart className={`w-3.5 h-3.5 ${saved ? "fill-red-500 text-red-500" : "text-white"}`} />
                     </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleUseAsReference(refType, id, item.title || item.name || "", imageUrl, item.image_urls || []);
-                      }}
-                      className="text-[11px] font-medium text-white bg-primary/80 hover:bg-primary px-4 py-2 rounded-md transition-colors"
-                    >
-                      {isSelected ? "Remove reference" : "Use as reference"}
-                    </button>
                   </div>
+
+                  {/* Selected indicator */}
+                  {isSelected && (
+                    <div className="absolute inset-0 bg-primary/10 pointer-events-none z-[5]" />
+                  )}
                 </div>
               );
             })
