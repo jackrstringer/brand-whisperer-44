@@ -9,7 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, MoreVertical, Trash2, Pencil, Eye, EyeOff, GripVertical, Sparkles, Loader2 } from "lucide-react";
+import { MoreVertical, Trash2, Pencil, Eye, EyeOff, Sparkles } from "lucide-react";
+import ReferenceUploadZone from "@/components/admin/ReferenceUploadZone";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -207,17 +208,14 @@ export default function AdminLibrary() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate("/dashboard")} className="text-sm text-muted-foreground hover:text-foreground">← Dashboard</button>
-          <h1 className="text-lg font-semibold">Reference Library</h1>
-        </div>
-        <Button onClick={() => { resetForm(); setShowUpload(true); }}>
-          <Plus className="w-4 h-4 mr-1" /> Upload Campaign
-        </Button>
+      <header className="border-b border-border px-6 py-4 flex items-center gap-4">
+        <button onClick={() => navigate("/dashboard")} className="text-sm text-muted-foreground hover:text-foreground">← Dashboard</button>
+        <h1 className="text-lg font-semibold">Reference Library</h1>
       </header>
 
-      <div className="p-6">
+      <div className="p-6 space-y-6">
+        {/* Inline upload zone — drag/drop, paste, URL */}
+        <ReferenceUploadZone onUploaded={loadCampaigns} campaignCount={campaigns.length} />
         <div className="grid grid-cols-3 gap-4">
           {campaigns.map((item) => (
             <div key={item.id} className="rounded-lg border border-border overflow-hidden bg-card group">
@@ -281,24 +279,21 @@ export default function AdminLibrary() {
         </div>
 
         {campaigns.length === 0 && (
-          <div className="text-center py-16">
-            <p className="text-muted-foreground">No reference campaigns yet.</p>
-            <Button className="mt-4" onClick={() => { resetForm(); setShowUpload(true); }}>
-              <Plus className="w-4 h-4 mr-1" /> Upload your first campaign
-            </Button>
+          <div className="text-center py-8">
+            <p className="text-muted-foreground text-sm">No reference campaigns yet. Drop some images above to get started.</p>
           </div>
         )}
       </div>
 
-      {/* Upload / Edit modal */}
+      {/* Edit-only modal (for existing campaigns) */}
       <Dialog open={showUpload} onOpenChange={(open) => { if (!open) { setShowUpload(false); resetForm(); } }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editingItem ? "Edit Campaign" : "Upload Campaign"}</DialogTitle>
+            <DialogTitle>Edit Campaign</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Title *</label>
+              <label className="text-xs text-muted-foreground">Title</label>
               <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Campaign title" />
             </div>
             <div className="space-y-1.5">
@@ -319,7 +314,7 @@ export default function AdminLibrary() {
               <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="bold typography, full-bleed, dark" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Campaign Images</label>
+              <label className="text-xs text-muted-foreground">Add more images</label>
               <input
                 type="file"
                 multiple
@@ -346,7 +341,7 @@ export default function AdminLibrary() {
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowUpload(false); resetForm(); }}>Cancel</Button>
             <Button onClick={handleSubmit} disabled={uploading}>
-              {uploading ? "Uploading..." : editingItem ? "Save" : "Upload"}
+              {uploading ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>
