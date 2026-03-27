@@ -925,7 +925,8 @@ export default function CampaignEditor() {
     if (!campaign || !campaignId) return;
     const history = campaign.html_history;
     if (!Array.isArray(history) || history.length === 0) return;
-    const currentHtml = campaign.html || "";
+    const currentHtml = iframeOwnedHtmlRef.current || campaign.html || "";
+    iframeOwnedHtmlRef.current = null; // flush iframe ownership
     const previousHtml = history[history.length - 1];
     const newHistory = history.slice(0, -1);
     await supabase.from("campaigns").update({ html: previousHtml, html_history: newHistory }).eq("id", campaignId);
