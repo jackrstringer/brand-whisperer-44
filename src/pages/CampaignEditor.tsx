@@ -1253,8 +1253,17 @@ export default function CampaignEditor() {
         el.removeAttribute('data-section-name');
       });
       clone.querySelectorAll('.ctx-menu').forEach(function(el){ el.remove(); });
+      clone.querySelectorAll('.ftb').forEach(function(el){ el.remove(); });
+      clone.querySelectorAll('.ftb-cpanel').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('style').forEach(function(s){
-        if(s.textContent && (s.textContent.indexOf('[contenteditable]')>=0 || s.textContent.indexOf('section-drag')>=0 || s.textContent.indexOf('.ctx-menu')>=0)) s.remove();
+        if(s.textContent && (s.textContent.indexOf('[contenteditable]')>=0 || s.textContent.indexOf('section-drag')>=0 || s.textContent.indexOf('.ctx-menu')>=0 || s.textContent.indexOf('.ftb')>=0)) s.remove();
+      });
+      clone.querySelectorAll('font').forEach(function(f){
+        var span = document.createElement('span');
+        span.innerHTML = f.innerHTML;
+        if(f.color) span.style.color = f.color;
+        if(f.size) { var sizes = {1:'10px',2:'13px',3:'16px',4:'18px',5:'24px',6:'32px',7:'48px'}; span.style.fontSize = sizes[f.size]||f.size+'px'; }
+        f.replaceWith(span);
       });
       window.parent.postMessage({ type: 'textEdited', html: clone.outerHTML }, '*');
     }, 1500);
