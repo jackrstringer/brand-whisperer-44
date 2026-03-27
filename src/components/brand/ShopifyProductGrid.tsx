@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { ChevronDown, ChevronUp, Image as ImageIcon, Check, X, Wand2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Image as ImageIcon, Check, X, Wand2, RefreshCw, Clock, Ban } from "lucide-react";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 interface ShopifyProduct {
   id: string;
