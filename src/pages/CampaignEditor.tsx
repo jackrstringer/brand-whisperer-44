@@ -57,6 +57,7 @@ export default function CampaignEditor() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null); // temporary hover preview
   const [selectedReference, setSelectedReference] = useState<SelectedReference | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
