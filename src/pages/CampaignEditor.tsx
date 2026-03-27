@@ -1434,6 +1434,8 @@ export default function CampaignEditor() {
                                   onApply={(variant, idx) => handleApplyVariant(variant, idx, msg.id)}
                                   onPreview={(variant, idx) => handlePreviewVariant(variant, idx, msg.id)}
                                   onPreviewClear={handlePreviewClear}
+                                  onMore={() => handleMoreVariants(msg.id)}
+                                  loadingMore={loadingMoreVariants === msg.id}
                                   disabled={agentState !== "idle"}
                                 />
                               </div>
