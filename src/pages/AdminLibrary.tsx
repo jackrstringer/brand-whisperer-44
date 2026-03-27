@@ -208,17 +208,14 @@ export default function AdminLibrary() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate("/dashboard")} className="text-sm text-muted-foreground hover:text-foreground">← Dashboard</button>
-          <h1 className="text-lg font-semibold">Reference Library</h1>
-        </div>
-        <Button onClick={() => { resetForm(); setShowUpload(true); }}>
-          <Plus className="w-4 h-4 mr-1" /> Upload Campaign
-        </Button>
+      <header className="border-b border-border px-6 py-4 flex items-center gap-4">
+        <button onClick={() => navigate("/dashboard")} className="text-sm text-muted-foreground hover:text-foreground">← Dashboard</button>
+        <h1 className="text-lg font-semibold">Reference Library</h1>
       </header>
 
-      <div className="p-6">
+      <div className="p-6 space-y-6">
+        {/* Inline upload zone — drag/drop, paste, URL */}
+        <ReferenceUploadZone onUploaded={loadCampaigns} campaignCount={campaigns.length} />
         <div className="grid grid-cols-3 gap-4">
           {campaigns.map((item) => (
             <div key={item.id} className="rounded-lg border border-border overflow-hidden bg-card group">
