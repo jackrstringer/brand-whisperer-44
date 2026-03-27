@@ -466,21 +466,31 @@ export default function CampaignEditor() {
   }, []);
 
   const sendMessage = async () => {
-    if (!campaignId || !brandId || (!chatInput.trim() && chatAttachments.length === 0) || !(iframeOwnedHtmlRef.current || campaign?.html)) return;
-    const userMsg = chatInput.trim();
-    const attachedFiles = [...chatAttachments];
-    setChatInput("");
-    setChatAttachments([]);
-    setChatAttachmentPreviews(prev => { prev.forEach(u => URL.revokeObjectURL(u)); return []; });
+    // Check for ideate override first
+    const ideateOverride = ideatePayloadRef.current;
+    ideatePayloadRef.current = null;
+
+    if (!campaignId || !brandId || !(iframeOwnedHtmlRef.current || campaign?.html)) return;
+    if (!ideateOverride && !chatInput.trim() && chatAttachments.length === 0) return;
+
+    const userMsg = ideateOverride ? ideateOverride.realPrompt : chatInput.trim();
+    const displayContent = ideateOverride
+      ? ideateOverride.displayText
+      : chatAttachments.length > 0
+        ? `${chatInput.trim()}${chatInput.trim() ? "\n" : ""}[${chatAttachments.length} image${chatAttachments.length > 1 ? "s" : ""} attached]`
+        : chatInput.trim();
+
+    const attachedFiles = ideateOverride ? [] : [...chatAttachments];
+    if (!ideateOverride) {
+      setChatInput("");
+      setChatAttachments([]);
+      setChatAttachmentPreviews(prev => { prev.forEach(u => URL.revokeObjectURL(u)); return []; });
+    }
     setSending(true);
     setAgentState("thinking");
     setStreamingText("");
     streamingTextRef.current = "";
-    setActiveVersionIndex(null); // snap back to latest when sending new edit
-
-    const displayContent = attachedFiles.length > 0
-      ? `${userMsg}${userMsg ? "\n" : ""}[${attachedFiles.length} image${attachedFiles.length > 1 ? "s" : ""} attached]`
-      : userMsg;
+    setActiveVersionIndex(null);
 
     setMessages((prev) => [
       ...prev,
@@ -488,7 +498,6 @@ export default function CampaignEditor() {
     ]);
 
     try {
-      // Upload attached images first
       let attachedImageUrls: string[] = [];
       if (attachedFiles.length > 0) {
         attachedImageUrls = await uploadChatImages(attachedFiles, brandId, campaignId);
