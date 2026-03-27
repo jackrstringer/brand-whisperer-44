@@ -444,31 +444,42 @@ You MUST feature these products prominently in the campaign. Use at least one im
 
       let referencePrompt = "";
       if (referenceMode === "reference") {
-        referencePrompt = `REFERENCE MODE (strong structural influence):
-Closely follow the layout, section sequence, sizing proportions,
-and visual hierarchy of the following campaign.
-Replicate its structure: same types of sections, same image placements,
-same spacing patterns, same element sizing ratios.
-IMPORTANT: Do NOT copy the reference's colors or typography.
-Apply the brand's own color palette, fonts, and design tokens throughout.
-The structure and proportions come from the reference — the skin comes from the brand.`;
+        referencePrompt = `REFERENCE MODE — STRONG STRUCTURAL MATCH:
+Study the following campaign screenshot carefully. Your output MUST closely match its:
+- Section sequence (same order of sections top to bottom)
+- Image placements (where images appear relative to text)
+- Sizing proportions (how large images are vs text blocks)
+- Spacing patterns (padding, gaps between sections)
+- Visual hierarchy (what's big, what's small, what's prominent)
+- Logo placement (same position — top-left, centered, etc.)
+- CTA button positions (same locations within sections)
+You may make minor adjustments to fit the brief content, but the structural skeleton should be clearly recognizable as the same layout.
+CRITICAL: Do NOT copy the reference's colors, fonts, or brand identity.
+Apply the brand's own color palette, typography, and design tokens throughout.
+Structure comes from the reference. Skin comes from the brand.`;
       } else {
-        referencePrompt = `DUPE — EXACT LAYOUT CLONE:
-You MUST replicate the EXACT layout of the following campaign.
-Same number of sections, same section types, same image placements,
-same sizing proportions, same spacing patterns, same visual hierarchy.
-Count every section in the reference and reproduce each one 1:1.
-If the reference has a full-bleed hero, you have a full-bleed hero.
-If it has a 2-column product grid, you have a 2-column product grid.
-If it has a quote pullout, you have a quote pullout — in the same position.
-IMPORTANT: Do NOT copy the reference's colors or typography.
-Apply the brand's own color palette, fonts, and design tokens throughout.
-The ONLY things that change are: brand colors, brand fonts, brand imagery,
-and the actual copy (which should match the brief). Everything else —
-layout structure, section order, element sizing, padding patterns,
-image-to-text ratios — must be a near-exact match.
-Think of it as: take this email, delete the content, keep the wireframe,
-then fill it back in with the new brand's design system and copy.`;
+        referencePrompt = `DUPE — PIXEL-PERFECT LAYOUT CLONE (THIS IS THE MOST IMPORTANT INSTRUCTION):
+You are looking at a screenshot of an email campaign. Your job is to CLONE ITS EXACT LAYOUT.
+
+MANDATORY CLONING RULES — violating ANY of these is a failure:
+1. COUNT every distinct section in the reference screenshot. Your output MUST have the EXACT SAME NUMBER of sections.
+2. Each section MUST be the SAME TYPE as the reference (hero image, text block, product grid, testimonial, divider, footer, etc.)
+3. Each section MUST be in the EXACT SAME ORDER as the reference.
+4. IMAGE PLACEMENT: If the reference has an image on the left with text on the right, yours must too. If it has a full-bleed hero, yours must too. If it has a centered product image at 50% width, yours must too.
+5. IMAGE SIZING: Match the proportions. If a hero image takes up 60% of the viewport height, yours should too. If product images are small thumbnails in a grid, yours should be too.
+6. LOGO PLACEMENT: If the logo is top-center, yours is top-center. If it's top-left with navigation links, yours is top-left with navigation links. EXACT match.
+7. CTA BUTTONS: Same number of CTAs, in the same positions, with the same approximate sizing.
+8. TEXT-TO-IMAGE RATIO: If a section is 70% image and 30% text, match that ratio.
+9. SPACING & PADDING: Match the whitespace patterns. If sections have tight spacing, use tight spacing. If there's generous padding, use generous padding.
+10. FOOTER STRUCTURE: Clone the footer layout exactly — same elements, same arrangement.
+
+WHAT CHANGES (and ONLY these things):
+- Colors → use the brand's color palette
+- Fonts → use the brand's typography
+- Images → use the brand's available image assets (but in the SAME positions and sizes as the reference)
+- Copy text → write new copy that matches the brief (but SAME length and structure as the reference copy)
+
+Think of it as: you are TRACING the reference layout, then painting over it with the brand's colors and filling in the brand's content. The wireframe is IDENTICAL.`;
       }
 
       referenceBlock = `\n\n=== ${referencePrompt} ===`;
