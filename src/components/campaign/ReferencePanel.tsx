@@ -139,7 +139,7 @@ export default function ReferencePanel({
   const [savedRefs, setSavedRefs] = useState<SavedReference[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [categories, setCategories] = useState<string[]>([]);
-  const [zoomLevel, setZoomLevel] = useState(71); // 0=8cols, 100=1col, default ~3 cols
+  const [zoomLevel, setZoomLevel] = useState(57); // 0=8cols, 100=1col, default 4 cols
 
   useEffect(() => {
     supabase
