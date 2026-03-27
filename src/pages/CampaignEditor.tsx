@@ -1033,45 +1033,6 @@ export default function CampaignEditor() {
                   />
                 )}
 
-                {/* Subject Line & Preview Text */}
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Subject Line</label>
-                  <div className="relative">
-                    <Input
-                      value={subjectLine}
-                      onChange={(e) => setSubjectLine(e.target.value)}
-                      placeholder="e.g. Don't miss our biggest sale..."
-                      className="bg-card border-border pr-12"
-                    />
-                    <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] tabular-nums ${subjectLine.length > 60 ? "text-amber-400" : "text-muted-foreground"}`}>
-                      {subjectLine.length}/60
-                    </span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Preview Text</label>
-                  <div className="relative">
-                    <Input
-                      value={previewText}
-                      onChange={(e) => setPreviewText(e.target.value)}
-                      placeholder="Short preview shown in inbox..."
-                      className="bg-card border-border pr-12"
-                    />
-                    <span className={`absolute right-2 top-1/2 -translate-y-1/2 text-[10px] tabular-nums ${previewText.length > 90 ? "text-amber-400" : "text-muted-foreground"}`}>
-                      {previewText.length}/90
-                    </span>
-                  </div>
-                </div>
-
-                {/* Segment selector */}
-                {brandId && (
-                  <SegmentSelector
-                    brandId={brandId}
-                    selectedListIds={sendListIds}
-                    selectedSegmentIds={sendSegmentIds}
-                    onSelectionChange={(l, s) => { setSendListIds(l); setSendSegmentIds(s); }}
-                  />
-                )}
 
                 {/* Reference images for this campaign */}
                 <div className="space-y-2">
