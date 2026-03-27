@@ -623,11 +623,11 @@ export default function CampaignEditor() {
           </div>
         </Panel>
 
-        {/* Drag handle */}
-        <PanelResizeHandle className="w-1.5 bg-border hover:bg-primary/40 transition-colors cursor-col-resize" />
+        {/* Fixed divider (no drag) */}
+        <div className="w-px bg-border shrink-0" />
 
         {/* Right Panel */}
-        <Panel defaultSize={40} minSize={15} maxSize={75}>
+        <Panel defaultSize={35}>
           <div className="h-full flex flex-col overflow-hidden">
             {isDraft && !isGenerating ? (
               <div className="p-6 space-y-5 overflow-y-auto flex-1">
