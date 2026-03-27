@@ -43,15 +43,16 @@ function enforceNoStackingLayout(html: string): string {
  * Each patch: { find: string, replace: string }
  * Returns the patched HTML and count of patches applied.
  */
-function applyPatches(html: string, patches: Array<{ find: string; replace: string }>): { html: string; applied: number } {
+function applyPatches(html: string, patches: Array<{ find: string; replace: string }>): { html: string; applied: number; changed: boolean } {
   let result = html;
   let applied = 0;
   for (const patch of patches) {
     if (!patch.find || typeof patch.find !== "string") continue;
     // Try exact match first
     if (result.includes(patch.find)) {
+      const before = result;
       result = result.replace(patch.find, patch.replace);
-      applied++;
+      if (result !== before) applied++;
     } else {
       // Try whitespace-normalized match
       const normalizedFind = patch.find.replace(/\s+/g, "\\s*");
@@ -63,7 +64,7 @@ function applyPatches(html: string, patches: Array<{ find: string; replace: stri
       } catch { /* skip bad regex */ }
     }
   }
-  return { html: result, applied };
+  return { html: result, applied, changed: result !== html };
 }
 
 Deno.serve(async (req) => {
@@ -286,7 +287,7 @@ CRITICAL RULES FOR PATCHES:
           // Fallback: check for old full-HTML format
           const htmlMatch = fullText.match(/<email_html>([\s\S]*?)<\/email_html>/);
 
-          const responseText = replyMatch ? replyMatch[1].trim() : "Changes applied.";
+          let responseText = replyMatch ? replyMatch[1].trim() : "Changes applied.";
 
           let finalHtml = currentHtml;
           let patchCount = 0;
@@ -329,7 +330,9 @@ CRITICAL RULES FOR PATCHES:
           const looksLikeHtml = finalHtml.includes("<!DOCTYPE") || finalHtml.includes("<html") || finalHtml.includes("<table") || finalHtml.includes("<div");
           const tooSmall = finalHtml.length < currentHtml.length * 0.3; // lost >70% of content = corrupted
           
-          if (finalHtml && finalHtml !== currentHtml && looksLikeHtml && !tooSmall) {
+          const htmlChanged = finalHtml !== currentHtml;
+
+          if (finalHtml && htmlChanged && looksLikeHtml && !tooSmall) {
             finalHtml = enforceNoStackingLayout(finalHtml);
 
             const history = Array.isArray(campaign.html_history) ? campaign.html_history : [];
@@ -341,9 +344,17 @@ CRITICAL RULES FOR PATCHES:
             }).eq("id", campaignId);
 
             emit("html_patch", { html: finalHtml });
-          } else if (finalHtml !== currentHtml && (!looksLikeHtml || tooSmall)) {
+          } else if (htmlChanged && (!looksLikeHtml || tooSmall)) {
             console.error(`[edit-campaign] BLOCKED corrupted save! looksLikeHtml=${looksLikeHtml}, tooSmall=${tooSmall}, length=${finalHtml.length} vs original=${currentHtml.length}`);
+            responseText = "The edit result was corrupted, so no change was saved. Your campaign is unchanged.";
             emit("text_delta", { content: "\n\n⚠️ The edit produced corrupted output and was not saved. Your campaign is unchanged. Please try again with a simpler request." });
+          } else if (!htmlChanged) {
+            const reason = patchCount === 0
+              ? "No matching HTML snippet was found for that request."
+              : "The request completed but produced no actual HTML change.";
+            responseText = `No change applied. ${reason}`;
+            console.warn(`[edit-campaign] No HTML change was applied (patches applied=${patchCount})`);
+            emit("no_change", { message: reason });
           }
 
           await supabase.from("chat_messages").insert([
@@ -352,9 +363,9 @@ CRITICAL RULES FOR PATCHES:
           ]);
 
           const totalMs = Date.now() - startMs;
-          console.log(`[edit-campaign] TOTAL: ${totalMs}ms | Prep: ${prepMs}ms | AI: ${aiMs}ms | Patches: ${patchCount}`);
+          console.log(`[edit-campaign] TOTAL: ${totalMs}ms | Prep: ${prepMs}ms | AI: ${aiMs}ms | Patches: ${patchCount} | HtmlChanged: ${htmlChanged}`);
 
-          emit("done", {});
+          emit("done", { reply: responseText, changed: htmlChanged, patchesApplied: patchCount });
         } catch (err) {
           emit("error", { message: err instanceof Error ? err.message : "Stream failed" });
         } finally {
