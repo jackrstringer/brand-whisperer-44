@@ -205,6 +205,27 @@ export default function CampaignEditor() {
   }, [messages, streamingText]);
 
 
+  // Listen for iframe ready signal (postMessage-based preview updates)
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'iframeReady') {
+        iframeReadyRef.current = true;
+        if (iframeRef.current) {
+          measureIframeHeight(iframeRef.current);
+          setupIframeObserver(iframeRef.current);
+          window.setTimeout(() => measureIframeHeight(iframeRef.current!), 300);
+          window.setTimeout(() => measureIframeHeight(iframeRef.current!), 1000);
+        }
+        if (pendingHtmlRef.current) {
+          iframeRef.current?.contentWindow?.postMessage({ type: 'updateHtml', html: pendingHtmlRef.current }, '*');
+          pendingHtmlRef.current = null;
+        }
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [measureIframeHeight, setupIframeObserver]);
+
 
   const measureIframeHeight = useCallback((iframe: HTMLIFrameElement | null) => {
     if (!iframe) return;
