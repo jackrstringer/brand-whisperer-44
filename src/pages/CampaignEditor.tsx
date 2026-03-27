@@ -187,7 +187,7 @@ export default function CampaignEditor() {
         : [];
 
       setPreviewFallbackUrls(fallbackUrls);
-      setMessages((msgs || []) as ChatMessage[]);
+      setMessages(restoredMessages);
       setLoading(false);
     };
     load();
