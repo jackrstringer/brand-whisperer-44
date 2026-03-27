@@ -1290,7 +1290,7 @@ export default function CampaignEditor() {
                   <iframe
                     key={`${renderWidth}-${viewportWidth}`}
                     srcDoc={srcdocHtml}
-                    sandbox="allow-same-origin"
+                    sandbox="allow-same-origin allow-scripts"
                     className="border-0 block bg-white shadow-2xl"
                     style={{
                       width: renderWidth,
