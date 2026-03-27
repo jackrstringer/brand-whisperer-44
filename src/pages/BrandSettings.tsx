@@ -14,6 +14,7 @@ import ProductManager from "@/components/brand/ProductManager";
 import KlaviyoSetup from "@/components/brand/KlaviyoSetup";
 import ShopifySetup from "@/components/brand/ShopifySetup";
 import ShopifyProductGrid from "@/components/brand/ShopifyProductGrid";
+import ClickUpSetup from "@/components/brand/ClickUpSetup";
 import { toast } from "sonner";
 
 interface BrandAsset {
