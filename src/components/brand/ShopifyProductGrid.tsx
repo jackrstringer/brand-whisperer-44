@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { ChevronDown, ChevronUp, Image as ImageIcon, Check, X, Wand2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Image as ImageIcon, Check, X, Wand2, RefreshCw, Clock, Ban } from "lucide-react";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 interface ShopifyProduct {
   id: string;
@@ -39,6 +41,7 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showRejected, setShowRejected] = useState(false);
+  const [classifying, setClassifying] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -68,6 +71,34 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>;
   if (products.length === 0) return <p className="text-sm text-muted-foreground py-4">No Shopify products synced yet.</p>;
 
+  const handleReclassify = async () => {
+    setClassifying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("shopify-classify-images", {
+        body: { brandId },
+      });
+      if (error) throw error;
+      toast.success(`Classified ${data?.classified ?? 0} images (${data?.rescued ?? 0} rescued, ${data?.rejected ?? 0} rejected)`);
+      // Reload images
+      const { data: imgs } = await supabase
+        .from("shopify_product_images")
+        .select("id, product_id, original_url, imagekit_url, processed_url, image_type, subject_description, processing_status, usable_as_hero, usable_as_product_shot, is_usable_product_photo, has_text_overlay, is_marketing_collateral, has_salvageable_product, rescue_strategy, rescue_transforms")
+        .eq("brand_id", brandId);
+      const grouped: Record<string, ShopifyImage[]> = {};
+      for (const img of (imgs || []) as ShopifyImage[]) {
+        if (!grouped[img.product_id]) grouped[img.product_id] = [];
+        grouped[img.product_id].push(img);
+      }
+      setImages(grouped);
+    } catch (err: any) {
+      toast.error("Classification failed: " + (err.message || "Unknown error"));
+    } finally {
+      setClassifying(false);
+    }
+  };
+
+  const pendingCount = Object.values(images).flat().filter(i => i.processing_status === "pending").length;
+
   const rejectionReason = (img: ShopifyImage) => {
     if (img.is_marketing_collateral) return "Unsalvageable collateral";
     if (img.has_text_overlay) return "Text covers product";
@@ -90,33 +121,44 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
     return t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   };
 
-  // Filter out products with zero ready images
-  const productsWithImages = products.filter((p) => {
-    const prodImages = images[p.id] || [];
-    return prodImages.some((i) => i.processing_status === "ready");
-  });
-
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium">Shopify Products ({productsWithImages.length})</h3>
-        <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-          <Switch checked={showRejected} onCheckedChange={setShowRejected} className="scale-75" />
-          Show rejected
-        </label>
+        <h3 className="text-sm font-medium">Shopify Products ({products.length})</h3>
+        <div className="flex items-center gap-3">
+          {pendingCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleReclassify}
+              disabled={classifying}
+              className="text-xs h-7"
+            >
+              {classifying ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+              Classify {pendingCount} pending
+            </Button>
+          )}
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <Switch checked={showRejected} onCheckedChange={setShowRejected} className="scale-75" />
+            Show rejected
+          </label>
+        </div>
       </div>
-      {productsWithImages.map((product) => {
+      {products.map((product) => {
         const prodImages = images[product.id] || [];
         const readyImages = prodImages.filter((i) => i.processing_status === "ready");
         const rescuedImages = readyImages.filter((i) => i.rescue_strategy && !i.is_usable_product_photo);
         const cleanImages = readyImages.filter((i) => i.is_usable_product_photo === true);
         const rejectedImages = prodImages.filter((i) => i.processing_status === "rejected");
+        const pendingImages = prodImages.filter((i) => i.processing_status === "pending" || i.processing_status === "processing");
         const displayImages = showRejected ? prodImages : readyImages;
         const firstUsable = readyImages.find((i) => i.processing_status === "ready");
         const isExpanded = expandedId === product.id;
+        const hasNoUsable = readyImages.length === 0;
+        const allPending = hasNoUsable && pendingImages.length > 0;
 
         return (
-          <div key={product.id} className="border border-border rounded-lg overflow-hidden">
+          <div key={product.id} className={`border border-border rounded-lg overflow-hidden ${hasNoUsable && !allPending ? "opacity-50" : ""}`}>
             <button
               onClick={() => setExpandedId(isExpanded ? null : product.id)}
               className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors text-left"
@@ -127,16 +169,29 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
                   alt=""
                   className="w-10 h-10 rounded object-cover flex-shrink-0"
                 />
+              ) : allPending ? (
+                <div className="w-10 h-10 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                  <Clock className="w-4 h-4 text-muted-foreground animate-pulse" />
+                </div>
               ) : (
                 <div className="w-10 h-10 rounded bg-muted flex items-center justify-center flex-shrink-0">
-                  <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                  <Ban className="w-4 h-4 text-muted-foreground" />
                 </div>
               )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{product.title}</p>
                 <p className="text-[10px] text-muted-foreground">
-                  {cleanImages.length} clean{rescuedImages.length > 0 && ` + ${rescuedImages.length} rescued`} of {prodImages.length} images
-                  {rejectedImages.length > 0 && ` • ${rejectedImages.length} rejected`}
+                  {allPending ? (
+                    <span>{pendingImages.length} images awaiting classification</span>
+                  ) : hasNoUsable ? (
+                    <span>No usable images • {rejectedImages.length} rejected</span>
+                  ) : (
+                    <>
+                      {cleanImages.length} clean{rescuedImages.length > 0 && ` + ${rescuedImages.length} rescued`} of {prodImages.length} images
+                      {rejectedImages.length > 0 && ` • ${rejectedImages.length} rejected`}
+                      {pendingImages.length > 0 && ` • ${pendingImages.length} pending`}
+                    </>
+                  )}
                 </p>
               </div>
               {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
