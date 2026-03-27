@@ -102,6 +102,7 @@ export default function CampaignEditor() {
   const [showReferenceDialog, setShowReferenceDialog] = useState(false);
   const refScrollRef = useRef<HTMLDivElement>(null);
   const [syncingScroll, setSyncingScroll] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Restore reference panel state from localStorage
   useEffect(() => {
@@ -982,11 +983,115 @@ export default function CampaignEditor() {
   // Debounced inline-edit save
   const inlineEditTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Listen for postMessage from iframe for inline text edits
+  // Background edit: sends instruction to AI silently (no chat message)
+  const sendBackgroundEdit = useCallback(async (instruction: string, onComplete?: () => void) => {
+    if (!campaignId || !brandId || !campaign?.html) return;
+    try {
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edit-campaign`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            campaignId,
+            message: instruction,
+            currentHtml: campaign.html,
+            silent: true,
+          }),
+        }
+      );
+      if (!response.ok || !response.body) return;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const blocks = buffer.split('\n\n');
+        buffer = blocks.pop() || '';
+        for (const block of blocks) {
+          const eventLine = block.split('\n').find(l => l.startsWith('event:'));
+          const dataLine = block.split('\n').find(l => l.startsWith('data:'));
+          if (!eventLine || !dataLine) continue;
+          const eventType = eventLine.replace('event:', '').trim();
+          let data: any;
+          try { data = JSON.parse(dataLine.replace('data:', '').trim()); } catch { continue; }
+          if (eventType === 'html_patch' && data.html) {
+            setCampaign(c => c ? { ...c, html: data.html } : c);
+            setCanUndo(true);
+            setRedoStack([]);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Background edit failed:', err);
+    } finally {
+      onComplete?.();
+    }
+  }, [campaignId, brandId, campaign?.html]);
+
+  // Color replace: Tier 1 instant change
+  const handleColorReplace = useCallback(async (oldHex: string, newHex: string) => {
+    if (!campaign?.html || !campaignId) return;
+    const currentHtml = campaign.html;
+    let newHtml = currentHtml.split(oldHex).join(newHex);
+    newHtml = newHtml.split(oldHex.toUpperCase()).join(newHex);
+    newHtml = newHtml.split(oldHex.toLowerCase()).join(newHex);
+    if (newHtml === currentHtml) return;
+    const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
+    history.push(currentHtml);
+    setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
+    setCanUndo(true);
+    setRedoStack([]);
+    if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
+    inlineEditTimerRef.current = setTimeout(async () => {
+      await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
+    }, 500);
+  }, [campaign, campaignId]);
+
+  // Listen for postMessage from iframe for inline text edits + section events
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.type === 'undo') { handleUndo(); return; }
       if (e.data?.type === 'redo') { handleRedo(); return; }
+
+      // Section reorder — Tier 2
+      if (e.data?.type === 'sectionReordered') {
+        const { movedSection, fromIndex, toIndex } = e.data;
+        const direction = toIndex < fromIndex ? 'up' : 'down';
+        const positions = Math.abs(toIndex - fromIndex);
+        const instruction = `Move the ${movedSection} section ${direction} by ${positions} position${positions > 1 ? 's' : ''}`;
+        setIsSyncing(true);
+        sendBackgroundEdit(instruction, () => setIsSyncing(false));
+        return;
+      }
+
+      // Section duplicated — Tier 2
+      if (e.data?.type === 'sectionDuplicated') {
+        setIsSyncing(true);
+        sendBackgroundEdit(`Duplicate the ${e.data.sectionName} section`, () => setIsSyncing(false));
+        return;
+      }
+
+      // Section deleted — already removed from DOM, sync HTML comes via textEdited
+      if (e.data?.type === 'sectionDeleted') {
+        // The syncHtml() in iframe already fires textEdited, which handles the save
+        return;
+      }
+
+      // Color replace from iframe
+      if (e.data?.type === 'colorReplace') {
+        handleColorReplace(e.data.oldHex, e.data.newHex);
+        return;
+      }
+
       if (e.data?.type !== "textEdited" || !e.data?.html) return;
       if (!campaignId || !campaign) return;
       const newHtml = e.data.html as string;
@@ -1011,7 +1116,7 @@ export default function CampaignEditor() {
       window.removeEventListener("message", handler);
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
     };
-  }, [campaignId, campaign, handleUndo, handleRedo]);
+  }, [campaignId, campaign, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace]);
 
   if (loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
@@ -1067,11 +1172,12 @@ export default function CampaignEditor() {
   const srcdocHtml = htmlForPreview
     ? htmlForPreview.replace(
         /(<head[^>]*>)/i,
-        `$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}[contenteditable]:hover{outline:1px dashed rgba(128,128,128,0.4);outline-offset:2px;cursor:text;}[contenteditable]:focus{outline:2px solid rgba(99,102,241,0.5);outline-offset:2px;background:rgba(99,102,241,0.04);}</style>`
+        `$1<meta name="viewport" content="width=device-width, initial-scale=1"><script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"><\/script><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}[contenteditable]:hover{outline:1px dashed rgba(128,128,128,0.4);outline-offset:2px;cursor:text;}[contenteditable]:focus{outline:2px solid rgba(99,102,241,0.5);outline-offset:2px;background:rgba(99,102,241,0.04);}.section-drag-ghost{opacity:0.4;}.section-drag-handle{cursor:grab;}.section-drag-handle:active{cursor:grabbing;}.section-handle-bar{position:absolute;top:0;left:0;right:0;height:32px;z-index:9999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:space-between;padding:0 8px;opacity:0;transition:opacity 0.15s;pointer-events:none;}.section-wrap:hover .section-handle-bar{opacity:1;pointer-events:auto;}.section-handle-bar span{color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;opacity:0.8;}.section-handle-bar button{background:none;border:none;color:#fff;cursor:pointer;padding:4px;opacity:0.7;font-size:14px;}.section-handle-bar button:hover{opacity:1;}</style>`
       ).replace(
         /<\/body>/i,
         `<script>
 (function(){
+  /* --- TEXT EDITING --- */
   var blocks = ['TABLE','TR','TD','TH','DIV','UL','OL','IMG'];
   document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label').forEach(function(el){
     if(el.querySelector('img,table,div')) return;
@@ -1088,7 +1194,6 @@ export default function CampaignEditor() {
     document.execCommand('insertText', false, text);
   });
   document.addEventListener('keydown', function(e){
-    if(!e.target.isContentEditable) return;
     if((e.metaKey || e.ctrlKey) && e.key === 'z'){
       e.preventDefault();
       e.stopPropagation();
@@ -1101,7 +1206,7 @@ export default function CampaignEditor() {
     }
   });
   var timer = null;
-  document.addEventListener('input', function(){
+  function syncHtml(){
     clearTimeout(timer);
     timer = setTimeout(function(){
       var clone = document.documentElement.cloneNode(true);
@@ -1110,14 +1215,84 @@ export default function CampaignEditor() {
         el.removeAttribute('contenteditable');
         el.style.removeProperty('cursor');
       });
+      clone.querySelectorAll('.section-handle-bar').forEach(function(el){ el.remove(); });
+      clone.querySelectorAll('.section-wrap').forEach(function(el){
+        el.classList.remove('section-wrap');
+        el.style.removeProperty('position');
+        el.removeAttribute('data-section-name');
+      });
       clone.querySelectorAll('style').forEach(function(s){
-        if(s.textContent && s.textContent.indexOf('[contenteditable]')>=0) s.remove();
+        if(s.textContent && (s.textContent.indexOf('[contenteditable]')>=0 || s.textContent.indexOf('section-drag')>=0)) s.remove();
       });
       window.parent.postMessage({ type: 'textEdited', html: clone.outerHTML }, '*');
     }, 300);
-  });
+  }
+  document.addEventListener('input', syncHtml);
+
+  /* --- SECTION DETECTION --- */
+  var sections = [];
+  var walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_COMMENT, null, false);
+  var node;
+  while(node = walker.nextNode()){
+    var val = node.nodeValue.trim();
+    var match = val.match(/^SECTION:\\s*(.+)/i);
+    if(match){
+      var name = match[1].trim();
+      var el = node.nextElementSibling;
+      if(el) sections.push({ name: name, el: el, comment: node });
+    }
+  }
+
+  if(sections.length > 0){
+    var container = sections[0].el.parentElement;
+    sections.forEach(function(sec){
+      var el = sec.el;
+      el.style.position = 'relative';
+      el.classList.add('section-wrap');
+      el.setAttribute('data-section-name', sec.name);
+
+      var bar = document.createElement('div');
+      bar.className = 'section-handle-bar section-drag-handle';
+      bar.innerHTML = '<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:14px;cursor:grab;">⠿</span><span>' + sec.name + '</span></div><div style="display:flex;gap:2px;"><button class="sec-dup" title="Duplicate">⧉</button><button class="sec-del" title="Delete">✕</button></div>';
+      el.insertBefore(bar, el.firstChild);
+
+      bar.querySelector('.sec-dup').addEventListener('click', function(e){
+        e.stopPropagation();
+        window.parent.postMessage({ type: 'sectionDuplicated', sectionName: sec.name }, '*');
+      });
+      bar.querySelector('.sec-del').addEventListener('click', function(e){
+        e.stopPropagation();
+        el.remove();
+        syncHtml();
+        window.parent.postMessage({ type: 'sectionDeleted', sectionName: sec.name }, '*');
+      });
+    });
+
+    /* --- SORTABLEJS --- */
+    if(container && typeof Sortable !== 'undefined'){
+      Sortable.create(container, {
+        handle: '.section-drag-handle',
+        animation: 150,
+        ghostClass: 'section-drag-ghost',
+        onEnd: function(evt){
+          var newOrder = [];
+          container.querySelectorAll('[data-section-name]').forEach(function(el){
+            newOrder.push(el.dataset.sectionName);
+          });
+          syncHtml();
+          window.parent.postMessage({
+            type: 'sectionReordered',
+            newOrder: newOrder,
+            movedSection: evt.item.dataset.sectionName,
+            fromIndex: evt.oldIndex,
+            toIndex: evt.newIndex
+          }, '*');
+        }
+      });
+    }
+  }
 })();
-</script></body>`
+<\/script></body>`
       )
     : "";
 
@@ -1148,6 +1323,11 @@ export default function CampaignEditor() {
           <Badge className={`text-[10px] ${campaign?.status === "ready" ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"}`}>
             {campaign?.status}
           </Badge>
+          {isSyncing && (
+            <span className="flex items-center gap-1 text-[10px] text-muted-foreground animate-pulse">
+              <Loader2 className="w-3 h-3 animate-spin" /> Syncing…
+            </span>
+          )}
           {/* Star button — only post-generation */}
           {campaign?.html && user && (
             <button
