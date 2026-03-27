@@ -955,6 +955,11 @@ export default function CampaignEditor() {
   // Keyboard shortcuts: Cmd/Ctrl+Z for undo, Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y for redo
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Skip if user is typing in an input/textarea in the parent
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || (ae as HTMLElement).isContentEditable)) return;
+      // Skip if iframe has focus (user is editing inside preview)
+      if (ae && ae.tagName === 'IFRAME') return;
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
@@ -1206,15 +1211,29 @@ export default function CampaignEditor() {
     document.execCommand('insertText', false, text);
   });
   document.addEventListener('keydown', function(e){
+    var ae = document.activeElement;
+    var isEditing = ae && (ae.isContentEditable || ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA');
     if((e.metaKey || e.ctrlKey) && e.key === 'z'){
+      if(isEditing) return; // let browser handle native undo/redo inside the text field
       e.preventDefault();
       e.stopPropagation();
       window.parent.postMessage({ type: e.shiftKey ? 'redo' : 'undo' }, '*');
     }
     if((e.metaKey || e.ctrlKey) && e.key === 'y'){
+      if(isEditing) return;
       e.preventDefault();
       e.stopPropagation();
       window.parent.postMessage({ type: 'redo' }, '*');
+    }
+    // Cmd+A inside editable: select all text in that element only
+    if((e.metaKey || e.ctrlKey) && e.key === 'a' && isEditing){
+      e.preventDefault();
+      e.stopPropagation();
+      var range = document.createRange();
+      range.selectNodeContents(ae);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
     }
   });
   var timer = null;
