@@ -1188,6 +1188,26 @@ export default function CampaignEditor() {
         return;
       }
 
+      // Element selection from iframe
+      if (e.data?.type === 'elementSelected') {
+        setSelectedElementContext({ tagName: e.data.tagName, text: e.data.text, outerHTML: e.data.outerHTML });
+        return;
+      }
+      if (e.data?.type === 'elementDeselected') {
+        setSelectedElementContext(null);
+        return;
+      }
+      if (e.data?.type === 'regionSelected') {
+        setSelectedElementContext({
+          tagName: 'REGION',
+          text: e.data.elements.map((el: any) => el.text).join(' | '),
+          outerHTML: '',
+          isRegion: true,
+          elements: e.data.elements,
+        });
+        return;
+      }
+
       if (e.data?.type !== "textEdited" || !e.data?.html) return;
       if (!campaignId || !campaign) return;
       const newHtml = e.data.html as string;
