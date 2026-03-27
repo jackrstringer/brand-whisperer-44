@@ -1,10 +1,63 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, Heart } from "lucide-react";
 import { toast } from "sonner";
+
+function CampaignIframeThumbnail({ html, scale, width, title }: { html: string; scale: number; width: number; title?: string }) {
+  const [contentHeight, setContentHeight] = useState(800);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  const srcDoc = html.replace(
+    /(<head[^>]*>)/i,
+    '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;pointer-events:none;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;}img{max-width:100%!important;height:auto!important;}td{box-sizing:border-box!important;}</style>'
+  );
+
+  const onLoad = useCallback(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    try {
+      const doc = iframe.contentDocument;
+      if (!doc) return;
+      const measure = () => {
+        const h = Math.max(doc.body?.scrollHeight ?? 0, doc.documentElement?.scrollHeight ?? 0, 200);
+        setContentHeight(h);
+      };
+      measure();
+      // Re-measure after images load
+      const imgs = doc.querySelectorAll("img");
+      imgs.forEach((img) => {
+        if (!img.complete) img.addEventListener("load", measure, { once: true });
+      });
+      setTimeout(measure, 500);
+      setTimeout(measure, 2000);
+    } catch {}
+  }, []);
+
+  const scaledHeight = Math.round(contentHeight * scale);
+
+  return (
+    <div className="w-full overflow-hidden" style={{ height: scaledHeight }}>
+      <iframe
+        ref={iframeRef}
+        srcDoc={srcDoc}
+        sandbox="allow-same-origin"
+        className="border-0 block bg-white pointer-events-none"
+        style={{
+          width,
+          height: contentHeight,
+          transform: `scale(${scale})`,
+          transformOrigin: "top left",
+        }}
+        title={title || "Campaign preview"}
+        tabIndex={-1}
+        onLoad={onLoad}
+      />
+    </div>
+  );
+}
 
 interface ReferenceCampaign {
   id: string;
@@ -240,24 +293,7 @@ export default function ReferencePanel({
                   }`}
                 >
                   {hasHtml ? (
-                    <div className="w-full overflow-hidden" style={{ height: 400 }}>
-                      <iframe
-                        srcDoc={item.html.replace(
-                          /(<head[^>]*>)/i,
-                          '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;overflow:hidden;pointer-events:none;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;}img{max-width:100%!important;height:auto!important;}td{box-sizing:border-box!important;}</style>'
-                        )}
-                        sandbox="allow-same-origin"
-                        className="border-0 block bg-white pointer-events-none"
-                        style={{
-                          width: iframeWidth,
-                          height: Math.round(400 / iframeScale),
-                          transform: `scale(${iframeScale})`,
-                          transformOrigin: "top left",
-                        }}
-                        title={item.title || "Campaign preview"}
-                        tabIndex={-1}
-                      />
-                    </div>
+                    <CampaignIframeThumbnail html={item.html} scale={iframeScale} width={iframeWidth} title={item.title} />
                   ) : imageUrl ? (
                     <div style={{ aspectRatio: "470 / 470" }}>
                       <img
