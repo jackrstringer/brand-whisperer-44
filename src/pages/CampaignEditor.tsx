@@ -1844,6 +1844,38 @@ export default function CampaignEditor() {
 
     bar.appendChild(makeSep());
 
+    // Padding controls
+    var padLabel = document.createElement('span');
+    padLabel.style.cssText = 'font-size:9px;color:rgba(255,255,255,0.35);letter-spacing:0.05em;font-weight:600;padding:0 2px;';
+    padLabel.textContent = 'PAD';
+    bar.appendChild(padLabel);
+    var padMinus = document.createElement('button');
+    padMinus.className = 'ftb-pad-btn';
+    padMinus.innerHTML = '−';
+    padMinus.title = 'Decrease padding';
+    padMinus.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    padMinus.addEventListener('click', function(e){
+      e.stopPropagation();
+      var cur = parseInt(window.getComputedStyle(el).paddingTop) || 0;
+      el.style.padding = Math.max(0, cur - 4) + 'px';
+      syncHtml();
+    });
+    bar.appendChild(padMinus);
+    var padPlus = document.createElement('button');
+    padPlus.className = 'ftb-pad-btn';
+    padPlus.innerHTML = '+';
+    padPlus.title = 'Increase padding';
+    padPlus.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    padPlus.addEventListener('click', function(e){
+      e.stopPropagation();
+      var cur = parseInt(window.getComputedStyle(el).paddingTop) || 0;
+      el.style.padding = (cur + 4) + 'px';
+      syncHtml();
+    });
+    bar.appendChild(padPlus);
+
+    bar.appendChild(makeSep());
+
     // Ideate button — stroke-only gradient border
     var ideateBtn = document.createElement('button');
     ideateBtn.className = 'ftb-ideate';
