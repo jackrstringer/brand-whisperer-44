@@ -709,6 +709,28 @@ export default function CampaignEditor() {
     toast.success(`Applied: ${variant.label}`);
   };
 
+  const handlePreviewVariant = useCallback((variant: VariantOption, index: number, messageId: string) => {
+    if (!campaign?.html) return;
+    const html = campaign.html;
+    const msg = messages.find(m => m.id === messageId);
+    const prevAppliedIndex = msg?.variant_data?.applied_index;
+    const appliedTexts = msg?.variant_data?.applied_texts || {};
+    let findTarget = variant.find;
+
+    if (prevAppliedIndex !== null && prevAppliedIndex !== undefined && prevAppliedIndex !== index) {
+      const prevVariant = msg?.variant_data?.variants[prevAppliedIndex];
+      const liveText = appliedTexts[prevAppliedIndex] || prevVariant?.replace;
+      if (liveText) findTarget = liveText;
+    }
+
+    if (!html.includes(findTarget)) return;
+    setPreviewHtml(html.replace(findTarget, variant.replace));
+  }, [campaign?.html, messages]);
+
+  const handlePreviewClear = useCallback(() => {
+    setPreviewHtml(null);
+  }, []);
+
 
   const allVersions: string[] = (() => {
     const history = Array.isArray(campaign?.html_history) ? campaign.html_history as string[] : [];
