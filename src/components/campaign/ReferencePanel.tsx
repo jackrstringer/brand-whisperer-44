@@ -376,7 +376,7 @@ export default function ReferencePanel({
 
       {/* Sticky strength slider when reference selected */}
       {selectedReference && (
-        <div className="shrink-0 border-t border-border p-4 space-y-2 bg-muted/30">
+        <div className="shrink-0 border-t border-border p-4 space-y-3 bg-muted/30">
           <div className="flex items-center gap-2">
             {selectedReference.thumbnail_url && (
               <img src={selectedReference.thumbnail_url} className="w-10 h-10 rounded object-cover shrink-0" alt="" />
@@ -386,21 +386,25 @@ export default function ReferencePanel({
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-muted-foreground">Reference strength</span>
-              <span className="text-[10px] font-medium tabular-nums">{selectedReference.strength}</span>
+          <div className="space-y-1.5">
+            <span className="text-[10px] text-muted-foreground">Reference mode</span>
+            <div className="flex gap-1">
+              {(Object.entries(MODE_CONFIG) as [ReferenceMode, typeof MODE_CONFIG["loose"]][]).map(([key, cfg]) => (
+                <button
+                  key={key}
+                  onClick={() => onSelectReference({ ...selectedReference, mode: key, strength: cfg.strength })}
+                  className={`flex-1 text-[11px] py-1.5 px-2 rounded-md border transition-colors font-medium ${
+                    selectedReference.mode === key
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                  }`}
+                >
+                  {cfg.label}
+                </button>
+              ))}
             </div>
-            <Slider
-              value={[selectedReference.strength]}
-              onValueChange={([v]) => onSelectReference({ ...selectedReference, strength: v })}
-              min={1}
-              max={10}
-              step={1}
-              className="w-full"
-            />
             <p className="text-[9px] text-muted-foreground italic">
-              {STRENGTH_HINTS[String(selectedReference.strength)] || ""}
+              {MODE_CONFIG[selectedReference.mode]?.description || ""}
             </p>
           </div>
         </div>
