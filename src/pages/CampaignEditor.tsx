@@ -2389,7 +2389,10 @@ export default function CampaignEditor() {
                     <div className="flex justify-start">
                       <div className="rounded-lg px-3 py-2 text-xs text-muted-foreground flex items-center gap-1.5">
                         {agentState === "thinking" && (
-                          <><span className="animate-pulse">•••</span></>
+                          <>
+                            <span className="inline-block animate-spin" style={{ animationDuration: '2s' }}>✨</span>
+                            <span>Generating ideas<span className="inline-block w-6 text-left"><span className="animate-pulse">...</span></span></span>
+                          </>
                         )}
                         {agentState === "editing" && (
                           <><span className="inline-block w-3 h-3">✏️</span> Editing...</>
