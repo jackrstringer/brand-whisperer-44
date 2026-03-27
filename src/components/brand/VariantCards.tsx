@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Eye, MoreHorizontal, Loader2 } from "lucide-react";
+import { Check, MoreHorizontal, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { VariantData, VariantOption } from "@/lib/types";
 
