@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Upload, Link, Clipboard, Loader2 } from "lucide-react";
+import { Upload, Link, Clipboard, Loader2, Crop } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { autoCropPadding } from "@/lib/autoCropPadding";
 
 interface ReferenceUploadZoneProps {
   onUploaded: () => void;
