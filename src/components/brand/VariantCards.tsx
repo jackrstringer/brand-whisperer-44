@@ -11,16 +11,17 @@ interface VariantCardsProps {
 
 export default function VariantCards({ variantData, onApply, disabled }: VariantCardsProps) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const isApplied = variantData.applied_index !== null;
+  const hasApplied = variantData.applied_index !== null;
 
   return (
     <div className="space-y-2">
       <p className="text-sm text-foreground">{variantData.message}</p>
       <div className="space-y-1.5">
         {variantData.variants.map((v, i) => {
-          const wasApplied = isApplied && variantData.applied_index === i;
+          const wasApplied = hasApplied && variantData.applied_index === i;
           const isSelected = selectedIndex === i;
-          const interactive = !isApplied && !disabled;
+          // Allow re-selection: interactive unless disabled or this is the currently applied one
+          const interactive = !disabled && !(wasApplied);
 
           return (
             <button
@@ -48,7 +49,8 @@ export default function VariantCards({ variantData, onApply, disabled }: Variant
           );
         })}
       </div>
-      {!isApplied && (
+      {/* Show apply button: for first apply OR re-selection (different option selected) */}
+      {(!hasApplied || (selectedIndex !== null && selectedIndex !== variantData.applied_index)) && (
         <Button
           size="sm"
           disabled={selectedIndex === null || disabled}
@@ -59,7 +61,7 @@ export default function VariantCards({ variantData, onApply, disabled }: Variant
           }}
           className="w-full mt-1"
         >
-          Apply
+          {hasApplied ? "Switch to this option" : "Apply"}
         </Button>
       )}
     </div>
