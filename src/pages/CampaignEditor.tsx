@@ -1095,14 +1095,20 @@ export default function CampaignEditor() {
         return;
       }
 
-      // Ideate element from floating toolbar
+      // Ideate element from floating toolbar — auto-send
       if (e.data?.type === 'ideateElement') {
         const { text, tagName } = e.data;
         let prompt = '';
         if (/^H[1-6]$/.test(tagName)) prompt = `Give me 5 alternative headline options for: "${text}"`;
         else if (tagName === 'A' || tagName === 'BUTTON') prompt = `Give me 5 alternative CTA button text options for: "${text}"`;
         else prompt = `Give me 5 alternative copy options for this text: "${text}"`;
+        // Auto-send by setting input then triggering send
         setChatInput(prompt);
+        // Use a microtask to let state update, then trigger send
+        setTimeout(() => {
+          const sendBtn = document.querySelector('[data-send-btn]') as HTMLButtonElement;
+          if (sendBtn) sendBtn.click();
+        }, 100);
         return;
       }
 
@@ -1200,7 +1206,7 @@ export default function CampaignEditor() {
   const srcdocHtml = htmlForPreview
     ? htmlForPreview.replace(
         /(<head[^>]*>)/i,
-        `$1<meta name="viewport" content="width=device-width, initial-scale=1"><script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"><\/script><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}[contenteditable]:hover{outline:1px dashed rgba(128,128,128,0.4);outline-offset:2px;cursor:text;}[contenteditable]:focus{outline:2px solid rgba(99,102,241,0.5);outline-offset:2px;background:rgba(99,102,241,0.04);}.section-drag-ghost{opacity:0.4;}.section-drag-handle{cursor:grab;}.section-drag-handle:active{cursor:grabbing;}.section-handle-bar{position:absolute;top:0;left:0;right:0;height:32px;z-index:9999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:space-between;padding:0 8px;opacity:0;transition:opacity 0.15s;pointer-events:none;}.section-wrap:hover .section-handle-bar{opacity:1;pointer-events:auto;}.section-handle-bar span{color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;opacity:0.8;}.section-handle-bar button{background:none;border:none;color:#fff;cursor:pointer;padding:4px;opacity:0.7;font-size:14px;}.section-handle-bar button:hover{opacity:1;}.ftb{position:fixed;z-index:99998;background:rgba(24,24,27,0.96);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:3px 4px;display:flex;align-items:center;gap:1px;box-shadow:0 4px 20px rgba(0,0,0,0.55);animation:ftb-in 0.15s ease-out;font-family:-apple-system,BlinkMacSystemFont,sans-serif;}@keyframes ftb-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}.ftb-btn{background:none;border:none;color:#aaa;width:28px;height:28px;border-radius:4px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all 0.1s;padding:0;}.ftb-btn:hover{background:rgba(255,255,255,0.1);color:#fff;}.ftb-btn.active{background:rgba(99,102,241,0.3);color:#818cf8;}.ftb-sep{width:1px;height:16px;background:rgba(255,255,255,0.12);margin:0 3px;flex-shrink:0;}.ftb-tag{font-size:9px;color:#888;text-transform:uppercase;letter-spacing:0.05em;padding:2px 6px;white-space:nowrap;}.ftb-select{background:#2a2a2e;color:#ccc;border:1px solid rgba(255,255,255,0.15);border-radius:4px;font-size:11px;padding:2px 4px;cursor:pointer;outline:none;height:26px;}.ftb-select:hover{border-color:rgba(255,255,255,0.3);}.ftb-swatch{width:22px;height:22px;border-radius:4px;border:2px solid rgba(255,255,255,0.2);cursor:pointer;position:relative;transition:border-color 0.1s;}.ftb-swatch:hover{border-color:rgba(255,255,255,0.5);}.ftb-cpanel{position:absolute;top:calc(100% + 6px);background:rgba(24,24,27,0.97);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:8px;display:flex;flex-wrap:wrap;gap:4px;box-shadow:0 8px 24px rgba(0,0,0,0.5);min-width:140px;animation:ftb-in 0.1s ease-out;}.ftb-cpanel-swatch{width:24px;height:24px;border-radius:4px;border:2px solid transparent;cursor:pointer;transition:all 0.1s;}.ftb-cpanel-swatch:hover{border-color:rgba(255,255,255,0.5);transform:scale(1.15);}.ftb-cpanel-swatch.active{border-color:#818cf8;}.ftb-ideate{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px;white-space:nowrap;transition:filter 0.1s;}.ftb-ideate:hover{filter:brightness(1.15);}</style>`
+        `$1<meta name="viewport" content="width=device-width, initial-scale=1"><script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"><\/script><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}[contenteditable]:hover{outline:1px dashed rgba(128,128,128,0.4);outline-offset:2px;cursor:text;}[contenteditable]:focus{outline:2px solid rgba(99,102,241,0.5);outline-offset:2px;background:rgba(99,102,241,0.04);}.section-drag-ghost{opacity:0.4;}.section-drag-handle{cursor:grab;}.section-drag-handle:active{cursor:grabbing;}.section-handle-bar{position:absolute;top:0;left:0;right:0;height:32px;z-index:9999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:space-between;padding:0 8px;opacity:0;transition:opacity 0.15s;pointer-events:none;}.section-wrap:hover .section-handle-bar{opacity:1;pointer-events:auto;}.section-handle-bar span{color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;opacity:0.8;}.section-handle-bar button{background:none;border:none;color:#fff;cursor:pointer;padding:4px;opacity:0.7;font-size:14px;}.section-handle-bar button:hover{opacity:1;}.ftb{position:fixed;z-index:99998;background:rgba(18,18,20,0.97);backdrop-filter:blur(16px) saturate(1.4);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:4px 6px;display:flex;align-items:center;gap:2px;box-shadow:0 8px 32px rgba(0,0,0,0.6),0 0 0 1px rgba(255,255,255,0.04) inset;animation:ftb-in 0.18s cubic-bezier(0.16,1,0.3,1);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;}@keyframes ftb-in{from{opacity:0;transform:translateY(6px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}.ftb-btn{background:none;border:none;color:rgba(255,255,255,0.55);width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all 0.12s;padding:0;}.ftb-btn:hover{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.9);}.ftb-btn.active{background:rgba(99,102,241,0.2);color:#a5b4fc;}.ftb-sep{width:1px;height:18px;background:rgba(255,255,255,0.08);margin:0 4px;flex-shrink:0;}.ftb-tag{font-size:9px;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.08em;padding:2px 8px;white-space:nowrap;font-weight:600;}.ftb-select{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.75);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:11px;padding:3px 6px;cursor:pointer;outline:none;height:28px;font-weight:500;transition:all 0.12s;-webkit-appearance:none;appearance:none;}.ftb-select:hover{border-color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.1);}.ftb-select:focus{border-color:rgba(99,102,241,0.5);}.ftb-swatch{width:24px;height:24px;border-radius:6px;border:2px solid rgba(255,255,255,0.15);cursor:pointer;position:relative;transition:all 0.12s;}.ftb-swatch:hover{border-color:rgba(255,255,255,0.4);transform:scale(1.1);}.ftb-cpanel{position:absolute;top:calc(100% + 8px);background:rgba(18,18,20,0.98);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px;box-shadow:0 12px 40px rgba(0,0,0,0.6);min-width:200px;animation:ftb-in 0.12s cubic-bezier(0.16,1,0.3,1);}.ftb-cpanel-label{font-size:9px;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.08em;margin:6px 0 4px;font-weight:600;}.ftb-cpanel-label:first-child{margin-top:0;}.ftb-cpanel-row{display:flex;flex-wrap:wrap;gap:4px;}.ftb-cpanel-swatch{width:26px;height:26px;border-radius:5px;border:2px solid transparent;cursor:pointer;transition:all 0.12s;position:relative;}.ftb-cpanel-swatch:hover{border-color:rgba(255,255,255,0.4);transform:scale(1.12);}.ftb-cpanel-swatch.active{border-color:#818cf8;box-shadow:0 0 0 2px rgba(129,140,248,0.3);}.ftb-cpanel-swatch.active::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.5);}.ftb-hex-row{display:flex;gap:4px;margin-top:8px;align-items:center;}.ftb-hex-input{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:rgba(255,255,255,0.8);font-size:11px;padding:4px 6px;width:72px;outline:none;font-family:monospace;}.ftb-hex-input:focus{border-color:rgba(99,102,241,0.5);}.ftb-hex-native{width:28px;height:28px;border:none;padding:0;background:none;cursor:pointer;border-radius:4px;}.ftb-ideate{background:transparent;color:#a5b4fc;border:1.5px solid transparent;border-radius:7px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;transition:all 0.15s;position:relative;background-image:linear-gradient(rgba(18,18,20,0.97),rgba(18,18,20,0.97)),linear-gradient(135deg,#6366f1,#8b5cf6,#6366f1);background-origin:border-box;background-clip:padding-box,border-box;}.ftb-ideate:hover{background-image:linear-gradient(rgba(99,102,241,0.1),rgba(99,102,241,0.1)),linear-gradient(135deg,#6366f1,#8b5cf6,#6366f1);color:#c7d2fe;box-shadow:0 0 12px rgba(99,102,241,0.2);}</style>`
       ).replace(
         /<\/body>/i,
         `<script>
@@ -1212,7 +1218,7 @@ export default function CampaignEditor() {
     var hasBlock = Array.from(el.children).some(function(c){ return blocks.indexOf(c.tagName)>=0; });
     if(hasBlock) return;
     if(!el.textContent.trim()) return;
-    try { el.contentEditable = 'plaintext-only'; } catch(e) { el.contentEditable = 'true'; }
+    el.contentEditable = 'true';
     el.style.cursor = 'text';
   });
   document.addEventListener('paste', function(e){
@@ -1225,7 +1231,7 @@ export default function CampaignEditor() {
     var ae = document.activeElement;
     var isEditing = ae && (ae.isContentEditable || ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA');
     if((e.metaKey || e.ctrlKey) && e.key === 'z'){
-      if(isEditing) return; // let browser handle native undo/redo inside the text field
+      if(isEditing) return;
       e.preventDefault();
       e.stopPropagation();
       window.parent.postMessage({ type: e.shiftKey ? 'redo' : 'undo' }, '*');
@@ -1236,7 +1242,6 @@ export default function CampaignEditor() {
       e.stopPropagation();
       window.parent.postMessage({ type: 'redo' }, '*');
     }
-    // Cmd+A inside editable: select all text in that element only
     if((e.metaKey || e.ctrlKey) && e.key === 'a' && isEditing){
       e.preventDefault();
       e.stopPropagation();
@@ -1281,16 +1286,52 @@ export default function CampaignEditor() {
   }
   document.addEventListener('input', syncHtml);
 
+  /* --- SELECTION PERSISTENCE --- */
+  var savedRange = null;
+  document.addEventListener('selectionchange', function(){
+    var sel = window.getSelection();
+    if(sel && sel.rangeCount > 0){
+      var r = sel.getRangeAt(0);
+      if(ftbTarget && ftbTarget.contains(r.startContainer)){
+        savedRange = r.cloneRange();
+      }
+    }
+    if(ftbEl) updateBIUState(ftbEl);
+  });
+
+  function restoreSelection(){
+    if(!savedRange) return false;
+    try {
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(savedRange);
+      return true;
+    } catch(e){ return false; }
+  }
+
+  function applyCommand(cmd, value){
+    if(!ftbTarget) return;
+    restoreSelection();
+    ftbTarget.focus();
+    try { document.execCommand(cmd, false, value || null); } catch(e){}
+    syncHtml();
+    // Re-save the range after command
+    var sel = window.getSelection();
+    if(sel && sel.rangeCount > 0) savedRange = sel.getRangeAt(0).cloneRange();
+  }
+
   /* --- FLOATING TOOLBAR --- */
   var ftbEl = null;
   var ftbTarget = null;
   var ftbBlurTimer = null;
   var ftbColorPanel = null;
+  var recentColors = [];
 
   function removeFtb(){
     if(ftbEl){ ftbEl.remove(); ftbEl = null; }
     if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; }
     ftbTarget = null;
+    savedRange = null;
   }
 
   function getTagLabel(el){
@@ -1306,21 +1347,19 @@ export default function CampaignEditor() {
 
   function positionFtb(bar, el){
     var r = el.getBoundingClientRect();
-    var bw = bar.offsetWidth || 340;
-    var bh = bar.offsetHeight || 36;
+    var bw = bar.offsetWidth || 380;
+    var bh = bar.offsetHeight || 38;
     var left = Math.max(4, Math.min(r.left + r.width/2 - bw/2, window.innerWidth - bw - 4));
-    if(r.top > bh + 8){
-      bar.style.top = (r.top - bh - 6) + 'px';
+    if(r.top > bh + 12){
+      bar.style.top = (r.top - bh - 8) + 'px';
     } else {
-      bar.style.top = (r.bottom + 6) + 'px';
+      bar.style.top = (r.bottom + 8) + 'px';
     }
     bar.style.left = left + 'px';
   }
 
   function extractEmailColors(){
     var colors = new Set();
-    var defaults = ['#000000','#ffffff','#333333','#666666','#999999','#ff0000','#0066cc','#00aa00'];
-    defaults.forEach(function(c){ colors.add(c); });
     document.querySelectorAll('*').forEach(function(el){
       var s = el.style;
       if(s.color){ var c = rgbToHex(s.color); if(c) colors.add(c); }
@@ -1331,7 +1370,7 @@ export default function CampaignEditor() {
       if(el.getAttribute('color')){ var c = normalizeHex(el.getAttribute('color')); if(c) colors.add(c); }
       if(el.getAttribute('bgcolor')){ var c = normalizeHex(el.getAttribute('bgcolor')); if(c) colors.add(c); }
     });
-    return Array.from(colors).slice(0, 20);
+    return Array.from(colors).filter(function(c){ return c && c.length === 7; }).slice(0, 16);
   }
 
   function rgbToHex(rgb){
@@ -1372,6 +1411,123 @@ export default function CampaignEditor() {
     } catch(e){}
   }
 
+  function addRecentColor(hex){
+    hex = hex.toLowerCase();
+    recentColors = recentColors.filter(function(c){ return c !== hex; });
+    recentColors.unshift(hex);
+    if(recentColors.length > 8) recentColors = recentColors.slice(0, 8);
+  }
+
+  function showColorPanel(swatchWrap, swatch, el){
+    if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; return; }
+    var panel = document.createElement('div');
+    panel.className = 'ftb-cpanel';
+    var currentColor = rgbToHex(window.getComputedStyle(el).color) || '#000000';
+
+    function applyColor(hex){
+      addRecentColor(hex);
+      restoreSelection();
+      el.focus();
+      var sel = window.getSelection();
+      if(!sel || !sel.rangeCount || sel.isCollapsed){
+        el.style.color = hex;
+      } else {
+        document.execCommand('foreColor', false, hex);
+      }
+      swatch.style.backgroundColor = hex;
+      if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; }
+      syncHtml();
+    }
+
+    function makeSwatchEl(hex, isActive){
+      var cs = document.createElement('div');
+      cs.className = 'ftb-cpanel-swatch' + (isActive ? ' active' : '');
+      cs.style.backgroundColor = hex;
+      cs.title = hex;
+      cs.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
+      cs.addEventListener('click', function(ev){ ev.stopPropagation(); applyColor(hex); });
+      return cs;
+    }
+
+    // Default colors
+    var defaults = ['#000000','#ffffff','#333333','#666666','#999999','#cc0000','#ff6600','#ffcc00','#33cc33','#0066cc','#6633cc','#cc33cc'];
+    var defLabel = document.createElement('div');
+    defLabel.className = 'ftb-cpanel-label';
+    defLabel.textContent = 'Default';
+    panel.appendChild(defLabel);
+    var defRow = document.createElement('div');
+    defRow.className = 'ftb-cpanel-row';
+    defaults.forEach(function(hex){ defRow.appendChild(makeSwatchEl(hex, currentColor === hex)); });
+    panel.appendChild(defRow);
+
+    // Document colors
+    var docColors = extractEmailColors();
+    if(docColors.length > 0){
+      var docLabel = document.createElement('div');
+      docLabel.className = 'ftb-cpanel-label';
+      docLabel.textContent = 'Document';
+      panel.appendChild(docLabel);
+      var docRow = document.createElement('div');
+      docRow.className = 'ftb-cpanel-row';
+      docColors.forEach(function(hex){ docRow.appendChild(makeSwatchEl(hex, currentColor === hex)); });
+      panel.appendChild(docRow);
+    }
+
+    // Recent colors
+    if(recentColors.length > 0){
+      var recLabel = document.createElement('div');
+      recLabel.className = 'ftb-cpanel-label';
+      recLabel.textContent = 'Recent';
+      panel.appendChild(recLabel);
+      var recRow = document.createElement('div');
+      recRow.className = 'ftb-cpanel-row';
+      recentColors.forEach(function(hex){ recRow.appendChild(makeSwatchEl(hex, currentColor === hex)); });
+      panel.appendChild(recRow);
+    }
+
+    // Hex input + native picker
+    var hexRow = document.createElement('div');
+    hexRow.className = 'ftb-hex-row';
+    var hexLabel = document.createElement('span');
+    hexLabel.style.cssText = 'color:rgba(255,255,255,0.35);font-size:10px;font-weight:600;';
+    hexLabel.textContent = '#';
+    hexRow.appendChild(hexLabel);
+    var hexInput = document.createElement('input');
+    hexInput.type = 'text';
+    hexInput.className = 'ftb-hex-input';
+    hexInput.value = currentColor.replace('#','');
+    hexInput.maxLength = 6;
+    hexInput.placeholder = '000000';
+    hexInput.addEventListener('mousedown', function(ev){ ev.stopPropagation(); });
+    hexInput.addEventListener('keydown', function(ev){
+      ev.stopPropagation();
+      if(ev.key === 'Enter'){
+        var val = hexInput.value.trim().replace('#','');
+        if(/^[0-9a-fA-F]{3,6}$/.test(val)){
+          var hex = normalizeHex('#'+val);
+          applyColor(hex);
+        }
+      }
+    });
+    hexRow.appendChild(hexInput);
+    var nativePicker = document.createElement('input');
+    nativePicker.type = 'color';
+    nativePicker.className = 'ftb-hex-native';
+    nativePicker.value = currentColor;
+    nativePicker.addEventListener('mousedown', function(ev){ ev.stopPropagation(); });
+    nativePicker.addEventListener('input', function(){
+      hexInput.value = nativePicker.value.replace('#','');
+    });
+    nativePicker.addEventListener('change', function(){
+      applyColor(nativePicker.value);
+    });
+    hexRow.appendChild(nativePicker);
+    panel.appendChild(hexRow);
+
+    swatchWrap.appendChild(panel);
+    ftbColorPanel = panel;
+  }
+
   function showFtb(el){
     removeFtb();
     ftbTarget = el;
@@ -1400,7 +1556,6 @@ export default function CampaignEditor() {
       if(s === currentSize) opt.selected = true;
       sizeSelect.appendChild(opt);
     });
-    // If current size not in list, add it
     if(sizes.indexOf(currentSize) < 0){
       var opt = document.createElement('option');
       opt.value = currentSize;
@@ -1408,14 +1563,15 @@ export default function CampaignEditor() {
       opt.selected = true;
       sizeSelect.insertBefore(opt, sizeSelect.firstChild);
     }
+    sizeSelect.addEventListener('mousedown', function(e){ e.stopPropagation(); });
     sizeSelect.addEventListener('change', function(){
+      restoreSelection();
+      el.focus();
       var sel = window.getSelection();
-      if(!sel.rangeCount || sel.isCollapsed){
-        // No selection — apply to the whole element
+      if(!sel || !sel.rangeCount || sel.isCollapsed){
         el.style.fontSize = sizeSelect.value + 'px';
       } else {
         document.execCommand('fontSize', false, '7');
-        // Convert <font size=7> to <span style="font-size">
         el.querySelectorAll('font[size="7"]').forEach(function(f){
           var span = document.createElement('span');
           span.style.fontSize = sizeSelect.value + 'px';
@@ -1424,9 +1580,7 @@ export default function CampaignEditor() {
         });
       }
       syncHtml();
-      el.focus();
     });
-    sizeSelect.addEventListener('mousedown', function(e){ e.stopPropagation(); });
     bar.appendChild(sizeSelect);
 
     // Text color swatch
@@ -1437,36 +1591,10 @@ export default function CampaignEditor() {
     swatch.className = 'ftb-swatch';
     swatch.style.backgroundColor = currentColor;
     swatch.title = 'Text color';
+    swatch.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
     swatch.addEventListener('click', function(e){
       e.stopPropagation();
-      if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; return; }
-      var panel = document.createElement('div');
-      panel.className = 'ftb-cpanel';
-      var colors = extractEmailColors();
-      colors.forEach(function(hex){
-        var cs = document.createElement('div');
-        cs.className = 'ftb-cpanel-swatch';
-        cs.style.backgroundColor = hex;
-        cs.title = hex;
-        if(rgbToHex(currentColor) === hex) cs.classList.add('active');
-        cs.addEventListener('click', function(ev){
-          ev.stopPropagation();
-          var sel = window.getSelection();
-          if(!sel.rangeCount || sel.isCollapsed){
-            el.style.color = hex;
-          } else {
-            document.execCommand('foreColor', false, hex);
-          }
-          swatch.style.backgroundColor = hex;
-          panel.remove();
-          ftbColorPanel = null;
-          syncHtml();
-          el.focus();
-        });
-        panel.appendChild(cs);
-      });
-      swatchWrap.appendChild(panel);
-      ftbColorPanel = panel;
+      showColorPanel(swatchWrap, swatch, el);
     });
     swatchWrap.appendChild(swatch);
     bar.appendChild(swatchWrap);
@@ -1474,50 +1602,56 @@ export default function CampaignEditor() {
     bar.appendChild(makeSep());
 
     // Bold
-    var boldBtn = makeBtn('<b>B</b>', 'Bold');
+    var boldBtn = makeBtn('<b style="font-size:13px;">B</b>', 'Bold');
     boldBtn.setAttribute('data-ftb', 'bold');
-    boldBtn.addEventListener('click', function(e){ e.stopPropagation(); document.execCommand('bold'); updateBIUState(bar); syncHtml(); el.focus(); });
+    boldBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    boldBtn.addEventListener('click', function(e){ e.stopPropagation(); applyCommand('bold'); updateBIUState(bar); });
     bar.appendChild(boldBtn);
 
     // Italic
-    var italicBtn = makeBtn('<i>I</i>', 'Italic');
+    var italicBtn = makeBtn('<i style="font-size:13px;font-family:Georgia,serif;">I</i>', 'Italic');
     italicBtn.setAttribute('data-ftb', 'italic');
-    italicBtn.addEventListener('click', function(e){ e.stopPropagation(); document.execCommand('italic'); updateBIUState(bar); syncHtml(); el.focus(); });
+    italicBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    italicBtn.addEventListener('click', function(e){ e.stopPropagation(); applyCommand('italic'); updateBIUState(bar); });
     bar.appendChild(italicBtn);
 
     // Underline
-    var underlineBtn = makeBtn('<u>U</u>', 'Underline');
+    var underlineBtn = makeBtn('<u style="font-size:13px;">U</u>', 'Underline');
     underlineBtn.setAttribute('data-ftb', 'underline');
-    underlineBtn.addEventListener('click', function(e){ e.stopPropagation(); document.execCommand('underline'); updateBIUState(bar); syncHtml(); el.focus(); });
+    underlineBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    underlineBtn.addEventListener('click', function(e){ e.stopPropagation(); applyCommand('underline'); updateBIUState(bar); });
     bar.appendChild(underlineBtn);
 
     bar.appendChild(makeSep());
 
-    // Text align
-    var alignIcons = { left:'≡', center:'☰', right:'≡' };
+    // Text align — SVG icons
+    var alignSvgs = {
+      left: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>',
+      center: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>',
+      right: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></svg>'
+    };
     var currentAlign = getCurrentAlignment(el);
-    var alignBtn = makeBtn(alignIcons[currentAlign] || '≡', 'Alignment');
-    alignBtn.style.fontSize = '15px';
-    if(currentAlign === 'right') alignBtn.style.transform = 'scaleX(-1)';
+    var alignBtn = makeBtn(alignSvgs[currentAlign] || alignSvgs.left, 'Alignment');
+    alignBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
     alignBtn.addEventListener('click', function(e){
       e.stopPropagation();
       var next = currentAlign === 'left' ? 'center' : currentAlign === 'center' ? 'right' : 'left';
       el.style.textAlign = next;
       currentAlign = next;
-      alignBtn.innerHTML = alignIcons[next];
-      if(next === 'right') alignBtn.style.transform = 'scaleX(-1)';
-      else alignBtn.style.transform = '';
+      alignBtn.innerHTML = alignSvgs[next];
       syncHtml();
+      restoreSelection();
       el.focus();
     });
     bar.appendChild(alignBtn);
 
     bar.appendChild(makeSep());
 
-    // Ideate button
+    // Ideate button — stroke-only gradient border
     var ideateBtn = document.createElement('button');
     ideateBtn.className = 'ftb-ideate';
-    ideateBtn.innerHTML = '✨ Ideate';
+    ideateBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg> Ideate';
+    ideateBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
     ideateBtn.addEventListener('click', function(e){
       e.stopPropagation();
       window.parent.postMessage({ type: 'ideateElement', text: el.textContent.trim(), tagName: el.tagName }, '*');
@@ -1556,21 +1690,16 @@ export default function CampaignEditor() {
     if(e.target && e.target.isContentEditable){
       ftbBlurTimer = setTimeout(function(){
         removeFtb();
-      }, 250);
+      }, 300);
     }
   }, true);
 
-  // Keep toolbar alive when interacting with it — preventDefault stops blur from firing
+  // Keep toolbar alive when interacting with it
   document.addEventListener('mousedown', function(e){
     if(ftbEl && (ftbEl.contains(e.target) || (ftbColorPanel && ftbColorPanel.contains(e.target)))){
       e.preventDefault();
       clearTimeout(ftbBlurTimer);
     }
-  });
-
-  // Update B/I/U state on selection change
-  document.addEventListener('selectionchange', function(){
-    if(ftbEl) updateBIUState(ftbEl);
   });
 
   // Reposition on scroll
@@ -1628,7 +1757,7 @@ export default function CampaignEditor() {
     /* Edit text — focus the element */
     if(el.isContentEditable || /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL)$/i.test(el.tagName)){
       addItem('Edit Text', '✏️', function(){
-        try { el.contentEditable = 'plaintext-only'; } catch(ex) { el.contentEditable = 'true'; }
+        el.contentEditable = 'true';
         el.focus();
         var range = document.createRange();
         range.selectNodeContents(el);
@@ -2316,6 +2445,7 @@ export default function CampaignEditor() {
                       disabled={sending}
                     />
                     <Button
+                      data-send-btn
                       onClick={sendMessage}
                       disabled={(!chatInput.trim() && chatAttachments.length === 0) || sending}
                       size="icon"
