@@ -557,11 +557,10 @@ export default function CampaignEditor() {
         </div>
       </div>
 
-      {/* Main Content — draggable split */}
+      {/* Main Content — fixed split */}
       <div className="flex-1 flex overflow-hidden">
-      <PanelGroup direction="horizontal" className="flex-1 min-w-0" autoSaveId="campaign-editor-panels">
-        {/* Left Panel — Preview or Inspiration */}
-        <Panel defaultSize={65}>
+        {/* Left Panel — Preview or Inspiration (65%) */}
+        <div className="h-full min-w-0 flex-[65] overflow-hidden">
           <div ref={previewPanelRef} className="h-full min-w-0 bg-card overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' as any }}>
             {isGenerating ? (
               <div className="max-w-[600px] mx-auto space-y-4 p-8 mt-12">
