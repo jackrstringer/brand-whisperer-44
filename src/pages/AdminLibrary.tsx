@@ -251,25 +251,22 @@ export default function AdminLibrary() {
                 <p className="text-xs text-muted-foreground truncate">{item.brand_name}</p>
                 <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                   <Badge variant={item.is_published ? "default" : "secondary"} className="text-[9px]">
-                    {item.is_published ? "Published" : "Draft"}
+                    {item.is_published ? "Live" : "Draft"}
                   </Badge>
-                  {item.category && (
-                    <Badge variant="outline" className="text-[9px]">{item.category}</Badge>
-                  )}
                   {item.industry && (
-                    <Badge variant="outline" className="text-[9px] bg-primary/5">{item.industry}</Badge>
+                    <Badge variant="outline" className="text-[9px] bg-primary/5 border-primary/20">{item.industry}</Badge>
                   )}
-                  {item.campaign_type && (
-                    <Badge variant="outline" className="text-[9px]">
-                      {item.campaign_type === "flow" ? "Flow" : "Campaign"}
+                  {item.campaign_type === "flow" && item.message_type && (
+                    <Badge variant="outline" className="text-[9px] bg-accent/50 border-accent">
+                      Flow: {item.message_type}
                     </Badge>
                   )}
-                  {item.message_type && (
+                  {item.campaign_type === "campaign" && item.message_type && !["Other"].includes(item.message_type) && (
                     <Badge variant="outline" className="text-[9px]">{item.message_type}</Badge>
                   )}
                   {!item.ai_metadata && !item.industry && (
                     <span className="text-[9px] text-muted-foreground italic flex items-center gap-0.5">
-                      <Sparkles className="w-2.5 h-2.5" /> Not analyzed
+                      <Sparkles className="w-2.5 h-2.5" /> Analyzing...
                     </span>
                   )}
                 </div>
