@@ -1019,6 +1019,30 @@ export default function CampaignEditor() {
                 <div>
                   <h2 className="text-sm font-medium mb-4">Campaign Brief</h2>
                 </div>
+                {/* Import from ClickUp */}
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Link2 className="w-3 h-3" /> Import from ClickUp (optional)
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={clickupUrl}
+                      onChange={(e) => setClickupUrl(e.target.value)}
+                      placeholder="Paste ClickUp task URL..."
+                      className="bg-card border-border text-sm"
+                      onKeyDown={(e) => e.key === "Enter" && importFromClickUp()}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={importFromClickUp}
+                      disabled={!clickupUrl.trim() || clickupLoading}
+                      className="shrink-0"
+                    >
+                      {clickupLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Import"}
+                    </Button>
+                  </div>
+                </div>
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">What's this campaign about?</label>
                   <Textarea
