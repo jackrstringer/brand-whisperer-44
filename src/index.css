@@ -64,3 +64,13 @@
     display: none;
   }
 }
+
+@keyframes ideate-pill-pulse {
+  0%, 100% { border-color: rgba(200, 241, 53, 0.2); box-shadow: 0 0 8px rgba(200, 241, 53, 0.05); }
+  50% { border-color: rgba(200, 241, 53, 0.4); box-shadow: 0 0 20px rgba(200, 241, 53, 0.1); }
+}
+
+@keyframes ideate-pill-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
