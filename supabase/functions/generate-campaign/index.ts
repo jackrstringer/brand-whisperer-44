@@ -432,30 +432,26 @@ You MUST feature these products prominently in the campaign. Use at least one im
     // Build reference campaign block if provided
     let referenceBlock = "";
     const referenceImageBlocks: any[] = [];
-    // Determine reference mode — supports new "mode" field or legacy numeric "strength"
-    let referenceMode: "loose" | "hard" | "dupe" | null = null;
+    // Determine reference mode — supports "mode" field or legacy numeric "strength"
+    let referenceMode: "reference" | "dupe" | null = null;
     if (reference && reference.image_urls && reference.image_urls.length > 0) {
-      // Resolve mode
-      if (reference.mode === "loose" || reference.mode === "hard" || reference.mode === "dupe") {
+      if (reference.mode === "reference" || reference.mode === "dupe") {
         referenceMode = reference.mode;
       } else {
         const s = reference.strength || 5;
-        referenceMode = s <= 3 ? "loose" : s <= 7 ? "hard" : "dupe";
+        referenceMode = s >= 9 ? "dupe" : "reference";
       }
 
       let referencePrompt = "";
-      if (referenceMode === "loose") {
-        referencePrompt = `LOOSE INSPIRATION (light influence):
-The following campaign is provided for subtle inspiration only.
-Do not replicate its structure or design. Let it gently influence
-the energy, pacing, and tonal feel of the writing and layout choices.`;
-      } else if (referenceMode === "hard") {
-        referencePrompt = `HARD INSPIRATION (strong influence):
-Closely follow the layout approach and section sequence of the
-following campaign. Replicate its visual hierarchy, section types,
-sizing proportions, and content pacing. Apply the brand's colors,
-fonts, and copy style throughout — but the skeleton should clearly
-echo this reference.`;
+      if (referenceMode === "reference") {
+        referencePrompt = `REFERENCE MODE (strong structural influence):
+Closely follow the layout, section sequence, sizing proportions,
+and visual hierarchy of the following campaign.
+Replicate its structure: same types of sections, same image placements,
+same spacing patterns, same element sizing ratios.
+IMPORTANT: Do NOT copy the reference's colors or typography.
+Apply the brand's own color palette, fonts, and design tokens throughout.
+The structure and proportions come from the reference — the skin comes from the brand.`;
       } else {
         referencePrompt = `DUPE — EXACT LAYOUT CLONE:
 You MUST replicate the EXACT layout of the following campaign.
@@ -465,6 +461,8 @@ Count every section in the reference and reproduce each one 1:1.
 If the reference has a full-bleed hero, you have a full-bleed hero.
 If it has a 2-column product grid, you have a 2-column product grid.
 If it has a quote pullout, you have a quote pullout — in the same position.
+IMPORTANT: Do NOT copy the reference's colors or typography.
+Apply the brand's own color palette, fonts, and design tokens throughout.
 The ONLY things that change are: brand colors, brand fonts, brand imagery,
 and the actual copy (which should match the brief). Everything else —
 layout structure, section order, element sizing, padding patterns,

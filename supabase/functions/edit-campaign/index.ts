@@ -196,20 +196,16 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
 
     // Reference campaign images if provided
     if (reference && reference.image_urls && reference.image_urls.length > 0) {
-      // Resolve mode
-      let refMode: "loose" | "hard" | "dupe" = "hard";
-      if (reference.mode === "loose" || reference.mode === "hard" || reference.mode === "dupe") {
+      let refMode: "reference" | "dupe" = "reference";
+      if (reference.mode === "reference" || reference.mode === "dupe") {
         refMode = reference.mode;
       } else {
         const s = reference.strength || 5;
-        refMode = s <= 3 ? "loose" : s <= 7 ? "hard" : "dupe";
+        refMode = s >= 9 ? "dupe" : "reference";
       }
 
-      let refLabel = "LOOSE INSPIRATION";
-      if (refMode === "hard") refLabel = "HARD INSPIRATION";
-      else if (refMode === "dupe") refLabel = "DUPE — EXACT LAYOUT CLONE";
-
-      userContent.push({ type: "text", text: `[${refLabel}] The following campaign is provided as a reference. ${refMode === "dupe" ? "Replicate its exact layout structure section-for-section." : refMode === "hard" ? "Closely follow its layout and section flow." : "Use it for subtle tonal inspiration only."}` });
+      const refLabel = refMode === "dupe" ? "DUPE — EXACT LAYOUT CLONE" : "REFERENCE";
+      userContent.push({ type: "text", text: `[${refLabel}] The following campaign is provided as a reference. ${refMode === "dupe" ? "Replicate its exact layout structure section-for-section. Use the brand's own colors and fonts." : "Closely follow its layout, sizing and structure. Use the brand's own colors and fonts."}` });
 
       for (const url of reference.image_urls.slice(0, 5)) {
         try {
