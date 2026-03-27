@@ -57,6 +57,7 @@ export default function CampaignEditor() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null); // temporary hover preview
   const [selectedReference, setSelectedReference] = useState<SelectedReference | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -708,6 +709,28 @@ export default function CampaignEditor() {
     toast.success(`Applied: ${variant.label}`);
   };
 
+  const handlePreviewVariant = useCallback((variant: VariantOption, index: number, messageId: string) => {
+    if (!campaign?.html) return;
+    const html = campaign.html;
+    const msg = messages.find(m => m.id === messageId);
+    const prevAppliedIndex = msg?.variant_data?.applied_index;
+    const appliedTexts = msg?.variant_data?.applied_texts || {};
+    let findTarget = variant.find;
+
+    if (prevAppliedIndex !== null && prevAppliedIndex !== undefined && prevAppliedIndex !== index) {
+      const prevVariant = msg?.variant_data?.variants[prevAppliedIndex];
+      const liveText = appliedTexts[prevAppliedIndex] || prevVariant?.replace;
+      if (liveText) findTarget = liveText;
+    }
+
+    if (!html.includes(findTarget)) return;
+    setPreviewHtml(html.replace(findTarget, variant.replace));
+  }, [campaign?.html, messages]);
+
+  const handlePreviewClear = useCallback(() => {
+    setPreviewHtml(null);
+  }, []);
+
 
   const allVersions: string[] = (() => {
     const history = Array.isArray(campaign?.html_history) ? campaign.html_history as string[] : [];
@@ -794,7 +817,7 @@ export default function CampaignEditor() {
   const renderedHeight = Math.round(iframeContentHeight * zoomScale);
 
   // When viewing a past version, show that version; otherwise show current
-  const displayHtml = activeVersionIndex !== null ? allVersions[activeVersionIndex] : campaign?.html;
+  const displayHtml = previewHtml || (activeVersionIndex !== null ? allVersions[activeVersionIndex] : campaign?.html);
   const htmlForPreview = displayHtml
     ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls)
     : "";
@@ -1235,6 +1258,8 @@ export default function CampaignEditor() {
                                 <VariantCards
                                   variantData={msg.variant_data}
                                   onApply={(variant, idx) => handleApplyVariant(variant, idx, msg.id)}
+                                  onPreview={(variant, idx) => handlePreviewVariant(variant, idx, msg.id)}
+                                  onPreviewClear={handlePreviewClear}
                                   disabled={agentState !== "idle"}
                                 />
                               </div>
