@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Slider } from "@/components/ui/slider";
@@ -55,6 +55,30 @@ function CampaignIframeThumbnail({ html, scale, width, title }: { html: string; 
         tabIndex={-1}
         onLoad={onLoad}
       />
+    </div>
+  );
+}
+
+const COL_WIDTH = 260; // target column width in px
+
+function MasonryGrid({ children }: { children: React.ReactNode }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [cols, setCols] = useState(3);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 800;
+      setCols(Math.max(1, Math.floor(w / COL_WIDTH)));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={containerRef} className="p-2" style={{ columnCount: cols, columnGap: 8 }}>
+      {children}
     </div>
   );
 }
@@ -269,9 +293,9 @@ export default function ReferencePanel({
         </div>
       )}
 
-      {/* Grid */}
+      {/* Grid — responsive masonry using container width */}
       <ScrollArea className="flex-1">
-        <div className="p-4" style={{ columnCount: 3, columnGap: 12 }}>
+        <MasonryGrid>
           {gridData.flatMap(({ items, type }) =>
             items.map((item: any) => {
               const id = item.id;
@@ -288,7 +312,7 @@ export default function ReferencePanel({
               return (
                 <div
                   key={id}
-                  className={`relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all mb-3 ${
+                  className={`relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all mb-2 ${
                     isSelected ? "border-primary ring-2 ring-primary/20" : "border-transparent hover:border-border"
                   }`}
                   style={{ breakInside: "avoid" }}
@@ -337,7 +361,7 @@ export default function ReferencePanel({
               {tab === "library" ? "No reference campaigns yet" : tab === "mine" ? "No completed campaigns yet" : "No saved references"}
             </p>
           )}
-        </div>
+        </MasonryGrid>
       </ScrollArea>
 
       {/* Sticky strength slider when reference selected */}
