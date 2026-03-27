@@ -173,6 +173,10 @@ export default function BrandSettings() {
           {brandId && <KlaviyoSetup brandId={brandId} />}
         </TabsContent>
 
+        <TabsContent value="clickup">
+          {brandId && <ClickUpSetup brandId={brandId} />}
+        </TabsContent>
+
         <TabsContent value="analysis">
           {brandId && <ReanalyzeBrand brandId={brandId} brandName={name} industry={industry} />}
         </TabsContent>
