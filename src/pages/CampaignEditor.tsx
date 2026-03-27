@@ -442,6 +442,9 @@ export default function CampaignEditor() {
     setChatAttachments([]);
     setChatAttachmentPreviews(prev => { prev.forEach(u => URL.revokeObjectURL(u)); return []; });
     setSending(true);
+    setAgentState("thinking");
+    setStreamingText("");
+    streamingTextRef.current = "";
 
     const displayContent = attachedFiles.length > 0
       ? `${userMsg}${userMsg ? "\n" : ""}[${attachedFiles.length} image${attachedFiles.length > 1 ? "s" : ""} attached]`
@@ -451,6 +454,7 @@ export default function CampaignEditor() {
       ...prev,
       { id: crypto.randomUUID(), campaign_id: campaignId, role: "user", content: displayContent, created_at: new Date().toISOString() },
     ]);
+
     try {
       // Upload attached images first
       let attachedImageUrls: string[] = [];
@@ -458,38 +462,120 @@ export default function CampaignEditor() {
         attachedImageUrls = await uploadChatImages(attachedFiles, brandId, campaignId);
       }
 
-      const { data, error } = await supabase.functions.invoke("edit-campaign", {
-        body: {
-          campaignId,
-          message: userMsg,
-          currentHtml: campaign.html,
-          ...(attachedImageUrls.length > 0 ? { attachedImageUrls } : {}),
-          ...(selectedReference ? {
-            reference: {
-              type: selectedReference.type,
-              id: selectedReference.id,
-              image_urls: selectedReference.image_urls,
-              strength: selectedReference.strength,
-              mode: selectedReference.mode,
-            },
-          } : {}),
-        },
-      });
-      if (error) throw new Error(error.message || "Edit failed");
-      if (data?.error) throw new Error(data.error);
-      setCampaign((c) => c ? { ...c, html: data.html } : c);
-      setCanUndo(true);
-      setMessages((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), campaign_id: campaignId, role: "assistant", content: "Changes applied.", created_at: new Date().toISOString() },
-      ]);
+      const session = (await supabase.auth.getSession()).data.session;
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edit-campaign`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            campaignId,
+            message: userMsg,
+            currentHtml: campaign.html,
+            ...(attachedImageUrls.length > 0 ? { attachedImageUrls } : {}),
+            ...(selectedReference ? {
+              reference: {
+                type: selectedReference.type,
+                id: selectedReference.id,
+                image_urls: selectedReference.image_urls,
+                strength: selectedReference.strength,
+                mode: selectedReference.mode,
+              },
+            } : {}),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errBody = await response.text();
+        throw new Error(errBody || `Edit failed: ${response.status}`);
+      }
+
+      // Check if response is SSE stream or JSON fallback
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("text/event-stream") && response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          // Parse complete SSE events (separated by double newline)
+          const blocks = buffer.split("\n\n");
+          buffer = blocks.pop() || "";
+
+          for (const block of blocks) {
+            if (!block.trim()) continue;
+            const eventLine = block.split("\n").find(l => l.startsWith("event:"));
+            const dataLine = block.split("\n").find(l => l.startsWith("data:"));
+            if (!eventLine || !dataLine) continue;
+
+            const eventType = eventLine.replace("event:", "").trim();
+            let data: any;
+            try {
+              data = JSON.parse(dataLine.replace("data:", "").trim());
+            } catch { continue; }
+
+            if (eventType === "text_delta") {
+              setAgentState("thinking");
+              const newText = streamingTextRef.current + data.content;
+              streamingTextRef.current = newText;
+              setStreamingText(newText);
+            }
+
+            if (eventType === "html_patch") {
+              setAgentState("editing");
+              setCampaign(c => c ? { ...c, html: data.html } : c);
+              setCanUndo(true);
+            }
+
+            if (eventType === "done") {
+              setAgentState("idle");
+              const finalText = streamingTextRef.current || "Changes applied.";
+              setMessages(prev => [
+                ...prev,
+                { id: crypto.randomUUID(), campaign_id: campaignId, role: "assistant", content: finalText, created_at: new Date().toISOString() },
+              ]);
+              setStreamingText("");
+              streamingTextRef.current = "";
+            }
+
+            if (eventType === "error") {
+              setAgentState("idle");
+              setMessages(prev => [
+                ...prev,
+                { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Error: ${data.message}`, created_at: new Date().toISOString() },
+              ]);
+            }
+          }
+        }
+      } else {
+        // JSON fallback (shouldn't happen but handle gracefully)
+        const data = await response.json();
+        if (data?.error) throw new Error(data.error);
+        setCampaign(c => c ? { ...c, html: data.html } : c);
+        setCanUndo(true);
+        setMessages(prev => [
+          ...prev,
+          { id: crypto.randomUUID(), campaign_id: campaignId, role: "assistant", content: "Changes applied.", created_at: new Date().toISOString() },
+        ]);
+      }
     } catch (err: any) {
-      setMessages((prev) => [
+      setAgentState("idle");
+      setMessages(prev => [
         ...prev,
         { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Change failed: ${err.message}`, created_at: new Date().toISOString() },
       ]);
     } finally {
       setSending(false);
+      setAgentState("idle");
     }
   };
 
