@@ -1050,30 +1050,6 @@ export default function CampaignEditor() {
       </div>
     </div>
 
-    {/* Reference Campaign Dialog */}
-    <Dialog open={showReferenceDialog} onOpenChange={setShowReferenceDialog}>
-      <DialogContent className="max-w-[520px] max-h-[90vh] overflow-hidden p-0">
-        <DialogHeader className="px-6 pt-6 pb-2">
-          <DialogTitle className="text-sm font-medium">
-            {selectedReference?.title || "Reference Campaign"}
-            <Badge className="ml-2 text-[9px] bg-primary/20 text-primary">
-              {selectedReference?.mode === "dupe" ? "Dupe" : "Reference"}
-            </Badge>
-          </DialogTitle>
-        </DialogHeader>
-        <div className="overflow-y-auto px-6 pb-6" style={{ maxHeight: 'calc(90vh - 80px)' }}>
-          {selectedReference?.image_urls?.length ? (
-            selectedReference.image_urls.map((url, i) => (
-              <img key={i} src={url} alt="" className="w-full h-auto block" loading="lazy" />
-            ))
-          ) : selectedReference?.thumbnail_url ? (
-            <img src={selectedReference.thumbnail_url} alt="" className="w-full h-auto block" />
-          ) : (
-            <p className="text-sm text-muted-foreground text-center py-12">No reference preview available</p>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
   </>
   );
 }
