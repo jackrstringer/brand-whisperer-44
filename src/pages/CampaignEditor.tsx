@@ -1097,14 +1097,18 @@ export default function CampaignEditor() {
 
       // Ideate element from floating toolbar — auto-send
       if (e.data?.type === 'ideateElement') {
-        const { text, tagName } = e.data;
+        const { text, tagName, innerHTML, outerHTML, elementStyle } = e.data;
+        // Build a context-rich prompt that includes styling info
+        const hasInlineStyles = innerHTML && innerHTML !== text && /<[^>]+style/i.test(innerHTML);
+        const styleContext = hasInlineStyles
+          ? `\n\nIMPORTANT: The original element contains inline styling (e.g. highlighted text, colored spans, background colors). Here is the original HTML:\n\`\`\`\n${outerHTML}\n\`\`\`\nPreserve any inline styling patterns (like background-color highlights, colored text spans, etc.) in your alternatives. Each variant's "replace" value must include the same HTML/inline-style structure.`
+          : '';
         let prompt = '';
-        if (/^H[1-6]$/.test(tagName)) prompt = `Give me 5 alternative headline options for: "${text}"`;
-        else if (tagName === 'A' || tagName === 'BUTTON') prompt = `Give me 5 alternative CTA button text options for: "${text}"`;
-        else prompt = `Give me 5 alternative copy options for this text: "${text}"`;
+        if (/^H[1-6]$/.test(tagName)) prompt = `Give me 5 alternative headline options for: "${text}"${styleContext}`;
+        else if (tagName === 'A' || tagName === 'BUTTON') prompt = `Give me 5 alternative CTA button text options for: "${text}"${styleContext}`;
+        else prompt = `Give me 5 alternative copy options for this text: "${text}"${styleContext}`;
         // Auto-send by setting input then triggering send
         setChatInput(prompt);
-        // Use a microtask to let state update, then trigger send
         setTimeout(() => {
           const sendBtn = document.querySelector('[data-send-btn]') as HTMLButtonElement;
           if (sendBtn) sendBtn.click();
