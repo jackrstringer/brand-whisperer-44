@@ -641,7 +641,7 @@ export default function CampaignEditor() {
               <div className="max-w-[600px] mx-auto space-y-4 p-8 mt-12">
                 <div className="text-center mb-6">
                   <p className="text-lg font-medium text-foreground tabular-nums">{formatTimer(genElapsed)}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Generating campaign...</p>
+                  <p className="text-xs text-muted-foreground mt-1">{visualQaRunning ? "Running visual QA..." : "Generating campaign..."}</p>
                 </div>
                 <Skeleton className="h-8 w-3/4" />
                 <Skeleton className="h-48 w-full" />
