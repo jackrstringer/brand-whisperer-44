@@ -1,49 +1,85 @@
 
 
-## Plan: Clean Ideate UX with Fake Placeholder Message
+## Plan: Robust Cross-Set Variant Apply & Preview
 
-### Problem
-When clicking "Ideate," the full verbose prompt (with raw HTML/styles) is displayed in chat as the user message. It's ugly and exposes implementation details.
+### Root Cause
 
-### Solution
-Instead of setting `chatInput` and clicking the send button (which shows the prompt), call `sendMessage` directly with a hidden prompt, while displaying a clean fake user message in chat.
+Both `handleApplyVariant` and `handlePreviewVariant` have the same flaw: they only track what changed **within a single variant set** (via `applied_index` / `applied_texts`). When you apply a variant from Set A, then try to preview or apply from Set B (which targets the same original text), Set B's `find` target is stale — the original text no longer exists in the HTML.
 
-### Changes (single file: `src/pages/CampaignEditor.tsx`)
+### Solution: "Scan for live text" strategy
 
-1. **Add an internal "ideate" flag** — a ref (`ideatePayloadRef`) that holds the real prompt + a short display label when an ideate request is in flight.
+Instead of only checking within a single message's `applied_texts`, build a helper that scans the current HTML to determine what text is actually live for a given variant set. The search order:
 
-2. **Rewrite the `ideateElement` handler** — instead of setting `chatInput` and simulating a button click:
-   - Store the full verbose prompt in `ideatePayloadRef`
-   - Call `sendMessage()` directly
+1. Check if the original `find` text exists in the HTML → use it
+2. If not, check if any variant's `replace` from **this same set** exists in the HTML → use the first match
+3. If not, check `applied_texts` values from this set
+4. If nothing matches → the text was manually edited away; disable the set gracefully
 
-3. **Modify `sendMessage`** — at the top, check `ideatePayloadRef.current`:
-   - If set, use its `displayText` (e.g. "✨ Ideate: headline alternatives") as the visible user message
-   - Use its `realPrompt` as the actual prompt sent to the edge function
-   - Clear the ref after consuming
-   - This keeps the ugly prompt hidden from the chat UI
+This single helper (`findLiveTarget`) is used by both `handleApplyVariant` and `handlePreviewVariant`, eliminating duplication and fixing both bugs at once.
 
-4. **Show a polished thinking state** — the existing `agentState === "thinking"` indicator already renders. Enhance it slightly:
-   - Show a branded "Generating ideas..." label with a sparkle icon and animated dots
-   - The natural 3-5s AI response time provides the built-in delay before variants stream in
+### Changes
 
-### What the user sees
-- Click Ideate on a heading → chat shows: `"✨ Ideate headline"` (short, clean)
-- Below it: animated thinking indicator with "Generating ideas..."
-- Then variants stream in as cards
+**File: `src/pages/CampaignEditor.tsx`**
+
+1. **Add `findLiveTarget` helper** — given a variant message and the current HTML, returns the string currently in the HTML that this set can replace, or `null` if nothing matches.
+
+```text
+findLiveTarget(msg, html):
+  if html.includes(msg.variant_data.variants[0].find) → return find
+  for each variant in set: if html.includes(variant.replace) → return variant.replace
+  for each appliedText: if html.includes(text) → return text
+  return null
+```
+
+2. **Rewrite `handleApplyVariant`** — replace the existing find-target logic with a call to `findLiveTarget`. After applying, update `applied_texts` on the current message AND also update any other variant messages that share the same original `find` text (cross-set tracking).
+
+3. **Rewrite `handlePreviewVariant`** — same `findLiveTarget` call, silently skip if no match (no error toast needed for preview).
+
+4. **Cross-set sync on apply** — after applying a variant, iterate all variant messages. For any message whose original `find` overlaps with the text that was just replaced, update that message's `applied_texts` to record the new state. This ensures future apply/preview from those sets will find the correct text.
+
+### What this fixes
+- Applying variant from Set B after Set A applied → works (finds the live text via scan)
+- Preview on hover for old sets → works (same scan logic)
+- Switching between variants within a set → still works (existing logic preserved)
+- Text manually edited away → graceful "not found" instead of silent failure
 
 ### Technical detail
+
 ```typescript
-// New ref
-const ideatePayloadRef = useRef<{ realPrompt: string; displayText: string } | null>(null);
+function findLiveTarget(variantData: VariantData, html: string): string | null {
+  const originalFind = variantData.variants[0]?.find;
+  if (!originalFind) return null;
+  
+  // 1. Original text still present
+  if (html.includes(originalFind)) return originalFind;
+  
+  // 2. Any variant's replace text present (someone applied from this set)
+  const appliedTexts = variantData.applied_texts || {};
+  const appliedIdx = variantData.applied_index;
+  if (appliedIdx !== null && appliedIdx !== undefined) {
+    const liveText = appliedTexts[appliedIdx] 
+      || variantData.variants[appliedIdx]?.replace;
+    if (liveText && html.includes(liveText)) return liveText;
+  }
+  
+  // 3. Check all variant replaces (cross-set apply may have used one)
+  for (const v of variantData.variants) {
+    if (html.includes(v.replace)) return v.replace;
+  }
+  
+  // 4. Check all tracked applied texts
+  for (const text of Object.values(appliedTexts)) {
+    if (typeof text === 'string' && html.includes(text)) return text;
+  }
+  
+  return null;
+}
+```
 
-// In ideateElement handler (replaces setChatInput + setTimeout click):
-ideatePayloadRef.current = { realPrompt: prompt, displayText };
-sendMessage();
-
-// In sendMessage, at the top:
-const ideateOverride = ideatePayloadRef.current;
-ideatePayloadRef.current = null;
-const userMsg = ideateOverride ? ideateOverride.realPrompt : chatInput.trim();
-const displayContent = ideateOverride ? ideateOverride.displayText : /* existing logic */;
+Both handlers become simple:
+```typescript
+const findTarget = findLiveTarget(msg.variant_data, html);
+if (!findTarget) { /* toast error or silently skip */ return; }
+// proceed with replace using findTarget
 ```
 
