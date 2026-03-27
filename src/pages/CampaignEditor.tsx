@@ -10,7 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, Send, Undo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star } from "lucide-react";
+import { ArrowLeft, Download, Send, Undo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -88,6 +89,7 @@ export default function CampaignEditor() {
   const [subjectLine, setSubjectLine] = useState("");
   const [previewText, setPreviewText] = useState("");
   const [starredCampaign, setStarredCampaign] = useState(false);
+  const [showReferenceDialog, setShowReferenceDialog] = useState(false);
 
   // Restore reference panel state from localStorage
   useEffect(() => {
@@ -533,6 +535,7 @@ export default function CampaignEditor() {
     : "";
 
   return (
+    <>
     <div className="h-screen bg-background flex flex-col overflow-hidden">
       {/* Top Bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
@@ -576,6 +579,16 @@ export default function CampaignEditor() {
               title={starredCampaign ? "Remove from favorites" : "Save to favorites"}
             >
               <Star className={`w-4 h-4 ${starredCampaign ? "fill-amber-400 text-amber-400" : ""}`} />
+            </button>
+          )}
+          {/* View Reference button — only post-generation when a reference was used */}
+          {campaign?.html && selectedReference && (
+            <button
+              onClick={() => setShowReferenceDialog(true)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title="View reference campaign"
+            >
+              <Eye className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -977,5 +990,31 @@ export default function CampaignEditor() {
         </div>
       </div>
     </div>
+
+    {/* Reference Campaign Dialog */}
+    <Dialog open={showReferenceDialog} onOpenChange={setShowReferenceDialog}>
+      <DialogContent className="max-w-[520px] max-h-[90vh] overflow-hidden p-0">
+        <DialogHeader className="px-6 pt-6 pb-2">
+          <DialogTitle className="text-sm font-medium">
+            {selectedReference?.title || "Reference Campaign"}
+            <Badge className="ml-2 text-[9px] bg-primary/20 text-primary">
+              {selectedReference?.mode === "dupe" ? "Dupe" : "Reference"}
+            </Badge>
+          </DialogTitle>
+        </DialogHeader>
+        <div className="overflow-y-auto px-6 pb-6" style={{ maxHeight: 'calc(90vh - 80px)' }}>
+          {selectedReference?.image_urls?.length ? (
+            selectedReference.image_urls.map((url, i) => (
+              <img key={i} src={url} alt="" className="w-full h-auto block" loading="lazy" />
+            ))
+          ) : selectedReference?.thumbnail_url ? (
+            <img src={selectedReference.thumbnail_url} alt="" className="w-full h-auto block" />
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-12">No reference preview available</p>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  </>
   );
 }
