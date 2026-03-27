@@ -2801,6 +2801,35 @@ export default function CampaignEditor() {
                   </div>
                 )}
 
+                {/* Selected element context chip */}
+                {selectedElementContext && (
+                  <div className="px-4 pt-2 flex items-center gap-2">
+                    <div
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(200,241,53,0.12), rgba(99,102,241,0.06))',
+                        border: '1px solid rgba(200,241,53,0.2)',
+                        color: 'rgba(255,255,255,0.7)',
+                      }}
+                    >
+                      <span style={{ color: 'rgba(200,241,53,0.8)' }}>
+                        {selectedElementContext.isRegion ? '⬚' : '◎'}
+                      </span>
+                      <span className="truncate max-w-[200px]">
+                        {selectedElementContext.isRegion
+                          ? `Region: ${selectedElementContext.elements?.length || 0} elements`
+                          : `${selectedElementContext.tagName}: ${selectedElementContext.text.slice(0, 40)}${selectedElementContext.text.length > 40 ? '…' : ''}`
+                        }
+                      </span>
+                      <button
+                        onClick={() => setSelectedElementContext(null)}
+                        className="ml-0.5 hover:text-foreground transition-colors"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div
                   ref={chatDropRef}
                   className="p-4 border-t border-border"
