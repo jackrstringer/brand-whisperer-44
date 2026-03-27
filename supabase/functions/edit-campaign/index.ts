@@ -553,10 +553,12 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
             safeEmit("no_change", { message: reason });
           }
 
-          await supabase.from("chat_messages").insert([
-            { campaign_id: campaignId, role: "user", content: message },
-            { campaign_id: campaignId, role: "assistant", content: responseText },
-          ]);
+          if (!silent) {
+            await supabase.from("chat_messages").insert([
+              { campaign_id: campaignId, role: "user", content: message },
+              { campaign_id: campaignId, role: "assistant", content: responseText },
+            ]);
+          }
 
           const totalMs = Date.now() - startMs;
           console.log(`[edit-campaign] TOTAL: ${totalMs}ms | Prep: ${prepMs}ms | AI: ${aiMs}ms | Patches: ${patchCount} | HtmlChanged: ${htmlChanged}`);
