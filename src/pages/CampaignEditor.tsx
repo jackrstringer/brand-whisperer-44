@@ -701,6 +701,7 @@ export default function CampaignEditor() {
         if (data?.error) throw new Error(data.error);
         setCampaign(c => c ? { ...c, html: data.html } : c);
         setCanUndo(true);
+        setRedoStack([]);
         setMessages(prev => [
           ...prev,
           { id: crypto.randomUUID(), campaign_id: campaignId, role: "assistant", content: "Changes applied.", created_at: new Date().toISOString() },
