@@ -535,6 +535,7 @@ export default function CampaignEditor() {
     : "";
 
   return (
+    <>
     <div className="h-screen bg-background flex flex-col overflow-hidden">
       {/* Top Bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
