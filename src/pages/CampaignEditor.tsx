@@ -580,6 +580,16 @@ export default function CampaignEditor() {
               <Star className={`w-4 h-4 ${starredCampaign ? "fill-amber-400 text-amber-400" : ""}`} />
             </button>
           )}
+          {/* View Reference button — only post-generation when a reference was used */}
+          {campaign?.html && selectedReference && (
+            <button
+              onClick={() => setShowReferenceDialog(true)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title="View reference campaign"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-3 px-3 py-1.5 rounded border border-border bg-card text-xs">
