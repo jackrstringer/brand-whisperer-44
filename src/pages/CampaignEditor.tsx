@@ -1014,10 +1014,67 @@ export default function CampaignEditor() {
     ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls)
     : "";
 
+  // Debounced inline-edit save
+  const inlineEditTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Listen for postMessage from iframe for inline text edits
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type !== "textEdited" || !e.data?.html) return;
+      if (!campaignId || !campaign) return;
+      const newHtml = e.data.html as string;
+      const currentHtml = campaign.html || "";
+      if (newHtml === currentHtml) return;
+
+      // Push to history for undo
+      const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
+      history.push(currentHtml);
+      setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
+      setCanUndo(true);
+      setRedoStack([]); // clear redo on new edit
+
+      // Debounced DB save
+      if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
+      inlineEditTimerRef.current = setTimeout(async () => {
+        await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
+      }, 500);
+    };
+    window.addEventListener("message", handler);
+    return () => {
+      window.removeEventListener("message", handler);
+      if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
+    };
+  }, [campaignId, campaign]);
+
   const srcdocHtml = htmlForPreview
     ? htmlForPreview.replace(
         /(<head[^>]*>)/i,
-        '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}</style>'
+        `$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}[contenteditable]:hover{outline:1px dashed rgba(128,128,128,0.4);outline-offset:2px;cursor:text;}[contenteditable]:focus{outline:2px solid rgba(99,102,241,0.5);outline-offset:2px;background:rgba(99,102,241,0.04);}</style>`
+      ).replace(
+        /<\/body>/i,
+        `<script>
+(function(){
+  var els = document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,td,th,li,button,label');
+  els.forEach(function(el){
+    if(el.querySelector('img') || el.querySelector('table')) return;
+    if(el.children.length > 0 && el.textContent.trim() === '') return;
+    el.contentEditable = 'true';
+    el.style.cursor = 'text';
+  });
+  var timer = null;
+  document.addEventListener('input', function(){
+    clearTimeout(timer);
+    timer = setTimeout(function(){
+      var clone = document.documentElement.cloneNode(true);
+      var scripts = clone.querySelectorAll('script');
+      scripts.forEach(function(s){ s.remove(); });
+      var editables = clone.querySelectorAll('[contenteditable]');
+      editables.forEach(function(el){ el.removeAttribute('contenteditable'); el.style.removeProperty('cursor'); });
+      window.parent.postMessage({ type: 'textEdited', html: clone.outerHTML }, '*');
+    }, 300);
+  });
+})();
+</script></body>`
       )
     : "";
 
