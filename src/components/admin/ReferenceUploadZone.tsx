@@ -152,6 +152,36 @@ export default function ReferenceUploadZone({ onUploaded, campaignCount }: Refer
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
+      // Post-process: auto-crop the captured image if it's an image URL
+      if (data?.id && data?.metadata?.image_urls?.length) {
+        try {
+          const imgUrl = data.metadata.image_urls[0];
+          const imgResp = await fetch(imgUrl);
+          if (imgResp.ok) {
+            const blob = await imgResp.blob();
+            const cropResult = await autoCropPadding(blob);
+            if (cropResult.cropped) {
+              // Re-upload the cropped version
+              const path = `${data.id}/${crypto.randomUUID()}.png`;
+              const { error: upErr } = await supabase.storage
+                .from("reference-campaigns")
+                .upload(path, cropResult.blob, { contentType: "image/png" });
+              if (!upErr) {
+                const { data: urlData } = supabase.storage
+                  .from("reference-campaigns")
+                  .getPublicUrl(path);
+                await supabase.from("reference_campaigns")
+                  .update({ thumbnail_url: urlData.publicUrl, image_urls: [urlData.publicUrl] })
+                  .eq("id", data.id);
+                toast.info(`Auto-cropped ${cropResult.left + cropResult.right}px horizontal + ${cropResult.top + cropResult.bottom}px vertical padding`);
+              }
+            }
+          }
+        } catch (cropErr) {
+          console.error("Post-capture auto-crop failed:", cropErr);
+        }
+      }
+
       toast.success("Campaign captured from URL");
       onUploaded();
     } catch (err: any) {
