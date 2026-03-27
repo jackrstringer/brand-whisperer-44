@@ -1323,6 +1323,11 @@ export default function CampaignEditor() {
           <Badge className={`text-[10px] ${campaign?.status === "ready" ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"}`}>
             {campaign?.status}
           </Badge>
+          {isSyncing && (
+            <span className="flex items-center gap-1 text-[10px] text-muted-foreground animate-pulse">
+              <Loader2 className="w-3 h-3 animate-spin" /> Syncing…
+            </span>
+          )}
           {/* Star button — only post-generation */}
           {campaign?.html && user && (
             <button
