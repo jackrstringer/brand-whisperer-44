@@ -1654,7 +1654,11 @@ export default function CampaignEditor() {
     ideateBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
     ideateBtn.addEventListener('click', function(e){
       e.stopPropagation();
-      window.parent.postMessage({ type: 'ideateElement', text: el.textContent.trim(), tagName: el.tagName }, '*');
+      // Capture innerHTML to preserve inline styling (highlights, colors, etc.)
+      var innerHTML = el.innerHTML;
+      var outerHTML = el.outerHTML;
+      var styles = el.getAttribute('style') || '';
+      window.parent.postMessage({ type: 'ideateElement', text: el.textContent.trim(), tagName: el.tagName, innerHTML: innerHTML, outerHTML: outerHTML, elementStyle: styles }, '*');
     });
     bar.appendChild(ideateBtn);
 
