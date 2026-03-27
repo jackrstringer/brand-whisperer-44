@@ -1,10 +1,12 @@
 /**
  * Auto-crop utility for reference campaign images.
  *
- * Uses AI vision to detect padding/margins around email campaign images,
- * then crops them client-side. Falls back to a simple pixel-scan if the
- * AI call fails.
+ * Email campaign screenshots from major ESPs consistently add ~5.9% padding
+ * on each side. We use AI vision to detect WHETHER padding exists (binary),
+ * then apply the standard 5.9% crop from left and right.
  */
+
+const STANDARD_PAD_PCT = 5.9; // 59px at 1000px width
 
 export interface CropResult {
   cropped: boolean;
@@ -17,9 +19,6 @@ export interface CropResult {
   originalHeight: number;
 }
 
-/**
- * Convert a Blob to a base64 data URL.
- */
 async function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -29,14 +28,10 @@ async function blobToDataUrl(blob: Blob): Promise<string> {
 }
 
 /**
- * Ask AI vision to detect padding bounds on a campaign image.
- * Returns { left, right, top, bottom } as percentages (0-100).
+ * Ask AI: does this campaign image have uniform padding on left and right?
+ * Returns true/false.
  */
-async function detectPaddingWithAI(
-  dataUrl: string,
-  width: number,
-  height: number,
-): Promise<{ left: number; right: number; top: number; bottom: number } | null> {
+async function hasPadding(dataUrl: string): Promise<boolean> {
   try {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -47,74 +42,57 @@ async function detectPaddingWithAI(
         "Content-Type": "application/json",
         Authorization: `Bearer ${supabaseKey}`,
       },
-      body: JSON.stringify({ imageDataUrl: dataUrl, width, height }),
+      body: JSON.stringify({ imageDataUrl: dataUrl }),
     });
 
-    if (!resp.ok) return null;
+    if (!resp.ok) return false;
     const data = await resp.json();
-    if (data?.left !== undefined) return data;
-    return null;
+    return data?.hasPadding === true;
   } catch {
-    return null;
+    return false;
   }
 }
 
 /**
- * Analyse an image blob and return a (possibly cropped) version.
- * Uses AI vision to detect padding, then crops in-browser.
+ * Analyse an image blob. If AI detects side padding, crop 5.9% from each side.
  */
 export async function autoCropPadding(file: Blob): Promise<CropResult> {
   const bitmap = await createImageBitmap(file);
   const { width, height } = bitmap;
 
-  // Convert to data URL for AI analysis
-  // For large images, resize for the AI call but crop the original
+  // Build a smaller version for AI analysis
   let analysisDataUrl: string;
-  if (width > 800) {
-    const scale = 800 / width;
-    const smallCanvas = document.createElement("canvas");
-    smallCanvas.width = 800;
-    smallCanvas.height = Math.round(height * scale);
-    const sCtx = smallCanvas.getContext("2d")!;
-    sCtx.drawImage(bitmap, 0, 0, smallCanvas.width, smallCanvas.height);
-    const smallBlob = await new Promise<Blob>((res) => smallCanvas.toBlob((b) => res(b!), "image/jpeg", 0.85));
+  if (width > 600) {
+    const scale = 600 / width;
+    const c = document.createElement("canvas");
+    c.width = 600;
+    c.height = Math.round(height * scale);
+    c.getContext("2d")!.drawImage(bitmap, 0, 0, c.width, c.height);
+    const smallBlob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), "image/jpeg", 0.8));
     analysisDataUrl = await blobToDataUrl(smallBlob);
   } else {
     analysisDataUrl = await blobToDataUrl(file);
   }
 
-  const bounds = await detectPaddingWithAI(analysisDataUrl, width, height);
+  const detected = await hasPadding(analysisDataUrl);
 
-  if (!bounds || (bounds.left === 0 && bounds.right === 0 && bounds.top === 0 && bounds.bottom === 0)) {
+  if (!detected) {
     bitmap.close();
     return { cropped: false, blob: file, left: 0, right: 0, top: 0, bottom: 0, originalWidth: width, originalHeight: height };
   }
 
-  // Convert percentage-based bounds to pixels
-  const leftPx = Math.round((bounds.left / 100) * width);
-  const rightPx = Math.round((bounds.right / 100) * width);
-  const topPx = Math.round((bounds.top / 100) * height);
-  const bottomPx = Math.round((bounds.bottom / 100) * height);
+  const padPx = Math.round(width * (STANDARD_PAD_PCT / 100));
+  const cropW = width - padPx * 2;
 
-  // Safety: don't crop more than 40% total width or 20% total height
-  if (leftPx + rightPx > width * 0.4 || topPx + bottomPx > height * 0.2) {
-    bitmap.close();
-    return { cropped: false, blob: file, left: 0, right: 0, top: 0, bottom: 0, originalWidth: width, originalHeight: height };
-  }
-
-  const cropW = width - leftPx - rightPx;
-  const cropH = height - topPx - bottomPx;
-
-  if (cropW < 100 || cropH < 100) {
+  if (cropW < 100) {
     bitmap.close();
     return { cropped: false, blob: file, left: 0, right: 0, top: 0, bottom: 0, originalWidth: width, originalHeight: height };
   }
 
   const cropCanvas = document.createElement("canvas");
   cropCanvas.width = cropW;
-  cropCanvas.height = cropH;
-  const cropCtx = cropCanvas.getContext("2d")!;
-  cropCtx.drawImage(bitmap, leftPx, topPx, cropW, cropH, 0, 0, cropW, cropH);
+  cropCanvas.height = height;
+  cropCanvas.getContext("2d")!.drawImage(bitmap, padPx, 0, cropW, height, 0, 0, cropW, height);
   bitmap.close();
 
   const croppedBlob = await new Promise<Blob>((resolve) => {
@@ -124,10 +102,10 @@ export async function autoCropPadding(file: Blob): Promise<CropResult> {
   return {
     cropped: true,
     blob: croppedBlob,
-    left: leftPx,
-    right: rightPx,
-    top: topPx,
-    bottom: bottomPx,
+    left: padPx,
+    right: padPx,
+    top: 0,
+    bottom: 0,
     originalWidth: width,
     originalHeight: height,
   };
