@@ -266,25 +266,41 @@ export default function ReferencePanel({
 
   const gridData = getGridItems();
 
+  // Zoom: 0 = very zoomed out (many cols, ~100px), 100 = zoomed in (1 col, full width ~800px)
+  // Map zoom 0-100 to column width 100-800
+  const columnWidth = 100 + (zoomLevel / 100) * 700;
+
   return (
     <div className="h-full flex flex-col">
-      {/* Header with tabs */}
-      <div className="shrink-0 border-b border-border px-4 pt-3 pb-0">
-        <h2 className="text-sm font-medium mb-2">Inspiration</h2>
-        <div className="flex gap-1">
-          {(["library", "mine", "saved"] as TabValue[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`text-[11px] px-3 py-1.5 rounded-t-md transition-colors ${
-                tab === t
-                  ? "bg-muted text-foreground font-medium"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {t === "library" ? "Library" : t === "mine" ? "My Campaigns" : "Saved"}
-            </button>
-          ))}
+      {/* Header with tabs + zoom */}
+      <div className="shrink-0 border-b border-border px-4 pt-2 pb-0">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="flex gap-1">
+            {(["library", "mine", "saved"] as TabValue[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`text-[11px] px-3 py-1.5 rounded-t-md transition-colors ${
+                  tab === t
+                    ? "bg-muted text-foreground font-medium"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t === "library" ? "Library" : t === "mine" ? "My Campaigns" : "Saved"}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-[10px] text-muted-foreground">Zoom</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={zoomLevel}
+              onChange={(e) => setZoomLevel(Number(e.target.value))}
+              className="w-20 h-1 accent-primary cursor-pointer"
+            />
+          </div>
         </div>
       </div>
 
