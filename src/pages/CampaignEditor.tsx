@@ -493,7 +493,7 @@ export default function CampaignEditor() {
     setStreamingText("");
     streamingTextRef.current = "";
     setActiveVersionIndex(null);
-    if (!ideateOverride) setIdeateIndicator("idle");
+    if (!ideateOverride) { setIdeateMessageId(null); ideateActiveRef.current = false; }
 
     // Don't show a user message bubble for ideate requests
     if (!ideateOverride) {
