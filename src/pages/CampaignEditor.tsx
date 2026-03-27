@@ -81,8 +81,7 @@ export default function CampaignEditor() {
   const [designNotes, setDesignNotes] = useState("");
   const [subjectLine, setSubjectLine] = useState("");
   const [previewText, setPreviewText] = useState("");
-  const [refPanelOpen, setRefPanelOpen] = useState(false);
-  const [selectedReference, setSelectedReference] = useState<SelectedReference | null>(null);
+  const [starredCampaign, setStarredCampaign] = useState(false);
 
   // Restore reference panel state from localStorage
   useEffect(() => {
@@ -91,11 +90,24 @@ export default function CampaignEditor() {
       const stored = localStorage.getItem(`ref-panel-${campaignId}`);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (typeof parsed.isOpen === "boolean") setRefPanelOpen(parsed.isOpen);
         if (parsed.selectedReference) setSelectedReference(parsed.selectedReference);
       }
     } catch {}
   }, [campaignId]);
+
+  // Check if campaign is already starred
+  useEffect(() => {
+    if (!user || !campaignId) return;
+    supabase
+      .from("saved_references")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("reference_type", "campaign")
+      .eq("reference_id", campaignId)
+      .then(({ data }) => {
+        setStarredCampaign(!!data && data.length > 0);
+      });
+  }, [user, campaignId]);
   const [sendListIds, setSendListIds] = useState<string[]>([]);
   const [sendSegmentIds, setSendSegmentIds] = useState<string[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
