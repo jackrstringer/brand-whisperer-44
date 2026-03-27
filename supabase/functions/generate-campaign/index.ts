@@ -747,23 +747,54 @@ You may make minor adjustments to fit the brief, but the overall skeleton should
       throw new Error("Generated HTML was incomplete. Please try again.");
     }
 
-    // Derive a short campaign name from the brief — but only if the campaign
-    // doesn't already have a meaningful name (i.e. one set at creation time).
+    // Derive a short campaign name — always generate a meaningful one
     const { data: existingCamp } = await supabase
       .from("campaigns")
       .select("name")
       .eq("id", campaignId)
       .single();
 
-    const existingName = existingCamp?.name || "";
-    const isDefaultName = !existingName || existingName === "New Campaign" || existingName === "Untitled";
+    const existingNameRaw = (existingCamp?.name || "").trim();
+    const DEFAULT_NAMES = ["new campaign", "untitled campaign", "untitled", ""];
+    const isDefaultName = DEFAULT_NAMES.includes(existingNameRaw.toLowerCase());
 
-    let campaignName = existingName;
+    let campaignName = existingNameRaw;
     if (isDefaultName) {
-      const briefWords = brief.trim().split(/\s+/);
-      campaignName = briefWords.length <= 8
-        ? brief.trim()
-        : briefWords.slice(0, 8).join(" ") + "…";
+      // Try to derive from brief first
+      if (brief && brief.trim().length > 3) {
+        const briefWords = brief.trim().split(/\s+/);
+        campaignName = briefWords.length <= 8
+          ? brief.trim()
+          : briefWords.slice(0, 8).join(" ") + "…";
+      } else {
+        // No brief — extract a name from the generated HTML content
+        // Pull the first headline or subject-like text from the email
+        const h1Match = html.match(/<(?:h1|h2)[^>]*>([\s\S]*?)<\/(?:h1|h2)>/i);
+        const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+        const rawTitle = (h1Match?.[1] || titleMatch?.[1] || "").replace(/<[^>]*>/g, "").replace(/&[^;]+;/g, " ").replace(/\s+/g, " ").trim();
+        if (rawTitle.length > 3 && rawTitle.length <= 60) {
+          campaignName = rawTitle;
+        } else if (rawTitle.length > 60) {
+          campaignName = rawTitle.slice(0, 57) + "…";
+        } else {
+          // Last resort: use goal
+          const goalLabels: Record<string, string> = {
+            promotional: "Promotional Campaign",
+            educational: "Educational Campaign",
+            "re-engagement": "Re-engagement Campaign",
+            seasonal: "Seasonal Campaign",
+            welcome: "Welcome Email",
+            social_proof: "Social Proof Campaign",
+            highlight: "Brand Highlight",
+            product_launch: "Product Launch",
+            abandoned_cart: "Abandoned Cart",
+            win_back: "Win-back Campaign",
+            newsletter: "Newsletter",
+            announcement: "Announcement",
+          };
+          campaignName = goalLabels[goal] || "Campaign";
+        }
+      }
     }
 
     const durationSecs = Math.round((Date.now() - new Date(genStartedAt).getTime()) / 1000);
