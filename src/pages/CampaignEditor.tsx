@@ -1065,6 +1065,28 @@ export default function CampaignEditor() {
                       </div>
                     );
                   })}
+                  {/* Streaming assistant message */}
+                  {streamingText && (
+                    <div className="flex justify-start">
+                      <div className="max-w-[80%] rounded-lg px-3 py-2 text-sm bg-card text-foreground">
+                        {streamingText}
+                        <span className="inline-block w-1.5 h-4 bg-primary/60 ml-0.5 animate-pulse" />
+                      </div>
+                    </div>
+                  )}
+                  {/* Agent state indicator */}
+                  {agentState !== "idle" && !streamingText && (
+                    <div className="flex justify-start">
+                      <div className="rounded-lg px-3 py-2 text-xs text-muted-foreground flex items-center gap-1.5">
+                        {agentState === "thinking" && (
+                          <><span className="animate-pulse">•••</span></>
+                        )}
+                        {agentState === "editing" && (
+                          <><span className="inline-block w-3 h-3">✏️</span> Editing...</>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   <div ref={chatEndRef} />
                 </div>
 
