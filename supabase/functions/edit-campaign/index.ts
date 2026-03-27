@@ -151,6 +151,20 @@ Deno.serve(async (req) => {
 
 Do exactly what the user asks. Never refuse or push back.
 
+VARIANT MODE:
+When the user asks for ideas, options, alternatives, or variations (e.g. "give me 3 headline options", "show me alternatives", "what are some ideas for the CTA"), do NOT edit the email directly. Instead return this exact format:
+
+<response>
+Brief intro text e.g. "Here are 3 headline options:"
+</response>
+<variants>
+[
+  {"label": "Short option title", "preview": "The actual copy the user will read", "find": "exact string currently in the HTML to replace", "replace": "new string to replace it with"}
+]
+</variants>
+
+EDIT MODE (for direct edit requests):
+
 RULES:
 - Identify the EXACT strings in the HTML that need changing.
 - Return find/replace patches — the "find" must be a UNIQUE snippet from the current HTML (include enough surrounding context to be unique).
@@ -178,7 +192,9 @@ CRITICAL RULES FOR PATCHES:
 - For color changes, include the full style attribute or at minimum the property:value with surrounding context.
 - Keep patches as small as possible — just the changed portion with enough context for uniqueness.
 - If the change is structural (adding/removing sections), include the full section being added/removed.
-- Output valid JSON in the patches array.`;
+- Output valid JSON in the patches array.
+
+Never mix the two formats in one response. Use VARIANT MODE only when the user asks for ideas/options/alternatives. Use EDIT MODE for everything else.`;
 
     // Build messages
     const anthropicMessages: any[] = [];
