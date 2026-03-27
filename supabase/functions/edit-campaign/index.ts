@@ -39,6 +39,20 @@ function enforceNoStackingLayout(html: string): string {
 }
 
 /**
+ * Normalize HTML for matching: collapse whitespace, decode entities.
+ */
+function normalizeHtmlForMatch(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * Apply find/replace patches to HTML.
  * Each patch: { find: string, replace: string }
  * Returns the patched HTML and count of patches applied.
@@ -55,13 +69,36 @@ function applyPatches(html: string, patches: Array<{ find: string; replace: stri
       if (result !== before) applied++;
     } else {
       // Try whitespace-normalized match
-      const normalizedFind = patch.find.replace(/\s+/g, "\\s*");
-      try {
-        const regex = new RegExp(normalizedFind.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\s\*/g, '\\s*'), "g");
-        const before = result;
-        result = result.replace(regex, patch.replace);
-        if (result !== before) applied++;
-      } catch { /* skip bad regex */ }
+      const normalizedFind = normalizeHtmlForMatch(patch.find);
+      const normalizedResult = normalizeHtmlForMatch(result);
+      const idx = normalizedResult.indexOf(normalizedFind);
+      if (idx !== -1) {
+        // Find the corresponding range in the original string
+        // by collapsing whitespace and matching character-by-character
+        let origStart = -1, origEnd = -1;
+        let normIdx = 0;
+        let matchStart = -1;
+        const collapsed = result.replace(/\s+/g, " ");
+        // Fallback: regex-based approach
+        const escapedFind = patch.find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const wsFlexible = escapedFind.replace(/\s+/g, '\\s*');
+        try {
+          const regex = new RegExp(wsFlexible, "g");
+          const before = result;
+          result = result.replace(regex, patch.replace);
+          if (result !== before) applied++;
+        } catch { /* skip bad regex */ }
+      } else {
+        // Last resort: case-insensitive match for CSS values
+        const escapedFind = patch.find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const wsFlexible = escapedFind.replace(/\s+/g, '\\s*');
+        try {
+          const regex = new RegExp(wsFlexible, "i");
+          const before = result;
+          result = result.replace(regex, patch.replace);
+          if (result !== before) applied++;
+        } catch { /* skip */ }
+      }
     }
   }
   return { html: result, applied, changed: result !== html };
