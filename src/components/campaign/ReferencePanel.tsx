@@ -100,7 +100,7 @@ interface SavedReference {
   reference_id: string;
 }
 
-export type ReferenceMode = "loose" | "hard" | "dupe";
+export type ReferenceMode = "reference" | "dupe";
 
 export interface SelectedReference {
   type: "library" | "campaign";
@@ -108,7 +108,7 @@ export interface SelectedReference {
   title: string;
   thumbnail_url: string;
   image_urls: string[];
-  strength: number; // kept for backwards compat / DB storage
+  strength: number;
   mode: ReferenceMode;
 }
 
@@ -120,9 +120,8 @@ interface ReferencePanelProps {
 }
 
 const MODE_CONFIG: Record<ReferenceMode, { label: string; strength: number; description: string }> = {
-  loose: { label: "Loose Inspo", strength: 3, description: "Borrows vibe and energy — layout is original" },
-  hard: { label: "Hard Inspo", strength: 7, description: "Follows the section flow and visual hierarchy closely" },
-  dupe: { label: "Dupe", strength: 10, description: "Exact layout clone — your brand rules applied on top" },
+  reference: { label: "Reference", strength: 7, description: "Strongly follows structure, sizing & layout — your brand's colors and fonts applied" },
+  dupe: { label: "Dupe", strength: 10, description: "Exact layout clone — section-for-section match with your brand applied" },
 };
 
 type TabValue = "library" | "mine" | "saved";
@@ -212,9 +211,9 @@ export default function ReferencePanel({
       }
       const storageKey = `ref-panel-${campaignId}`;
       const stored = localStorage.getItem(storageKey);
-      let mode: ReferenceMode = "hard";
+      let mode: ReferenceMode = "reference";
       if (stored) {
-        try { mode = JSON.parse(stored).selectedReference?.mode || "hard"; } catch {}
+        try { mode = JSON.parse(stored).selectedReference?.mode || "reference"; } catch {}
       }
       const cfg = MODE_CONFIG[mode];
       onSelectReference({ type, id, title, thumbnail_url: thumbnailUrl, image_urls: imageUrls, strength: cfg.strength, mode });
@@ -389,7 +388,7 @@ export default function ReferencePanel({
           <div className="space-y-1.5">
             <span className="text-[10px] text-muted-foreground">Reference mode</span>
             <div className="flex gap-1">
-              {(Object.entries(MODE_CONFIG) as [ReferenceMode, typeof MODE_CONFIG["loose"]][]).map(([key, cfg]) => (
+              {(Object.entries(MODE_CONFIG) as [ReferenceMode, typeof MODE_CONFIG["reference"]][]).map(([key, cfg]) => (
                 <button
                   key={key}
                   onClick={() => onSelectReference({ ...selectedReference, mode: key, strength: cfg.strength })}
