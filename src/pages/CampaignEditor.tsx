@@ -2365,19 +2365,22 @@ export default function CampaignEditor() {
                       if (msg.role === "assistant") {
                         // Variant messages don't count as edit versions
                         if (msg.message_type === "variants" && msg.variant_data) {
-                          const pillEl = ideateIndicator !== "idle" ? (
+                          const isThisMsgGenerating = ideateMessageId === msg.id && msg.variant_data.variants.length === 0;
+                          const showPill = ideateMessageId === msg.id || msg.variant_data.variants.length > 0;
+                          const pillState = isThisMsgGenerating ? "thinking" : "done";
+                          const pillEl = showPill ? (
                             <div className="flex justify-start my-2">
                               <div
                                 className="relative rounded-full px-6 py-2 text-xs font-medium flex items-center gap-2.5 overflow-hidden"
                                 style={{
-                                  background: ideateIndicator === "done"
+                                  background: pillState === "done"
                                     ? 'linear-gradient(135deg, rgba(200,241,53,0.12), rgba(99,102,241,0.06))'
                                     : 'linear-gradient(135deg, rgba(200,241,53,0.08), rgba(99,102,241,0.08))',
                                   border: '1px solid rgba(200,241,53,0.2)',
-                                  ...(ideateIndicator === "thinking" ? { animation: 'ideate-pill-pulse 2s ease-in-out infinite' } : {}),
+                                  ...(pillState === "thinking" ? { animation: 'ideate-pill-pulse 2s ease-in-out infinite' } : {}),
                                 }}
                               >
-                                {ideateIndicator === "thinking" && (
+                                {pillState === "thinking" && (
                                   <span
                                     className="absolute inset-0 rounded-full opacity-40"
                                     style={{
@@ -2388,7 +2391,7 @@ export default function CampaignEditor() {
                                 )}
                                 <Zap className="relative w-3 h-3" style={{ color: 'rgba(200,241,53,0.9)' }} />
                                 <span className="relative" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                                  {ideateIndicator === "thinking" ? (
+                                  {pillState === "thinking" ? (
                                     <>Generating options<span className="inline-block w-4 text-left animate-pulse">...</span></>
                                   ) : "Options generated"}
                                 </span>
