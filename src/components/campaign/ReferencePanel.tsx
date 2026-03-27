@@ -388,7 +388,7 @@ export default function ReferencePanel({
           <div className="space-y-1.5">
             <span className="text-[10px] text-muted-foreground">Reference mode</span>
             <div className="flex gap-1">
-              {(Object.entries(MODE_CONFIG) as [ReferenceMode, typeof MODE_CONFIG["loose"]][]).map(([key, cfg]) => (
+              {(Object.entries(MODE_CONFIG) as [ReferenceMode, typeof MODE_CONFIG["reference"]][]).map(([key, cfg]) => (
                 <button
                   key={key}
                   onClick={() => onSelectReference({ ...selectedReference, mode: key, strength: cfg.strength })}
