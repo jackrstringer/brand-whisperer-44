@@ -650,8 +650,65 @@ export default function CampaignEditor() {
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel — Preview or Inspiration — fixed 65% */}
-        <div className="h-full overflow-hidden" style={{ width: '65%', minWidth: 0 }}>
-          <div ref={previewPanelRef} className="h-full min-w-0 bg-card overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' as any }}>
+        <div className="h-full overflow-hidden flex" style={{ width: '65%', minWidth: 0 }}>
+          {/* Reference side-by-side (when toggled on post-generation) */}
+          {showReferenceDialog && campaign?.html && selectedReference && (
+            <>
+              <div
+                ref={refScrollRef}
+                className="h-full overflow-y-auto bg-muted/30 border-r border-border"
+                style={{ width: '50%', scrollbarWidth: 'none', msOverflowStyle: 'none' as any }}
+                onScroll={(e) => {
+                  if (syncingScroll) return;
+                  setSyncingScroll(true);
+                  const el = e.currentTarget;
+                  const panel = previewPanelRef.current;
+                  if (panel) {
+                    const ratio = el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight);
+                    panel.scrollTop = ratio * (panel.scrollHeight - panel.clientHeight);
+                  }
+                  requestAnimationFrame(() => setSyncingScroll(false));
+                }}
+              >
+                <div className="flex justify-center p-4">
+                  <div style={{ width: renderedWidth }}>
+                    <p className="text-[10px] text-muted-foreground text-center mb-2 font-medium uppercase tracking-wider">Reference</p>
+                    {selectedReference.image_urls?.length ? (
+                      selectedReference.image_urls.map((url, i) => (
+                        <img key={i} src={url} alt="" className="w-full h-auto block" loading="lazy" />
+                      ))
+                    ) : selectedReference.thumbnail_url ? (
+                      <img src={selectedReference.thumbnail_url} alt="" className="w-full h-auto block" />
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-12">No reference preview</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Campaign preview / Inspiration panel */}
+          <div
+            ref={previewPanelRef}
+            className="h-full min-w-0 bg-card overflow-y-auto scrollbar-hide"
+            style={{
+              width: showReferenceDialog && campaign?.html && selectedReference ? '50%' : '100%',
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none' as any,
+            }}
+            onScroll={(e) => {
+              if (!showReferenceDialog || syncingScroll) return;
+              setSyncingScroll(true);
+              const el = e.currentTarget;
+              const refEl = refScrollRef.current;
+              if (refEl) {
+                const ratio = el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight);
+                refEl.scrollTop = ratio * (refEl.scrollHeight - refEl.clientHeight);
+              }
+              requestAnimationFrame(() => setSyncingScroll(false));
+            }}
+          >
             {isGenerating ? (
               <div className="max-w-[600px] mx-auto space-y-4 p-8 mt-12">
                 <div className="text-center mb-6">
