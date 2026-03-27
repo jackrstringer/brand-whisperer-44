@@ -1,48 +1,33 @@
 
 
-# Fix Image Curation: Stricter Filtering + Better Product Selector UI
+# Fix: Show All Shopify Products + Handle Pending Images
 
-## Problems
+## Root Cause
 
-1. **Rescued images still show text** — The rescue concept is fundamentally flawed for most cases. `e-bgremove` removes backgrounds, not text overlays. Smart crop can't reliably remove text that's on top of the product. The AI is marking images as "salvageable" but the ImageKit transforms don't actually fix them. Only `bg_remove` genuinely works — it isolates the product silhouette and discards everything else including text.
-
-2. **Products without usable images still appear** in the campaign creator product selector.
-
-3. **Product selector layout** is a checkbox list — user wants a 3-wide scrollable image grid.
+The Shopify products exist in the database (20+ products), but most images are stuck in `pending` processing status — they were never classified. The `ShopifyProductGrid` filters out any product without at least one `ready` image, so the grid appears nearly empty.
 
 ## Changes
 
-### 1. `shopify-classify-images/index.ts` — Tighten rescue logic
+### 1. `ShopifyProductGrid.tsx` — Show all products, not just those with ready images
 
-The only rescue strategy that reliably removes text is `bg_remove` (and `bg_remove_and_crop`). Smart cropping and directional cropping do NOT remove text overlays — they just crop the frame, which often still leaves text visible.
+- Remove the `productsWithImages` filter — show ALL active Shopify products
+- For products with only pending images, show a "Processing..." indicator instead of hiding them
+- For products with no ready images and only rejected ones, show with a dimmed state and note "No usable images"
+- Keep the existing expand/collapse per-product image detail view
 
-Changes:
-- Only accept rescue strategies `bg_remove` and `bg_remove_and_crop` as valid rescues
-- `smart_crop`, `crop_top`, `crop_bottom` → treat as **rejected** (these don't reliably remove text)
-- Update the prompt: tell Claude that the ONLY viable rescue is background removal, which isolates the product shape and discards everything else. If text is overlaid directly on the product body itself (not the background), it's NOT salvageable.
-- Images where `text_position === "overlay"` (text directly on the product) → always rejected, no rescue possible
+### 2. `ShopifyProductGrid.tsx` — Add a "Re-classify" button
 
-### 2. `ShopifyProductGrid.tsx` — Show actual processed images correctly
+- Add a button at the top to trigger re-classification of all pending/unprocessed images for this brand
+- Calls the existing `shopify-classify-images` edge function
+- This lets the user re-run the classifier with the new stricter logic on images that were either never processed or were processed with the old logic
 
-- For rescued images, display the `processed_url` (with bg-remove transform) as the preview, not the original
-- If `processed_url` is already being used (it is), then the issue is the transforms aren't working. Add a note that the grid already uses `processed_url` — the real fix is in the classifier tightening above
+### 3. `ProductSelector.tsx` — Already correct
 
-### 3. `ProductSelector.tsx` — Hide products without images + grid layout
-
-- Filter `shopifyProducts` to only show products that have at least one usable image (where `pickBestImage` returns non-null)
-- Replace the checkbox list layout with a 3-wide scrollable grid showing product images with title overlay
-- Clicking a product card toggles selection (highlighted border)
-- Search still works, filtering the grid
-
-### 4. `ShopifyProductGrid.tsx` — Hide products without usable images
-
-- In the settings grid view, don't show products that have zero ready images
+- The product selector in the campaign creator already filters to only show products with usable images (via `pickBestImage`). This is the correct behavior for campaign creation — no changes needed here.
 
 ## Files Modified
 
 | File | Change |
 |------|--------|
-| `supabase/functions/shopify-classify-images/index.ts` | Tighten rescue: only bg_remove works, reject smart_crop/crop strategies |
-| `src/components/brand/ProductSelector.tsx` | Hide imageless products, 3-wide scrollable image grid |
-| `src/components/brand/ShopifyProductGrid.tsx` | Hide products with no usable images |
+| `src/components/brand/ShopifyProductGrid.tsx` | Show all products (pending/rejected/ready), add re-classify button |
 
