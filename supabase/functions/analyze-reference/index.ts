@@ -168,6 +168,20 @@ Respond ONLY with the JSON object, no markdown or explanation.`;
     if (metadata.category) updateData.category = metadata.category;
     if (metadata.tags?.length) updateData.tags = metadata.tags;
 
+    const { data: existingRef, error: existingFetchError } = await supabase
+      .from("reference_campaigns")
+      .select("title")
+      .eq("id", referenceId)
+      .single();
+
+    if (existingFetchError) {
+      console.error("Failed to fetch existing reference title:", existingFetchError);
+    }
+
+    if (isGenericTitle(existingRef?.title)) {
+      updateData.title = deriveReferenceTitle(metadata);
+    }
+
     const { error: updateError } = await supabase
       .from("reference_campaigns")
       .update(updateData)
