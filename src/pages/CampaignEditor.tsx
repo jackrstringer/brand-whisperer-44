@@ -722,7 +722,7 @@ export default function CampaignEditor() {
                 <Skeleton className="h-10 w-1/3" />
               </div>
             ) : campaign?.html ? (
-              <div className="flex justify-center p-8">
+              <div className={`flex ${showReferenceDialog && selectedReference ? 'justify-start p-1 pl-0.5 pt-4' : 'justify-center p-8'}`}>
                 <div
                   className="overflow-hidden"
                   style={{
