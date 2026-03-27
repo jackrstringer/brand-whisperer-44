@@ -465,7 +465,7 @@ export default function CampaignEditor() {
   }, []);
 
   const sendMessage = async () => {
-    if (!campaignId || !brandId || (!chatInput.trim() && chatAttachments.length === 0) || !campaign?.html) return;
+    if (!campaignId || !brandId || (!chatInput.trim() && chatAttachments.length === 0) || !(iframeOwnedHtmlRef.current || campaign?.html)) return;
     const userMsg = chatInput.trim();
     const attachedFiles = [...chatAttachments];
     setChatInput("");
