@@ -49,45 +49,6 @@ function enforceNoStackingLayout(html: string): string {
   return output;
 }
 
-/** Anthropic API call with AbortController timeout */
-async function callAnthropic(body: object, apiKey: string, timeoutMs = 240000): Promise<Response> {
-  const maxRetries = 2;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    const startMs = Date.now();
-    console.log(`[callAnthropic] attempt=${attempt} model=${(body as any).model} max_tokens=${(body as any).max_tokens} timeout=${timeoutMs}ms`);
-    try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-      const elapsed = Date.now() - startMs;
-      console.log(`[callAnthropic] completed in ${elapsed}ms status=${resp.status}`);
-      if ((resp.status === 529 || resp.status === 503) && attempt < maxRetries) {
-        console.warn(`[callAnthropic] got ${resp.status}, retrying in ${(attempt + 1) * 5}s...`);
-        await resp.text();
-        await new Promise(r => setTimeout(r, (attempt + 1) * 5000));
-        continue;
-      }
-      return resp;
-    } catch (error) {
-      const elapsed = Date.now() - startMs;
-      if (error.name === "AbortError") throw new Error(`Anthropic API call timed out after ${Math.round(elapsed / 1000)}s`);
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-  throw new Error("callAnthropic: exhausted retries");
-}
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -106,7 +67,7 @@ Deno.serve(async (req) => {
 
     const { campaignId, message, currentHtml, attachedImageUrls, reference } = await req.json();
 
-    // FIX 2: Fetch campaign first (need brand_id), then parallelize the rest
+    // Fetch campaign first (need brand_id)
     const { data: campaign, error: cErr } = await supabase
       .from("campaigns")
       .select("*")
@@ -114,18 +75,22 @@ Deno.serve(async (req) => {
       .single();
     if (cErr || !campaign) throw new Error("Campaign not found");
 
-    // Parallelize all reads that depend on brand_id
-    const [profileResult, brandAssetsResult, productAssetsResult, brandResult] = await Promise.all([
+    // Parallelize all reads that depend on brand_id + conversation history
+    const [profileResult, brandAssetsResult, productAssetsResult, brandResult, historyResult] = await Promise.all([
       supabase.from("brand_profiles").select("*").eq("brand_id", campaign.brand_id).single(),
       supabase.from("brand_assets").select("url, category").eq("brand_id", campaign.brand_id),
       supabase.from("product_assets").select("url").eq("brand_id", campaign.brand_id),
       supabase.from("brands").select("user_id").eq("id", campaign.brand_id).single(),
+      supabase.from("chat_messages").select("role, content").eq("campaign_id", campaignId).order("created_at", { ascending: false }).limit(10),
     ]);
 
     const profile = profileResult.data;
     if (profileResult.error || !profile) throw new Error("Brand profile not found");
 
     const brandInstructions = (profile as any).brand_instructions || "";
+
+    // Build conversation history (reverse to chronological order)
+    const chatHistory = (historyResult.data || []).reverse();
 
     // Chain user_preferences after brand (needs user_id)
     let globalRules = "";
@@ -136,19 +101,17 @@ Deno.serve(async (req) => {
       }
     }
 
-    // FIX 5: Reference images — skip rehost for already-hosted URLs, fetch once for base64 only
+    // Reference images
     const imageBlocks: any[] = [];
     const referenceUrls = Array.isArray(profile.reference_image_urls)
       ? profile.reference_image_urls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
       : [];
 
-    // Also include user-attached images from chat
     const userAttachedUrls = Array.isArray(attachedImageUrls)
       ? attachedImageUrls.filter((url: unknown): url is string => typeof url === "string" && url.trim().length > 0)
       : [];
 
     const hostedReferenceUrls = referenceUrls.slice(0, 3);
-    // Attached images go first so they're most prominent
     const allImageUrls = [...userAttachedUrls.slice(0, 5), ...hostedReferenceUrls];
 
     for (const url of allImageUrls) {
@@ -214,8 +177,26 @@ After making the requested change, also audit the ENTIRE email for:
 - Proper footer separation
 - Buttons must NOT be full-width
 
-Return only the complete updated HTML. No commentary. No markdown fences.`;
+RESPONSE FORMAT — you MUST use these exact XML tags:
+<response>
+Brief conversational reply confirming what was changed (2-3 sentences max). Ask if anything else needs adjusting.
+</response>
+<html>
+The complete updated HTML here — no markdown fences, no commentary.
+</html>`;
 
+    // Build messages array with conversation history
+    const anthropicMessages: any[] = [];
+
+    // Add previous conversation (without full HTML to save tokens)
+    for (const msg of chatHistory) {
+      anthropicMessages.push({
+        role: msg.role === "assistant" ? "assistant" : "user",
+        content: msg.content,
+      });
+    }
+
+    // Build final user message
     const userContent: any[] = [];
     if (imageBlocks.length > 0) userContent.push(...imageBlocks);
 
@@ -256,54 +237,166 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
 
     userContent.push({
       type: "text",
-      text: `Brand rules: ${profile.system_prompt}${extraRules}\n\n${imageRulesText}\n\nCurrent HTML:\n${currentHtml}\n\nChange requested: ${message}\n\nReturn only the updated HTML.`,
+      text: `Brand rules: ${profile.system_prompt}${extraRules}\n\n${imageRulesText}\n\nCurrent HTML:\n${currentHtml}\n\nChange requested: ${message}`,
     });
 
-    // FIX 1: max_tokens 16384, FIX 6: callAnthropic with timeout
-    const response = await callAnthropic({
-      model: "claude-sonnet-4-6",
-      max_tokens: 16384,
-      system: systemMsg,
-      messages: [{ role: "user", content: userContent }],
-    }, ANTHROPIC_API_KEY);
+    // Add the final user message
+    anthropicMessages.push({ role: "user", content: userContent });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Anthropic API error: ${response.status} - ${errText}`);
+    // Streaming Anthropic call
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 240000);
+
+    console.log(`[edit-campaign] Starting streaming call, ${anthropicMessages.length} messages`);
+
+    const anthropicResp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 16384,
+        system: systemMsg,
+        messages: anthropicMessages,
+        stream: true,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!anthropicResp.ok) {
+      const errText = await anthropicResp.text();
+      throw new Error(`Anthropic API error: ${anthropicResp.status} - ${errText}`);
     }
 
-    const result = await response.json();
-    let html = result.content?.[0]?.text || "";
-    html = html.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
+    // SSE response stream
+    const stream = new ReadableStream({
+      async start(ctrl) {
+        const encoder = new TextEncoder();
+        const emit = (event: string, data: any) => {
+          ctrl.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        };
 
-    // FIX 5: rehostHtmlImagesWithImageKit now skips already-hosted URLs
-    html = await rehostHtmlImagesWithImageKit(html, {
-      campaignId,
-      imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
-      fallbackImageUrls: embeddableUrls,
+        let fullText = "";
+
+        try {
+          const reader = anthropicResp.body!.getReader();
+          const decoder = new TextDecoder();
+          let sseBuffer = "";
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            sseBuffer += decoder.decode(value, { stream: true });
+
+            const lines = sseBuffer.split("\n");
+            sseBuffer = lines.pop() || "";
+
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue;
+              const jsonStr = line.slice(6).trim();
+              if (!jsonStr || jsonStr === "[DONE]") continue;
+
+              try {
+                const evt = JSON.parse(jsonStr);
+                if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
+                  const text = evt.delta.text;
+                  fullText += text;
+
+                  // Stream text_delta for content inside <response> tags only
+                  // We parse incrementally: if we're inside <response>, stream it
+                  const responseMatch = fullText.match(/<response>([\s\S]*?)(<\/response>|$)/);
+                  if (responseMatch) {
+                    const responseContent = responseMatch[1];
+                    // Only emit the new delta if it's part of the response section
+                    if (!fullText.includes("</response>") || fullText.indexOf(text) < fullText.indexOf("</response>")) {
+                      // Check if current text addition is within response tags
+                      const beforeThis = fullText.slice(0, fullText.length - text.length);
+                      const wasInResponse = beforeThis.includes("<response>") && !beforeThis.includes("</response>");
+                      const isInHtml = beforeThis.includes("<html>") && !beforeThis.includes("</html>");
+                      
+                      if (wasInResponse && !beforeThis.includes("</response>")) {
+                        // Strip any tag fragments from the delta
+                        let cleanDelta = text;
+                        if (cleanDelta.includes("</response>")) {
+                          cleanDelta = cleanDelta.split("</response>")[0];
+                        }
+                        if (cleanDelta) {
+                          emit("text_delta", { content: cleanDelta });
+                        }
+                      }
+                    }
+                  }
+                }
+              } catch { /* skip malformed SSE lines */ }
+            }
+          }
+
+          // Parse the complete response
+          const responseMatch = fullText.match(/<response>([\s\S]*?)<\/response>/);
+          const htmlMatch = fullText.match(/<html>([\s\S]*?)<\/html>/);
+
+          const responseText = responseMatch ? responseMatch[1].trim() : "Changes applied.";
+          let html = htmlMatch ? htmlMatch[1].trim() : "";
+
+          // Fallback: if no tags found, treat entire output as HTML (backward compat)
+          if (!htmlMatch && !responseMatch) {
+            html = fullText.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
+          }
+
+          if (html) {
+            // Rehost images
+            html = await rehostHtmlImagesWithImageKit(html, {
+              campaignId,
+              imagekitPrivateKey: IMAGEKIT_PRIVATE_KEY,
+              fallbackImageUrls: embeddableUrls,
+            });
+
+            html = enforceNoStackingLayout(html);
+
+            // Save to DB
+            const history = Array.isArray(campaign.html_history) ? campaign.html_history : [];
+            history.push(campaign.html);
+
+            await supabase.from("campaigns").update({
+              html,
+              html_history: history,
+            }).eq("id", campaignId);
+
+            emit("html_patch", { html });
+          }
+
+          // Save chat messages
+          await supabase.from("chat_messages").insert([
+            { campaign_id: campaignId, role: "user", content: message },
+            { campaign_id: campaignId, role: "assistant", content: responseText },
+          ]);
+
+          emit("done", {});
+        } catch (err) {
+          emit("error", { message: err instanceof Error ? err.message : "Stream failed" });
+        } finally {
+          ctrl.close();
+        }
+      },
     });
 
-    const history = Array.isArray(campaign.html_history) ? campaign.html_history : [];
-    history.push(campaign.html);
-
-    html = enforceNoStackingLayout(html);
-
-    await supabase.from("campaigns").update({
-      html,
-      html_history: history,
-    }).eq("id", campaignId);
-
-    await supabase.from("chat_messages").insert([
-      { campaign_id: campaignId, role: "user", content: message },
-      { campaign_id: campaignId, role: "assistant", content: "Changes applied." },
-    ]);
-
-    return new Response(JSON.stringify({ html }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(stream, {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(JSON.stringify({ error: (err as Error).message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
