@@ -90,6 +90,7 @@ export default function CampaignEditor() {
   const [pinnedAssetUrls, setPinnedAssetUrls] = useState<string[]>([]);
   const [canUndo, setCanUndo] = useState(false);
   const [redoStack, setRedoStack] = useState<string[]>([]);
+  const ideatePayloadRef = useRef<{ realPrompt: string; displayText: string } | null>(null);
   const [activeVersionIndex, setActiveVersionIndex] = useState<number | null>(null); // null = latest
   const [matchProductColors, setMatchProductColors] = useState(false);
   const [selectedShopifyProducts, setSelectedShopifyProducts] = useState<SelectedShopifyProduct[]>([]);
@@ -465,21 +466,31 @@ export default function CampaignEditor() {
   }, []);
 
   const sendMessage = async () => {
-    if (!campaignId || !brandId || (!chatInput.trim() && chatAttachments.length === 0) || !(iframeOwnedHtmlRef.current || campaign?.html)) return;
-    const userMsg = chatInput.trim();
-    const attachedFiles = [...chatAttachments];
-    setChatInput("");
-    setChatAttachments([]);
-    setChatAttachmentPreviews(prev => { prev.forEach(u => URL.revokeObjectURL(u)); return []; });
+    // Check for ideate override first
+    const ideateOverride = ideatePayloadRef.current;
+    ideatePayloadRef.current = null;
+
+    if (!campaignId || !brandId || !(iframeOwnedHtmlRef.current || campaign?.html)) return;
+    if (!ideateOverride && !chatInput.trim() && chatAttachments.length === 0) return;
+
+    const userMsg = ideateOverride ? ideateOverride.realPrompt : chatInput.trim();
+    const displayContent = ideateOverride
+      ? ideateOverride.displayText
+      : chatAttachments.length > 0
+        ? `${chatInput.trim()}${chatInput.trim() ? "\n" : ""}[${chatAttachments.length} image${chatAttachments.length > 1 ? "s" : ""} attached]`
+        : chatInput.trim();
+
+    const attachedFiles = ideateOverride ? [] : [...chatAttachments];
+    if (!ideateOverride) {
+      setChatInput("");
+      setChatAttachments([]);
+      setChatAttachmentPreviews(prev => { prev.forEach(u => URL.revokeObjectURL(u)); return []; });
+    }
     setSending(true);
     setAgentState("thinking");
     setStreamingText("");
     streamingTextRef.current = "";
-    setActiveVersionIndex(null); // snap back to latest when sending new edit
-
-    const displayContent = attachedFiles.length > 0
-      ? `${userMsg}${userMsg ? "\n" : ""}[${attachedFiles.length} image${attachedFiles.length > 1 ? "s" : ""} attached]`
-      : userMsg;
+    setActiveVersionIndex(null);
 
     setMessages((prev) => [
       ...prev,
@@ -487,7 +498,6 @@ export default function CampaignEditor() {
     ]);
 
     try {
-      // Upload attached images first
       let attachedImageUrls: string[] = [];
       if (attachedFiles.length > 0) {
         attachedImageUrls = await uploadChatImages(attachedFiles, brandId, campaignId);
@@ -1098,21 +1108,21 @@ export default function CampaignEditor() {
       // Ideate element from floating toolbar — auto-send
       if (e.data?.type === 'ideateElement') {
         const { text, tagName, innerHTML, outerHTML, elementStyle } = e.data;
-        // Build a context-rich prompt that includes styling info
         const hasInlineStyles = innerHTML && innerHTML !== text && /<[^>]+style/i.test(innerHTML);
         const styleContext = hasInlineStyles
           ? `\n\nIMPORTANT: The original element contains inline styling (e.g. highlighted text, colored spans, background colors). Here is the original HTML:\n\`\`\`\n${outerHTML}\n\`\`\`\nPreserve any inline styling patterns (like background-color highlights, colored text spans, etc.) in your alternatives. Each variant's "replace" value must include the same HTML/inline-style structure.`
           : '';
-        let prompt = '';
-        if (/^H[1-6]$/.test(tagName)) prompt = `Give me 5 alternative headline options for: "${text}"${styleContext}`;
-        else if (tagName === 'A' || tagName === 'BUTTON') prompt = `Give me 5 alternative CTA button text options for: "${text}"${styleContext}`;
-        else prompt = `Give me 5 alternative copy options for this text: "${text}"${styleContext}`;
-        // Auto-send by setting input then triggering send
-        setChatInput(prompt);
-        setTimeout(() => {
-          const sendBtn = document.querySelector('[data-send-btn]') as HTMLButtonElement;
-          if (sendBtn) sendBtn.click();
-        }, 100);
+        let realPrompt = '';
+        if (/^H[1-6]$/.test(tagName)) realPrompt = `Give me 5 alternative headline options for: "${text}"${styleContext}`;
+        else if (tagName === 'A' || tagName === 'BUTTON') realPrompt = `Give me 5 alternative CTA button text options for: "${text}"${styleContext}`;
+        else realPrompt = `Give me 5 alternative copy options for this text: "${text}"${styleContext}`;
+
+        const shortText = text.length > 40 ? text.slice(0, 40) + '…' : text;
+        const typeLabel = /^H[1-6]$/.test(tagName) ? 'headline' : (tagName === 'A' || tagName === 'BUTTON') ? 'CTA' : 'copy';
+        const displayText = `✨ Ideate ${typeLabel}: "${shortText}"`;
+
+        ideatePayloadRef.current = { realPrompt, displayText };
+        sendMessage();
         return;
       }
 
@@ -2379,7 +2389,10 @@ export default function CampaignEditor() {
                     <div className="flex justify-start">
                       <div className="rounded-lg px-3 py-2 text-xs text-muted-foreground flex items-center gap-1.5">
                         {agentState === "thinking" && (
-                          <><span className="animate-pulse">•••</span></>
+                          <>
+                            <span className="inline-block animate-spin" style={{ animationDuration: '2s' }}>✨</span>
+                            <span>Generating ideas<span className="inline-block w-6 text-left"><span className="animate-pulse">...</span></span></span>
+                          </>
                         )}
                         {agentState === "editing" && (
                           <><span className="inline-block w-3 h-3">✏️</span> Editing...</>
