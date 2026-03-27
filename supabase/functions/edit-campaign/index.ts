@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { campaignId, message, currentHtml, attachedImageUrls } = await req.json();
+    const { campaignId, message, currentHtml, attachedImageUrls, reference } = await req.json();
 
     // FIX 2: Fetch campaign first (need brand_id), then parallelize the rest
     const { data: campaign, error: cErr } = await supabase
