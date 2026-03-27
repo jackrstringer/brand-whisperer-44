@@ -92,7 +92,7 @@ export default function CampaignEditor() {
   const [redoStack, setRedoStack] = useState<string[]>([]);
   const ideatePayloadRef = useRef<{ realPrompt: string; displayText: string } | null>(null);
   const [ideateMessageId, setIdeateMessageId] = useState<string | null>(null); // tracks which variant msg is currently generating
-  const ideateActiveRef = useRef(false); // true while an ideate request is in flight (before variants arrive)
+  const [ideateActive, setIdeateActive] = useState(false); // true while an ideate request is in flight (before variants arrive)
   const [activeVersionIndex, setActiveVersionIndex] = useState<number | null>(null); // null = latest
   const [matchProductColors, setMatchProductColors] = useState(false);
   const [selectedShopifyProducts, setSelectedShopifyProducts] = useState<SelectedShopifyProduct[]>([]);
