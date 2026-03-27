@@ -862,7 +862,8 @@ export default function CampaignEditor() {
   }, [measureIframeHeight, setupIframeObserver]);
 
   // Push content updates via postMessage instead of srcDoc swap
-  const prevHtmlForPreviewRef = useRef<string>("");
+
+
   useEffect(() => {
     if (!htmlForPreview || htmlForPreview === prevHtmlForPreviewRef.current) return;
     prevHtmlForPreviewRef.current = htmlForPreview;
