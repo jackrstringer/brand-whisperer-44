@@ -822,12 +822,59 @@ export default function CampaignEditor() {
     ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls)
     : "";
 
-  const srcdocHtml = htmlForPreview
-    ? htmlForPreview.replace(
-        /(<head[^>]*>)/i,
-        '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}</style>'
-      )
-    : "";
+  // Stable shell iframe that receives content via postMessage — no srcDoc swap = no white flash
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const iframeReadyRef = useRef(false);
+  const pendingHtmlRef = useRef<string | null>(null);
+
+  const shellHtml = `<!DOCTYPE html><html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;background:#fff;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}</style>
+</head><body>
+<script>window.addEventListener('message',function(e){if(e.data&&e.data.type==='updateHtml'){document.open();document.write(e.data.html);document.close();window.parent.postMessage({type:'iframeReady'},'*');}});</script>
+</body></html>`;
+
+  // Listen for iframe ready signal
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'iframeReady') {
+        iframeReadyRef.current = true;
+        // Re-measure after content update
+        if (iframeRef.current) {
+          measureIframeHeight(iframeRef.current);
+          setupIframeObserver(iframeRef.current);
+          window.setTimeout(() => measureIframeHeight(iframeRef.current!), 300);
+          window.setTimeout(() => measureIframeHeight(iframeRef.current!), 1000);
+        }
+        // If there was a pending update queued before ready, send it now
+        if (pendingHtmlRef.current) {
+          iframeRef.current?.contentWindow?.postMessage({ type: 'updateHtml', html: pendingHtmlRef.current }, '*');
+          pendingHtmlRef.current = null;
+        }
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [measureIframeHeight, setupIframeObserver]);
+
+  // Push content updates via postMessage instead of srcDoc swap
+  const prevHtmlForPreviewRef = useRef<string>("");
+  useEffect(() => {
+    if (!htmlForPreview || htmlForPreview === prevHtmlForPreviewRef.current) return;
+    prevHtmlForPreviewRef.current = htmlForPreview;
+
+    const injectedHtml = htmlForPreview.replace(
+      /(<head[^>]*>)/i,
+      '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}</style>'
+    );
+
+    const iframe = iframeRef.current;
+    if (iframe?.contentWindow && iframeReadyRef.current) {
+      iframe.contentWindow.postMessage({ type: 'updateHtml', html: injectedHtml }, '*');
+    } else {
+      pendingHtmlRef.current = injectedHtml;
+    }
+  }, [htmlForPreview]);
 
   return (
     <>
