@@ -91,6 +91,7 @@ export default function CampaignEditor() {
   const [canUndo, setCanUndo] = useState(false);
   const [redoStack, setRedoStack] = useState<string[]>([]);
   const ideatePayloadRef = useRef<{ realPrompt: string; displayText: string } | null>(null);
+  const [ideateIndicator, setIdeateIndicator] = useState<"idle" | "thinking" | "done">("idle");
   const [activeVersionIndex, setActiveVersionIndex] = useState<number | null>(null); // null = latest
   const [matchProductColors, setMatchProductColors] = useState(false);
   const [selectedShopifyProducts, setSelectedShopifyProducts] = useState<SelectedShopifyProduct[]>([]);
