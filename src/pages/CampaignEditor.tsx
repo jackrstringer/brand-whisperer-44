@@ -559,9 +559,9 @@ export default function CampaignEditor() {
 
       {/* Main Content — draggable split */}
       <div className="flex-1 flex overflow-hidden">
-      <PanelGroup direction="horizontal" className="flex-1 min-w-0">
+      <PanelGroup direction="horizontal" className="flex-1 min-w-0" autoSaveId="campaign-editor-panels">
         {/* Left Panel — Preview or Inspiration */}
-        <Panel defaultSize={75} minSize={20} maxSize={85}>
+        <Panel defaultSize={65}>
           <div ref={previewPanelRef} className="h-full min-w-0 bg-card overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' as any }}>
             {isGenerating ? (
               <div className="max-w-[600px] mx-auto space-y-4 p-8 mt-12">
