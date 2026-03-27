@@ -120,9 +120,8 @@ interface ReferencePanelProps {
 }
 
 const MODE_CONFIG: Record<ReferenceMode, { label: string; strength: number; description: string }> = {
-  loose: { label: "Loose Inspo", strength: 3, description: "Borrows vibe and energy — layout is original" },
-  hard: { label: "Hard Inspo", strength: 7, description: "Follows the section flow and visual hierarchy closely" },
-  dupe: { label: "Dupe", strength: 10, description: "Exact layout clone — your brand rules applied on top" },
+  reference: { label: "Reference", strength: 7, description: "Strongly follows structure, sizing & layout — your brand's colors and fonts applied" },
+  dupe: { label: "Dupe", strength: 10, description: "Exact layout clone — section-for-section match with your brand applied" },
 };
 
 type TabValue = "library" | "mine" | "saved";
