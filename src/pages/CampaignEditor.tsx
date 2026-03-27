@@ -521,7 +521,20 @@ export default function CampaignEditor() {
         </div>
       </div>
 
-      {/* Main Content — draggable split */}
+      {/* Main Content — with reference panel + draggable split */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Reference Panel */}
+        {brandId && campaignId && (
+          <ReferencePanel
+            brandId={brandId}
+            campaignId={campaignId}
+            isOpen={refPanelOpen}
+            onToggle={() => setRefPanelOpen((o) => !o)}
+            selectedReference={selectedReference}
+            onSelectReference={setSelectedReference}
+          />
+        )}
+
       <PanelGroup direction="horizontal" className="flex-1">
         {/* Left Panel — Preview */}
         <Panel defaultSize={60} minSize={25} maxSize={85}>
