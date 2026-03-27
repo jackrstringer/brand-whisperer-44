@@ -1,9 +1,11 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { ChevronDown, ChevronUp, Plus, Package, Pin, Search, ShoppingBag, Check } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Package, Pin, Search, ShoppingBag, Check, Upload, X, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import ProductCreator from "./ProductCreator";
 import type { Product, ProductAsset } from "@/lib/types";
 
@@ -37,6 +39,7 @@ export interface SelectedShopifyProduct {
   image_url: string;
   image_type: string;
   variant: string | null;
+  pinned_image_urls?: string[];
 }
 
 interface ProductSelectorProps {
@@ -45,6 +48,10 @@ interface ProductSelectorProps {
   pinnedAssetUrls: string[];
   onSelectionChange: (productIds: string[], pinnedUrls: string[]) => void;
   onShopifyProductsChange?: (products: SelectedShopifyProduct[]) => void;
+}
+
+function getImageUrl(img: ShopifyImage): string {
+  return img.processed_url || img.imagekit_url || img.original_url;
 }
 
 function pickBestImage(images: ShopifyImage[], bestHeroImageId?: string | null): ShopifyImage | null {
@@ -67,6 +74,63 @@ function pickBestImage(images: ShopifyImage[], bestHeroImageId?: string | null):
   return usable[0];
 }
 
+function getUsableImages(images: ShopifyImage[]): ShopifyImage[] {
+  return images.filter((i) => i.is_usable_product_photo === true && i.processing_status === "ready");
+}
+
+/* ── Expanded detail for a selected Shopify product ── */
+function ShopifyProductDetail({
+  product,
+  images,
+  pinnedUrls,
+  onTogglePin,
+}: {
+  product: ShopifyProduct;
+  images: ShopifyImage[];
+  pinnedUrls: string[];
+  onTogglePin: (url: string) => void;
+}) {
+  const usable = getUsableImages(images);
+  if (usable.length === 0) return null;
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[10px] text-muted-foreground font-medium">
+        {product.title} — {usable.length} usable image{usable.length !== 1 ? "s" : ""}
+        <span className="ml-1 opacity-60">(click to pin specific images)</span>
+      </p>
+      <div className="grid grid-cols-4 gap-1.5">
+        {usable.map((img) => {
+          const url = getImageUrl(img);
+          const isPinned = pinnedUrls.includes(url);
+          return (
+            <button
+              key={img.id}
+              onClick={() => onTogglePin(url)}
+              className={`relative aspect-square rounded overflow-hidden border-2 transition-all ${
+                isPinned ? "border-primary ring-1 ring-primary/30" : "border-border hover:border-muted-foreground"
+              }`}
+              title={img.subject_description || img.image_type || "Click to pin"}
+            >
+              <img src={url} alt="" className="w-full h-full object-cover" />
+              {isPinned && (
+                <div className="absolute top-0.5 right-0.5 bg-primary rounded-full p-0.5">
+                  <Pin className="w-2 h-2 text-primary-foreground" />
+                </div>
+              )}
+              {img.image_type && (
+                <div className="absolute bottom-0 left-0 right-0 bg-background/70 text-[8px] text-center py-0.5 truncate">
+                  {img.image_type.replace(/_/g, " ")}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function ProductSelector({
   brandId,
   selectedProductIds,
@@ -84,6 +148,7 @@ export default function ProductSelector({
   const [shopifyImages, setShopifyImages] = useState<Record<string, ShopifyImage[]>>({});
   const [selectedShopifyIds, setSelectedShopifyIds] = useState<string[]>([]);
   const [shopifySearch, setShopifySearch] = useState("");
+  const [expandedShopifyId, setExpandedShopifyId] = useState<string | null>(null);
 
   const fetchProducts = useCallback(async () => {
     const { data } = await supabase
@@ -148,25 +213,32 @@ export default function ProductSelector({
     if (selectedProductIds.length > 0) fetchAssetsForProducts(selectedProductIds);
   }, [selectedProductIds, fetchAssetsForProducts]);
 
+  // Build selected shopify products data for parent
   useEffect(() => {
     if (!onShopifyProductsChange) return;
     const selected: SelectedShopifyProduct[] = selectedShopifyIds.map((id) => {
       const product = shopifyProducts.find((p) => p.id === id);
       const images = shopifyImages[id] || [];
       const bestImage = pickBestImage(images, product?.best_hero_image_id);
-      const imageUrl = bestImage
-        ? (bestImage.processed_url || bestImage.imagekit_url || bestImage.original_url)
-        : "";
+      const imageUrl = bestImage ? getImageUrl(bestImage) : "";
+
+      // Collect pinned URLs for this product's images
+      const usable = getUsableImages(images);
+      const productPinnedUrls = usable
+        .map((i) => getImageUrl(i))
+        .filter((u) => pinnedAssetUrls.includes(u));
+
       return {
         title: product?.title || "",
         description: bestImage?.subject_description || "",
         image_url: imageUrl,
         image_type: bestImage?.image_type || "other",
         variant: bestImage?.variant_shown || null,
+        pinned_image_urls: productPinnedUrls.length > 0 ? productPinnedUrls : undefined,
       };
     }).filter((p) => p.image_url);
     onShopifyProductsChange(selected);
-  }, [selectedShopifyIds, shopifyProducts, shopifyImages, onShopifyProductsChange]);
+  }, [selectedShopifyIds, shopifyProducts, shopifyImages, pinnedAssetUrls, onShopifyProductsChange]);
 
   // Only show Shopify products that have at least one usable image
   const shopifyProductsWithImages = useMemo(() => {
@@ -177,9 +249,8 @@ export default function ProductSelector({
   }, [shopifyProducts, shopifyImages]);
 
   const filteredShopifyProducts = useMemo(() => {
-    const pool = shopifyProductsWithImages;
-    if (!shopifySearch) return pool;
-    return pool.filter((p) => p.title.toLowerCase().includes(shopifySearch.toLowerCase()));
+    if (!shopifySearch) return shopifyProductsWithImages;
+    return shopifyProductsWithImages.filter((p) => p.title.toLowerCase().includes(shopifySearch.toLowerCase()));
   }, [shopifyProductsWithImages, shopifySearch]);
 
   const toggleProduct = (productId: string) => {
@@ -206,9 +277,23 @@ export default function ProductSelector({
   };
 
   const toggleShopifyProduct = (id: string) => {
-    setSelectedShopifyIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : prev.length < 3 ? [...prev, id] : prev
-    );
+    setSelectedShopifyIds((prev) => {
+      const wasSelected = prev.includes(id);
+      if (wasSelected) {
+        // Deselecting — also remove pinned URLs for this product's images
+        const images = shopifyImages[id] || [];
+        const productImageUrls = getUsableImages(images).map((i) => getImageUrl(i));
+        const newPinned = pinnedAssetUrls.filter((u) => !productImageUrls.includes(u));
+        if (newPinned.length !== pinnedAssetUrls.length) {
+          onSelectionChange(selectedProductIds, newPinned);
+        }
+        setExpandedShopifyId((cur) => cur === id ? null : cur);
+        return prev.filter((x) => x !== id);
+      }
+      if (prev.length >= 3) return prev;
+      setExpandedShopifyId(id);
+      return [...prev, id];
+    });
   };
 
   const totalSelected = selectedProductIds.length + selectedShopifyIds.length;
@@ -233,32 +318,35 @@ export default function ProductSelector({
 
       {expanded && (
         <div className="border-t border-border p-3 space-y-3">
-          {/* Shopify products section — 3-wide scrollable grid */}
+          {/* Shopify products section — scrollable 3-wide grid */}
           {hasShopify && shopifyProductsWithImages.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
                 <ShoppingBag className="w-3 h-3" /> Shopify Products ({shopifyProductsWithImages.length})
+                {selectedShopifyIds.length > 0 && (
+                  <span className="text-primary ml-auto normal-case">{selectedShopifyIds.length}/3 selected</span>
+                )}
               </div>
-              {shopifyProductsWithImages.length > 6 && (
-                <div className="relative">
-                  <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-                  <Input
-                    value={shopifySearch}
-                    onChange={(e) => setShopifySearch(e.target.value)}
-                    placeholder="Search products..."
-                    className="pl-7 h-7 text-xs"
-                  />
-                </div>
-              )}
-              <ScrollArea className="max-h-64">
+
+              {/* Always show search */}
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                <Input
+                  value={shopifySearch}
+                  onChange={(e) => setShopifySearch(e.target.value)}
+                  placeholder="Search products..."
+                  className="pl-7 h-7 text-xs"
+                />
+              </div>
+
+              {/* Scrollable product grid */}
+              <ScrollArea className="max-h-[400px]">
                 <div className="grid grid-cols-3 gap-2">
                   {filteredShopifyProducts.map((sp) => {
                     const isSelected = selectedShopifyIds.includes(sp.id);
                     const images = shopifyImages[sp.id] || [];
                     const bestImage = pickBestImage(images, sp.best_hero_image_id);
-                    const thumbUrl = bestImage
-                      ? (bestImage.processed_url || bestImage.imagekit_url || bestImage.original_url)
-                      : null;
+                    const thumbUrl = bestImage ? getImageUrl(bestImage) : null;
 
                     return (
                       <button
@@ -289,6 +377,28 @@ export default function ProductSelector({
                   })}
                 </div>
               </ScrollArea>
+
+              {/* Expanded image details for selected products */}
+              {selectedShopifyIds.length > 0 && (
+                <div className="space-y-3 pt-2 border-t border-border">
+                  <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                    Selected Product Images
+                  </p>
+                  {selectedShopifyIds.map((id) => {
+                    const product = shopifyProducts.find((p) => p.id === id);
+                    if (!product) return null;
+                    return (
+                      <ShopifyProductDetail
+                        key={id}
+                        product={product}
+                        images={shopifyImages[id] || []}
+                        pinnedUrls={pinnedAssetUrls}
+                        onTogglePin={togglePin}
+                      />
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
