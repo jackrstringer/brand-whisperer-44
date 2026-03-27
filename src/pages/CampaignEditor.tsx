@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 
 import type { Campaign, ChatMessage } from "@/lib/types";
+import { captureEmailScreenshots } from "@/lib/visualQaCapture";
 
 async function uploadChatImages(files: File[], brandId: string, campaignId: string): Promise<string[]> {
   const urls: string[] = [];
