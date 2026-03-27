@@ -242,12 +242,20 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
       });
     }
 
+    // Options-intent detection — hint the AI to use VARIANT MODE
+    const isOptionsIntent = /\b(option|alternative|variation|variant|idea|choice|version)s?\b/i.test(message)
+      || /\bgive me \d/i.test(message)
+      || /\bshow me \d/i.test(message)
+      || /\bsubject line options?\b/i.test(message)
+      || /\bpreview text options?\b/i.test(message);
+
+    const editPrefix = isOptionsIntent
+      ? `[USER WANTS OPTIONS — use VARIANT MODE, not EDIT MODE]\n\nCurrent HTML:\n${currentHtml}\n\nRequest: ${message}`
+      : `Current HTML:\n${currentHtml}\n\nEdit: ${message}`;
+
     const userContent: any[] = [];
     if (imageBlocks.length > 0) userContent.push(...imageBlocks);
-    userContent.push({
-      type: "text",
-      text: `Current HTML:\n${currentHtml}\n\nEdit: ${message}`,
-    });
+    userContent.push({ type: "text", text: editPrefix });
     anthropicMessages.push({ role: "user", content: userContent });
 
     const prepMs = Date.now() - startMs;
