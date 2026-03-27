@@ -369,6 +369,11 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
 
           let responseText = replyMatch ? replyMatch[1].trim() : "Changes applied.";
 
+          // Emit the full reply text at once (no mid-stream text_delta)
+          if (responseText) {
+            emit("text_delta", { content: responseText });
+          }
+
           let finalHtml = currentHtml;
           let patchCount = 0;
 
