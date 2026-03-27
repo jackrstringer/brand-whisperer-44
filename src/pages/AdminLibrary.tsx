@@ -279,11 +279,8 @@ export default function AdminLibrary() {
         </div>
 
         {campaigns.length === 0 && (
-          <div className="text-center py-16">
-            <p className="text-muted-foreground">No reference campaigns yet.</p>
-            <Button className="mt-4" onClick={() => { resetForm(); setShowUpload(true); }}>
-              <Plus className="w-4 h-4 mr-1" /> Upload your first campaign
-            </Button>
+          <div className="text-center py-8">
+            <p className="text-muted-foreground text-sm">No reference campaigns yet. Drop some images above to get started.</p>
           </div>
         )}
       </div>
