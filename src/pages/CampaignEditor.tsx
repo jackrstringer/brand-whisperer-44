@@ -369,6 +369,14 @@ export default function CampaignEditor() {
           message: userMsg,
           currentHtml: campaign.html,
           ...(attachedImageUrls.length > 0 ? { attachedImageUrls } : {}),
+          ...(selectedReference ? {
+            reference: {
+              type: selectedReference.type,
+              id: selectedReference.id,
+              image_urls: selectedReference.image_urls,
+              strength: selectedReference.strength,
+            },
+          } : {}),
         },
       });
       if (error) throw new Error(error.message || "Edit failed");
