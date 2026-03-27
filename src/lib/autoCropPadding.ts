@@ -4,16 +4,15 @@
  * Detects uniform-color padding on left / right edges (and optionally
  * top / bottom) and trims it.  Conservative by design:
  *   – Only crops when BOTH left and right padding are detected
- *   – Padding must be ≥ 3 % of image width on each side
- *   – Uses a colour-tolerance check (not exact match) to handle
- *     JPEG compression artefacts and subtle gradients
+ *   – Padding must be ≥ 2 % of image width on each side
+ *   – Uses a per-row scan approach: for each sampled row, measure
+ *     how far the edge color extends inward, then take the minimum
  *   – Returns the original blob untouched when no crop is needed
  */
 
-const TOLERANCE = 28;          // max channel diff to consider "same colour"
-const MIN_PAD_PCT = 0.025;     // 2.5 % of width before we crop
-const SAMPLE_ROWS = 40;        // vertical samples per column scan
-const EDGE_SAMPLE_DEPTH = 3;   // pixels inward to establish the "edge colour"
+const TOLERANCE = 30;          // max channel diff to consider "same colour"
+const MIN_PAD_PCT = 0.02;     // 2 % of width before we crop
+const SAMPLE_COUNT = 60;      // number of rows/cols to sample
 
 function colorsMatch(r1: number, g1: number, b1: number,
                      r2: number, g2: number, b2: number): boolean {
@@ -23,30 +22,55 @@ function colorsMatch(r1: number, g1: number, b1: number,
 }
 
 /**
- * For a given column x, sample `SAMPLE_ROWS` evenly-spaced pixels and
- * check whether they are all the same colour (within tolerance).
- * Returns true if the column is uniform.
+ * For a given row y, measure how many pixels from the left edge share the
+ * same colour (within tolerance). Returns the padding width for that row.
+ * Stops scanning beyond maxScan pixels.
  */
-function isUniformColumn(
-  data: Uint8ClampedArray,
-  width: number,
-  height: number,
-  x: number,
-): boolean {
-  const step = Math.max(1, Math.floor(height / SAMPLE_ROWS));
+function measureRowLeftPad(
+  data: Uint8ClampedArray, width: number, y: number, maxScan: number,
+): number {
+  const base = y * width * 4;
+  const r0 = data[base], g0 = data[base + 1], b0 = data[base + 2];
 
-  // Anchor colour = pixel at ~25 % height (avoids top/bottom edge artefacts)
-  const anchorY = Math.floor(height * 0.25);
-  const ai = (anchorY * width + x) * 4;
-  const ar = data[ai], ag = data[ai + 1], ab = data[ai + 2];
+  // Skip rows that start with very varied content (not padding)
+  // Quick check: compare pixel 0 with pixel 2
+  if (maxScan < 3) return 0;
+  const i2 = base + 2 * 4;
+  if (!colorsMatch(r0, g0, b0, data[i2], data[i2 + 1], data[i2 + 2])) return 0;
 
-  for (let y = 0; y < height; y += step) {
-    const i = (y * width + x) * 4;
-    if (!colorsMatch(ar, ag, ab, data[i], data[i + 1], data[i + 2])) {
-      return false;
+  let pad = 0;
+  for (let x = 1; x < maxScan; x++) {
+    const i = base + x * 4;
+    if (colorsMatch(r0, g0, b0, data[i], data[i + 1], data[i + 2])) {
+      pad = x;
+    } else {
+      break;
     }
   }
-  return true;
+  return pad;
+}
+
+function measureRowRightPad(
+  data: Uint8ClampedArray, width: number, y: number, maxScan: number,
+): number {
+  const rightEdge = width - 1;
+  const base0 = (y * width + rightEdge) * 4;
+  const r0 = data[base0], g0 = data[base0 + 1], b0 = data[base0 + 2];
+
+  if (maxScan < 3) return 0;
+  const i2 = (y * width + rightEdge - 2) * 4;
+  if (!colorsMatch(r0, g0, b0, data[i2], data[i2 + 1], data[i2 + 2])) return 0;
+
+  let pad = 0;
+  for (let x = rightEdge - 1; x > rightEdge - maxScan; x--) {
+    const i = (y * width + x) * 4;
+    if (colorsMatch(r0, g0, b0, data[i], data[i + 1], data[i + 2])) {
+      pad = rightEdge - x;
+    } else {
+      break;
+    }
+  }
+  return pad;
 }
 
 /** Same idea but for a horizontal row (top/bottom padding). */
@@ -56,7 +80,7 @@ function isUniformRow(
   _height: number,
   y: number,
 ): boolean {
-  const step = Math.max(1, Math.floor(width / SAMPLE_ROWS));
+  const step = Math.max(1, Math.floor(width / SAMPLE_COUNT));
   const anchorX = Math.floor(width * 0.25);
   const ai = (y * width + anchorX) * 4;
   const ar = data[ai], ag = data[ai + 1], ab = data[ai + 2];
@@ -83,14 +107,16 @@ export interface CropResult {
 
 /**
  * Analyse an image blob and return a (possibly cropped) version.
- * Runs entirely in-browser via OffscreenCanvas / HTMLCanvasElement.
+ * Runs entirely in-browser via HTMLCanvasElement.
+ *
+ * Strategy for left/right: sample many rows, measure padding on each,
+ * take the MINIMUM across all sampled rows. This handles emails where
+ * different sections have different background colors in the padding strip.
  */
 export async function autoCropPadding(file: Blob): Promise<CropResult> {
-  // Load bitmap
   const bitmap = await createImageBitmap(file);
   const { width, height } = bitmap;
 
-  // Draw to canvas to get pixel data
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -99,25 +125,36 @@ export async function autoCropPadding(file: Blob): Promise<CropResult> {
   const imageData = ctx.getImageData(0, 0, width, height);
   const data = imageData.data;
 
-  // --- Detect LEFT padding ---
-  let leftPad = 0;
-  for (let x = 0; x < Math.floor(width * 0.35); x++) {
-    if (isUniformColumn(data, width, height, x)) {
-      leftPad = x + 1;
-    } else {
-      break;
+  // --- Detect LEFT / RIGHT padding via per-row scanning ---
+  const maxHScan = Math.floor(width * 0.35);
+  const rowStep = Math.max(1, Math.floor(height / SAMPLE_COUNT));
+
+  let minLeft = Infinity;
+  let minRight = Infinity;
+  let leftSamples = 0;
+  let rightSamples = 0;
+
+  for (let y = rowStep; y < height - rowStep; y += rowStep) {
+    const lp = measureRowLeftPad(data, width, y, maxHScan);
+    const rp = measureRowRightPad(data, width, y, maxHScan);
+
+    // Only count rows that have some padding (skip rows where content extends to edge)
+    if (lp > 0) {
+      minLeft = Math.min(minLeft, lp);
+      leftSamples++;
+    }
+    if (rp > 0) {
+      minRight = Math.min(minRight, rp);
+      rightSamples++;
     }
   }
 
-  // --- Detect RIGHT padding ---
-  let rightPad = 0;
-  for (let x = width - 1; x > Math.floor(width * 0.65); x--) {
-    if (isUniformColumn(data, width, height, x)) {
-      rightPad = width - x;
-    } else {
-      break;
-    }
-  }
+  // Require at least 70% of sampled rows to show padding
+  const totalSamples = Math.floor((height - 2 * rowStep) / rowStep);
+  const minRowRatio = 0.7;
+
+  const leftPad = leftSamples >= totalSamples * minRowRatio ? (minLeft === Infinity ? 0 : minLeft) : 0;
+  const rightPad = rightSamples >= totalSamples * minRowRatio ? (minRight === Infinity ? 0 : minRight) : 0;
 
   // --- Detect TOP padding ---
   let topPad = 0;
@@ -143,7 +180,6 @@ export async function autoCropPadding(file: Blob): Promise<CropResult> {
 
   // Only crop horizontally if BOTH sides have padding above threshold
   const cropH = leftPad >= minHPad && rightPad >= minHPad;
-  // Only crop vertically if padding is > 1 % height
   const minVPad = Math.floor(height * 0.01);
   const cropTop = topPad >= minVPad;
   const cropBottom = bottomPad >= minVPad;
