@@ -1486,6 +1486,8 @@ export default function CampaignEditor() {
   }
 
   function getCurrentFontSize(el){
+    // Check inline style first (user may have set it), then computed
+    if(el.style && el.style.fontSize) return parseInt(el.style.fontSize) || 16;
     return parseInt(window.getComputedStyle(el).fontSize) || 16;
   }
 
@@ -2497,10 +2499,10 @@ export default function CampaignEditor() {
             ) : campaign?.html ? (
               <div className={`flex ${showReferenceDialog && selectedReference ? 'justify-start p-1 pl-0.5 pt-4' : 'justify-center p-8'}`}>
                 <div
-                  className="overflow-hidden"
                   style={{
                     width: renderedWidth,
                     height: renderedHeight,
+                    position: 'relative',
                   }}
                 >
                   <iframe
