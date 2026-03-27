@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, Send, Undo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, RotateCcw } from "lucide-react";
+import { ArrowLeft, Download, Send, Undo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, RotateCcw, Link2, Loader2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -90,6 +90,8 @@ export default function CampaignEditor() {
   const [matchProductColors, setMatchProductColors] = useState(false);
   const [selectedShopifyProducts, setSelectedShopifyProducts] = useState<SelectedShopifyProduct[]>([]);
   const [designNotes, setDesignNotes] = useState("");
+  const [clickupUrl, setClickupUrl] = useState("");
+  const [clickupLoading, setClickupLoading] = useState(false);
   const [subjectLine, setSubjectLine] = useState("");
   const [previewText, setPreviewText] = useState("");
   const [starredCampaign, setStarredCampaign] = useState(false);
@@ -711,6 +713,40 @@ export default function CampaignEditor() {
   const isDraft = !campaign?.html || campaign?.status === "draft";
   const isGenerating = campaign?.status === "generating" || generating;
 
+  const importFromClickUp = async () => {
+    if (!clickupUrl.trim() || !brandId) return;
+    setClickupLoading(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/clickup-fetch-task`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ brandId, taskUrl: clickupUrl.trim() }),
+        }
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: "Import failed" }));
+        throw new Error(err.error || `Error ${resp.status}`);
+      }
+      const data = await resp.json();
+      if (data.name) setNameValue(data.name);
+      if (data.brief) setBrief(data.brief);
+      if (data.copy) setExtraCopy(data.copy);
+      if (data.suggestedGoal) setGoal(data.suggestedGoal);
+      toast.success("Imported from ClickUp");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to import from ClickUp");
+    } finally {
+      setClickupLoading(false);
+    }
+  };
+
   const zoomScale = screenZoom / 100;
   const renderedWidth = Math.round(viewportWidth * zoomScale);
   const renderedHeight = Math.round(iframeContentHeight * zoomScale);
@@ -982,6 +1018,30 @@ export default function CampaignEditor() {
                 )}
                 <div>
                   <h2 className="text-sm font-medium mb-4">Campaign Brief</h2>
+                </div>
+                {/* Import from ClickUp */}
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Link2 className="w-3 h-3" /> Import from ClickUp (optional)
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={clickupUrl}
+                      onChange={(e) => setClickupUrl(e.target.value)}
+                      placeholder="Paste ClickUp task URL..."
+                      className="bg-card border-border text-sm"
+                      onKeyDown={(e) => e.key === "Enter" && importFromClickUp()}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={importFromClickUp}
+                      disabled={!clickupUrl.trim() || clickupLoading}
+                      className="shrink-0"
+                    >
+                      {clickupLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Import"}
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">What's this campaign about?</label>

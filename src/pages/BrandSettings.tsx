@@ -14,6 +14,7 @@ import ProductManager from "@/components/brand/ProductManager";
 import KlaviyoSetup from "@/components/brand/KlaviyoSetup";
 import ShopifySetup from "@/components/brand/ShopifySetup";
 import ShopifyProductGrid from "@/components/brand/ShopifyProductGrid";
+import ClickUpSetup from "@/components/brand/ClickUpSetup";
 import { toast } from "sonner";
 
 interface BrandAsset {
@@ -109,6 +110,7 @@ export default function BrandSettings() {
           <TabsTrigger value="qa">QA Checklist</TabsTrigger>
           <TabsTrigger value="klaviyo">Klaviyo</TabsTrigger>
           <TabsTrigger value="shopify">Shopify</TabsTrigger>
+          <TabsTrigger value="clickup">ClickUp</TabsTrigger>
           <TabsTrigger value="analysis">Analysis</TabsTrigger>
         </TabsList>
 
@@ -169,6 +171,10 @@ export default function BrandSettings() {
 
         <TabsContent value="klaviyo">
           {brandId && <KlaviyoSetup brandId={brandId} />}
+        </TabsContent>
+
+        <TabsContent value="clickup">
+          {brandId && <ClickUpSetup brandId={brandId} />}
         </TabsContent>
 
         <TabsContent value="analysis">
