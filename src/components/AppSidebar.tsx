@@ -2,7 +2,8 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { LayoutDashboard, Settings, LogOut, FolderOpen, Palette, BookOpen } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, FolderOpen, Palette, BookOpen, Library } from "lucide-react";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { NavLink } from "@/components/NavLink";
 import {
   Sidebar,
@@ -22,6 +23,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const { signOut } = useAuth();
+  const { isAdmin } = useIsAdmin();
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
@@ -96,6 +98,24 @@ export function AppSidebar() {
                     <NavLink to={`/brands/${brandId}/guide`} end activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">
                       <BookOpen className="mr-2 h-4 w-4 shrink-0" />
                       {!collapsed && <span>Brand Guide</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+        {/* Admin section */}
+        {isAdmin && (
+          <SidebarGroup>
+            <SidebarGroupLabel>{collapsed ? "A" : "Admin"}</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild>
+                    <NavLink to="/admin/library" end activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium">
+                      <Library className="mr-2 h-4 w-4 shrink-0" />
+                      {!collapsed && <span>Reference Library</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

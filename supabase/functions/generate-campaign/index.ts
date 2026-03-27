@@ -209,7 +209,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { brandId, campaignId, brief, goal, copy, speedMode, productIds, pinnedAssetUrls: pinnedUrls, matchProductColors, designNotes, shopifyProducts } = await req.json();
+    const { brandId, campaignId, brief, goal, copy, speedMode, productIds, pinnedAssetUrls: pinnedUrls, matchProductColors, designNotes, shopifyProducts, reference } = await req.json();
     campaignIdForError = campaignId;
 
     // Always use Opus 4.6
@@ -429,6 +429,52 @@ You MUST feature these products prominently in the campaign. Use at least one im
       brandValuesText += `\n\n=== USER DESIGN NOTES FOR THIS CAMPAIGN ===\n${designNotes}`;
     }
 
+    // Build reference campaign block if provided
+    let referenceBlock = "";
+    const referenceImageBlocks: any[] = [];
+    if (reference && reference.image_urls && reference.image_urls.length > 0) {
+      const strength = reference.strength || 5;
+      let referencePrompt = "";
+      if (strength <= 3) {
+        referencePrompt = `TONAL REFERENCE (light influence):
+The following campaign is provided for subtle inspiration only.
+Do not replicate its structure or design. Let it gently influence
+the energy and pacing of the writing.`;
+      } else if (strength <= 6) {
+        referencePrompt = `STRUCTURAL REFERENCE (medium influence):
+Use the following campaign as loose structural inspiration.
+You may borrow its general section flow and visual rhythm,
+but the output must fully conform to the brand's design system.`;
+      } else if (strength <= 9) {
+        referencePrompt = `STRUCTURAL TEMPLATE (strong influence):
+Closely follow the layout approach and section sequence of the
+following campaign. Replicate its visual hierarchy and pacing.
+Apply the brand's colors, fonts, and copy style throughout.`;
+      } else {
+        referencePrompt = `DIRECT TEMPLATE (full influence):
+Treat the following campaign as a structural template.
+Replicate its exact section order and layout approach.
+Apply the brand's complete design system on top of this structure.
+The output should feel like this campaign re-skinned for the brand.`;
+      }
+
+      referenceBlock = `\n\n=== ${referencePrompt} ===`;
+
+      // Fetch reference images
+      for (const url of reference.image_urls.slice(0, 10)) {
+        try {
+          const imgResp = await fetch(url);
+          if (!imgResp.ok) continue;
+          const contentType = imgResp.headers.get("content-type") || "image/jpeg";
+          const mediaType = contentType.split(";")[0].trim();
+          const buf = await imgResp.arrayBuffer();
+          if (buf.byteLength > 4_500_000) continue;
+          const b64 = arrayBufferToBase64(buf);
+          referenceImageBlocks.push({ type: "image", source: { type: "base64", media_type: mediaType, data: b64 } });
+        } catch {}
+      }
+    }
+
     userContent.push({ type: "text", text: brandValuesText });
 
     // Goal-specific creative direction for structural variety
@@ -449,6 +495,14 @@ You MUST feature these products prominently in the campaign. Use at least one im
 
     const creativeDir = goalCreativeDirection[goal] || goalCreativeDirection[goal?.replace(/[-\s]/g, '_')] || 
       `CREATIVE DIRECTION: Be creative with the layout structure. Don't default to a generic template. Consider the campaign goal "${goal}" and design a unique layout that serves that purpose. Vary section types, image placements, and content flow. Think like an editorial designer.`;
+
+    // Inject reference block before the campaign brief
+    if (referenceBlock) {
+      userContent.push({ type: "text", text: referenceBlock });
+      if (referenceImageBlocks.length > 0) {
+        userContent.push(...referenceImageBlocks);
+      }
+    }
 
     let part3 = `Generate a ${goal} email campaign.\nBrief: ${brief}`;
     if (copy) part3 += `\nThe following copy must be used verbatim: ${copy}`;

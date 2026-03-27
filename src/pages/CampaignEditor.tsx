@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ProductSelector, { type SelectedShopifyProduct } from "@/components/brand/ProductSelector";
 import SegmentSelector from "@/components/brand/SegmentSelector";
+import ReferencePanel, { type SelectedReference } from "@/components/campaign/ReferencePanel";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -80,6 +81,21 @@ export default function CampaignEditor() {
   const [designNotes, setDesignNotes] = useState("");
   const [subjectLine, setSubjectLine] = useState("");
   const [previewText, setPreviewText] = useState("");
+  const [refPanelOpen, setRefPanelOpen] = useState(false);
+  const [selectedReference, setSelectedReference] = useState<SelectedReference | null>(null);
+
+  // Restore reference panel state from localStorage
+  useEffect(() => {
+    if (!campaignId) return;
+    try {
+      const stored = localStorage.getItem(`ref-panel-${campaignId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (typeof parsed.isOpen === "boolean") setRefPanelOpen(parsed.isOpen);
+        if (parsed.selectedReference) setSelectedReference(parsed.selectedReference);
+      }
+    } catch {}
+  }, [campaignId]);
   const [sendListIds, setSendListIds] = useState<string[]>([]);
   const [sendSegmentIds, setSendSegmentIds] = useState<string[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -237,6 +253,12 @@ export default function CampaignEditor() {
         matchProductColors: matchProductColors || undefined,
         designNotes: designNotes.trim() || undefined,
         shopifyProducts: selectedShopifyProducts.length > 0 ? selectedShopifyProducts : undefined,
+        reference: selectedReference ? {
+          type: selectedReference.type,
+          id: selectedReference.id,
+          image_urls: selectedReference.image_urls,
+          strength: selectedReference.strength,
+        } : undefined,
       }),
     }).catch(() => {});
 
@@ -347,6 +369,14 @@ export default function CampaignEditor() {
           message: userMsg,
           currentHtml: campaign.html,
           ...(attachedImageUrls.length > 0 ? { attachedImageUrls } : {}),
+          ...(selectedReference ? {
+            reference: {
+              type: selectedReference.type,
+              id: selectedReference.id,
+              image_urls: selectedReference.image_urls,
+              strength: selectedReference.strength,
+            },
+          } : {}),
         },
       });
       if (error) throw new Error(error.message || "Edit failed");
@@ -491,7 +521,20 @@ export default function CampaignEditor() {
         </div>
       </div>
 
-      {/* Main Content — draggable split */}
+      {/* Main Content — with reference panel + draggable split */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Reference Panel */}
+        {brandId && campaignId && (
+          <ReferencePanel
+            brandId={brandId}
+            campaignId={campaignId}
+            isOpen={refPanelOpen}
+            onToggle={() => setRefPanelOpen((o) => !o)}
+            selectedReference={selectedReference}
+            onSelectReference={setSelectedReference}
+          />
+        )}
+
       <PanelGroup direction="horizontal" className="flex-1">
         {/* Left Panel — Preview */}
         <Panel defaultSize={60} minSize={25} maxSize={85}>
@@ -557,6 +600,14 @@ export default function CampaignEditor() {
           <div className="h-full flex flex-col overflow-hidden">
             {isDraft && !isGenerating ? (
               <div className="p-6 space-y-5 overflow-y-auto flex-1">
+                {/* Reference indicator */}
+                {selectedReference && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-xs">
+                    <span className="text-primary font-medium">Reference:</span>
+                    <span className="truncate">{selectedReference.title}</span>
+                    <Badge className="text-[9px] ml-auto bg-primary/20 text-primary">Strength {selectedReference.strength}</Badge>
+                  </div>
+                )}
                 <div>
                   <h2 className="text-sm font-medium mb-4">Campaign Brief</h2>
                 </div>
@@ -718,6 +769,14 @@ export default function CampaignEditor() {
               </div>
             ) : (
               <div className="flex flex-col flex-1 overflow-hidden">
+                {/* Reference indicator in chat mode */}
+                {selectedReference && (
+                  <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-primary/5 text-xs">
+                    <span className="text-muted-foreground">Generating with reference:</span>
+                    <span className="font-medium truncate">{selectedReference.title}</span>
+                    <span className="text-muted-foreground">(strength {selectedReference.strength})</span>
+                  </div>
+                )}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
                   {messages.map((msg) => {
                     if (msg.role === "system") {
@@ -812,6 +871,7 @@ export default function CampaignEditor() {
           </div>
         </Panel>
       </PanelGroup>
+      </div>
     </div>
   );
 }
