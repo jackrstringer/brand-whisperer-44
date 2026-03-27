@@ -605,6 +605,7 @@ export default function CampaignEditor() {
               setStreamingText("");
               streamingTextRef.current = "";
               setAgentState("idle");
+              setIdeateIndicator("done");
               serverReply = "__VARIANTS_HANDLED__";
               const msgId = crypto.randomUUID();
               streamingVariantMsgIdRef.current = msgId;
