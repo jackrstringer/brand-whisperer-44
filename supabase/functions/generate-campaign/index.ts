@@ -590,7 +590,13 @@ You may make minor adjustments to fit the brief, but the overall skeleton should
 - Do not use any other product image URLs`;
     }
 
-    part3 += `\n\nThe output must MATCH the brand's design language (colors, fonts, spacing, tone) from the references above, but the LAYOUT and STRUCTURE must be original and tailored to this specific campaign goal. Return only the complete HTML.`;
+    if (referenceMode === "dupe") {
+      part3 += `\n\nThe output must use the brand's colors, fonts, and design tokens — but the LAYOUT and STRUCTURE must be an EXACT CLONE of the reference campaign screenshot. Do NOT deviate from the reference layout. Return only the complete HTML.`;
+    } else if (referenceMode === "reference") {
+      part3 += `\n\nThe output must use the brand's colors, fonts, and design tokens. Follow the reference campaign's layout structure closely. Return only the complete HTML.`;
+    } else {
+      part3 += `\n\nThe output must MATCH the brand's design language (colors, fonts, spacing, tone) from the references above, but the LAYOUT and STRUCTURE must be original and tailored to this specific campaign goal. Return only the complete HTML.`;
+    }
     userContent.push({ type: "text", text: part3 });
 
     // === PASS 1: Generate (FIX 1: max_tokens 16384, FIX 6: callAnthropic with timeout) ===
