@@ -1,66 +1,76 @@
 
+What I found (from logs + code)
+1) This is not an AI-generation timeout.
+- Edge logs show the model finished quickly: `AI stream: 7862ms`.
+- Logs also show valid variant output: `Variant mode: 4 variants` and `<variants>` present in `fullText preview`.
 
-# Improve Campaign Edit & Variant System (Learning from Lucy)
+2) The request fails during stream finalization, after variants are generated.
+- Edge log error: `TypeError: The stream controller cannot close or enqueue` in `edit-campaign`.
+- In code, variant path calls `ctrl.close()` and returns, but `finally` also calls `ctrl.close()` again.
+- That double-close pattern matches this exact runtime error and can cause the stream to terminate unreliably from the browser’s perspective.
 
-## Problem
-The current patch-based editing system frequently fails because the AI's `find` strings don't exactly match the HTML. Variants work but lack re-selection support — once applied, you can't switch to a different option without the find string being stale.
+3) Why it looked like “stuck then dropped” in UI.
+- Session replay shows user message + thinking indicator, but no variant cards rendered.
+- Client only renders variant cards on `event: variants`.
+- If stream termination is faulty, client may never process final event blocks (or exits without actionable event), then `finally` resets sending state, so it looks like the process silently died.
 
-## Key Improvements from Lucy to Apply
+4) There is also a schema mismatch that weakens variant persistence.
+- Function writes `tool_calls` on `chat_messages`, but DB `chat_messages` has no `tool_calls` column.
+- This likely does not cause the immediate streaming crash, but it breaks reliable storage/reload of variant metadata and should be fixed.
 
-### 1. Full-HTML Retry Fallback in `edit-campaign`
-When all patches fail (0 applied), automatically retry with a second AI call requesting the complete modified HTML instead of patches. This eliminates the "No change applied" dead end.
+Most likely root cause
+- Primary: SSE lifecycle bug in edge function (double close / unsafe enqueue/close ordering).
+- Secondary: client SSE parser is fragile at end-of-stream (doesn’t process leftover buffer on `done`), so final events can be missed if stream ends abruptly.
+- Tertiary: missing `tool_calls` column makes variant state persistence inconsistent.
 
-**In `edit-campaign/index.ts`**: After detecting `patchCount === 0`, make a second Anthropic call with a simpler prompt: "Return the full modified HTML wrapped in `<email_html>` tags." Use the existing `htmlMatch` fallback parser.
+Fix plan (for your senior engineer)
+P0 (stability, must do first)
+1) Harden stream lifecycle in `supabase/functions/edit-campaign/index.ts`.
+- Remove manual `ctrl.close()` from early variant branch OR guard with `isClosed` flag.
+- Add `safeEmit` and `safeClose` helpers:
+  - no `enqueue` after close
+  - no double close
+- Ensure only one close path executes.
 
-### 2. Re-Selection Support for Variants
-Track what text was actually applied so users can switch between variant options after the first apply.
+2) Keep variant response contract simple and deterministic.
+- On variant mode: emit only `variants` then terminal `done` (or just `variants` with terminal flag), but do not interleave risky extra operations after close.
+- Add explicit logs before each terminal emit: `"emitting variants"`, `"emitting done"`.
 
-**Changes:**
-- Add `applied_texts` to `VariantData` type — a `Map`-like structure `Record<number, string>` tracking what replacement text is currently live in the HTML per variant index
-- In `handleApplyVariant`: before replacing, check if a previous variant was applied (via `applied_index`). If so, use the previously applied variant's `replace` text as the new `find` target instead of the original `find`
-- Update `VariantCards` to allow clicking a different option even after one is applied (remove the locked/disabled state)
+P1 (client robustness)
+3) In `CampaignEditor` SSE loop, on `reader.read().done === true`, parse any remaining `buffer` before exiting.
+- Prevent dropping last SSE block if stream closes without extra chunk.
+- Add fallback: if no `variants`/`done` received but stream ended, append a system error message.
 
-### 3. Better Patch Matching with Normalization
-Improve `applyPatches()` in the edge function to handle common mismatches:
-- Normalize HTML entities (`&amp;` vs `&`, `&#39;` vs `'`)
-- Collapse whitespace before matching
-- Try case-insensitive match as last resort for color values
+4) Add request-level timeout/failure UX on client.
+- If no SSE events for N seconds while `sending`, show “Still processing…” + retry action.
+- On terminal failure, always show an explicit error bubble.
 
-### 4. Smarter Variant Detection in System Prompt  
-Add an explicit `isOptionsIntent` check server-side (like Lucy's regex) so the AI reliably enters variant mode. Currently it depends entirely on the AI interpreting the system prompt correctly.
+P1 (data consistency)
+5) Align `chat_messages` schema with code.
+- Either add `tool_calls jsonb` migration, or remove all `tool_calls` writes and store variant payload elsewhere.
+- Right now code assumes this column exists in both read and write paths.
 
-**In `edit-campaign/index.ts`**: Add regex detection before the AI call. If the message matches options-intent patterns, prepend a hint to the user message: `"[USER WANTS OPTIONS — use VARIANT MODE]"`.
+Technical evidence snapshot
+- `edit-campaign` logs:
+  - `Prep: ...`
+  - `AI stream: 7862ms`
+  - `fullText preview: <response>...<variants>...`
+  - `Variant mode: 4 variants`
+  - then `TypeError: The stream controller cannot close or enqueue`
+- Network:
+  - `POST /functions/v1/edit-campaign` returns HTTP 200 with streaming body (so request starts correctly).
+- Session replay:
+  - thinking state appears, then no variant cards, then UI returns to idle without usable result.
 
-## Files to Modify
-
-| File | Change |
-|------|--------|
-| `supabase/functions/edit-campaign/index.ts` | Add retry fallback, options-intent detection, improved patch matching |
-| `src/lib/types.ts` | Add `applied_texts` to `VariantData` |
-| `src/components/brand/VariantCards.tsx` | Allow re-selection after apply |
-| `src/pages/CampaignEditor.tsx` | Update `handleApplyVariant` for re-selection logic |
-
-## Technical Details
-
-### Retry fallback (edit-campaign)
-```text
-User message → AI (patch mode) → 0 patches matched?
-  YES → 2nd AI call (full-HTML mode, ~8K tokens) → save result
-  NO  → apply patches as normal
-```
-
-### Re-selection flow
-```text
-User picks Option A → applied_index=0, applied_texts={0: "new headline A"}
-User picks Option B → find target = applied_texts[0] (not original find)
-                     → replace with Option B's text
-                     → applied_index=1, applied_texts={1: "new headline B"}
-```
-
-### Options-intent regex
-```typescript
-const isOptionsIntent = /\b(option|alternative|variation|variant|idea|choice|version)s?\b/i.test(message)
-  || /\bgive me \d/i.test(message)
-  || /\bshow me \d/i.test(message);
-```
-
+Verification plan after fixes
+1) Ask: “Give me four new options for the language in the first CTA.”
+2) Confirm in logs:
+- variant mode detected
+- variants emitted
+- done emitted
+- no stream controller error
+3) Confirm in UI:
+- variant cards always appear
+- no orphaned loading bubble
+- no silent drop after waiting.
+4) Refresh page and confirm variant state persists correctly (if `tool_calls` schema fixed).
