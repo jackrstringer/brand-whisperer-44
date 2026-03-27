@@ -1,59 +1,30 @@
 
+Goal: make the editor stable and predictable (65% left / 35% right, no overlap), and make zoom actually shrink campaign cards so 8 fit across at max zoom-out.
 
-# Redesign: Inspiration Panel for Campaign Creation Only
+1) Lock the editor into two non-overlapping panes
+- In `src/pages/CampaignEditor.tsx`, remove the resizable panel usage for this screen.
+- Replace it with a fixed 2-column layout (`65%` left, `35%` right) using a single parent container with `min-w-0 overflow-hidden`.
+- Add strict clipping (`overflow-x-hidden`) on the left pane and `overflow-hidden` on the right pane so content can never paint into the other pane.
+- Keep the right pane exclusively for Campaign Brief UI.
 
-## Current State
+2) Fix why zoom currently “does nothing”
+- In `src/components/campaign/ReferencePanel.tsx`, keep the 1–8 column zoom mapping but ensure the cards can physically shrink.
+- Root issue: iframe-based thumbnails have a fixed intrinsic width (`470px`) that can force overflow in masonry columns.
+- Update `CampaignIframeThumbnail` so the iframe is absolutely positioned inside a `relative w-full min-w-0 overflow-hidden` wrapper; wrapper width drives scale.
+- Ensure card wrappers also use `min-w-0 w-full` so column width always wins.
 
-The reference panel is a 280px collapsible left sidebar that shows at all times (draft + editing). It uses small 180px thumbnail cards with labels. After generation, there's no way to "star" the campaign.
+3) Keep masonry dense with tighter spacing
+- Preserve masonry behavior (no large vertical holes) via CSS columns.
+- Reduce spacing to be very tight: e.g. container padding `0`, `columnGap: 2`, item bottom spacing `2px`.
+- Keep `breakInside: avoid` per item so full cards stay intact.
 
-## What the User Wants
+4) Make zoom behavior explicit and reliable
+- Keep slider range 0–100 mapped to columns 8→1.
+- Display current column count next to zoom control (e.g. “8 wide”, “1 wide”) so the effect is visible/traceable.
+- Default zoom value set so initial view is practical (e.g. ~3 wide), but max zoom-out must force 8 columns.
 
-1. **Inspiration panel only during campaign creation** (draft state, before HTML exists)
-2. **Takes the entire left panel** — since there's no campaign preview to show yet, the left panel (currently showing "Generate a campaign to see the preview") becomes the inspiration browser
-3. **Full-length campaign renders** — no labels, just visual previews rendered like the main campaign preview (iframe-style), sized at ~470×470px equivalent at 55% zoom, 3 columns wide
-4. **After generation** — panel disappears, replaced by the campaign preview. A "star" button appears in the top bar (left of the render controls) to save the generated campaign as a reference/favorite
-
-## Changes
-
-### 1. `CampaignEditor.tsx` — Layout restructure
-
-**Draft state (no HTML yet):**
-- Remove the `ReferencePanel` sidebar entirely from the left
-- The left panel (inside `PanelGroup`) becomes the inspiration browser instead of showing "Generate a campaign to see the preview"
-- Show a scrollable 3-wide grid of reference campaigns, each rendered as a scaled-down iframe or full-length image preview (~258px wide at 55% zoom of 470px)
-- No labels, no brand names — pure visual thumbnails showing the full campaign length
-- Clicking a campaign selects it as reference (highlighted border + strength slider appears at bottom)
-- Keep the right panel as the campaign brief form
-
-**After generation (HTML exists):**
-- Left panel shows the campaign preview as it does now
-- No inspiration panel visible
-- Add a star/heart button in the top bar, to the left of the "Render:" controls
-- Clicking it saves the current campaign to `saved_references` as type "campaign"
-- Filled star = already saved, empty = not saved
-
-### 2. `ReferencePanel.tsx` — Repurpose as inline component
-
-- Convert from a sidebar into an inline component that fills the left panel
-- Remove the collapsed strip / 280px sidebar behavior
-- Display reference campaigns in a 3-column grid
-- Each campaign shown as a full-length image (using `thumbnail_url` or first `image_url`), `object-fit: cover` with `object-position: top`, filling the card width
-- No text labels — visuals only
-- On hover: subtle overlay with "Use as reference" button
-- Keep the tabs (Library / My Campaigns / Saved) as filter options at top
-- When a reference is selected, show the strength slider as a sticky bar at the bottom
-
-### 3. Top bar star button
-
-- Add a `Star` icon button between the campaign name/badge and the render controls
-- Only visible when `campaign.html` exists (post-generation)
-- Toggle saves/unsaves to `saved_references` with `reference_type: "campaign"`
-- Optimistic UI update with toast feedback
-
-## Files Modified
-
-| File | Change |
-|------|--------|
-| `src/pages/CampaignEditor.tsx` | Replace left panel content in draft state with inspiration grid; add star button to top bar post-generation; remove sidebar `ReferencePanel` |
-| `src/components/campaign/ReferencePanel.tsx` | Redesign as full-panel inline component: 3-col visual-only grid, no labels, tabs at top, strength slider at bottom |
-
+5) Validation pass (same route/screen)
+- Confirm no pane overlap at all states (draft/editor, with/without generated campaign).
+- At max zoom-out, verify 8 cards fit side-by-side in the left 65% pane (using current viewport scale).
+- At max zoom-in, verify 1 column.
+- Verify spacing remains tight both horizontally and vertically in Library / My Campaigns / Saved tabs.
