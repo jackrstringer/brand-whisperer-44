@@ -333,16 +333,16 @@ export default function ReferencePanel({
                   {hasHtml ? (
                     <CampaignIframeThumbnail html={item.html} title={item.title} />
                   ) : imageUrl ? (
-                    <div style={{ aspectRatio: "470 / 470" }}>
+                    <div>
                       <img
                         src={imageUrl}
                         alt=""
-                        className="w-full h-full object-cover object-top"
+                        className="w-full h-auto block"
                         loading="lazy"
                       />
                     </div>
                   ) : (
-                    <div className="bg-muted flex items-center justify-center" style={{ aspectRatio: "470 / 470" }}>
+                    <div className="bg-muted flex items-center justify-center py-12">
                       <span className="text-[10px] text-muted-foreground">No preview</span>
                     </div>
                   )}
