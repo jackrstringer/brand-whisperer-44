@@ -582,8 +582,56 @@ export default function CampaignEditor() {
               setStreamingText(noChangeText);
             }
 
+            if (eventType === "variants_start") {
+              // New streaming variant mode — create the message shell
+              setStreamingText("");
+              streamingTextRef.current = "";
+              setAgentState("idle");
+              serverReply = "__VARIANTS_HANDLED__";
+              const msgId = crypto.randomUUID();
+              streamingVariantMsgIdRef.current = msgId;
+              const variantMsg: ChatMessage = {
+                id: msgId,
+                campaign_id: campaignId,
+                role: "assistant",
+                content: data.message || "Here are some options:",
+                created_at: new Date().toISOString(),
+                message_type: "variants",
+                variant_data: { message: data.message || "Here are some options:", variants: [], applied_index: null },
+              };
+              setMessages(prev => [...prev, variantMsg]);
+            }
+
+            if (eventType === "variant_item") {
+              // Append a single variant to the streaming message
+              const msgId = streamingVariantMsgIdRef.current;
+              if (msgId && data.variant) {
+                setMessages(prev => prev.map(m => {
+                  if (m.id === msgId && m.variant_data) {
+                    return { ...m, variant_data: { ...m.variant_data, variants: [...m.variant_data.variants, data.variant] } };
+                  }
+                  return m;
+                }));
+              }
+            }
+
+            if (eventType === "variants_done") {
+              // Finalize the variant message with all variants
+              const msgId = streamingVariantMsgIdRef.current;
+              if (msgId && data.variants) {
+                setMessages(prev => prev.map(m => {
+                  if (m.id === msgId && m.variant_data) {
+                    return { ...m, variant_data: { ...m.variant_data, message: data.message, variants: data.variants } };
+                  }
+                  return m;
+                }));
+              }
+              streamingVariantMsgIdRef.current = null;
+              serverReply = "__VARIANTS_HANDLED__";
+            }
+
             if (eventType === "variants") {
-              // Discard any streaming text bubble — variant message replaces it
+              // Legacy non-streaming variant event
               setStreamingText("");
               streamingTextRef.current = "";
               serverReply = "__VARIANTS_HANDLED__";
