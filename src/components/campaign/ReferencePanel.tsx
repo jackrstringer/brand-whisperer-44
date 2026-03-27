@@ -236,7 +236,7 @@ export default function ReferencePanel({
       return item ? { ...item, _source: "Library" as const } : null;
     } else {
       const item = myCampaigns.find((c) => c.id === s.reference_id);
-      return item ? { id: item.id, title: item.name, brand_name: null, thumbnail_url: item.pinned_asset_urls?.[0] || "", image_urls: item.pinned_asset_urls || null, category: null, tags: null, _source: "Mine" as const } : null;
+      return item ? { id: item.id, title: item.name, brand_name: null, thumbnail_url: item.pinned_asset_urls?.[0] || "", image_urls: item.pinned_asset_urls || null, category: null, tags: null, html: item.html || null, _source: "Mine" as const } : null;
     }
   }).filter(Boolean);
 
