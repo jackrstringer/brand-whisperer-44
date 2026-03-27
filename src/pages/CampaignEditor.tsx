@@ -1232,13 +1232,97 @@ export default function CampaignEditor() {
         el.style.removeProperty('position');
         el.removeAttribute('data-section-name');
       });
+      clone.querySelectorAll('.ctx-menu').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('style').forEach(function(s){
-        if(s.textContent && (s.textContent.indexOf('[contenteditable]')>=0 || s.textContent.indexOf('section-drag')>=0)) s.remove();
+        if(s.textContent && (s.textContent.indexOf('[contenteditable]')>=0 || s.textContent.indexOf('section-drag')>=0 || s.textContent.indexOf('.ctx-menu')>=0)) s.remove();
       });
       window.parent.postMessage({ type: 'textEdited', html: clone.outerHTML }, '*');
-    }, 300);
+    }, 1500);
   }
   document.addEventListener('input', syncHtml);
+
+  /* --- RIGHT-CLICK CONTEXT MENU --- */
+  var ctxMenu = null;
+  var ctxTarget = null;
+  function removeCtxMenu(){ if(ctxMenu){ ctxMenu.remove(); ctxMenu = null; } ctxTarget = null; }
+  document.addEventListener('click', removeCtxMenu);
+  document.addEventListener('scroll', removeCtxMenu, true);
+
+  document.addEventListener('contextmenu', function(e){
+    e.preventDefault();
+    removeCtxMenu();
+    var el = e.target;
+    while(el && el !== document.body){
+      if(el.tagName && /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL|TD|TH|TR|TABLE|DIV|IMG)$/i.test(el.tagName)) break;
+      el = el.parentElement;
+    }
+    if(!el || el === document.body) return;
+    ctxTarget = el;
+
+    var menu = document.createElement('div');
+    menu.className = 'ctx-menu';
+    menu.style.cssText = 'position:fixed;z-index:99999;background:#1a1a1a;border:1px solid #333;border-radius:6px;padding:4px 0;min-width:160px;box-shadow:0 8px 24px rgba(0,0,0,0.4);font-family:-apple-system,BlinkMacSystemFont,sans-serif;';
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = e.clientY + 'px';
+
+    function addItem(label, icon, fn){
+      var item = document.createElement('div');
+      item.style.cssText = 'padding:6px 12px;color:#e0e0e0;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:8px;';
+      item.innerHTML = '<span style="opacity:0.6;font-size:13px;">' + icon + '</span>' + label;
+      item.addEventListener('mouseenter', function(){ item.style.background = '#333'; });
+      item.addEventListener('mouseleave', function(){ item.style.background = 'none'; });
+      item.addEventListener('click', function(ev){ ev.stopPropagation(); removeCtxMenu(); fn(); });
+      menu.appendChild(item);
+    }
+    function addSep(){
+      var sep = document.createElement('div');
+      sep.style.cssText = 'height:1px;background:#333;margin:4px 0;';
+      menu.appendChild(sep);
+    }
+
+    /* Edit text — focus the element */
+    if(el.isContentEditable || /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL)$/i.test(el.tagName)){
+      addItem('Edit Text', '✏️', function(){
+        try { el.contentEditable = 'plaintext-only'; } catch(ex) { el.contentEditable = 'true'; }
+        el.focus();
+        var range = document.createRange();
+        range.selectNodeContents(el);
+        var sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      });
+    }
+
+    /* Copy text */
+    if(el.textContent && el.textContent.trim()){
+      addItem('Copy Text', '📋', function(){
+        navigator.clipboard.writeText(el.textContent.trim()).catch(function(){});
+      });
+    }
+
+    addSep();
+
+    /* Duplicate element */
+    addItem('Duplicate', '⧉', function(){
+      var cloned = el.cloneNode(true);
+      el.parentNode.insertBefore(cloned, el.nextSibling);
+      syncHtml();
+    });
+
+    /* Delete element */
+    addItem('Delete', '🗑️', function(){
+      el.remove();
+      syncHtml();
+    });
+
+    document.body.appendChild(menu);
+    ctxMenu = menu;
+
+    /* Keep menu in viewport */
+    var rect = menu.getBoundingClientRect();
+    if(rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 8) + 'px';
+    if(rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 8) + 'px';
+  });
 
   /* --- SECTION DETECTION --- */
   var sections = [];
