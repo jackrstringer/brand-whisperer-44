@@ -482,7 +482,7 @@ WHAT CHANGES (and ONLY these things):
 Think of it as: you are TRACING the reference layout, then painting over it with the brand's colors and filling in the brand's content. The wireframe is IDENTICAL.`;
       }
 
-      referenceBlock = `\n\n=== ${referencePrompt} ===`;
+      referenceBlock = `\n\n=== ${referencePrompt} ===\n\nThe following image(s) show the EXACT campaign you must ${referenceMode === "dupe" ? "clone" : "reference"}. Study every detail — section count, image positions, text placement, button locations, logo position, spacing:`;
 
       // Fetch reference images
       for (const url of reference.image_urls.slice(0, 10)) {
