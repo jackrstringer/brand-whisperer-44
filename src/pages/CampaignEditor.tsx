@@ -591,6 +591,28 @@ export default function CampaignEditor() {
     toast.success("Undo successful");
   };
 
+  const handleRevertToVersion = async (editIndex: number) => {
+    if (!campaign || !campaignId) return;
+    const history = Array.isArray(campaign.html_history) ? campaign.html_history : [];
+    if (history.length === 0) return;
+
+    // editIndex is the 0-based index of the assistant edit message
+    // history[editIndex] = the HTML that was current BEFORE that edit
+    // The result AFTER that edit = history[editIndex + 1] if it exists, else campaign.html
+    const isLastEdit = editIndex >= history.length - 1;
+    if (isLastEdit) {
+      toast("Already on this version");
+      return;
+    }
+
+    const targetHtml = history[editIndex + 1] as string;
+    const newHistory = history.slice(0, editIndex + 1);
+    await supabase.from("campaigns").update({ html: targetHtml, html_history: newHistory }).eq("id", campaignId);
+    setCampaign((c) => c ? { ...c, html: targetHtml, html_history: newHistory } : c);
+    setCanUndo(newHistory.length > 0);
+    toast.success("Reverted to this version");
+  };
+
   const exportHtml = () => {
     if (!campaign?.html) return;
     const blob = new Blob([campaign.html], { type: "text/html" });
