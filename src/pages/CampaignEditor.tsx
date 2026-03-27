@@ -1004,7 +1004,7 @@ export default function CampaignEditor() {
           body: JSON.stringify({
             campaignId,
             message: instruction,
-            currentHtml: campaign.html,
+            currentHtml: iframeOwnedHtmlRef.current || campaign.html,
             silent: true,
           }),
         }
