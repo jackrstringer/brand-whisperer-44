@@ -920,7 +920,7 @@ export default function CampaignEditor() {
   // The active version index (null = latest = allVersions.length - 1)
   const resolvedActiveIndex = activeVersionIndex ?? allVersions.length - 1;
 
-  const handleUndo = async () => {
+  const handleUndo = useCallback(async () => {
     if (!campaign || !campaignId) return;
     const history = campaign.html_history;
     if (!Array.isArray(history) || history.length === 0) return;
@@ -933,9 +933,9 @@ export default function CampaignEditor() {
     setActiveVersionIndex(null);
     setRedoStack(prev => [...prev, currentHtml]);
     toast.success("Undo successful");
-  };
+  }, [campaign, campaignId]);
 
-  const handleRedo = async () => {
+  const handleRedo = useCallback(async () => {
     if (!campaign || !campaignId || redoStack.length === 0) return;
     const redoHtml = redoStack[redoStack.length - 1];
     const newRedoStack = redoStack.slice(0, -1);
@@ -947,7 +947,20 @@ export default function CampaignEditor() {
     setRedoStack(newRedoStack);
     setActiveVersionIndex(null);
     toast.success("Redo successful");
-  };
+  }, [campaign, campaignId, redoStack]);
+
+  // Keyboard shortcuts: Cmd/Ctrl+Z for undo, Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y for redo
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
+      if (e.key === 'z' && e.shiftKey) { e.preventDefault(); handleRedo(); }
+      if (e.key === 'y') { e.preventDefault(); handleRedo(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleUndo, handleRedo]);
 
   const handleSwitchToVersion = (versionIndex: number) => {
     if (versionIndex === resolvedActiveIndex) return;
@@ -972,6 +985,8 @@ export default function CampaignEditor() {
   // Listen for postMessage from iframe for inline text edits
   useEffect(() => {
     const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'undo') { handleUndo(); return; }
+      if (e.data?.type === 'redo') { handleRedo(); return; }
       if (e.data?.type !== "textEdited" || !e.data?.html) return;
       if (!campaignId || !campaign) return;
       const newHtml = e.data.html as string;
@@ -996,7 +1011,7 @@ export default function CampaignEditor() {
       window.removeEventListener("message", handler);
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
     };
-  }, [campaignId, campaign]);
+  }, [campaignId, campaign, handleUndo, handleRedo]);
 
   if (loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
@@ -1057,22 +1072,47 @@ export default function CampaignEditor() {
         /<\/body>/i,
         `<script>
 (function(){
-  var els = document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,td,th,li,button,label');
-  els.forEach(function(el){
-    if(el.querySelector('img') || el.querySelector('table')) return;
-    if(el.children.length > 0 && el.textContent.trim() === '') return;
-    el.contentEditable = 'true';
+  var blocks = ['TABLE','TR','TD','TH','DIV','UL','OL','IMG'];
+  document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label').forEach(function(el){
+    if(el.querySelector('img,table,div')) return;
+    var hasBlock = Array.from(el.children).some(function(c){ return blocks.indexOf(c.tagName)>=0; });
+    if(hasBlock) return;
+    if(!el.textContent.trim()) return;
+    try { el.contentEditable = 'plaintext-only'; } catch(e) { el.contentEditable = 'true'; }
     el.style.cursor = 'text';
+  });
+  document.addEventListener('paste', function(e){
+    if(!e.target.isContentEditable) return;
+    e.preventDefault();
+    var text = (e.clipboardData||window.clipboardData).getData('text/plain');
+    document.execCommand('insertText', false, text);
+  });
+  document.addEventListener('keydown', function(e){
+    if(!e.target.isContentEditable) return;
+    if((e.metaKey || e.ctrlKey) && e.key === 'z'){
+      e.preventDefault();
+      e.stopPropagation();
+      window.parent.postMessage({ type: e.shiftKey ? 'redo' : 'undo' }, '*');
+    }
+    if((e.metaKey || e.ctrlKey) && e.key === 'y'){
+      e.preventDefault();
+      e.stopPropagation();
+      window.parent.postMessage({ type: 'redo' }, '*');
+    }
   });
   var timer = null;
   document.addEventListener('input', function(){
     clearTimeout(timer);
     timer = setTimeout(function(){
       var clone = document.documentElement.cloneNode(true);
-      var scripts = clone.querySelectorAll('script');
-      scripts.forEach(function(s){ s.remove(); });
-      var editables = clone.querySelectorAll('[contenteditable]');
-      editables.forEach(function(el){ el.removeAttribute('contenteditable'); el.style.removeProperty('cursor'); });
+      clone.querySelectorAll('script').forEach(function(s){ s.remove(); });
+      clone.querySelectorAll('[contenteditable]').forEach(function(el){
+        el.removeAttribute('contenteditable');
+        el.style.removeProperty('cursor');
+      });
+      clone.querySelectorAll('style').forEach(function(s){
+        if(s.textContent && s.textContent.indexOf('[contenteditable]')>=0) s.remove();
+      });
       window.parent.postMessage({ type: 'textEdited', html: clone.outerHTML }, '*');
     }, 300);
   });
