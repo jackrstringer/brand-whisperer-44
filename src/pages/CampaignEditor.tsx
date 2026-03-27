@@ -76,6 +76,8 @@ export default function CampaignEditor() {
   const [streamingText, setStreamingText] = useState("");
   const streamingTextRef = useRef("");
   const [agentState, setAgentState] = useState<"idle" | "thinking" | "editing">("idle");
+  const [loadingMoreVariants, setLoadingMoreVariants] = useState<string | null>(null); // messageId being loaded
+  const streamingVariantMsgIdRef = useRef<string | null>(null);
   const speedMode = "normal";
   const [chatAttachments, setChatAttachments] = useState<File[]>([]);
   const [chatAttachmentPreviews, setChatAttachmentPreviews] = useState<string[]>([]);
