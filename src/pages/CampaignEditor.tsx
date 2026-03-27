@@ -446,6 +446,7 @@ export default function CampaignEditor() {
     setAgentState("thinking");
     setStreamingText("");
     streamingTextRef.current = "";
+    setActiveVersionIndex(null); // snap back to latest when sending new edit
 
     const displayContent = attachedFiles.length > 0
       ? `${userMsg}${userMsg ? "\n" : ""}[${attachedFiles.length} image${attachedFiles.length > 1 ? "s" : ""} attached]`
