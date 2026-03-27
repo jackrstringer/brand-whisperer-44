@@ -167,7 +167,7 @@ export default function ReferencePanel({
 
   const getGridItems = (): { items: any[]; type: "library" | "campaign" }[] => {
     if (tab === "library") return [{ items: filteredLibrary, type: "library" }];
-    if (tab === "mine") return [{ items: myCampaigns.map(c => ({ ...c, title: c.name, thumbnail_url: c.pinned_asset_urls?.[0] || "", image_urls: c.pinned_asset_urls || [] })), type: "campaign" }];
+    if (tab === "mine") return [{ items: myCampaigns.map(c => ({ ...c, title: c.name, thumbnail_url: "", image_urls: [], html: c.html })), type: "campaign" }];
     return [{ items: savedItems as any[], type: "library" }];
   };
 
