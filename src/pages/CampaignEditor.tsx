@@ -1911,6 +1911,8 @@ export default function CampaignEditor() {
     padWrap.appendChild(padPanel);
     bar.appendChild(padWrap);
 
+    bar.appendChild(makeSep());
+
     // Ideate button — stroke-only gradient border
     var ideateBtn = document.createElement('button');
     ideateBtn.className = 'ftb-ideate';
