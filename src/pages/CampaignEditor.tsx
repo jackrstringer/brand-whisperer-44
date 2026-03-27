@@ -1065,7 +1065,7 @@ export default function CampaignEditor() {
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
                   {(() => {
                     let editCount = 0;
-                    const historyLen = Array.isArray(campaign?.html_history) ? campaign.html_history.length : 0;
+                    const totalVersions = allVersions.length;
                     return messages.map((msg) => {
                       if (msg.role === "system") {
                         return (
@@ -1079,21 +1079,27 @@ export default function CampaignEditor() {
                       if (msg.role === "assistant") {
                         const thisEditIndex = editCount;
                         editCount++;
-                        const canRevert = historyLen > 0 && thisEditIndex < historyLen - 1;
+                        // Version index: editIndex + 1 maps to allVersions index (history[0]=v0, history[1]=v1 after edit 0, etc.)
+                        const versionIndex = thisEditIndex + 1;
+                        const isActive = versionIndex === resolvedActiveIndex;
+                        const canSwitch = totalVersions > 1 && versionIndex < totalVersions && !isActive;
                         return (
                           <div key={msg.id} className="flex justify-start group/msg">
                             <div className="max-w-[80%]">
-                              <div className="rounded-lg px-3 py-2 text-sm bg-card text-foreground">
+                              <div className={`rounded-lg px-3 py-2 text-sm bg-card text-foreground ${isActive && activeVersionIndex !== null ? "ring-1 ring-primary/40" : ""}`}>
                                 {msg.content}
                               </div>
-                              {canRevert && (
+                              {canSwitch && (
                                 <button
-                                  onClick={() => handleRevertToVersion(thisEditIndex)}
+                                  onClick={() => handleSwitchToVersion(versionIndex)}
                                   className="flex items-center gap-1 mt-1 px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground opacity-0 group-hover/msg:opacity-100 transition-opacity"
                                 >
                                   <RotateCcw className="w-2.5 h-2.5" />
-                                  Revert to this version
+                                  Switch to this version
                                 </button>
+                              )}
+                              {isActive && activeVersionIndex !== null && (
+                                <span className="text-[10px] text-primary/70 px-2 mt-0.5 block">Viewing this version</span>
                               )}
                             </div>
                           </div>
