@@ -767,6 +767,8 @@ You may make minor adjustments to fit the brief, but the overall skeleton should
 
     const durationSecs = Math.round((Date.now() - new Date(genStartedAt).getTime()) / 1000);
 
+    html = enforceNoStackingLayout(html);
+
     await supabase.from("campaigns").update({
       html,
       status: "ready",
