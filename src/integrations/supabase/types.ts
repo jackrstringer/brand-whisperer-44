@@ -488,36 +488,51 @@ export type Database = {
       }
       reference_campaigns: {
         Row: {
+          ai_metadata: Json | null
           brand_name: string | null
+          campaign_type: string | null
           category: string | null
           created_at: string | null
+          extracted_copy: string | null
           id: string
           image_urls: string[] | null
+          industry: string | null
           is_published: boolean | null
+          message_type: string | null
           sort_order: number | null
           tags: string[] | null
           thumbnail_url: string
           title: string
         }
         Insert: {
+          ai_metadata?: Json | null
           brand_name?: string | null
+          campaign_type?: string | null
           category?: string | null
           created_at?: string | null
+          extracted_copy?: string | null
           id?: string
           image_urls?: string[] | null
+          industry?: string | null
           is_published?: boolean | null
+          message_type?: string | null
           sort_order?: number | null
           tags?: string[] | null
           thumbnail_url: string
           title: string
         }
         Update: {
+          ai_metadata?: Json | null
           brand_name?: string | null
+          campaign_type?: string | null
           category?: string | null
           created_at?: string | null
+          extracted_copy?: string | null
           id?: string
           image_urls?: string[] | null
+          industry?: string | null
           is_published?: boolean | null
+          message_type?: string | null
           sort_order?: number | null
           tags?: string[] | null
           thumbnail_url?: string

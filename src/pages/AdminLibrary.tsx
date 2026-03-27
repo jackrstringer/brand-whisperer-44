@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, MoreVertical, Trash2, Pencil, Eye, EyeOff, GripVertical } from "lucide-react";
+import { Plus, MoreVertical, Trash2, Pencil, Eye, EyeOff, GripVertical, Sparkles, Loader2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +32,11 @@ interface RefCampaign {
   image_urls: string[] | null;
   is_published: boolean;
   sort_order: number;
+  industry: string | null;
+  campaign_type: string | null;
+  message_type: string | null;
+  extracted_copy: string | null;
+  ai_metadata: any | null;
 }
 
 export default function AdminLibrary() {
@@ -141,10 +146,40 @@ export default function AdminLibrary() {
       setShowUpload(false);
       resetForm();
       loadCampaigns();
+
+      // Fire-and-forget AI analysis for new uploads with images
+      if (imageUrls.length > 0) {
+        toast.info("Analyzing campaign with AI...");
+        supabase.functions.invoke("analyze-reference", {
+          body: { referenceId: id, imageUrls },
+        }).then(({ data, error }) => {
+          if (error) {
+            console.error("AI analysis error:", error);
+            toast.error("AI analysis failed — you can edit metadata manually");
+          } else {
+            toast.success("AI analysis complete — metadata updated");
+            loadCampaigns();
+          }
+        });
+      }
     } catch (err: any) {
       toast.error(err.message);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const reanalyze = async (item: RefCampaign) => {
+    if (!item.image_urls?.length) { toast.error("No images to analyze"); return; }
+    toast.info("Re-analyzing campaign...");
+    const { error } = await supabase.functions.invoke("analyze-reference", {
+      body: { referenceId: item.id, imageUrls: item.image_urls },
+    });
+    if (error) {
+      toast.error("Analysis failed");
+    } else {
+      toast.success("Analysis complete");
+      loadCampaigns();
     }
   };
 
@@ -199,6 +234,9 @@ export default function AdminLibrary() {
                       <DropdownMenuItem onClick={() => openEdit(item)}>
                         <Pencil className="w-3.5 h-3.5 mr-2" /> Edit
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => reanalyze(item)}>
+                        <Sparkles className="w-3.5 h-3.5 mr-2" /> Re-analyze
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => togglePublish(item)}>
                         {item.is_published ? <EyeOff className="w-3.5 h-3.5 mr-2" /> : <Eye className="w-3.5 h-3.5 mr-2" />}
                         {item.is_published ? "Unpublish" : "Publish"}
@@ -213,12 +251,28 @@ export default function AdminLibrary() {
               <div className="p-3">
                 <h3 className="text-sm font-medium truncate">{item.title}</h3>
                 <p className="text-xs text-muted-foreground truncate">{item.brand_name}</p>
-                <div className="flex items-center gap-1.5 mt-1.5">
+                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                   <Badge variant={item.is_published ? "default" : "secondary"} className="text-[9px]">
                     {item.is_published ? "Published" : "Draft"}
                   </Badge>
                   {item.category && (
                     <Badge variant="outline" className="text-[9px]">{item.category}</Badge>
+                  )}
+                  {item.industry && (
+                    <Badge variant="outline" className="text-[9px] bg-primary/5">{item.industry}</Badge>
+                  )}
+                  {item.campaign_type && (
+                    <Badge variant="outline" className="text-[9px]">
+                      {item.campaign_type === "flow" ? "Flow" : "Campaign"}
+                    </Badge>
+                  )}
+                  {item.message_type && (
+                    <Badge variant="outline" className="text-[9px]">{item.message_type}</Badge>
+                  )}
+                  {!item.ai_metadata && !item.industry && (
+                    <span className="text-[9px] text-muted-foreground italic flex items-center gap-0.5">
+                      <Sparkles className="w-2.5 h-2.5" /> Not analyzed
+                    </span>
                   )}
                 </div>
               </div>
