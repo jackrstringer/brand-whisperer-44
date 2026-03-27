@@ -2381,11 +2381,12 @@ export default function CampaignEditor() {
           {/* Campaign preview / Inspiration panel */}
           <div
             ref={previewPanelRef}
-            className="h-full min-w-0 bg-card overflow-y-auto scrollbar-hide"
+            className="h-full min-w-0 bg-card overflow-y-auto scrollbar-hide relative"
             style={{
               width: showReferenceDialog && campaign?.html && selectedReference ? '50%' : '100%',
               scrollbarWidth: 'none',
               msOverflowStyle: 'none' as any,
+              cursor: dragSelect?.active ? 'crosshair' : undefined,
             }}
             onScroll={(e) => {
               if (!showReferenceDialog || syncingScroll) return;
@@ -2398,7 +2399,88 @@ export default function CampaignEditor() {
               }
               requestAnimationFrame(() => setSyncingScroll(false));
             }}
+            onMouseDown={(e) => {
+              // Only start drag select on left button, not on interactive elements
+              if (e.button !== 0) return;
+              const tag = (e.target as HTMLElement).tagName;
+              if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+              // Don't start if clicking inside the iframe (iframe handles its own clicks)
+              if ((e.target as HTMLElement).tagName === 'IFRAME') return;
+              const panelRect = previewPanelRef.current?.getBoundingClientRect();
+              if (!panelRect) return;
+              const x = e.clientX - panelRect.left;
+              const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+              setDragSelect({ startX: x, startY: y, x, y, active: false });
+            }}
+            onMouseMove={(e) => {
+              if (!dragSelect) return;
+              const panelRect = previewPanelRef.current?.getBoundingClientRect();
+              if (!panelRect) return;
+              const x = e.clientX - panelRect.left;
+              const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+              const dx = Math.abs(x - dragSelect.startX);
+              const dy = Math.abs(y - dragSelect.startY);
+              if (!dragSelect.active && (dx > 8 || dy > 8)) {
+                setDragSelect({ ...dragSelect, x, y, active: true });
+              } else if (dragSelect.active) {
+                setDragSelect({ ...dragSelect, x, y });
+              }
+            }}
+            onMouseUp={(e) => {
+              if (!dragSelect || !dragSelect.active) {
+                setDragSelect(null);
+                return;
+              }
+              // Calculate the drag rect relative to the iframe
+              const panelRect = previewPanelRef.current?.getBoundingClientRect();
+              if (!panelRect) { setDragSelect(null); return; }
+              // Find the iframe element
+              const iframe = previewPanelRef.current?.querySelector('iframe');
+              if (!iframe) { setDragSelect(null); return; }
+              const iframeRect = iframe.getBoundingClientRect();
+              const iframePanelLeft = iframeRect.left - panelRect.left;
+              const iframePanelTop = iframeRect.top - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+              const scale = zoomScale;
+              // Convert drag rect from panel coords to iframe content coords
+              const left = Math.min(dragSelect.startX, dragSelect.x);
+              const top = Math.min(dragSelect.startY, dragSelect.y);
+              const right = Math.max(dragSelect.startX, dragSelect.x);
+              const bottom = Math.max(dragSelect.startY, dragSelect.y);
+              const iframeRect2 = {
+                left: (left - iframePanelLeft) / scale,
+                top: (top - iframePanelTop) / scale,
+                right: (right - iframePanelLeft) / scale,
+                bottom: (bottom - iframePanelTop) / scale,
+              };
+              // Send to iframe for element detection
+              try {
+                iframe.contentWindow?.postMessage({ type: 'regionSelectQuery', rect: iframeRect2 }, '*');
+              } catch (err) {}
+              setDragSelect(null);
+            }}
+            onMouseLeave={() => {
+              if (dragSelect && !dragSelect.active) setDragSelect(null);
+            }}
           >
+            {/* Drag selection overlay */}
+            {dragSelect?.active && (() => {
+              const left = Math.min(dragSelect.startX, dragSelect.x);
+              const top = Math.min(dragSelect.startY, dragSelect.y);
+              const w = Math.abs(dragSelect.x - dragSelect.startX);
+              const h = Math.abs(dragSelect.y - dragSelect.startY);
+              return (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left, top, width: w, height: h,
+                    border: '1.5px dashed rgba(200,241,53,0.5)',
+                    background: 'rgba(200,241,53,0.05)',
+                    pointerEvents: 'none',
+                    zIndex: 50,
+                  }}
+                />
+              );
+            })()}
             {isGenerating ? (
               <div className="max-w-[600px] mx-auto space-y-4 p-8 mt-12">
                 <div className="text-center mb-6">
