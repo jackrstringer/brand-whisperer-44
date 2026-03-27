@@ -747,6 +747,7 @@ export default function CampaignEditor() {
     await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
     setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
     setCanUndo(true);
+    setRedoStack([]);
 
     // Track which text is now live for this variant index
     const newAppliedTexts = { ...appliedTexts, [index]: variant.replace };
