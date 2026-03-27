@@ -826,10 +826,8 @@ export default function CampaignEditor() {
     ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls)
     : "";
 
-  // Stable shell iframe that receives content via postMessage — no srcDoc swap = no white flash
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const iframeReadyRef = useRef(false);
-  const pendingHtmlRef = useRef<string | null>(null);
+
+
 
   const shellHtml = `<!DOCTYPE html><html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
