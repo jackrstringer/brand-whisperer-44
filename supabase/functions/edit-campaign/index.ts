@@ -434,11 +434,12 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
                   safeEmit("variant_item", { variant: allVariants[vi], index: vi });
                 }
 
-                // Save to DB
-                await supabase.from("chat_messages").insert([
-                  { campaign_id: campaignId, role: "user", content: message },
-                  { campaign_id: campaignId, role: "assistant", content: introText, tool_calls: { type: "variants", data: { message: introText, variants: allVariants, applied_index: null } } },
-                ]);
+                if (!silent) {
+                  await supabase.from("chat_messages").insert([
+                    { campaign_id: campaignId, role: "user", content: message },
+                    { campaign_id: campaignId, role: "assistant", content: introText, tool_calls: { type: "variants", data: { message: introText, variants: allVariants, applied_index: null } } },
+                  ]);
+                }
 
                 safeEmit("variants_done", { message: introText, variants: allVariants });
                 safeEmit("done", { reply: introText, changed: false, patchesApplied: 0, isVariants: true });
