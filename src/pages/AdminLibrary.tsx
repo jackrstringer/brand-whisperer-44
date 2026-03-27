@@ -285,15 +285,15 @@ export default function AdminLibrary() {
         )}
       </div>
 
-      {/* Upload / Edit modal */}
+      {/* Edit-only modal (for existing campaigns) */}
       <Dialog open={showUpload} onOpenChange={(open) => { if (!open) { setShowUpload(false); resetForm(); } }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editingItem ? "Edit Campaign" : "Upload Campaign"}</DialogTitle>
+            <DialogTitle>Edit Campaign</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Title *</label>
+              <label className="text-xs text-muted-foreground">Title</label>
               <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Campaign title" />
             </div>
             <div className="space-y-1.5">
@@ -314,7 +314,7 @@ export default function AdminLibrary() {
               <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="bold typography, full-bleed, dark" />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">Campaign Images</label>
+              <label className="text-xs text-muted-foreground">Add more images</label>
               <input
                 type="file"
                 multiple
@@ -341,7 +341,7 @@ export default function AdminLibrary() {
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowUpload(false); resetForm(); }}>Cancel</Button>
             <Button onClick={handleSubmit} disabled={uploading}>
-              {uploading ? "Uploading..." : editingItem ? "Save" : "Upload"}
+              {uploading ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>
