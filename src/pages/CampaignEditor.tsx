@@ -955,6 +955,11 @@ export default function CampaignEditor() {
   // Keyboard shortcuts: Cmd/Ctrl+Z for undo, Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y for redo
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Skip if user is typing in an input/textarea in the parent
+      const ae = document.activeElement;
+      if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || (ae as HTMLElement).isContentEditable)) return;
+      // Skip if iframe has focus (user is editing inside preview)
+      if (ae && ae.tagName === 'IFRAME') return;
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
