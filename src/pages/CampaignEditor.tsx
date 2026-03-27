@@ -1270,6 +1270,310 @@ export default function CampaignEditor() {
   }
   document.addEventListener('input', syncHtml);
 
+  /* --- FLOATING TOOLBAR --- */
+  var ftbEl = null;
+  var ftbTarget = null;
+  var ftbBlurTimer = null;
+  var ftbColorPanel = null;
+
+  function removeFtb(){
+    if(ftbEl){ ftbEl.remove(); ftbEl = null; }
+    if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; }
+    ftbTarget = null;
+  }
+
+  function getTagLabel(el){
+    var t = el.tagName;
+    if(/^H[1-6]$/.test(t)) return 'Heading';
+    if(t === 'A') return 'Link';
+    if(t === 'BUTTON') return 'Button';
+    if(t === 'LI') return 'List';
+    if(t === 'LABEL') return 'Label';
+    if(t === 'SPAN' && el.closest('a')) return 'Link';
+    return 'Body';
+  }
+
+  function positionFtb(bar, el){
+    var r = el.getBoundingClientRect();
+    var bw = bar.offsetWidth || 340;
+    var bh = bar.offsetHeight || 36;
+    var left = Math.max(4, Math.min(r.left + r.width/2 - bw/2, window.innerWidth - bw - 4));
+    if(r.top > bh + 8){
+      bar.style.top = (r.top - bh - 6) + 'px';
+    } else {
+      bar.style.top = (r.bottom + 6) + 'px';
+    }
+    bar.style.left = left + 'px';
+  }
+
+  function extractEmailColors(){
+    var colors = new Set();
+    var defaults = ['#000000','#ffffff','#333333','#666666','#999999','#ff0000','#0066cc','#00aa00'];
+    defaults.forEach(function(c){ colors.add(c); });
+    document.querySelectorAll('*').forEach(function(el){
+      var s = el.style;
+      if(s.color){ var c = rgbToHex(s.color); if(c) colors.add(c); }
+      if(s.backgroundColor){ var c = rgbToHex(s.backgroundColor); if(c) colors.add(c); }
+    });
+    var fromAttrs = document.querySelectorAll('[color],[bgcolor]');
+    fromAttrs.forEach(function(el){
+      if(el.getAttribute('color')){ var c = normalizeHex(el.getAttribute('color')); if(c) colors.add(c); }
+      if(el.getAttribute('bgcolor')){ var c = normalizeHex(el.getAttribute('bgcolor')); if(c) colors.add(c); }
+    });
+    return Array.from(colors).slice(0, 20);
+  }
+
+  function rgbToHex(rgb){
+    if(!rgb) return null;
+    if(rgb.charAt(0)==='#') return normalizeHex(rgb);
+    var m = rgb.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/);
+    if(!m) return null;
+    return '#' + [m[1],m[2],m[3]].map(function(x){ return parseInt(x).toString(16).padStart(2,'0'); }).join('');
+  }
+
+  function normalizeHex(h){
+    if(!h) return null;
+    h = h.trim();
+    if(h.charAt(0)!=='#') h = '#' + h;
+    if(h.length === 4) h = '#' + h[1]+h[1]+h[2]+h[2]+h[3]+h[3];
+    return h.toLowerCase();
+  }
+
+  function getCurrentFontSize(el){
+    return parseInt(window.getComputedStyle(el).fontSize) || 16;
+  }
+
+  function getCurrentAlignment(el){
+    var a = window.getComputedStyle(el).textAlign;
+    if(a === 'center') return 'center';
+    if(a === 'right' || a === 'end') return 'right';
+    return 'left';
+  }
+
+  function updateBIUState(bar){
+    try {
+      var bBtn = bar.querySelector('[data-ftb="bold"]');
+      var iBtn = bar.querySelector('[data-ftb="italic"]');
+      var uBtn = bar.querySelector('[data-ftb="underline"]');
+      if(bBtn) bBtn.classList.toggle('active', document.queryCommandState('bold'));
+      if(iBtn) iBtn.classList.toggle('active', document.queryCommandState('italic'));
+      if(uBtn) uBtn.classList.toggle('active', document.queryCommandState('underline'));
+    } catch(e){}
+  }
+
+  function showFtb(el){
+    removeFtb();
+    ftbTarget = el;
+
+    var bar = document.createElement('div');
+    bar.className = 'ftb';
+
+    // Tag label
+    var tag = document.createElement('span');
+    tag.className = 'ftb-tag';
+    tag.textContent = getTagLabel(el);
+    bar.appendChild(tag);
+
+    bar.appendChild(makeSep());
+
+    // Font size select
+    var sizeSelect = document.createElement('select');
+    sizeSelect.className = 'ftb-select';
+    sizeSelect.title = 'Font size';
+    var sizes = [10,12,13,14,16,18,20,24,28,32,40,48,64];
+    var currentSize = getCurrentFontSize(el);
+    sizes.forEach(function(s){
+      var opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = s + 'px';
+      if(s === currentSize) opt.selected = true;
+      sizeSelect.appendChild(opt);
+    });
+    // If current size not in list, add it
+    if(sizes.indexOf(currentSize) < 0){
+      var opt = document.createElement('option');
+      opt.value = currentSize;
+      opt.textContent = currentSize + 'px';
+      opt.selected = true;
+      sizeSelect.insertBefore(opt, sizeSelect.firstChild);
+    }
+    sizeSelect.addEventListener('change', function(){
+      var sel = window.getSelection();
+      if(!sel.rangeCount || sel.isCollapsed){
+        // No selection — apply to the whole element
+        el.style.fontSize = sizeSelect.value + 'px';
+      } else {
+        document.execCommand('fontSize', false, '7');
+        // Convert <font size=7> to <span style="font-size">
+        el.querySelectorAll('font[size="7"]').forEach(function(f){
+          var span = document.createElement('span');
+          span.style.fontSize = sizeSelect.value + 'px';
+          span.innerHTML = f.innerHTML;
+          f.replaceWith(span);
+        });
+      }
+      syncHtml();
+      el.focus();
+    });
+    sizeSelect.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+    bar.appendChild(sizeSelect);
+
+    // Text color swatch
+    var currentColor = window.getComputedStyle(el).color;
+    var swatchWrap = document.createElement('div');
+    swatchWrap.style.position = 'relative';
+    var swatch = document.createElement('div');
+    swatch.className = 'ftb-swatch';
+    swatch.style.backgroundColor = currentColor;
+    swatch.title = 'Text color';
+    swatch.addEventListener('click', function(e){
+      e.stopPropagation();
+      if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; return; }
+      var panel = document.createElement('div');
+      panel.className = 'ftb-cpanel';
+      var colors = extractEmailColors();
+      colors.forEach(function(hex){
+        var cs = document.createElement('div');
+        cs.className = 'ftb-cpanel-swatch';
+        cs.style.backgroundColor = hex;
+        cs.title = hex;
+        if(rgbToHex(currentColor) === hex) cs.classList.add('active');
+        cs.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          var sel = window.getSelection();
+          if(!sel.rangeCount || sel.isCollapsed){
+            el.style.color = hex;
+          } else {
+            document.execCommand('foreColor', false, hex);
+          }
+          swatch.style.backgroundColor = hex;
+          panel.remove();
+          ftbColorPanel = null;
+          syncHtml();
+          el.focus();
+        });
+        panel.appendChild(cs);
+      });
+      swatchWrap.appendChild(panel);
+      ftbColorPanel = panel;
+    });
+    swatchWrap.appendChild(swatch);
+    bar.appendChild(swatchWrap);
+
+    bar.appendChild(makeSep());
+
+    // Bold
+    var boldBtn = makeBtn('<b>B</b>', 'Bold');
+    boldBtn.setAttribute('data-ftb', 'bold');
+    boldBtn.addEventListener('click', function(e){ e.stopPropagation(); document.execCommand('bold'); updateBIUState(bar); syncHtml(); el.focus(); });
+    bar.appendChild(boldBtn);
+
+    // Italic
+    var italicBtn = makeBtn('<i>I</i>', 'Italic');
+    italicBtn.setAttribute('data-ftb', 'italic');
+    italicBtn.addEventListener('click', function(e){ e.stopPropagation(); document.execCommand('italic'); updateBIUState(bar); syncHtml(); el.focus(); });
+    bar.appendChild(italicBtn);
+
+    // Underline
+    var underlineBtn = makeBtn('<u>U</u>', 'Underline');
+    underlineBtn.setAttribute('data-ftb', 'underline');
+    underlineBtn.addEventListener('click', function(e){ e.stopPropagation(); document.execCommand('underline'); updateBIUState(bar); syncHtml(); el.focus(); });
+    bar.appendChild(underlineBtn);
+
+    bar.appendChild(makeSep());
+
+    // Text align
+    var alignIcons = { left:'≡', center:'☰', right:'≡' };
+    var currentAlign = getCurrentAlignment(el);
+    var alignBtn = makeBtn(alignIcons[currentAlign] || '≡', 'Alignment');
+    alignBtn.style.fontSize = '15px';
+    if(currentAlign === 'right') alignBtn.style.transform = 'scaleX(-1)';
+    alignBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var next = currentAlign === 'left' ? 'center' : currentAlign === 'center' ? 'right' : 'left';
+      el.style.textAlign = next;
+      currentAlign = next;
+      alignBtn.innerHTML = alignIcons[next];
+      if(next === 'right') alignBtn.style.transform = 'scaleX(-1)';
+      else alignBtn.style.transform = '';
+      syncHtml();
+      el.focus();
+    });
+    bar.appendChild(alignBtn);
+
+    bar.appendChild(makeSep());
+
+    // Ideate button
+    var ideateBtn = document.createElement('button');
+    ideateBtn.className = 'ftb-ideate';
+    ideateBtn.innerHTML = '✨ Ideate';
+    ideateBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      window.parent.postMessage({ type: 'ideateElement', text: el.textContent.trim(), tagName: el.tagName }, '*');
+    });
+    bar.appendChild(ideateBtn);
+
+    document.body.appendChild(bar);
+    ftbEl = bar;
+    positionFtb(bar, el);
+    updateBIUState(bar);
+  }
+
+  function makeBtn(html, title){
+    var btn = document.createElement('button');
+    btn.className = 'ftb-btn';
+    btn.innerHTML = html;
+    btn.title = title;
+    return btn;
+  }
+  function makeSep(){
+    var sep = document.createElement('div');
+    sep.className = 'ftb-sep';
+    return sep;
+  }
+
+  // Show toolbar on focus of editable elements
+  document.addEventListener('focus', function(e){
+    if(e.target && e.target.isContentEditable){
+      clearTimeout(ftbBlurTimer);
+      showFtb(e.target);
+    }
+  }, true);
+
+  // Hide toolbar on blur (delayed to allow toolbar button clicks)
+  document.addEventListener('blur', function(e){
+    if(e.target && e.target.isContentEditable){
+      ftbBlurTimer = setTimeout(function(){
+        removeFtb();
+      }, 250);
+    }
+  }, true);
+
+  // Keep toolbar alive when interacting with it
+  document.addEventListener('mousedown', function(e){
+    if(ftbEl && (ftbEl.contains(e.target) || (ftbColorPanel && ftbColorPanel.contains(e.target)))){
+      clearTimeout(ftbBlurTimer);
+    }
+  });
+
+  // Update B/I/U state on selection change
+  document.addEventListener('selectionchange', function(){
+    if(ftbEl) updateBIUState(ftbEl);
+  });
+
+  // Reposition on scroll
+  document.addEventListener('scroll', function(){
+    if(ftbEl && ftbTarget) positionFtb(ftbEl, ftbTarget);
+  }, true);
+
+  // Dismiss on Escape
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && ftbEl){
+      removeFtb();
+      if(document.activeElement && document.activeElement.isContentEditable) document.activeElement.blur();
+    }
+  });
+
   /* --- RIGHT-CLICK CONTEXT MENU --- */
   var ctxMenu = null;
   var ctxTarget = null;
