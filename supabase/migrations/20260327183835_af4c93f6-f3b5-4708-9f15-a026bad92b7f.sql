@@ -1,0 +1,1 @@
+ALTER TABLE public.brands ADD COLUMN clickup_api_key text;

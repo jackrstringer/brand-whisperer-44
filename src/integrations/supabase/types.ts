@@ -189,6 +189,7 @@ export type Database = {
       }
       brands: {
         Row: {
+          clickup_api_key: string | null
           created_at: string
           figma_url: string | null
           id: string
@@ -199,6 +200,7 @@ export type Database = {
           website_url: string | null
         }
         Insert: {
+          clickup_api_key?: string | null
           created_at?: string
           figma_url?: string | null
           id?: string
@@ -209,6 +211,7 @@ export type Database = {
           website_url?: string | null
         }
         Update: {
+          clickup_api_key?: string | null
           created_at?: string
           figma_url?: string | null
           id?: string
