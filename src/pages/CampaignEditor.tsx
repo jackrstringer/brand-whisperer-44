@@ -671,7 +671,7 @@ export default function CampaignEditor() {
               >
                 <div className="flex justify-end p-1 pr-0.5 pt-4">
                   <div style={{ width: renderedWidth }}>
-                    <p className="text-[10px] text-muted-foreground text-center mb-2 font-medium uppercase tracking-wider">Reference</p>
+                    
                     {selectedReference.image_urls?.length ? (
                       selectedReference.image_urls.map((url, i) => (
                         <img key={i} src={url} alt="" className="w-full h-auto block" loading="lazy" />
