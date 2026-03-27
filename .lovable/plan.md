@@ -1,76 +1,41 @@
 
-What I found (from logs + code)
-1) This is not an AI-generation timeout.
-- Edge logs show the model finished quickly: `AI stream: 7862ms`.
-- Logs also show valid variant output: `Variant mode: 4 variants` and `<variants>` present in `fullText preview`.
 
-2) The request fails during stream finalization, after variants are generated.
-- Edge log error: `TypeError: The stream controller cannot close or enqueue` in `edit-campaign`.
-- In code, variant path calls `ctrl.close()` and returns, but `finally` also calls `ctrl.close()` again.
-- That double-close pattern matches this exact runtime error and can cause the stream to terminate unreliably from the browser’s perspective.
+## Plan: Inline Text Editing + Undo/Redo Toolbar
 
-3) Why it looked like “stuck then dropped” in UI.
-- Session replay shows user message + thinking indicator, but no variant cards rendered.
-- Client only renders variant cards on `event: variants`.
-- If stream termination is faulty, client may never process final event blocks (or exits without actionable event), then `finally` resets sending state, so it looks like the process silently died.
+### 1. Inline Text Editing in Campaign Preview
 
-4) There is also a schema mismatch that weakens variant persistence.
-- Function writes `tool_calls` on `chat_messages`, but DB `chat_messages` has no `tool_calls` column.
-- This likely does not cause the immediate streaming crash, but it breaks reliable storage/reload of variant metadata and should be fixed.
+**Approach**: Make the iframe's `contentEditable` work by changing the sandbox attribute to `allow-same-origin allow-scripts`, then injecting a small script into the `srcdocHtml` that:
+- Sets `document.body.contentEditable = true` on all text-containing elements (headings, paragraphs, spans, links, tds)
+- On blur/input of any editable element, sends a `postMessage` back to the parent with the updated full HTML (`document.documentElement.outerHTML`)
+- The parent listens for these messages, pushes the old HTML onto `html_history`, and updates `campaign.html` with the new content
 
-Most likely root cause
-- Primary: SSE lifecycle bug in edge function (double close / unsafe enqueue/close ordering).
-- Secondary: client SSE parser is fragile at end-of-stream (doesn’t process leftover buffer on `done`), so final events can be missed if stream ends abruptly.
-- Tertiary: missing `tool_calls` column makes variant state persistence inconsistent.
+Visual cues: Inject CSS so editable text gets a subtle dashed outline on hover and a light highlight on focus, making it clear the text is editable without being distracting.
 
-Fix plan (for your senior engineer)
-P0 (stability, must do first)
-1) Harden stream lifecycle in `supabase/functions/edit-campaign/index.ts`.
-- Remove manual `ctrl.close()` from early variant branch OR guard with `isClosed` flag.
-- Add `safeEmit` and `safeClose` helpers:
-  - no `enqueue` after close
-  - no double close
-- Ensure only one close path executes.
+**Parent-side handler** in `CampaignEditor.tsx`:
+- Listen for `message` events with `type: 'textEdited'`
+- Debounce saves (500ms) so rapid typing doesn't spam the DB
+- Before saving, push current HTML to history (enabling undo)
+- Update `campaign.html` state + persist to Supabase
 
-2) Keep variant response contract simple and deterministic.
-- On variant mode: emit only `variants` then terminal `done` (or just `variants` with terminal flag), but do not interleave risky extra operations after close.
-- Add explicit logs before each terminal emit: `"emitting variants"`, `"emitting done"`.
+### 2. Undo / Redo Buttons in Top Bar
 
-P1 (client robustness)
-3) In `CampaignEditor` SSE loop, on `reader.read().done === true`, parse any remaining `buffer` before exiting.
-- Prevent dropping last SSE block if stream closes without extra chunk.
-- Add fallback: if no `variants`/`done` received but stream ended, append a system error message.
+Currently there's a `handleUndo` function and `canUndo` state, but no visible undo button in the top bar, and no redo support.
 
-4) Add request-level timeout/failure UX on client.
-- If no SSE events for N seconds while `sending`, show “Still processing…” + retry action.
-- On terminal failure, always show an explicit error bubble.
+**Changes**:
+- Add a `redoStack` state (`string[]`) — when the user undoes, the popped HTML goes onto the redo stack. Any new edit clears the redo stack.
+- Add `handleRedo`: pops from redo stack, pushes current HTML to history, updates campaign
+- Place Undo (`Undo2` icon) and Redo (`Redo2` icon) buttons in the top bar next to the export/review buttons, disabled when their respective stacks are empty
+- Wire inline text edits into the same history system so they're also undoable
 
-P1 (data consistency)
-5) Align `chat_messages` schema with code.
-- Either add `tool_calls jsonb` migration, or remove all `tool_calls` writes and store variant payload elsewhere.
-- Right now code assumes this column exists in both read and write paths.
+### Files to modify
 
-Technical evidence snapshot
-- `edit-campaign` logs:
-  - `Prep: ...`
-  - `AI stream: 7862ms`
-  - `fullText preview: <response>...<variants>...`
-  - `Variant mode: 4 variants`
-  - then `TypeError: The stream controller cannot close or enqueue`
-- Network:
-  - `POST /functions/v1/edit-campaign` returns HTTP 200 with streaming body (so request starts correctly).
-- Session replay:
-  - thinking state appears, then no variant cards, then UI returns to idle without usable result.
+1. **`src/pages/CampaignEditor.tsx`**
+   - Add `redoStack` state
+   - Update `handleUndo` to push to redo stack
+   - Add `handleRedo` function
+   - Update `srcdocHtml` injection to include contentEditable script + styles
+   - Change iframe sandbox to `allow-same-origin allow-scripts`
+   - Add `message` event listener for `textEdited` events from iframe
+   - Add Undo/Redo buttons to the top bar (next to Export HTML)
+   - Clear redo stack on new edits (chat edits, variant applies, inline edits)
 
-Verification plan after fixes
-1) Ask: “Give me four new options for the language in the first CTA.”
-2) Confirm in logs:
-- variant mode detected
-- variants emitted
-- done emitted
-- no stream controller error
-3) Confirm in UI:
-- variant cards always appear
-- no orphaned loading bubble
-- no silent drop after waiting.
-4) Refresh page and confirm variant state persists correctly (if `tool_calls` schema fixed).
