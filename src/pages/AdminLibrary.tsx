@@ -146,6 +146,22 @@ export default function AdminLibrary() {
       setShowUpload(false);
       resetForm();
       loadCampaigns();
+
+      // Fire-and-forget AI analysis for new uploads with images
+      if (imageUrls.length > 0) {
+        toast.info("Analyzing campaign with AI...");
+        supabase.functions.invoke("analyze-reference", {
+          body: { referenceId: id, imageUrls },
+        }).then(({ data, error }) => {
+          if (error) {
+            console.error("AI analysis error:", error);
+            toast.error("AI analysis failed — you can edit metadata manually");
+          } else {
+            toast.success("AI analysis complete — metadata updated");
+            loadCampaigns();
+          }
+        });
+      }
     } catch (err: any) {
       toast.error(err.message);
     } finally {
