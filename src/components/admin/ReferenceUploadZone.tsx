@@ -56,7 +56,7 @@ export default function ReferenceUploadZone({ onUploaded, campaignCount }: Refer
           title,
           thumbnail_url: publicUrl,
           image_urls: [publicUrl],
-          is_published: false,
+          is_published: true,
           sort_order: campaignCount,
         });
 

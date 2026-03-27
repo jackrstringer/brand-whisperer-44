@@ -250,9 +250,9 @@ export default function AdminLibrary() {
                 <h3 className="text-sm font-medium truncate">{item.title}</h3>
                 <p className="text-xs text-muted-foreground truncate">{item.brand_name}</p>
                 <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                  <Badge variant={item.is_published ? "default" : "secondary"} className="text-[9px]">
-                    {item.is_published ? "Live" : "Draft"}
-                  </Badge>
+                  {!item.is_published && (
+                    <Badge variant="secondary" className="text-[9px]">Draft</Badge>
+                  )}
                   {item.industry && (
                     <Badge variant="outline" className="text-[9px] bg-primary/5 border-primary/20">{item.industry}</Badge>
                   )}
