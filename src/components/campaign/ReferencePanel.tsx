@@ -76,23 +76,9 @@ function CampaignIframeThumbnail({ html, title }: { html: string; title?: string
   );
 }
 
-function MasonryGrid({ children, columnWidth }: { children: React.ReactNode; columnWidth: number }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [cols, setCols] = useState(3);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width ?? 800;
-      setCols(Math.max(1, Math.floor(w / columnWidth)));
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [columnWidth]);
-
+function MasonryGrid({ children, cols }: { children: React.ReactNode; cols: number }) {
   return (
-    <div ref={containerRef} className="p-1" style={{ columnCount: cols, columnGap: 4 }}>
+    <div className="p-1" style={{ columnCount: cols, columnGap: 4 }}>
       {children}
     </div>
   );
@@ -158,7 +144,7 @@ export default function ReferencePanel({
   const [savedRefs, setSavedRefs] = useState<SavedReference[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [categories, setCategories] = useState<string[]>([]);
-  const [zoomLevel, setZoomLevel] = useState(50); // 0-100 slider, maps to column width
+  const [zoomLevel, setZoomLevel] = useState(71); // 0=8cols, 100=1col, default ~3 cols
 
   useEffect(() => {
     supabase
@@ -266,9 +252,9 @@ export default function ReferencePanel({
 
   const gridData = getGridItems();
 
-  // Zoom: 0 = very zoomed out (many cols, ~100px), 100 = zoomed in (1 col, full width ~800px)
-  // Map zoom 0-100 to column width 100-800
-  const columnWidth = 100 + (zoomLevel / 100) * 700;
+  // Zoom slider directly controls column count: 1 (zoomed in) to 8 (zoomed out)
+  // Slider value 0 = 8 cols (zoomed out), 100 = 1 col (zoomed in)
+  const cols = Math.round(8 - (zoomLevel / 100) * 7); // 8 at 0, 1 at 100
 
   return (
     <div className="h-full flex flex-col">
@@ -327,7 +313,7 @@ export default function ReferencePanel({
 
       {/* Grid — responsive masonry using container width */}
       <ScrollArea className="flex-1">
-        <MasonryGrid columnWidth={columnWidth}>
+        <MasonryGrid cols={cols}>
           {gridData.flatMap(({ items, type }) =>
             items.map((item: any) => {
               const id = item.id;
