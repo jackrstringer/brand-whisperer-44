@@ -2445,6 +2445,7 @@ export default function CampaignEditor() {
                       disabled={sending}
                     />
                     <Button
+                      data-send-btn
                       onClick={sendMessage}
                       disabled={(!chatInput.trim() && chatAttachments.length === 0) || sending}
                       size="icon"
