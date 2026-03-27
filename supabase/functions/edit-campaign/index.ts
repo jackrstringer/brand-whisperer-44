@@ -39,6 +39,20 @@ function enforceNoStackingLayout(html: string): string {
 }
 
 /**
+ * Normalize HTML for matching: collapse whitespace, decode entities.
+ */
+function normalizeHtmlForMatch(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * Apply find/replace patches to HTML.
  * Each patch: { find: string, replace: string }
  * Returns the patched HTML and count of patches applied.
@@ -55,13 +69,36 @@ function applyPatches(html: string, patches: Array<{ find: string; replace: stri
       if (result !== before) applied++;
     } else {
       // Try whitespace-normalized match
-      const normalizedFind = patch.find.replace(/\s+/g, "\\s*");
-      try {
-        const regex = new RegExp(normalizedFind.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\s\*/g, '\\s*'), "g");
-        const before = result;
-        result = result.replace(regex, patch.replace);
-        if (result !== before) applied++;
-      } catch { /* skip bad regex */ }
+      const normalizedFind = normalizeHtmlForMatch(patch.find);
+      const normalizedResult = normalizeHtmlForMatch(result);
+      const idx = normalizedResult.indexOf(normalizedFind);
+      if (idx !== -1) {
+        // Find the corresponding range in the original string
+        // by collapsing whitespace and matching character-by-character
+        let origStart = -1, origEnd = -1;
+        let normIdx = 0;
+        let matchStart = -1;
+        const collapsed = result.replace(/\s+/g, " ");
+        // Fallback: regex-based approach
+        const escapedFind = patch.find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const wsFlexible = escapedFind.replace(/\s+/g, '\\s*');
+        try {
+          const regex = new RegExp(wsFlexible, "g");
+          const before = result;
+          result = result.replace(regex, patch.replace);
+          if (result !== before) applied++;
+        } catch { /* skip bad regex */ }
+      } else {
+        // Last resort: case-insensitive match for CSS values
+        const escapedFind = patch.find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const wsFlexible = escapedFind.replace(/\s+/g, '\\s*');
+        try {
+          const regex = new RegExp(wsFlexible, "i");
+          const before = result;
+          result = result.replace(regex, patch.replace);
+          if (result !== before) applied++;
+        } catch { /* skip */ }
+      }
     }
   }
   return { html: result, applied, changed: result !== html };
@@ -205,12 +242,20 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
       });
     }
 
+    // Options-intent detection — hint the AI to use VARIANT MODE
+    const isOptionsIntent = /\b(option|alternative|variation|variant|idea|choice|version)s?\b/i.test(message)
+      || /\bgive me \d/i.test(message)
+      || /\bshow me \d/i.test(message)
+      || /\bsubject line options?\b/i.test(message)
+      || /\bpreview text options?\b/i.test(message);
+
+    const editPrefix = isOptionsIntent
+      ? `[USER WANTS OPTIONS — use VARIANT MODE, not EDIT MODE]\n\nCurrent HTML:\n${currentHtml}\n\nRequest: ${message}`
+      : `Current HTML:\n${currentHtml}\n\nEdit: ${message}`;
+
     const userContent: any[] = [];
     if (imageBlocks.length > 0) userContent.push(...imageBlocks);
-    userContent.push({
-      type: "text",
-      text: `Current HTML:\n${currentHtml}\n\nEdit: ${message}`,
-    });
+    userContent.push({ type: "text", text: editPrefix });
     anthropicMessages.push({ role: "user", content: userContent });
 
     const prepMs = Date.now() - startMs;
@@ -346,10 +391,44 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
                 console.log(`[edit-campaign] Patches: ${patches.length} provided, ${patchCount} applied`);
 
                 if (patchCount === 0) {
-                  // None matched — emit error but don't fail
-                  console.warn(`[edit-campaign] WARNING: 0 patches matched! Patch find strings didn't match HTML.`);
-                  emit("text_delta", { content: "\n\n⚠️ The patches couldn't be applied — retrying with full output..." });
-                  // TODO: could retry with full-HTML mode here
+                  // None matched — retry with full-HTML mode
+                  console.warn(`[edit-campaign] WARNING: 0 patches matched! Retrying with full-HTML mode...`);
+                  emit("text_delta", { content: "\n\n⚠️ Patches didn't match — retrying with full output..." });
+
+                  try {
+                    const retryResp = await fetch("https://api.anthropic.com/v1/messages", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "x-api-key": ANTHROPIC_API_KEY,
+                        "anthropic-version": "2023-06-01",
+                      },
+                      body: JSON.stringify({
+                        model: "claude-sonnet-4-6",
+                        max_tokens: 16384,
+                        system: `You are a surgical HTML email editor. Apply the user's requested edit and return the COMPLETE modified HTML wrapped in <email_html> tags. Also include a brief <reply> tag describing what you changed.\n\nFormat:\n<reply>What changed</reply>\n<email_html>...full modified HTML...</email_html>`,
+                        messages: anthropicMessages,
+                      }),
+                    });
+
+                    if (retryResp.ok) {
+                      const retryJson = await retryResp.json();
+                      const retryText = retryJson?.content?.[0]?.text || "";
+                      const retryHtmlMatch = retryText.match(/<email_html>([\s\S]*?)<\/email_html>/);
+                      const retryReplyMatch = retryText.match(/<reply>([\s\S]*?)<\/reply>/);
+                      if (retryHtmlMatch) {
+                        const retryHtml = retryHtmlMatch[1].trim();
+                        if (retryHtml.includes("<") && retryHtml.length > currentHtml.length * 0.3) {
+                          finalHtml = retryHtml;
+                          patchCount = 1; // mark as changed
+                          if (retryReplyMatch) responseText = retryReplyMatch[1].trim();
+                          console.log(`[edit-campaign] Full-HTML retry succeeded (${finalHtml.length} chars)`);
+                        }
+                      }
+                    }
+                  } catch (retryErr) {
+                    console.error(`[edit-campaign] Full-HTML retry failed:`, retryErr);
+                  }
                 }
               }
             } catch (e) {

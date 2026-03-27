@@ -638,11 +638,25 @@ export default function CampaignEditor() {
   const handleApplyVariant = async (variant: VariantOption, index: number, messageId: string) => {
     if (!campaign?.html || !campaignId) return;
     const html = campaign.html;
-    if (!html.includes(variant.find)) {
+
+    // Determine the correct find target: if a previous variant was applied, find the applied text instead of original
+    const msg = messages.find(m => m.id === messageId);
+    const prevAppliedIndex = msg?.variant_data?.applied_index;
+    const appliedTexts = msg?.variant_data?.applied_texts || {};
+    let findTarget = variant.find;
+
+    if (prevAppliedIndex !== null && prevAppliedIndex !== undefined && prevAppliedIndex !== index) {
+      // A different variant was previously applied — use its replace text as the find target
+      const prevVariant = msg?.variant_data?.variants[prevAppliedIndex];
+      const liveText = appliedTexts[prevAppliedIndex] || prevVariant?.replace;
+      if (liveText) findTarget = liveText;
+    }
+
+    if (!html.includes(findTarget)) {
       toast.error("Could not find the text to replace — it may have already changed.");
       return;
     }
-    const newHtml = html.replace(variant.find, variant.replace);
+    const newHtml = html.replace(findTarget, variant.replace);
     // Save to history
     const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
     history.push(html);
@@ -650,17 +664,21 @@ export default function CampaignEditor() {
     setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
     setCanUndo(true);
 
-    // Update the message's applied_index
+    // Track which text is now live for this variant index
+    const newAppliedTexts = { ...appliedTexts, [index]: variant.replace };
+
+    // Update the message's applied_index and applied_texts
     setMessages(prev => prev.map(m => {
       if (m.id === messageId && m.variant_data) {
-        return { ...m, variant_data: { ...m.variant_data, applied_index: index } };
+        return { ...m, variant_data: { ...m.variant_data, applied_index: index, applied_texts: newAppliedTexts } };
       }
       return m;
     }));
 
-    // Persist applied_index to DB
+    // Persist to DB
+    const variantData = msg?.variant_data;
     await supabase.from("chat_messages").update({
-      tool_calls: { type: "variants", data: { message: messages.find(m => m.id === messageId)?.variant_data?.message || "", variants: messages.find(m => m.id === messageId)?.variant_data?.variants || [], applied_index: index } },
+      tool_calls: { type: "variants", data: { message: variantData?.message || "", variants: variantData?.variants || [], applied_index: index, applied_texts: newAppliedTexts } },
     } as any).eq("id", messageId);
 
     toast.success(`Applied: ${variant.label}`);

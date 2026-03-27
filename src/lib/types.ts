@@ -44,6 +44,7 @@ export interface VariantData {
   message: string;
   variants: VariantOption[];
   applied_index: number | null;
+  applied_texts?: Record<number, string>;
 }
 
 export interface ChatMessage {
