@@ -240,24 +240,7 @@ export default function ReferencePanel({
                   }`}
                 >
                   {hasHtml ? (
-                    <div className="w-full overflow-hidden" style={{ height: 400 }}>
-                      <iframe
-                        srcDoc={item.html.replace(
-                          /(<head[^>]*>)/i,
-                          '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;overflow:hidden;pointer-events:none;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;}img{max-width:100%!important;height:auto!important;}td{box-sizing:border-box!important;}</style>'
-                        )}
-                        sandbox="allow-same-origin"
-                        className="border-0 block bg-white pointer-events-none"
-                        style={{
-                          width: iframeWidth,
-                          height: Math.round(400 / iframeScale),
-                          transform: `scale(${iframeScale})`,
-                          transformOrigin: "top left",
-                        }}
-                        title={item.title || "Campaign preview"}
-                        tabIndex={-1}
-                      />
-                    </div>
+                    <CampaignIframeThumbnail html={item.html} scale={iframeScale} width={iframeWidth} title={item.title} />
                   ) : imageUrl ? (
                     <div style={{ aspectRatio: "470 / 470" }}>
                       <img
