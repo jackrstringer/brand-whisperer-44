@@ -11,7 +11,7 @@ const TARGET_COLUMN_WIDTH = 245;
 
 function CampaignIframeThumbnail({ html, title }: { html: string; title?: string }) {
   const [contentHeight, setContentHeight] = useState(800);
-  const [containerWidth, setContainerWidth] = useState(258);
+  const [containerWidth, setContainerWidth] = useState(100);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -24,7 +24,7 @@ function CampaignIframeThumbnail({ html, title }: { html: string; title?: string
     const el = containerRef.current;
     if (!el) return;
     const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 258;
+      const width = entries[0]?.contentRect.width ?? 100;
       setContainerWidth(Math.max(1, width));
     });
     observer.observe(el);
@@ -52,16 +52,16 @@ function CampaignIframeThumbnail({ html, title }: { html: string; title?: string
     } catch {}
   }, []);
 
-  const scale = Math.min(1, containerWidth / CAMPAIGN_RENDER_WIDTH);
-  const scaledHeight = Math.max(120, Math.round(contentHeight * scale));
+  const scale = containerWidth / CAMPAIGN_RENDER_WIDTH;
+  const scaledHeight = Math.max(20, Math.round(contentHeight * scale));
 
   return (
-    <div ref={containerRef} className="w-full overflow-hidden" style={{ height: scaledHeight }}>
+    <div ref={containerRef} className="w-full min-w-0 overflow-hidden relative" style={{ height: scaledHeight }}>
       <iframe
         ref={iframeRef}
         srcDoc={srcDoc}
         sandbox="allow-same-origin"
-        className="border-0 block bg-white pointer-events-none"
+        className="border-0 block bg-white pointer-events-none absolute top-0 left-0"
         style={{
           width: CAMPAIGN_RENDER_WIDTH,
           height: contentHeight,
@@ -78,7 +78,7 @@ function CampaignIframeThumbnail({ html, title }: { html: string; title?: string
 
 function MasonryGrid({ children, cols }: { children: React.ReactNode; cols: number }) {
   return (
-    <div className="p-1" style={{ columnCount: cols, columnGap: 4 }}>
+    <div style={{ columnCount: cols, columnGap: 2, padding: 2 }}>
       {children}
     </div>
   );
@@ -252,9 +252,8 @@ export default function ReferencePanel({
 
   const gridData = getGridItems();
 
-  // Zoom slider directly controls column count: 1 (zoomed in) to 8 (zoomed out)
-  // Slider value 0 = 8 cols (zoomed out), 100 = 1 col (zoomed in)
-  const cols = Math.round(8 - (zoomLevel / 100) * 7); // 8 at 0, 1 at 100
+  // Zoom: 0 = 8 cols (zoomed out), 100 = 1 col (zoomed in)
+  const cols = Math.max(1, Math.min(8, Math.round(8 - (zoomLevel / 100) * 7)));
 
   return (
     <div className="h-full flex flex-col">
@@ -277,14 +276,14 @@ export default function ReferencePanel({
             ))}
           </div>
           <div className="flex items-center gap-2 ml-auto">
-            <span className="text-[10px] text-muted-foreground">Zoom</span>
+            <span className="text-[10px] text-muted-foreground">{cols} wide</span>
             <input
               type="range"
               min={0}
               max={100}
               value={zoomLevel}
               onChange={(e) => setZoomLevel(Number(e.target.value))}
-              className="w-20 h-1 accent-primary cursor-pointer"
+              className="w-24 h-1 accent-primary cursor-pointer"
             />
           </div>
         </div>
@@ -326,10 +325,10 @@ export default function ReferencePanel({
               return (
                 <div
                   key={id}
-                  className={`relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all mb-1 ${
+                  className={`relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all min-w-0 w-full ${
                     isSelected ? "border-primary ring-2 ring-primary/20" : "border-transparent hover:border-border"
                   }`}
-                  style={{ breakInside: "avoid" }}
+                  style={{ breakInside: "avoid", marginBottom: 2 }}
                 >
                   {hasHtml ? (
                     <CampaignIframeThumbnail html={item.html} title={item.title} />

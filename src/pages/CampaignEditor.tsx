@@ -14,7 +14,7 @@ import { ArrowLeft, Download, Send, Undo2, Zap, Paperclip, X, Image as ImageIcon
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+
 
 import type { Campaign, ChatMessage } from "@/lib/types";
 
@@ -559,9 +559,9 @@ export default function CampaignEditor() {
       </div>
 
       {/* Main Content */}
-      <ResizablePanelGroup direction="horizontal" className="flex-1 overflow-hidden">
-        {/* Left Panel — Preview or Inspiration */}
-        <ResizablePanel defaultSize={75} minSize={35} maxSize={85} className="h-full min-w-0 overflow-hidden">
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Panel — Preview or Inspiration — fixed 65% */}
+        <div className="h-full overflow-hidden" style={{ width: '65%', minWidth: 0 }}>
           <div ref={previewPanelRef} className="h-full min-w-0 bg-card overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' as any }}>
             {isGenerating ? (
               <div className="max-w-[600px] mx-auto space-y-4 p-8 mt-12">
@@ -621,12 +621,13 @@ export default function CampaignEditor() {
               </div>
             )}
           </div>
-        </ResizablePanel>
+        </div>
 
-        <ResizableHandle withHandle />
+        {/* Divider */}
+        <div className="w-px bg-border shrink-0" />
 
-        {/* Right Panel */}
-        <ResizablePanel defaultSize={25} minSize={15} maxSize={65} className="h-full min-w-0 overflow-hidden">
+        {/* Right Panel — fixed 35% */}
+        <div className="h-full overflow-hidden" style={{ width: '35%', minWidth: 0 }}>
           <div className="h-full flex flex-col overflow-hidden">
             {isDraft && !isGenerating ? (
               <div className="p-6 space-y-5 overflow-y-auto flex-1">
@@ -899,8 +900,8 @@ export default function CampaignEditor() {
               </div>
             )}
           </div>
-        </ResizablePanel>
-      </ResizablePanelGroup>
+        </div>
+      </div>
     </div>
   );
 }
