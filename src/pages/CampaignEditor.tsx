@@ -85,6 +85,7 @@ export default function CampaignEditor() {
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [pinnedAssetUrls, setPinnedAssetUrls] = useState<string[]>([]);
   const [canUndo, setCanUndo] = useState(false);
+  const [activeVersionIndex, setActiveVersionIndex] = useState<number | null>(null); // null = latest
   const [matchProductColors, setMatchProductColors] = useState(false);
   const [selectedShopifyProducts, setSelectedShopifyProducts] = useState<SelectedShopifyProduct[]>([]);
   const [designNotes, setDesignNotes] = useState("");
@@ -445,6 +446,7 @@ export default function CampaignEditor() {
     setAgentState("thinking");
     setStreamingText("");
     streamingTextRef.current = "";
+    setActiveVersionIndex(null); // snap back to latest when sending new edit
 
     const displayContent = attachedFiles.length > 0
       ? `${userMsg}${userMsg ? "\n" : ""}[${attachedFiles.length} image${attachedFiles.length > 1 ? "s" : ""} attached]`
@@ -579,6 +581,15 @@ export default function CampaignEditor() {
     }
   };
 
+  // All versions: history entries + current html as the last version
+  const allVersions: string[] = (() => {
+    const history = Array.isArray(campaign?.html_history) ? campaign.html_history as string[] : [];
+    const current = campaign?.html || "";
+    return [...history, current];
+  })();
+  // The active version index (null = latest = allVersions.length - 1)
+  const resolvedActiveIndex = activeVersionIndex ?? allVersions.length - 1;
+
   const handleUndo = async () => {
     if (!campaign || !campaignId) return;
     const history = campaign.html_history;
@@ -588,29 +599,15 @@ export default function CampaignEditor() {
     await supabase.from("campaigns").update({ html: previousHtml, html_history: newHistory }).eq("id", campaignId);
     setCampaign((c) => c ? { ...c, html: previousHtml as string, html_history: newHistory } : c);
     setCanUndo(newHistory.length > 0);
+    setActiveVersionIndex(null);
     toast.success("Undo successful");
   };
 
-  const handleRevertToVersion = async (editIndex: number) => {
-    if (!campaign || !campaignId) return;
-    const history = Array.isArray(campaign.html_history) ? campaign.html_history : [];
-    if (history.length === 0) return;
-
-    // editIndex is the 0-based index of the assistant edit message
-    // history[editIndex] = the HTML that was current BEFORE that edit
-    // The result AFTER that edit = history[editIndex + 1] if it exists, else campaign.html
-    const isLastEdit = editIndex >= history.length - 1;
-    if (isLastEdit) {
-      toast("Already on this version");
-      return;
-    }
-
-    const targetHtml = history[editIndex + 1] as string;
-    const newHistory = history.slice(0, editIndex + 1);
-    await supabase.from("campaigns").update({ html: targetHtml, html_history: newHistory }).eq("id", campaignId);
-    setCampaign((c) => c ? { ...c, html: targetHtml, html_history: newHistory } : c);
-    setCanUndo(newHistory.length > 0);
-    toast.success("Reverted to this version");
+  const handleSwitchToVersion = (versionIndex: number) => {
+    if (versionIndex === resolvedActiveIndex) return;
+    if (versionIndex < 0 || versionIndex >= allVersions.length) return;
+    setActiveVersionIndex(versionIndex === allVersions.length - 1 ? null : versionIndex);
+    toast.success(versionIndex === allVersions.length - 1 ? "Switched to latest version" : `Switched to version ${versionIndex + 1}`);
   };
 
   const exportHtml = () => {
@@ -635,8 +632,10 @@ export default function CampaignEditor() {
   const renderedWidth = Math.round(viewportWidth * zoomScale);
   const renderedHeight = Math.round(iframeContentHeight * zoomScale);
 
-  const htmlForPreview = campaign?.html
-    ? replaceLikelyBrokenImageUrls(campaign.html, previewFallbackUrls)
+  // When viewing a past version, show that version; otherwise show current
+  const displayHtml = activeVersionIndex !== null ? allVersions[activeVersionIndex] : campaign?.html;
+  const htmlForPreview = displayHtml
+    ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls)
     : "";
 
   const srcdocHtml = htmlForPreview
@@ -1067,7 +1066,7 @@ export default function CampaignEditor() {
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
                   {(() => {
                     let editCount = 0;
-                    const historyLen = Array.isArray(campaign?.html_history) ? campaign.html_history.length : 0;
+                    const totalVersions = allVersions.length;
                     return messages.map((msg) => {
                       if (msg.role === "system") {
                         return (
@@ -1081,21 +1080,27 @@ export default function CampaignEditor() {
                       if (msg.role === "assistant") {
                         const thisEditIndex = editCount;
                         editCount++;
-                        const canRevert = historyLen > 0 && thisEditIndex < historyLen - 1;
+                        // Version index: editIndex + 1 maps to allVersions index (history[0]=v0, history[1]=v1 after edit 0, etc.)
+                        const versionIndex = thisEditIndex + 1;
+                        const isActive = versionIndex === resolvedActiveIndex;
+                        const canSwitch = totalVersions > 1 && versionIndex < totalVersions && !isActive;
                         return (
                           <div key={msg.id} className="flex justify-start group/msg">
                             <div className="max-w-[80%]">
-                              <div className="rounded-lg px-3 py-2 text-sm bg-card text-foreground">
+                              <div className={`rounded-lg px-3 py-2 text-sm bg-card text-foreground ${isActive && activeVersionIndex !== null ? "ring-1 ring-primary/40" : ""}`}>
                                 {msg.content}
                               </div>
-                              {canRevert && (
+                              {canSwitch && (
                                 <button
-                                  onClick={() => handleRevertToVersion(thisEditIndex)}
+                                  onClick={() => handleSwitchToVersion(versionIndex)}
                                   className="flex items-center gap-1 mt-1 px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground opacity-0 group-hover/msg:opacity-100 transition-opacity"
                                 >
                                   <RotateCcw className="w-2.5 h-2.5" />
-                                  Revert to this version
+                                  Switch to this version
                                 </button>
+                              )}
+                              {isActive && activeVersionIndex !== null && (
+                                <span className="text-[10px] text-primary/70 px-2 mt-0.5 block">Viewing this version</span>
                               )}
                             </div>
                           </div>
