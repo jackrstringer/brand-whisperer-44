@@ -563,19 +563,43 @@ export default function CampaignEditor() {
               setStreamingText(noChangeText);
             }
 
-            if (eventType === "done") {
+            if (eventType === "variants") {
               setAgentState("idle");
-              const finalText =
-                (typeof data?.reply === "string" && data.reply.trim()) ||
-                serverReply ||
-                streamingTextRef.current ||
-                "Changes applied.";
-              setMessages(prev => [
-                ...prev,
-                { id: crypto.randomUUID(), campaign_id: campaignId, role: "assistant", content: finalText, created_at: new Date().toISOString() },
-              ]);
+              const variantMsg: ChatMessage = {
+                id: crypto.randomUUID(),
+                campaign_id: campaignId,
+                role: "assistant",
+                content: data.message || "Here are some options:",
+                created_at: new Date().toISOString(),
+                message_type: "variants",
+                variant_data: { message: data.message, variants: data.variants, applied_index: null },
+              };
+              setMessages(prev => [...prev, variantMsg]);
               setStreamingText("");
               streamingTextRef.current = "";
+              // Skip the normal done handler for variants
+              serverReply = data.message;
+            }
+
+            if (eventType === "done") {
+              setAgentState("idle");
+              // Skip adding another message if variants already handled it
+              if (data?.isVariants) {
+                setStreamingText("");
+                streamingTextRef.current = "";
+              } else {
+                const finalText =
+                  (typeof data?.reply === "string" && data.reply.trim()) ||
+                  serverReply ||
+                  streamingTextRef.current ||
+                  "Changes applied.";
+                setMessages(prev => [
+                  ...prev,
+                  { id: crypto.randomUUID(), campaign_id: campaignId, role: "assistant", content: finalText, created_at: new Date().toISOString() },
+                ]);
+                setStreamingText("");
+                streamingTextRef.current = "";
+              }
             }
 
             if (eventType === "error") {
