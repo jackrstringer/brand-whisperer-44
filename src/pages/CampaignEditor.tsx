@@ -921,13 +921,29 @@ export default function CampaignEditor() {
     if (!campaign || !campaignId) return;
     const history = campaign.html_history;
     if (!Array.isArray(history) || history.length === 0) return;
+    const currentHtml = campaign.html || "";
     const previousHtml = history[history.length - 1];
     const newHistory = history.slice(0, -1);
     await supabase.from("campaigns").update({ html: previousHtml, html_history: newHistory }).eq("id", campaignId);
     setCampaign((c) => c ? { ...c, html: previousHtml as string, html_history: newHistory } : c);
     setCanUndo(newHistory.length > 0);
     setActiveVersionIndex(null);
+    setRedoStack(prev => [...prev, currentHtml]);
     toast.success("Undo successful");
+  };
+
+  const handleRedo = async () => {
+    if (!campaign || !campaignId || redoStack.length === 0) return;
+    const redoHtml = redoStack[redoStack.length - 1];
+    const newRedoStack = redoStack.slice(0, -1);
+    const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
+    history.push(campaign.html || "");
+    await supabase.from("campaigns").update({ html: redoHtml, html_history: history }).eq("id", campaignId);
+    setCampaign((c) => c ? { ...c, html: redoHtml, html_history: history } : c);
+    setCanUndo(true);
+    setRedoStack(newRedoStack);
+    setActiveVersionIndex(null);
+    toast.success("Redo successful");
   };
 
   const handleSwitchToVersion = (versionIndex: number) => {
