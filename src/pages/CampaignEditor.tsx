@@ -1258,6 +1258,8 @@ export default function CampaignEditor() {
                                 <VariantCards
                                   variantData={msg.variant_data}
                                   onApply={(variant, idx) => handleApplyVariant(variant, idx, msg.id)}
+                                  onPreview={(variant, idx) => handlePreviewVariant(variant, idx, msg.id)}
+                                  onPreviewClear={handlePreviewClear}
                                   disabled={agentState !== "idle"}
                                 />
                               </div>
