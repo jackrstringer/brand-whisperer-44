@@ -14,7 +14,7 @@ import { ArrowLeft, Download, Send, Undo2, Zap, Paperclip, X, Image as ImageIcon
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+
 import type { Campaign, ChatMessage } from "@/lib/types";
 
 async function uploadChatImages(files: File[], brandId: string, campaignId: string): Promise<string[]> {
@@ -557,11 +557,10 @@ export default function CampaignEditor() {
         </div>
       </div>
 
-      {/* Main Content — draggable split */}
+      {/* Main Content — fixed split */}
       <div className="flex-1 flex overflow-hidden">
-      <PanelGroup direction="horizontal" className="flex-1 min-w-0">
-        {/* Left Panel — Preview or Inspiration */}
-        <Panel defaultSize={75} minSize={20} maxSize={85}>
+        {/* Left Panel — Preview or Inspiration (65%) */}
+        <div className="h-full min-w-0 flex-[65] overflow-hidden">
           <div ref={previewPanelRef} className="h-full min-w-0 bg-card overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' as any }}>
             {isGenerating ? (
               <div className="max-w-[600px] mx-auto space-y-4 p-8 mt-12">
@@ -621,13 +620,13 @@ export default function CampaignEditor() {
               </div>
             )}
           </div>
-        </Panel>
+        </div>
 
-        {/* Drag handle */}
-        <PanelResizeHandle className="w-1.5 bg-border hover:bg-primary/40 transition-colors cursor-col-resize" />
+        {/* Divider */}
+        <div className="w-px bg-border shrink-0" />
 
-        {/* Right Panel */}
-        <Panel defaultSize={40} minSize={15} maxSize={75}>
+        {/* Right Panel (35%) */}
+        <div className="h-full min-w-0 flex-[35] overflow-hidden">
           <div className="h-full flex flex-col overflow-hidden">
             {isDraft && !isGenerating ? (
               <div className="p-6 space-y-5 overflow-y-auto flex-1">
@@ -900,8 +899,7 @@ export default function CampaignEditor() {
               </div>
             )}
           </div>
-        </Panel>
-      </PanelGroup>
+        </div>
       </div>
     </div>
   );
