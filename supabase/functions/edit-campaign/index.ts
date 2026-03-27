@@ -204,8 +204,8 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
         refMode = s >= 9 ? "dupe" : "reference";
       }
 
-      const refLabel = refMode === "dupe" ? "DUPE — EXACT LAYOUT CLONE" : "REFERENCE";
-      userContent.push({ type: "text", text: `[${refLabel}] The following campaign is provided as a reference. ${refMode === "dupe" ? "Replicate its exact layout structure section-for-section. Use the brand's own colors and fonts." : "Closely follow its layout, sizing and structure. Use the brand's own colors and fonts."}` });
+      const refLabel = refMode === "dupe" ? "DUPE — PIXEL-PERFECT LAYOUT CLONE" : "REFERENCE — STRONG STRUCTURAL MATCH";
+      userContent.push({ type: "text", text: `[${refLabel}] The following campaign is provided as a ${refMode === "dupe" ? "layout blueprint to clone exactly" : "structural reference to follow closely"}. ${refMode === "dupe" ? "Your output MUST match its exact section count, section types, section order, image placements, image sizing, logo position, CTA positions, and spacing patterns. Only change colors, fonts, imagery, and copy to match the brand." : "Follow its layout, sizing and structure closely. Use the brand's own colors and fonts."}` });
 
       for (const url of reference.image_urls.slice(0, 5)) {
         try {
