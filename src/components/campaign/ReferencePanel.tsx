@@ -211,9 +211,9 @@ export default function ReferencePanel({
       }
       const storageKey = `ref-panel-${campaignId}`;
       const stored = localStorage.getItem(storageKey);
-      let mode: ReferenceMode = "hard";
+      let mode: ReferenceMode = "reference";
       if (stored) {
-        try { mode = JSON.parse(stored).selectedReference?.mode || "hard"; } catch {}
+        try { mode = JSON.parse(stored).selectedReference?.mode || "reference"; } catch {}
       }
       const cfg = MODE_CONFIG[mode];
       onSelectReference({ type, id, title, thumbnail_url: thumbnailUrl, image_urls: imageUrls, strength: cfg.strength, mode });
