@@ -90,6 +90,8 @@ export default function CampaignEditor() {
   const [matchProductColors, setMatchProductColors] = useState(false);
   const [selectedShopifyProducts, setSelectedShopifyProducts] = useState<SelectedShopifyProduct[]>([]);
   const [designNotes, setDesignNotes] = useState("");
+  const [clickupUrl, setClickupUrl] = useState("");
+  const [clickupLoading, setClickupLoading] = useState(false);
   const [subjectLine, setSubjectLine] = useState("");
   const [previewText, setPreviewText] = useState("");
   const [starredCampaign, setStarredCampaign] = useState(false);
