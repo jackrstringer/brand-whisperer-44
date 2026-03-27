@@ -121,30 +121,41 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
     return t.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   };
 
-  // Filter out products with zero ready images
-  const productsWithImages = products.filter((p) => {
-    const prodImages = images[p.id] || [];
-    return prodImages.some((i) => i.processing_status === "ready");
-  });
-
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium">Shopify Products ({productsWithImages.length})</h3>
-        <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-          <Switch checked={showRejected} onCheckedChange={setShowRejected} className="scale-75" />
-          Show rejected
-        </label>
+        <h3 className="text-sm font-medium">Shopify Products ({products.length})</h3>
+        <div className="flex items-center gap-3">
+          {pendingCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleReclassify}
+              disabled={classifying}
+              className="text-xs h-7"
+            >
+              {classifying ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
+              Classify {pendingCount} pending
+            </Button>
+          )}
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <Switch checked={showRejected} onCheckedChange={setShowRejected} className="scale-75" />
+            Show rejected
+          </label>
+        </div>
       </div>
-      {productsWithImages.map((product) => {
+      {products.map((product) => {
         const prodImages = images[product.id] || [];
         const readyImages = prodImages.filter((i) => i.processing_status === "ready");
         const rescuedImages = readyImages.filter((i) => i.rescue_strategy && !i.is_usable_product_photo);
         const cleanImages = readyImages.filter((i) => i.is_usable_product_photo === true);
         const rejectedImages = prodImages.filter((i) => i.processing_status === "rejected");
+        const pendingImages = prodImages.filter((i) => i.processing_status === "pending" || i.processing_status === "processing");
         const displayImages = showRejected ? prodImages : readyImages;
         const firstUsable = readyImages.find((i) => i.processing_status === "ready");
         const isExpanded = expandedId === product.id;
+        const hasNoUsable = readyImages.length === 0;
+        const allPending = hasNoUsable && pendingImages.length > 0;
 
         return (
           <div key={product.id} className="border border-border rounded-lg overflow-hidden">
