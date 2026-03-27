@@ -586,13 +586,13 @@ export default function CampaignEditor() {
             if (eventType === "done") {
               setAgentState("idle");
               // Skip adding another message if variants already handled it
-              if (data?.isVariants) {
+              if (data?.isVariants || serverReply === "__VARIANTS_HANDLED__") {
                 setStreamingText("");
                 streamingTextRef.current = "";
               } else {
                 const finalText =
                   (typeof data?.reply === "string" && data.reply.trim()) ||
-                  serverReply ||
+                  (serverReply && serverReply !== "__VARIANTS_HANDLED__" ? serverReply : null) ||
                   streamingTextRef.current ||
                   "Changes applied.";
                 setMessages(prev => [
