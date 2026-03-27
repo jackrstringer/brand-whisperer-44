@@ -276,14 +276,14 @@ export default function ReferencePanel({
             ))}
           </div>
           <div className="flex items-center gap-2 ml-auto">
-            <span className="text-[10px] text-muted-foreground">Zoom</span>
+            <span className="text-[10px] text-muted-foreground">{cols} wide</span>
             <input
               type="range"
               min={0}
               max={100}
               value={zoomLevel}
               onChange={(e) => setZoomLevel(Number(e.target.value))}
-              className="w-20 h-1 accent-primary cursor-pointer"
+              className="w-24 h-1 accent-primary cursor-pointer"
             />
           </div>
         </div>
