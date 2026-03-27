@@ -2330,18 +2330,51 @@ export default function CampaignEditor() {
                       if (msg.role === "assistant") {
                         // Variant messages don't count as edit versions
                         if (msg.message_type === "variants" && msg.variant_data) {
+                          const pillEl = ideateIndicator !== "idle" ? (
+                            <div className="flex justify-start my-2">
+                              <div
+                                className="relative rounded-full px-6 py-2 text-xs font-medium flex items-center gap-2.5 overflow-hidden"
+                                style={{
+                                  background: ideateIndicator === "done"
+                                    ? 'linear-gradient(135deg, rgba(200,241,53,0.12), rgba(99,102,241,0.06))'
+                                    : 'linear-gradient(135deg, rgba(200,241,53,0.08), rgba(99,102,241,0.08))',
+                                  border: '1px solid rgba(200,241,53,0.2)',
+                                  ...(ideateIndicator === "thinking" ? { animation: 'ideate-pill-pulse 2s ease-in-out infinite' } : {}),
+                                }}
+                              >
+                                {ideateIndicator === "thinking" && (
+                                  <span
+                                    className="absolute inset-0 rounded-full opacity-40"
+                                    style={{
+                                      background: 'linear-gradient(90deg, transparent, rgba(200,241,53,0.15), transparent)',
+                                      animation: 'ideate-pill-shimmer 2s ease-in-out infinite',
+                                    }}
+                                  />
+                                )}
+                                <Zap className="relative w-3 h-3" style={{ color: 'rgba(200,241,53,0.9)' }} />
+                                <span className="relative" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                                  {ideateIndicator === "thinking" ? (
+                                    <>Generating options<span className="inline-block w-4 text-left animate-pulse">...</span></>
+                                  ) : "Options generated"}
+                                </span>
+                              </div>
+                            </div>
+                          ) : null;
                           return (
-                            <div key={msg.id} className="flex justify-start">
-                              <div className="max-w-[90%] rounded-lg px-3 py-2 bg-card text-foreground">
-                                <VariantCards
-                                  variantData={msg.variant_data}
-                                  onApply={(variant, idx) => handleApplyVariant(variant, idx, msg.id)}
-                                  onPreview={(variant, idx) => handlePreviewVariant(variant, idx, msg.id)}
-                                  onPreviewClear={handlePreviewClear}
-                                  onMore={() => handleMoreVariants(msg.id)}
-                                  loadingMore={loadingMoreVariants === msg.id}
-                                  disabled={agentState !== "idle"}
-                                />
+                            <div key={msg.id}>
+                              {pillEl}
+                              <div className="flex justify-start">
+                                <div className="max-w-[90%] rounded-lg px-3 py-2 bg-card text-foreground">
+                                  <VariantCards
+                                    variantData={msg.variant_data}
+                                    onApply={(variant, idx) => handleApplyVariant(variant, idx, msg.id)}
+                                    onPreview={(variant, idx) => handlePreviewVariant(variant, idx, msg.id)}
+                                    onPreviewClear={handlePreviewClear}
+                                    onMore={() => handleMoreVariants(msg.id)}
+                                    loadingMore={loadingMoreVariants === msg.id}
+                                    disabled={agentState !== "idle"}
+                                  />
+                                </div>
                               </div>
                             </div>
                           );
