@@ -496,6 +496,14 @@ The output should feel like this campaign re-skinned for the brand.`;
     const creativeDir = goalCreativeDirection[goal] || goalCreativeDirection[goal?.replace(/[-\s]/g, '_')] || 
       `CREATIVE DIRECTION: Be creative with the layout structure. Don't default to a generic template. Consider the campaign goal "${goal}" and design a unique layout that serves that purpose. Vary section types, image placements, and content flow. Think like an editorial designer.`;
 
+    // Inject reference block before the campaign brief
+    if (referenceBlock) {
+      userContent.push({ type: "text", text: referenceBlock });
+      if (referenceImageBlocks.length > 0) {
+        userContent.push(...referenceImageBlocks);
+      }
+    }
+
     let part3 = `Generate a ${goal} email campaign.\nBrief: ${brief}`;
     if (copy) part3 += `\nThe following copy must be used verbatim: ${copy}`;
 
