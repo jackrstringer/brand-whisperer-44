@@ -269,9 +269,9 @@ export default function ReferencePanel({
         </div>
       )}
 
-      {/* Grid */}
+      {/* Grid — responsive masonry using container width */}
       <ScrollArea className="flex-1">
-        <div className="p-4" style={{ columnCount: 3, columnGap: 12 }}>
+        <MasonryGrid>
           {gridData.flatMap(({ items, type }) =>
             items.map((item: any) => {
               const id = item.id;
