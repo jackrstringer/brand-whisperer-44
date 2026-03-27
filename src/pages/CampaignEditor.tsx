@@ -1097,21 +1097,29 @@ export default function CampaignEditor() {
       if (e.data?.type !== "textEdited" || !e.data?.html) return;
       if (!campaignId || !campaign) return;
       const newHtml = e.data.html as string;
-      const currentHtml = campaign.html || "";
+      const currentHtml = iframeOwnedHtmlRef.current || campaign.html || "";
       if (newHtml === currentHtml) return;
+
+      // Track iframe's live HTML WITHOUT updating campaign state (prevents iframe reload)
+      iframeOwnedHtmlRef.current = newHtml;
 
       // Push to history for undo
       const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
       history.push(currentHtml);
-      setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
+      // Update history in state (but NOT html — that would reload iframe)
+      setCampaign(c => c ? { ...c, html_history: history } : c);
       setCanUndo(true);
       setRedoStack([]); // clear redo on new edit
 
-      // Debounced DB save
+      // Debounced DB save — persist both html and history
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
       inlineEditTimerRef.current = setTimeout(async () => {
         await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
-      }, 500);
+        // Silently sync campaign.html to match DB without triggering srcdoc recompute
+        // (srcdocHtml won't change because displayHtml hasn't changed)
+        setCampaign(c => c ? { ...c, html: newHtml } : c);
+        iframeOwnedHtmlRef.current = null;
+      }, 2000);
     };
     window.addEventListener("message", handler);
     return () => {
