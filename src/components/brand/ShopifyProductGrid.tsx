@@ -71,6 +71,34 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>;
   if (products.length === 0) return <p className="text-sm text-muted-foreground py-4">No Shopify products synced yet.</p>;
 
+  const handleReclassify = async () => {
+    setClassifying(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("shopify-classify-images", {
+        body: { brandId },
+      });
+      if (error) throw error;
+      toast.success(`Classified ${data?.classified ?? 0} images (${data?.rescued ?? 0} rescued, ${data?.rejected ?? 0} rejected)`);
+      // Reload images
+      const { data: imgs } = await supabase
+        .from("shopify_product_images")
+        .select("id, product_id, original_url, imagekit_url, processed_url, image_type, subject_description, processing_status, usable_as_hero, usable_as_product_shot, is_usable_product_photo, has_text_overlay, is_marketing_collateral, has_salvageable_product, rescue_strategy, rescue_transforms")
+        .eq("brand_id", brandId);
+      const grouped: Record<string, ShopifyImage[]> = {};
+      for (const img of (imgs || []) as ShopifyImage[]) {
+        if (!grouped[img.product_id]) grouped[img.product_id] = [];
+        grouped[img.product_id].push(img);
+      }
+      setImages(grouped);
+    } catch (err: any) {
+      toast.error("Classification failed: " + (err.message || "Unknown error"));
+    } finally {
+      setClassifying(false);
+    }
+  };
+
+  const pendingCount = Object.values(images).flat().filter(i => i.processing_status === "pending").length;
+
   const rejectionReason = (img: ShopifyImage) => {
     if (img.is_marketing_collateral) return "Unsalvageable collateral";
     if (img.has_text_overlay) return "Text covers product";
