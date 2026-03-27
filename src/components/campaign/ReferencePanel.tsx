@@ -337,7 +337,7 @@ export default function ReferencePanel({
               {tab === "library" ? "No reference campaigns yet" : tab === "mine" ? "No completed campaigns yet" : "No saved references"}
             </p>
           )}
-        </div>
+        </MasonryGrid>
       </ScrollArea>
 
       {/* Sticky strength slider when reference selected */}
