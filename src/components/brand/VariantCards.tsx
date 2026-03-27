@@ -19,7 +19,13 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
   return (
     <div className="space-y-2">
       <p className="text-sm text-foreground">{variantData.message}</p>
-      <div className="space-y-1.5">
+      <div
+        className="rounded-lg border border-border/40 overflow-hidden divide-y divide-border/30"
+        onMouseLeave={() => {
+          setHoveringIndex(null);
+          onPreviewClear?.();
+        }}
+      >
         {variantData.variants.map((v, i) => {
           const wasApplied = hasApplied && variantData.applied_index === i;
           const isSelected = selectedIndex === i;
@@ -35,26 +41,20 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
                 setHoveringIndex(i);
                 onPreview?.(v, i);
               }}
-              onMouseLeave={() => {
-                if (hoveringIndex === i) {
-                  setHoveringIndex(null);
-                  onPreviewClear?.();
-                }
-              }}
               disabled={!interactive}
-              className={`w-full text-left rounded-lg border px-3 py-2.5 transition-all ${
+              className={`w-full text-left px-3 py-2.5 transition-colors ${
                 wasApplied
-                  ? "border-primary/50 bg-primary/10"
+                  ? "bg-primary/10"
                   : isSelected
-                  ? "border-primary/50 bg-primary/5"
+                  ? "bg-primary/5"
                   : isHovering
-                  ? "border-primary/30 bg-primary/5"
-                  : "border-border/40 bg-card hover:border-border"
+                  ? "bg-primary/5"
+                  : "bg-card hover:bg-muted/30"
               } ${interactive ? "cursor-pointer" : "cursor-default"}`}
             >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-foreground">{v.label}</span>
-                <div className="flex items-center gap-1.5">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-xs font-medium text-foreground leading-snug">{v.preview}</p>
+                <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
                   {isHovering && !wasApplied && (
                     <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
                       <Eye className="w-3 h-3" /> Preview
@@ -67,7 +67,7 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
                   )}
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{v.preview}</p>
+              <span className="text-[11px] text-muted-foreground mt-0.5 block">{v.label}</span>
             </button>
           );
         })}
