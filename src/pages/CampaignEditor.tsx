@@ -312,6 +312,11 @@ export default function CampaignEditor() {
           ...prev,
           { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Campaign generated in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
         ]);
+
+        // === PASS 3: Visual QA — capture screenshots and send to AI ===
+        if (data.html) {
+          runVisualQa(data as Campaign);
+        }
       } else if (data.status === "error") {
         clearInterval(pollInterval);
         setCampaign(data as Campaign);
