@@ -1015,5 +1015,6 @@ export default function CampaignEditor() {
         </div>
       </DialogContent>
     </Dialog>
-  </>;
+  </>
+  );
 }
