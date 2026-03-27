@@ -32,22 +32,25 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 function enforceNoStackingLayout(html: string): string {
   if (!html) return html;
 
-  // Remove common mobile-collapse overrides that force side-by-side layouts into a single column
-  const collapseSelectors = [".product-grid-cell", ".two-col-cell", ".gift-cell", ".column-cell", ".grid-cell"];
   let output = html;
 
-  for (const selector of collapseSelectors) {
-    const escaped = selector.replace(".", "\\.");
-    const blockRegex = new RegExp(`(${escaped}\\s*\\{[^}]*?)\\}`, "gi");
-    output = output.replace(blockRegex, (full) => {
-      let cleaned = full
-        .replace(/display\s*:\s*block\s*!important;?/gi, "")
-        .replace(/width\s*:\s*100%\s*!important;?/gi, "");
+  // Remove common mobile-collapse rules that force side-by-side layouts into a single column
+  const collapseSelectorPattern = /\.(?:[a-z0-9_-]*?(?:grid|col|column|two-col|two_col|product|gift)[a-z0-9_-]*?(?:cell|col|column)?|(?:product-grid-cell|two-col-cell|gift-cell|column-cell|grid-cell))\s*\{[^}]*\}/gi;
+  output = output.replace(collapseSelectorPattern, (rule) => {
+    return rule
+      .replace(/display\s*:\s*block\s*!important;?/gi, "")
+      .replace(/width\s*:\s*100%\s*!important;?/gi, "")
+      .replace(/float\s*:\s*none\s*!important;?/gi, "")
+      .replace(/max-width\s*:\s*100%\s*!important;?/gi, "")
+      .replace(/;\s*;/g, ";");
+  });
 
-      // Cleanup duplicate semicolons that may be left after removals
-      cleaned = cleaned.replace(/;\s*;/g, ";");
-      return cleaned;
-    });
+  // Force common multi-column classes to remain side-by-side at all breakpoints
+  if (/<head[^>]*>/i.test(output)) {
+    output = output.replace(
+      /(<head[^>]*>)/i,
+      `$1<style>.product-grid-cell,.two-col-cell,.gift-cell,.column-cell,.grid-cell{display:table-cell !important;vertical-align:top !important;}.product-grid-cell,.two-col-cell,.column-cell,.grid-cell{width:auto !important;}</style>`
+    );
   }
 
   return output;
