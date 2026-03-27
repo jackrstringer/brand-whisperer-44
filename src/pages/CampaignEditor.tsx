@@ -253,6 +253,12 @@ export default function CampaignEditor() {
         matchProductColors: matchProductColors || undefined,
         designNotes: designNotes.trim() || undefined,
         shopifyProducts: selectedShopifyProducts.length > 0 ? selectedShopifyProducts : undefined,
+        reference: selectedReference ? {
+          type: selectedReference.type,
+          id: selectedReference.id,
+          image_urls: selectedReference.image_urls,
+          strength: selectedReference.strength,
+        } : undefined,
       }),
     }).catch(() => {});
 
