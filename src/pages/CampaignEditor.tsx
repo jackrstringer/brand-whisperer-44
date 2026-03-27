@@ -499,6 +499,7 @@ export default function CampaignEditor() {
       setChatInput("");
       setChatAttachments([]);
       setChatAttachmentPreviews(prev => { prev.forEach(u => URL.revokeObjectURL(u)); return []; });
+      setSelectedElementContext(null);
     }
     setSending(true);
     setAgentState("thinking");
