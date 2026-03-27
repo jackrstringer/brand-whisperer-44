@@ -1161,6 +1161,20 @@ export default function CampaignEditor() {
                         );
                       }
                       if (msg.role === "assistant") {
+                        // Variant messages don't count as edit versions
+                        if (msg.message_type === "variants" && msg.variant_data) {
+                          return (
+                            <div key={msg.id} className="flex justify-start">
+                              <div className="max-w-[90%] rounded-lg px-3 py-2 bg-card text-foreground">
+                                <VariantCards
+                                  variantData={msg.variant_data}
+                                  onApply={(variant, idx) => handleApplyVariant(variant, idx, msg.id)}
+                                  disabled={agentState !== "idle"}
+                                />
+                              </div>
+                            </div>
+                          );
+                        }
                         const thisEditIndex = editCount;
                         editCount++;
                         // Version index: editIndex + 1 maps to allVersions index (history[0]=v0, history[1]=v1 after edit 0, etc.)
