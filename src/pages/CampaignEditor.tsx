@@ -1486,6 +1486,8 @@ export default function CampaignEditor() {
   }
 
   function getCurrentFontSize(el){
+    // Check inline style first (user may have set it), then computed
+    if(el.style && el.style.fontSize) return parseInt(el.style.fontSize) || 16;
     return parseInt(window.getComputedStyle(el).fontSize) || 16;
   }
 
