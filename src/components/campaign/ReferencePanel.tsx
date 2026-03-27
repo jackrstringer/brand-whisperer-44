@@ -1,11 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { X, Heart, Maximize2, ChevronRight } from "lucide-react";
+import { X, Heart } from "lucide-react";
 import { toast } from "sonner";
 
 interface ReferenceCampaign {
@@ -36,8 +34,6 @@ export interface SelectedReference {
 interface ReferencePanelProps {
   brandId: string;
   campaignId: string;
-  isOpen: boolean;
-  onToggle: () => void;
   selectedReference: SelectedReference | null;
   onSelectReference: (ref: SelectedReference | null) => void;
 }
@@ -55,91 +51,22 @@ const STRENGTH_HINTS: Record<string, string> = {
   "10": "Full — direct structural template, brand applied on top",
 };
 
-function ThumbnailCard({
-  thumbnailUrl,
-  title,
-  subtitle,
-  isSaved,
-  isSelected,
-  badgeLabel,
-  onSave,
-  onUseAsReference,
-  onExpand,
-}: {
-  thumbnailUrl: string;
-  title: string;
-  subtitle: string;
-  isSaved: boolean;
-  isSelected: boolean;
-  badgeLabel?: string;
-  onSave: () => void;
-  onUseAsReference: () => void;
-  onExpand: () => void;
-}) {
-  return (
-    <div
-      className={`relative group rounded-lg overflow-hidden border-2 transition-colors cursor-pointer ${
-        isSelected ? "border-primary" : "border-transparent hover:border-border"
-      }`}
-    >
-      <img
-        src={thumbnailUrl}
-        alt={title}
-        className="w-full h-[180px] object-cover object-top"
-        loading="lazy"
-      />
-      {/* Hover overlay */}
-      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
-        <div className="flex gap-2">
-          <button
-            onClick={(e) => { e.stopPropagation(); onSave(); }}
-            className="p-1.5 rounded-full bg-background/20 hover:bg-background/40 transition-colors"
-          >
-            <Heart className={`w-4 h-4 ${isSaved ? "fill-red-500 text-red-500" : "text-white"}`} />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onExpand(); }}
-            className="p-1.5 rounded-full bg-background/20 hover:bg-background/40 transition-colors"
-          >
-            <Maximize2 className="w-4 h-4 text-white" />
-          </button>
-        </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onUseAsReference(); }}
-          className="text-[11px] font-medium text-white bg-primary/80 hover:bg-primary px-3 py-1.5 rounded-md transition-colors"
-        >
-          Use as reference
-        </button>
-      </div>
-      {/* Info below */}
-      <div className="p-1.5">
-        <p className="text-[11px] text-muted-foreground truncate">{subtitle}</p>
-        {badgeLabel && (
-          <Badge variant="outline" className="text-[9px] mt-0.5 px-1 py-0">{badgeLabel}</Badge>
-        )}
-      </div>
-    </div>
-  );
-}
+type TabValue = "library" | "mine" | "saved";
 
 export default function ReferencePanel({
   brandId,
   campaignId,
-  isOpen,
-  onToggle,
   selectedReference,
   onSelectReference,
 }: ReferencePanelProps) {
   const { user } = useAuth();
-  const [tab, setTab] = useState("library");
+  const [tab, setTab] = useState<TabValue>("library");
   const [libraryItems, setLibraryItems] = useState<ReferenceCampaign[]>([]);
   const [myCampaigns, setMyCampaigns] = useState<any[]>([]);
   const [savedRefs, setSavedRefs] = useState<SavedReference[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [categories, setCategories] = useState<string[]>([]);
-  const [expandedItem, setExpandedItem] = useState<ReferenceCampaign | null>(null);
 
-  // Load library items
   useEffect(() => {
     supabase
       .from("reference_campaigns")
@@ -155,7 +82,6 @@ export default function ReferencePanel({
       });
   }, []);
 
-  // Load my campaigns
   useEffect(() => {
     if (!brandId) return;
     supabase
@@ -169,7 +95,6 @@ export default function ReferencePanel({
       });
   }, [brandId]);
 
-  // Load saved references
   useEffect(() => {
     if (!user) return;
     supabase
@@ -210,7 +135,6 @@ export default function ReferencePanel({
         onSelectReference(null);
         return;
       }
-      // Restore strength from localStorage if available
       const storageKey = `ref-panel-${campaignId}`;
       const stored = localStorage.getItem(storageKey);
       let strength = 5;
@@ -222,188 +146,141 @@ export default function ReferencePanel({
     [selectedReference, onSelectReference, campaignId]
   );
 
-  // Persist state to localStorage
   useEffect(() => {
     const storageKey = `ref-panel-${campaignId}`;
-    const state = {
-      isOpen,
-      selectedReference,
-    };
-    localStorage.setItem(storageKey, JSON.stringify(state));
-  }, [isOpen, selectedReference, campaignId]);
-
-  // Collapsed strip
-  if (!isOpen) {
-    return (
-      <button
-        onClick={onToggle}
-        className="w-10 h-full bg-card border-r border-border flex flex-col items-center justify-center gap-2 hover:bg-accent/50 transition-colors shrink-0"
-      >
-        <ChevronRight className="w-4 h-4 text-muted-foreground" />
-        <span className="text-[10px] text-muted-foreground writing-mode-vertical" style={{ writingMode: "vertical-rl" }}>
-          References
-        </span>
-      </button>
-    );
-  }
+    localStorage.setItem(storageKey, JSON.stringify({ selectedReference }));
+  }, [selectedReference, campaignId]);
 
   const filteredLibrary = categoryFilter === "all"
     ? libraryItems
     : libraryItems.filter((item) => item.category === categoryFilter);
 
-  // Build saved tab items
   const savedItems = savedRefs.map((s) => {
     if (s.reference_type === "library") {
       const item = libraryItems.find((l) => l.id === s.reference_id);
       return item ? { ...item, _source: "Library" as const } : null;
     } else {
       const item = myCampaigns.find((c) => c.id === s.reference_id);
-      return item ? { id: item.id, title: item.name, brand_name: null, thumbnail_url: "", image_urls: null, category: null, tags: null, _source: "Mine" as const } : null;
+      return item ? { id: item.id, title: item.name, brand_name: null, thumbnail_url: item.pinned_asset_urls?.[0] || "", image_urls: item.pinned_asset_urls || null, category: null, tags: null, _source: "Mine" as const } : null;
     }
   }).filter(Boolean);
 
-  // Expanded lightbox
-  if (expandedItem) {
-    return (
-      <div className="w-[280px] h-full bg-card border-r border-border flex flex-col shrink-0">
-        <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-          <button onClick={() => setExpandedItem(null)} className="text-xs text-muted-foreground hover:text-foreground">
-            ← Back
-          </button>
-          <span className="text-xs font-medium truncate mx-2">{expandedItem.title}</span>
-          <button onClick={onToggle} className="text-muted-foreground hover:text-foreground">
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-        <ScrollArea className="flex-1">
-          <div className="p-2 space-y-1">
-            {(expandedItem.image_urls || [expandedItem.thumbnail_url]).map((url, i) => (
-              <img key={i} src={url} alt="" className="w-full rounded" loading="lazy" />
-            ))}
-          </div>
-        </ScrollArea>
-      </div>
-    );
-  }
+  const getGridItems = (): { items: any[]; type: "library" | "campaign" }[] => {
+    if (tab === "library") return [{ items: filteredLibrary, type: "library" }];
+    if (tab === "mine") return [{ items: myCampaigns.map(c => ({ ...c, title: c.name, thumbnail_url: c.pinned_asset_urls?.[0] || "", image_urls: c.pinned_asset_urls || [] })), type: "campaign" }];
+    return [{ items: savedItems as any[], type: "library" }];
+  };
+
+  const gridData = getGridItems();
 
   return (
-    <div className="w-[280px] h-full bg-card border-r border-border flex flex-col shrink-0">
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-        <span className="text-sm font-medium">Inspiration</span>
-        <button onClick={onToggle} className="text-muted-foreground hover:text-foreground">
-          <X className="w-3.5 h-3.5" />
-        </button>
+    <div className="h-full flex flex-col">
+      {/* Header with tabs */}
+      <div className="shrink-0 border-b border-border px-4 pt-3 pb-0">
+        <h2 className="text-sm font-medium mb-2">Inspiration</h2>
+        <div className="flex gap-1">
+          {(["library", "mine", "saved"] as TabValue[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`text-[11px] px-3 py-1.5 rounded-t-md transition-colors ${
+                tab === t
+                  ? "bg-muted text-foreground font-medium"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t === "library" ? "Library" : t === "mine" ? "My Campaigns" : "Saved"}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={tab} onValueChange={setTab} className="flex-1 flex flex-col min-h-0">
-        <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent h-8 px-2">
-          <TabsTrigger value="library" className="text-[11px] px-2 py-1 h-6 data-[state=active]:bg-muted">Library</TabsTrigger>
-          <TabsTrigger value="mine" className="text-[11px] px-2 py-1 h-6 data-[state=active]:bg-muted">My Campaigns</TabsTrigger>
-          <TabsTrigger value="saved" className="text-[11px] px-2 py-1 h-6 data-[state=active]:bg-muted">Saved</TabsTrigger>
-        </TabsList>
+      {/* Category filters (library tab only) */}
+      {tab === "library" && categories.length > 0 && (
+        <div className="flex gap-1 px-4 py-2 flex-wrap shrink-0 border-b border-border">
+          <button
+            onClick={() => setCategoryFilter("all")}
+            className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${categoryFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
+          >
+            All
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setCategoryFilter(cat)}
+              className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${categoryFilter === cat ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      )}
 
-        <TabsContent value="library" className="flex-1 min-h-0 mt-0">
-          {/* Category filters */}
-          {categories.length > 0 && (
-            <div className="flex gap-1 p-2 flex-wrap">
-              <button
-                onClick={() => setCategoryFilter("all")}
-                className={`text-[10px] px-2 py-0.5 rounded-full border ${categoryFilter === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
-              >
-                All
-              </button>
-              {categories.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setCategoryFilter(cat)}
-                  className={`text-[10px] px-2 py-0.5 rounded-full border ${categoryFilter === cat ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
+      {/* Grid */}
+      <ScrollArea className="flex-1">
+        <div className="grid grid-cols-3 gap-3 p-4">
+          {gridData.flatMap(({ items, type }) =>
+            items.map((item: any) => {
+              const id = item.id;
+              const imageUrl = item.thumbnail_url || (item.image_urls?.[0]) || "";
+              const isSelected = selectedReference?.id === id;
+              const saved = isSavedRef(item._source === "Mine" ? "campaign" : item._source === "Library" ? "library" : type, id);
+              const refType: "library" | "campaign" = item._source === "Mine" ? "campaign" : item._source === "Library" ? "library" : type;
+
+              return (
+                <div
+                  key={id}
+                  className={`relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all ${
+                    isSelected ? "border-primary ring-2 ring-primary/20" : "border-transparent hover:border-border"
+                  }`}
+                  style={{ aspectRatio: "470 / 470" }}
                 >
-                  {cat}
-                </button>
-              ))}
-            </div>
-          )}
-          <ScrollArea className="flex-1 h-[calc(100%-2rem)]">
-            <div className="grid grid-cols-2 gap-2 p-2">
-              {filteredLibrary.map((item) => (
-                <ThumbnailCard
-                  key={item.id}
-                  thumbnailUrl={item.thumbnail_url}
-                  title={item.title}
-                  subtitle={item.brand_name || ""}
-                  isSaved={isSavedRef("library", item.id)}
-                  isSelected={selectedReference?.id === item.id}
-                  onSave={() => toggleSave("library", item.id)}
-                  onUseAsReference={() => handleUseAsReference("library", item.id, item.title, item.thumbnail_url, item.image_urls || [])}
-                  onExpand={() => setExpandedItem(item)}
-                />
-              ))}
-              {filteredLibrary.length === 0 && (
-                <p className="col-span-2 text-xs text-muted-foreground text-center py-8">No reference campaigns yet</p>
-              )}
-            </div>
-          </ScrollArea>
-        </TabsContent>
-
-        <TabsContent value="mine" className="flex-1 min-h-0 mt-0">
-          <ScrollArea className="h-full">
-            <div className="grid grid-cols-2 gap-2 p-2">
-              {myCampaigns.map((c) => (
-                <ThumbnailCard
-                  key={c.id}
-                  thumbnailUrl={c.pinned_asset_urls?.[0] || ""}
-                  title={c.name}
-                  subtitle={c.name}
-                  isSaved={isSavedRef("campaign", c.id)}
-                  isSelected={selectedReference?.id === c.id}
-                  onSave={() => toggleSave("campaign", c.id)}
-                  onUseAsReference={() => handleUseAsReference("campaign", c.id, c.name, c.pinned_asset_urls?.[0] || "", c.pinned_asset_urls || [])}
-                  onExpand={() => {}}
-                />
-              ))}
-              {myCampaigns.length === 0 && (
-                <p className="col-span-2 text-xs text-muted-foreground text-center py-8">No completed campaigns yet</p>
-              )}
-            </div>
-          </ScrollArea>
-        </TabsContent>
-
-        <TabsContent value="saved" className="flex-1 min-h-0 mt-0">
-          <ScrollArea className="h-full">
-            <div className="grid grid-cols-2 gap-2 p-2">
-              {savedItems.map((item: any) => (
-                <ThumbnailCard
-                  key={item.id}
-                  thumbnailUrl={item.thumbnail_url || ""}
-                  title={item.title || item.name}
-                  subtitle={item.brand_name || item.title}
-                  isSaved={true}
-                  isSelected={selectedReference?.id === item.id}
-                  badgeLabel={item._source}
-                  onSave={() => toggleSave(item._source === "Library" ? "library" : "campaign", item.id)}
-                  onUseAsReference={() => handleUseAsReference(
-                    item._source === "Library" ? "library" : "campaign",
-                    item.id,
-                    item.title || item.name,
-                    item.thumbnail_url || "",
-                    item.image_urls || []
+                  {imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt=""
+                      className="w-full h-full object-cover object-top"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-muted flex items-center justify-center">
+                      <span className="text-[10px] text-muted-foreground">No preview</span>
+                    </div>
                   )}
-                  onExpand={() => item._source === "Library" ? setExpandedItem(item) : null}
-                />
-              ))}
-              {savedItems.length === 0 && (
-                <p className="col-span-2 text-xs text-muted-foreground text-center py-8">No saved references</p>
-              )}
-            </div>
-          </ScrollArea>
-        </TabsContent>
-      </Tabs>
 
-      {/* Reference control bar */}
+                  {/* Hover overlay */}
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); toggleSave(refType, id); }}
+                      className="absolute top-2 right-2 p-1.5 rounded-full bg-background/20 hover:bg-background/40 transition-colors"
+                    >
+                      <Heart className={`w-3.5 h-3.5 ${saved ? "fill-red-500 text-red-500" : "text-white"}`} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleUseAsReference(refType, id, item.title || item.name || "", imageUrl, item.image_urls || []);
+                      }}
+                      className="text-[11px] font-medium text-white bg-primary/80 hover:bg-primary px-4 py-2 rounded-md transition-colors"
+                    >
+                      {isSelected ? "Remove reference" : "Use as reference"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+          {gridData.every(({ items }) => items.length === 0) && (
+            <p className="col-span-3 text-xs text-muted-foreground text-center py-12">
+              {tab === "library" ? "No reference campaigns yet" : tab === "mine" ? "No completed campaigns yet" : "No saved references"}
+            </p>
+          )}
+        </div>
+      </ScrollArea>
+
+      {/* Sticky strength slider when reference selected */}
       {selectedReference && (
-        <div className="border-t border-border p-3 space-y-2 bg-muted/30">
+        <div className="shrink-0 border-t border-border p-4 space-y-2 bg-muted/30">
           <div className="flex items-center gap-2">
             {selectedReference.thumbnail_url && (
               <img src={selectedReference.thumbnail_url} className="w-10 h-10 rounded object-cover shrink-0" alt="" />

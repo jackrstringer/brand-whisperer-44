@@ -4,12 +4,13 @@ import ProductSelector, { type SelectedShopifyProduct } from "@/components/brand
 import SegmentSelector from "@/components/brand/SegmentSelector";
 import ReferencePanel, { type SelectedReference } from "@/components/campaign/ReferencePanel";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, Send, Undo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck } from "lucide-react";
+import { ArrowLeft, Download, Send, Undo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -51,7 +52,9 @@ function replaceLikelyBrokenImageUrls(html: string, fallbackUrls: string[]): str
 export default function CampaignEditor() {
   const { brandId, campaignId } = useParams<{ brandId: string; campaignId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [selectedReference, setSelectedReference] = useState<SelectedReference | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop"); // kept for key
@@ -81,8 +84,7 @@ export default function CampaignEditor() {
   const [designNotes, setDesignNotes] = useState("");
   const [subjectLine, setSubjectLine] = useState("");
   const [previewText, setPreviewText] = useState("");
-  const [refPanelOpen, setRefPanelOpen] = useState(false);
-  const [selectedReference, setSelectedReference] = useState<SelectedReference | null>(null);
+  const [starredCampaign, setStarredCampaign] = useState(false);
 
   // Restore reference panel state from localStorage
   useEffect(() => {
@@ -91,11 +93,24 @@ export default function CampaignEditor() {
       const stored = localStorage.getItem(`ref-panel-${campaignId}`);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (typeof parsed.isOpen === "boolean") setRefPanelOpen(parsed.isOpen);
         if (parsed.selectedReference) setSelectedReference(parsed.selectedReference);
       }
     } catch {}
   }, [campaignId]);
+
+  // Check if campaign is already starred
+  useEffect(() => {
+    if (!user || !campaignId) return;
+    supabase
+      .from("saved_references")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("reference_type", "campaign")
+      .eq("reference_id", campaignId)
+      .then(({ data }) => {
+        setStarredCampaign(!!data && data.length > 0);
+      });
+  }, [user, campaignId]);
   const [sendListIds, setSendListIds] = useState<string[]>([]);
   const [sendSegmentIds, setSendSegmentIds] = useState<string[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -467,6 +482,27 @@ export default function CampaignEditor() {
           <Badge className={`text-[10px] ${campaign?.status === "ready" ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"}`}>
             {campaign?.status}
           </Badge>
+          {/* Star button — only post-generation */}
+          {campaign?.html && user && (
+            <button
+              onClick={async () => {
+                if (!campaignId) return;
+                if (starredCampaign) {
+                  setStarredCampaign(false);
+                  toast("Removed from favorites");
+                  await supabase.from("saved_references").delete().eq("user_id", user.id).eq("reference_type", "campaign").eq("reference_id", campaignId);
+                } else {
+                  setStarredCampaign(true);
+                  toast("Saved to favorites");
+                  await supabase.from("saved_references").insert({ user_id: user.id, reference_type: "campaign", reference_id: campaignId });
+                }
+              }}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title={starredCampaign ? "Remove from favorites" : "Save to favorites"}
+            >
+              <Star className={`w-4 h-4 ${starredCampaign ? "fill-amber-400 text-amber-400" : ""}`} />
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-3 px-3 py-1.5 rounded border border-border bg-card text-xs">
@@ -521,22 +557,10 @@ export default function CampaignEditor() {
         </div>
       </div>
 
-      {/* Main Content — with reference panel + draggable split */}
+      {/* Main Content — draggable split */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Reference Panel */}
-        {brandId && campaignId && (
-          <ReferencePanel
-            brandId={brandId}
-            campaignId={campaignId}
-            isOpen={refPanelOpen}
-            onToggle={() => setRefPanelOpen((o) => !o)}
-            selectedReference={selectedReference}
-            onSelectReference={setSelectedReference}
-          />
-        )}
-
       <PanelGroup direction="horizontal" className="flex-1">
-        {/* Left Panel — Preview */}
+        {/* Left Panel — Preview or Inspiration */}
         <Panel defaultSize={60} minSize={25} maxSize={85}>
           <div ref={previewPanelRef} className="h-full bg-card overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' as any }}>
             {isGenerating ? (
@@ -584,6 +608,13 @@ export default function CampaignEditor() {
                   />
                 </div>
               </div>
+            ) : brandId && campaignId ? (
+              <ReferencePanel
+                brandId={brandId}
+                campaignId={campaignId}
+                selectedReference={selectedReference}
+                onSelectReference={setSelectedReference}
+              />
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
                 Generate a campaign to see the preview
