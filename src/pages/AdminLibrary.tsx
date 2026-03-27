@@ -169,6 +169,20 @@ export default function AdminLibrary() {
     }
   };
 
+  const reanalyze = async (item: RefCampaign) => {
+    if (!item.image_urls?.length) { toast.error("No images to analyze"); return; }
+    toast.info("Re-analyzing campaign...");
+    const { error } = await supabase.functions.invoke("analyze-reference", {
+      body: { referenceId: item.id, imageUrls: item.image_urls },
+    });
+    if (error) {
+      toast.error("Analysis failed");
+    } else {
+      toast.success("Analysis complete");
+      loadCampaigns();
+    }
+  };
+
   const togglePublish = async (item: RefCampaign) => {
     await supabase.from("reference_campaigns").update({ is_published: !item.is_published }).eq("id", item.id);
     loadCampaigns();
