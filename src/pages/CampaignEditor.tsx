@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, Send, Undo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, RotateCcw, Link2, Loader2 } from "lucide-react";
+import { ArrowLeft, Download, Send, Undo2, Redo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, RotateCcw, Link2, Loader2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -89,6 +89,7 @@ export default function CampaignEditor() {
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [pinnedAssetUrls, setPinnedAssetUrls] = useState<string[]>([]);
   const [canUndo, setCanUndo] = useState(false);
+  const [redoStack, setRedoStack] = useState<string[]>([]);
   const [activeVersionIndex, setActiveVersionIndex] = useState<number | null>(null); // null = latest
   const [matchProductColors, setMatchProductColors] = useState(false);
   const [selectedShopifyProducts, setSelectedShopifyProducts] = useState<SelectedShopifyProduct[]>([]);
@@ -573,6 +574,7 @@ export default function CampaignEditor() {
               setAgentState("editing");
               setCampaign(c => c ? { ...c, html: data.html } : c);
               setCanUndo(true);
+              setRedoStack([]);
             }
 
             if (eventType === "no_change") {
@@ -699,6 +701,7 @@ export default function CampaignEditor() {
         if (data?.error) throw new Error(data.error);
         setCampaign(c => c ? { ...c, html: data.html } : c);
         setCanUndo(true);
+        setRedoStack([]);
         setMessages(prev => [
           ...prev,
           { id: crypto.randomUUID(), campaign_id: campaignId, role: "assistant", content: "Changes applied.", created_at: new Date().toISOString() },
@@ -744,6 +747,7 @@ export default function CampaignEditor() {
     await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
     setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
     setCanUndo(true);
+    setRedoStack([]);
 
     // Track which text is now live for this variant index
     const newAppliedTexts = { ...appliedTexts, [index]: variant.replace };
@@ -920,13 +924,29 @@ export default function CampaignEditor() {
     if (!campaign || !campaignId) return;
     const history = campaign.html_history;
     if (!Array.isArray(history) || history.length === 0) return;
+    const currentHtml = campaign.html || "";
     const previousHtml = history[history.length - 1];
     const newHistory = history.slice(0, -1);
     await supabase.from("campaigns").update({ html: previousHtml, html_history: newHistory }).eq("id", campaignId);
     setCampaign((c) => c ? { ...c, html: previousHtml as string, html_history: newHistory } : c);
     setCanUndo(newHistory.length > 0);
     setActiveVersionIndex(null);
+    setRedoStack(prev => [...prev, currentHtml]);
     toast.success("Undo successful");
+  };
+
+  const handleRedo = async () => {
+    if (!campaign || !campaignId || redoStack.length === 0) return;
+    const redoHtml = redoStack[redoStack.length - 1];
+    const newRedoStack = redoStack.slice(0, -1);
+    const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
+    history.push(campaign.html || "");
+    await supabase.from("campaigns").update({ html: redoHtml, html_history: history }).eq("id", campaignId);
+    setCampaign((c) => c ? { ...c, html: redoHtml, html_history: history } : c);
+    setCanUndo(true);
+    setRedoStack(newRedoStack);
+    setActiveVersionIndex(null);
+    toast.success("Redo successful");
   };
 
   const handleSwitchToVersion = (versionIndex: number) => {
@@ -946,6 +966,37 @@ export default function CampaignEditor() {
     a.click();
     URL.revokeObjectURL(url);
   };
+  // Debounced inline-edit save
+  const inlineEditTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Listen for postMessage from iframe for inline text edits
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type !== "textEdited" || !e.data?.html) return;
+      if (!campaignId || !campaign) return;
+      const newHtml = e.data.html as string;
+      const currentHtml = campaign.html || "";
+      if (newHtml === currentHtml) return;
+
+      // Push to history for undo
+      const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
+      history.push(currentHtml);
+      setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
+      setCanUndo(true);
+      setRedoStack([]); // clear redo on new edit
+
+      // Debounced DB save
+      if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
+      inlineEditTimerRef.current = setTimeout(async () => {
+        await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
+      }, 500);
+    };
+    window.addEventListener("message", handler);
+    return () => {
+      window.removeEventListener("message", handler);
+      if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
+    };
+  }, [campaignId, campaign]);
 
   if (loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
@@ -997,10 +1048,36 @@ export default function CampaignEditor() {
     ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls)
     : "";
 
+
   const srcdocHtml = htmlForPreview
     ? htmlForPreview.replace(
         /(<head[^>]*>)/i,
-        '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}</style>'
+        `$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}[contenteditable]:hover{outline:1px dashed rgba(128,128,128,0.4);outline-offset:2px;cursor:text;}[contenteditable]:focus{outline:2px solid rgba(99,102,241,0.5);outline-offset:2px;background:rgba(99,102,241,0.04);}</style>`
+      ).replace(
+        /<\/body>/i,
+        `<script>
+(function(){
+  var els = document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,td,th,li,button,label');
+  els.forEach(function(el){
+    if(el.querySelector('img') || el.querySelector('table')) return;
+    if(el.children.length > 0 && el.textContent.trim() === '') return;
+    el.contentEditable = 'true';
+    el.style.cursor = 'text';
+  });
+  var timer = null;
+  document.addEventListener('input', function(){
+    clearTimeout(timer);
+    timer = setTimeout(function(){
+      var clone = document.documentElement.cloneNode(true);
+      var scripts = clone.querySelectorAll('script');
+      scripts.forEach(function(s){ s.remove(); });
+      var editables = clone.querySelectorAll('[contenteditable]');
+      editables.forEach(function(el){ el.removeAttribute('contenteditable'); el.style.removeProperty('cursor'); });
+      window.parent.postMessage({ type: 'textEdited', html: clone.outerHTML }, '*');
+    }, 300);
+  });
+})();
+</script></body>`
       )
     : "";
 
@@ -1064,6 +1141,16 @@ export default function CampaignEditor() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {campaign?.html && (
+            <div className="flex items-center gap-1 mr-1">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleUndo} disabled={!canUndo} title="Undo">
+                <Undo2 className="w-3.5 h-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRedo} disabled={redoStack.length === 0} title="Redo">
+                <Redo2 className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          )}
           <div className="flex items-center gap-3 px-3 py-1.5 rounded border border-border bg-card text-xs">
             <label className="flex items-center gap-1.5">
               <span className="text-muted-foreground">Render:</span>
@@ -1206,7 +1293,7 @@ export default function CampaignEditor() {
                   <iframe
                     key={`${renderWidth}-${viewportWidth}`}
                     srcDoc={srcdocHtml}
-                    sandbox="allow-same-origin"
+                    sandbox="allow-same-origin allow-scripts"
                     className="border-0 block bg-white shadow-2xl"
                     style={{
                       width: renderWidth,
@@ -1506,13 +1593,7 @@ export default function CampaignEditor() {
                   <div ref={chatEndRef} />
                 </div>
 
-                {canUndo && (
-                  <div className="px-4 pb-2">
-                    <Button variant="ghost" size="sm" onClick={handleUndo} className="text-muted-foreground hover:text-foreground">
-                      <Undo2 className="w-3 h-3 mr-1" /> Undo last change
-                    </Button>
-                  </div>
-                )}
+
 
                 {/* Quick prompt chips */}
                 {campaign?.html && agentState === "idle" && !sending && (
