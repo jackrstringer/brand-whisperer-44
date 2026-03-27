@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Eye, MoreHorizontal, Loader2 } from "lucide-react";
+import { Check, MoreHorizontal, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { VariantData, VariantOption } from "@/lib/types";
 
@@ -57,11 +57,6 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
               <div className="flex items-start justify-between gap-2">
                 <p className="text-xs font-medium text-foreground leading-snug">{v.preview}</p>
                 <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
-                  {isHovering && !wasApplied && (
-                    <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                      <Eye className="w-3 h-3" /> Preview
-                    </span>
-                  )}
                   {wasApplied && (
                     <span className="flex items-center gap-1 text-[10px] text-primary">
                       <Check className="w-3 h-3" /> Applied
