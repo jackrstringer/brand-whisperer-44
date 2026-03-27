@@ -96,6 +96,7 @@ export default function CampaignEditor() {
   const [activeVersionIndex, setActiveVersionIndex] = useState<number | null>(null); // null = latest
   const [matchProductColors, setMatchProductColors] = useState(false);
   const [selectedShopifyProducts, setSelectedShopifyProducts] = useState<SelectedShopifyProduct[]>([]);
+  const [selectedElementContext, setSelectedElementContext] = useState<{ tagName: string; text: string; outerHTML: string; isRegion?: boolean; elements?: { tagName: string; text: string }[] } | null>(null);
   const [designNotes, setDesignNotes] = useState("");
   const [clickupUrl, setClickupUrl] = useState("");
   const [clickupLoading, setClickupLoading] = useState(false);
@@ -475,7 +476,18 @@ export default function CampaignEditor() {
     if (!campaignId || !brandId || !(iframeOwnedHtmlRef.current || campaign?.html)) return;
     if (!ideateOverride && !chatInput.trim() && chatAttachments.length === 0) return;
 
-    const userMsg = ideateOverride ? ideateOverride.realPrompt : chatInput.trim();
+    const userMsg = ideateOverride ? ideateOverride.realPrompt : (() => {
+      const raw = chatInput.trim();
+      if (selectedElementContext && raw) {
+        const truncatedText = selectedElementContext.text.length > 200 ? selectedElementContext.text.slice(0, 200) + '…' : selectedElementContext.text;
+        if (selectedElementContext.isRegion && selectedElementContext.elements) {
+          const elDesc = selectedElementContext.elements.map(e => `<${e.tagName}>`).join(', ');
+          return `[Targeting region with elements: ${elDesc}]\n\n${raw}`;
+        }
+        return `[Targeting <${selectedElementContext.tagName}> element: "${truncatedText}"]\nElement HTML: ${selectedElementContext.outerHTML.slice(0, 500)}\n\n${raw}`;
+      }
+      return raw;
+    })();
     const displayContent = ideateOverride
       ? ideateOverride.displayText
       : chatAttachments.length > 0
@@ -487,6 +499,7 @@ export default function CampaignEditor() {
       setChatInput("");
       setChatAttachments([]);
       setChatAttachmentPreviews(prev => { prev.forEach(u => URL.revokeObjectURL(u)); return []; });
+      setSelectedElementContext(null);
     }
     setSending(true);
     setAgentState("thinking");
@@ -1175,6 +1188,26 @@ export default function CampaignEditor() {
         return;
       }
 
+      // Element selection from iframe
+      if (e.data?.type === 'elementSelected') {
+        setSelectedElementContext({ tagName: e.data.tagName, text: e.data.text, outerHTML: e.data.outerHTML });
+        return;
+      }
+      if (e.data?.type === 'elementDeselected') {
+        setSelectedElementContext(null);
+        return;
+      }
+      if (e.data?.type === 'regionSelected') {
+        setSelectedElementContext({
+          tagName: 'REGION',
+          text: e.data.elements.map((el: any) => el.text).join(' | '),
+          outerHTML: '',
+          isRegion: true,
+          elements: e.data.elements,
+        });
+        return;
+      }
+
       if (e.data?.type !== "textEdited" || !e.data?.html) return;
       if (!campaignId || !campaign) return;
       const newHtml = e.data.html as string;
@@ -1266,7 +1299,7 @@ export default function CampaignEditor() {
         `$1<meta name="viewport" content="width=device-width, initial-scale=1"><script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"><\/script><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}h1,h2,h3,h4,h5,h6,p,span,a,li,label{text-wrap:balance;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}[contenteditable]:hover{outline:1px dashed rgba(128,128,128,0.4);outline-offset:2px;cursor:text;}[contenteditable]:focus{outline:2px solid rgba(99,102,241,0.5);outline-offset:2px;background:rgba(99,102,241,0.04);}.section-drag-ghost{opacity:0.4;}.section-drag-handle{cursor:grab;}.section-drag-handle:active{cursor:grabbing;}.section-handle-bar{position:absolute;top:0;left:0;right:0;height:32px;z-index:9999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:space-between;padding:0 8px;opacity:0;transition:opacity 0.15s;pointer-events:none;}.section-wrap:hover .section-handle-bar{opacity:1;pointer-events:auto;}.section-handle-bar span{color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;opacity:0.8;}.section-handle-bar button{background:none;border:none;color:#fff;cursor:pointer;padding:4px;opacity:0.7;font-size:14px;}.section-handle-bar button:hover{opacity:1;}.ftb{position:fixed;z-index:99998;background:rgba(18,18,20,0.97);backdrop-filter:blur(16px) saturate(1.4);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:4px 6px;display:flex;align-items:center;gap:2px;box-shadow:0 8px 32px rgba(0,0,0,0.6),0 0 0 1px rgba(255,255,255,0.04) inset;animation:ftb-in 0.18s cubic-bezier(0.16,1,0.3,1);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;}@keyframes ftb-in{from{opacity:0;transform:translateY(6px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}.ftb-btn{background:none;border:none;color:rgba(255,255,255,0.55);width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all 0.12s;padding:0;}.ftb-btn:hover{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.9);}.ftb-btn.active{background:rgba(99,102,241,0.2);color:#a5b4fc;}.ftb-sep{width:1px;height:18px;background:rgba(255,255,255,0.08);margin:0 4px;flex-shrink:0;}.ftb-tag{font-size:9px;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.08em;padding:2px 8px;white-space:nowrap;font-weight:600;}.ftb-select{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.75);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:11px;padding:3px 6px;cursor:pointer;outline:none;height:28px;font-weight:500;transition:all 0.12s;-webkit-appearance:none;appearance:none;}.ftb-select:hover{border-color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.1);}.ftb-select:focus{border-color:rgba(99,102,241,0.5);}.ftb-swatch{width:24px;height:24px;border-radius:6px;border:2px solid rgba(255,255,255,0.15);cursor:pointer;position:relative;transition:all 0.12s;}.ftb-swatch:hover{border-color:rgba(255,255,255,0.4);transform:scale(1.1);}.ftb-cpanel{position:absolute;top:calc(100% + 8px);background:rgba(18,18,20,0.98);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px;box-shadow:0 12px 40px rgba(0,0,0,0.6);min-width:200px;animation:ftb-in 0.12s cubic-bezier(0.16,1,0.3,1);}.ftb-cpanel-label{font-size:9px;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.08em;margin:6px 0 4px;font-weight:600;}.ftb-cpanel-label:first-child{margin-top:0;}.ftb-cpanel-row{display:flex;flex-wrap:wrap;gap:4px;}.ftb-cpanel-swatch{width:26px;height:26px;border-radius:5px;border:2px solid transparent;cursor:pointer;transition:all 0.12s;position:relative;}.ftb-cpanel-swatch:hover{border-color:rgba(255,255,255,0.4);transform:scale(1.12);}.ftb-cpanel-swatch.active{border-color:#818cf8;box-shadow:0 0 0 2px rgba(129,140,248,0.3);}.ftb-cpanel-swatch.active::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.5);}.ftb-hex-row{display:flex;gap:4px;margin-top:8px;align-items:center;}.ftb-hex-input{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:rgba(255,255,255,0.8);font-size:11px;padding:4px 6px;width:72px;outline:none;font-family:monospace;}.ftb-hex-input:focus{border-color:rgba(99,102,241,0.5);}.ftb-hex-native{width:28px;height:28px;border:none;padding:0;background:none;cursor:pointer;border-radius:4px;}.ftb-ideate{background:transparent;color:#c8f135;border:1.5px solid transparent;border-radius:7px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;transition:all 0.15s;position:relative;background-image:linear-gradient(rgba(18,18,20,0.97),rgba(18,18,20,0.97)),linear-gradient(135deg,#c8f135,#a5b4fc,#c8f135);background-origin:border-box;background-clip:padding-box,border-box;}.ftb-ideate:hover{background-image:linear-gradient(rgba(200,241,53,0.08),rgba(200,241,53,0.08)),linear-gradient(135deg,#c8f135,#a5b4fc,#c8f135);color:#d4f55a;box-shadow:0 0 16px rgba(200,241,53,0.2);}</style>`
       ).replace(
         /<\/body>/i,
-        `<script>
+        `<style>.el-selected{outline:2px solid rgba(200,241,53,0.6)!important;outline-offset:2px;}.region-select-overlay{position:fixed;border:1.5px dashed rgba(200,241,53,0.5);background:rgba(200,241,53,0.05);pointer-events:none;z-index:99997;}.ftb-pad-btn{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.6);border-radius:5px;font-size:11px;width:26px;height:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.12s;padding:0;}.ftb-pad-btn:hover{background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.9);}</style><script>
 (function(){
   /* --- TEXT EDITING --- */
   var blocks = ['TABLE','TR','TD','TH','DIV','UL','OL','IMG'];
@@ -1328,6 +1361,8 @@ export default function CampaignEditor() {
       clone.querySelectorAll('.ctx-menu').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('.ftb').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('.ftb-cpanel').forEach(function(el){ el.remove(); });
+      clone.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
+      clone.querySelectorAll('.region-select-overlay').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('style').forEach(function(s){
         if(s.textContent && (s.textContent.indexOf('[contenteditable]')>=0 || s.textContent.indexOf('section-drag')>=0 || s.textContent.indexOf('.ctx-menu')>=0 || s.textContent.indexOf('.ftb')>=0)) s.remove();
       });
@@ -1585,6 +1620,89 @@ export default function CampaignEditor() {
     ftbColorPanel = panel;
   }
 
+  function showBgColorPanel(swatchWrap, swatch, el){
+    if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; return; }
+    var panel = document.createElement('div');
+    panel.className = 'ftb-cpanel';
+    var currentBg = rgbToHex(window.getComputedStyle(el).backgroundColor) || '';
+
+    function applyBg(hex){
+      addRecentColor(hex);
+      el.style.backgroundColor = hex;
+      if(el.hasAttribute('bgcolor')) el.setAttribute('bgcolor', hex);
+      swatch.style.backgroundColor = hex;
+      swatch.style.backgroundImage = 'none';
+      if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; }
+      syncHtml();
+    }
+
+    function makeBgSwatch(hex, isActive){
+      var cs = document.createElement('div');
+      cs.className = 'ftb-cpanel-swatch' + (isActive ? ' active' : '');
+      cs.style.backgroundColor = hex;
+      cs.title = hex;
+      cs.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
+      cs.addEventListener('click', function(ev){ ev.stopPropagation(); applyBg(hex); });
+      return cs;
+    }
+
+    var defaults = ['#000000','#ffffff','#333333','#666666','#999999','#cc0000','#ff6600','#ffcc00','#33cc33','#0066cc','#6633cc','#cc33cc'];
+    var defLabel = document.createElement('div');
+    defLabel.className = 'ftb-cpanel-label';
+    defLabel.textContent = 'Default';
+    panel.appendChild(defLabel);
+    var defRow = document.createElement('div');
+    defRow.className = 'ftb-cpanel-row';
+    defaults.forEach(function(hex){ defRow.appendChild(makeBgSwatch(hex, currentBg === hex)); });
+    panel.appendChild(defRow);
+
+    var docColors = extractEmailColors();
+    if(docColors.length > 0){
+      var docLabel = document.createElement('div');
+      docLabel.className = 'ftb-cpanel-label';
+      docLabel.textContent = 'Document';
+      panel.appendChild(docLabel);
+      var docRow = document.createElement('div');
+      docRow.className = 'ftb-cpanel-row';
+      docColors.forEach(function(hex){ docRow.appendChild(makeBgSwatch(hex, currentBg === hex)); });
+      panel.appendChild(docRow);
+    }
+
+    var hexRow = document.createElement('div');
+    hexRow.className = 'ftb-hex-row';
+    var hexLabel = document.createElement('span');
+    hexLabel.style.cssText = 'color:rgba(255,255,255,0.35);font-size:10px;font-weight:600;';
+    hexLabel.textContent = '#';
+    hexRow.appendChild(hexLabel);
+    var hexInput = document.createElement('input');
+    hexInput.type = 'text';
+    hexInput.className = 'ftb-hex-input';
+    hexInput.value = currentBg ? currentBg.replace('#','') : '';
+    hexInput.maxLength = 6;
+    hexInput.placeholder = '000000';
+    hexInput.addEventListener('mousedown', function(ev){ ev.stopPropagation(); });
+    hexInput.addEventListener('keydown', function(ev){
+      ev.stopPropagation();
+      if(ev.key === 'Enter'){
+        var val = hexInput.value.trim().replace('#','');
+        if(/^[0-9a-fA-F]{3,6}$/.test(val)) applyBg(normalizeHex('#'+val));
+      }
+    });
+    hexRow.appendChild(hexInput);
+    var nativePicker = document.createElement('input');
+    nativePicker.type = 'color';
+    nativePicker.className = 'ftb-hex-native';
+    nativePicker.value = currentBg || '#ffffff';
+    nativePicker.addEventListener('mousedown', function(ev){ ev.stopPropagation(); });
+    nativePicker.addEventListener('input', function(){ hexInput.value = nativePicker.value.replace('#',''); });
+    nativePicker.addEventListener('change', function(){ applyBg(nativePicker.value); });
+    hexRow.appendChild(nativePicker);
+    panel.appendChild(hexRow);
+
+    swatchWrap.appendChild(panel);
+    ftbColorPanel = panel;
+  }
+
   function showFtb(el){
     removeFtb();
     ftbTarget = el;
@@ -1656,6 +1774,28 @@ export default function CampaignEditor() {
     swatchWrap.appendChild(swatch);
     bar.appendChild(swatchWrap);
 
+    // Background color swatch
+    var currentBg = window.getComputedStyle(el).backgroundColor;
+    var bgSwatchWrap = document.createElement('div');
+    bgSwatchWrap.style.position = 'relative';
+    var bgSwatch = document.createElement('div');
+    bgSwatch.className = 'ftb-swatch';
+    var bgHex = rgbToHex(currentBg);
+    bgSwatch.style.backgroundColor = bgHex && currentBg !== 'rgba(0, 0, 0, 0)' ? currentBg : 'transparent';
+    if(!bgHex || currentBg === 'rgba(0, 0, 0, 0)'){
+      bgSwatch.style.backgroundImage = 'linear-gradient(45deg,#555 25%,transparent 25%,transparent 75%,#555 75%),linear-gradient(45deg,#555 25%,transparent 25%,transparent 75%,#555 75%)';
+      bgSwatch.style.backgroundSize = '8px 8px';
+      bgSwatch.style.backgroundPosition = '0 0,4px 4px';
+    }
+    bgSwatch.title = 'Background color';
+    bgSwatch.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    bgSwatch.addEventListener('click', function(e){
+      e.stopPropagation();
+      showBgColorPanel(bgSwatchWrap, bgSwatch, el);
+    });
+    bgSwatchWrap.appendChild(bgSwatch);
+    bar.appendChild(bgSwatchWrap);
+
     bar.appendChild(makeSep());
 
     // Bold
@@ -1701,6 +1841,38 @@ export default function CampaignEditor() {
       el.focus();
     });
     bar.appendChild(alignBtn);
+
+    bar.appendChild(makeSep());
+
+    // Padding controls
+    var padLabel = document.createElement('span');
+    padLabel.style.cssText = 'font-size:9px;color:rgba(255,255,255,0.35);letter-spacing:0.05em;font-weight:600;padding:0 2px;';
+    padLabel.textContent = 'PAD';
+    bar.appendChild(padLabel);
+    var padMinus = document.createElement('button');
+    padMinus.className = 'ftb-pad-btn';
+    padMinus.innerHTML = '−';
+    padMinus.title = 'Decrease padding';
+    padMinus.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    padMinus.addEventListener('click', function(e){
+      e.stopPropagation();
+      var cur = parseInt(window.getComputedStyle(el).paddingTop) || 0;
+      el.style.padding = Math.max(0, cur - 4) + 'px';
+      syncHtml();
+    });
+    bar.appendChild(padMinus);
+    var padPlus = document.createElement('button');
+    padPlus.className = 'ftb-pad-btn';
+    padPlus.innerHTML = '+';
+    padPlus.title = 'Increase padding';
+    padPlus.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    padPlus.addEventListener('click', function(e){
+      e.stopPropagation();
+      var cur = parseInt(window.getComputedStyle(el).paddingTop) || 0;
+      el.style.padding = (cur + 4) + 'px';
+      syncHtml();
+    });
+    bar.appendChild(padPlus);
 
     bar.appendChild(makeSep());
 
@@ -1921,6 +2093,101 @@ export default function CampaignEditor() {
       });
     }
   }
+
+  /* --- CLICK-TO-SELECT ELEMENT --- */
+  var selectedEl = null;
+  function clearElSelection(){
+    if(selectedEl){ selectedEl.classList.remove('el-selected'); selectedEl = null; }
+    window.parent.postMessage({ type: 'elementDeselected' }, '*');
+  }
+
+  document.addEventListener('click', function(e){
+    if(ftbEl && ftbEl.contains(e.target)) return;
+    if(ftbColorPanel && ftbColorPanel.contains(e.target)) return;
+    if(ctxMenu && ctxMenu.contains(e.target)) return;
+
+    var el = e.target;
+    while(el && el !== document.body && el !== document.documentElement){
+      if(el.tagName && /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL|TD|TH|TR|TABLE|DIV|IMG|SECTION)$/i.test(el.tagName)) break;
+      el = el.parentElement;
+    }
+    if(!el || el === document.body || el === document.documentElement){
+      clearElSelection();
+      return;
+    }
+
+    if(selectedEl && selectedEl !== el) selectedEl.classList.remove('el-selected');
+    selectedEl = el;
+    el.classList.add('el-selected');
+
+    var text = el.textContent ? el.textContent.trim().slice(0, 300) : '';
+    var outerHTML = el.outerHTML ? el.outerHTML.slice(0, 1000) : '';
+    window.parent.postMessage({ type: 'elementSelected', tagName: el.tagName, text: text, outerHTML: outerHTML }, '*');
+  });
+
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && selectedEl && !ftbEl){
+      clearElSelection();
+    }
+  });
+
+  /* --- SHIFT+DRAG REGION SELECT --- */
+  var regionOverlay = null;
+  var regionStart = null;
+
+  document.addEventListener('mousedown', function(e){
+    if(!e.shiftKey) return;
+    if(ftbEl && ftbEl.contains(e.target)) return;
+    e.preventDefault();
+    regionStart = { x: e.clientX, y: e.clientY };
+    regionOverlay = document.createElement('div');
+    regionOverlay.className = 'region-select-overlay';
+    document.body.appendChild(regionOverlay);
+  });
+
+  document.addEventListener('mousemove', function(e){
+    if(!regionOverlay || !regionStart) return;
+    var x = Math.min(regionStart.x, e.clientX);
+    var y = Math.min(regionStart.y, e.clientY);
+    var w = Math.abs(e.clientX - regionStart.x);
+    var h = Math.abs(e.clientY - regionStart.y);
+    regionOverlay.style.left = x + 'px';
+    regionOverlay.style.top = y + 'px';
+    regionOverlay.style.width = w + 'px';
+    regionOverlay.style.height = h + 'px';
+  });
+
+  document.addEventListener('mouseup', function(e){
+    if(!regionOverlay || !regionStart) return;
+    var rect = {
+      left: Math.min(regionStart.x, e.clientX),
+      top: Math.min(regionStart.y, e.clientY),
+      right: Math.max(regionStart.x, e.clientX),
+      bottom: Math.max(regionStart.y, e.clientY)
+    };
+    regionOverlay.remove();
+    regionOverlay = null;
+    regionStart = null;
+
+    if(rect.right - rect.left < 10 || rect.bottom - rect.top < 10) return;
+
+    // Clear previous selections
+    document.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
+
+    var elements = [];
+    document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img,td,div').forEach(function(el){
+      var r = el.getBoundingClientRect();
+      if(r.width < 1 || r.height < 1) return;
+      if(r.right > rect.left && r.left < rect.right && r.bottom > rect.top && r.top < rect.bottom){
+        elements.push({ tagName: el.tagName, text: (el.textContent || '').trim().slice(0, 100) });
+        el.classList.add('el-selected');
+      }
+    });
+
+    if(elements.length > 0){
+      window.parent.postMessage({ type: 'regionSelected', elements: elements }, '*');
+    }
+  });
 })();
 <\/script></body>`
       )
@@ -2534,6 +2801,35 @@ export default function CampaignEditor() {
                   </div>
                 )}
 
+                {/* Selected element context chip */}
+                {selectedElementContext && (
+                  <div className="px-4 pt-2 flex items-center gap-2">
+                    <div
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(200,241,53,0.12), rgba(99,102,241,0.06))',
+                        border: '1px solid rgba(200,241,53,0.2)',
+                        color: 'rgba(255,255,255,0.7)',
+                      }}
+                    >
+                      <span style={{ color: 'rgba(200,241,53,0.8)' }}>
+                        {selectedElementContext.isRegion ? '⬚' : '◎'}
+                      </span>
+                      <span className="truncate max-w-[200px]">
+                        {selectedElementContext.isRegion
+                          ? `Region: ${selectedElementContext.elements?.length || 0} elements`
+                          : `${selectedElementContext.tagName}: ${selectedElementContext.text.slice(0, 40)}${selectedElementContext.text.length > 40 ? '…' : ''}`
+                        }
+                      </span>
+                      <button
+                        onClick={() => setSelectedElementContext(null)}
+                        className="ml-0.5 hover:text-foreground transition-colors"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div
                   ref={chatDropRef}
                   className="p-4 border-t border-border"
