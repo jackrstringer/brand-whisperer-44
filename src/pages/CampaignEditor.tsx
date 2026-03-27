@@ -2464,7 +2464,7 @@ export default function CampaignEditor() {
                     </div>
                   )}
                   {/* Ideate indicator pill (shown while thinking, before variants arrive) */}
-                  {ideateIndicator === "thinking" && (
+                  {ideateActiveRef.current && !ideateMessageId && (
                     <div className="flex justify-start my-2">
                       <div
                         className="relative rounded-full px-6 py-2 text-xs font-medium flex items-center gap-2.5 overflow-hidden"
