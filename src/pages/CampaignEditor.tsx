@@ -476,7 +476,18 @@ export default function CampaignEditor() {
     if (!campaignId || !brandId || !(iframeOwnedHtmlRef.current || campaign?.html)) return;
     if (!ideateOverride && !chatInput.trim() && chatAttachments.length === 0) return;
 
-    const userMsg = ideateOverride ? ideateOverride.realPrompt : chatInput.trim();
+    const userMsg = ideateOverride ? ideateOverride.realPrompt : (() => {
+      const raw = chatInput.trim();
+      if (selectedElementContext && raw) {
+        const truncatedText = selectedElementContext.text.length > 200 ? selectedElementContext.text.slice(0, 200) + '…' : selectedElementContext.text;
+        if (selectedElementContext.isRegion && selectedElementContext.elements) {
+          const elDesc = selectedElementContext.elements.map(e => `<${e.tagName}>`).join(', ');
+          return `[Targeting region with elements: ${elDesc}]\n\n${raw}`;
+        }
+        return `[Targeting <${selectedElementContext.tagName}> element: "${truncatedText}"]\nElement HTML: ${selectedElementContext.outerHTML.slice(0, 500)}\n\n${raw}`;
+      }
+      return raw;
+    })();
     const displayContent = ideateOverride
       ? ideateOverride.displayText
       : chatAttachments.length > 0
