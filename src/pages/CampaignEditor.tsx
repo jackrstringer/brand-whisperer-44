@@ -524,10 +524,19 @@ export default function CampaignEditor() {
         let buffer = "";
         let serverReply: string | null = null;
 
+        let receivedDone = false;
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
+          if (done) {
+            // Process any remaining buffer before exiting
+            if (buffer.trim()) {
+              buffer += "\n\n"; // ensure trailing delimiter for parser
+            } else {
+              break;
+            }
+          } else {
+            buffer += decoder.decode(value, { stream: true });
+          }
 
           // Parse complete SSE events (separated by double newline)
           const blocks = buffer.split("\n\n");
@@ -584,6 +593,7 @@ export default function CampaignEditor() {
             }
 
             if (eventType === "done") {
+              receivedDone = true;
               setAgentState("idle");
               // Skip adding another message if variants already handled it
               if (data?.isVariants || serverReply === "__VARIANTS_HANDLED__") {
@@ -611,6 +621,20 @@ export default function CampaignEditor() {
                 { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Error: ${data.message}`, created_at: new Date().toISOString() },
               ]);
             }
+          }
+          // If we were processing leftover buffer after done=true, break now
+          if (done) break;
+        }
+        // Fallback: stream ended without a done event
+        if (!receivedDone && serverReply !== "__VARIANTS_HANDLED__") {
+          setAgentState("idle");
+          if (streamingTextRef.current) {
+            setMessages(prev => [
+              ...prev,
+              { id: crypto.randomUUID(), campaign_id: campaignId!, role: "assistant", content: streamingTextRef.current, created_at: new Date().toISOString() },
+            ]);
+            setStreamingText("");
+            streamingTextRef.current = "";
           }
         }
       } else {

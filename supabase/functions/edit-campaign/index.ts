@@ -294,8 +294,19 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
     const stream = new ReadableStream({
       async start(ctrl) {
         const encoder = new TextEncoder();
-        const emit = (event: string, data: any) => {
-          ctrl.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        let isClosed = false;
+        const safeEmit = (event: string, data: any) => {
+          if (isClosed) return;
+          try {
+            ctrl.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+          } catch (e) {
+            console.error(`[edit-campaign] safeEmit failed for ${event}:`, e);
+          }
+        };
+        const safeClose = () => {
+          if (isClosed) return;
+          isClosed = true;
+          try { ctrl.close(); } catch {}
         };
 
         let fullText = "";
@@ -351,15 +362,16 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
                 console.log(`[edit-campaign] Variant mode: ${variants.length} variants`);
 
                 const responseText = introText;
-                // Save the message with variant data as tool_calls JSON
+                // Save the message (without tool_calls for now — column added separately)
                 await supabase.from("chat_messages").insert([
                   { campaign_id: campaignId, role: "user", content: message },
                   { campaign_id: campaignId, role: "assistant", content: responseText, tool_calls: { type: "variants", data: { message: introText, variants, applied_index: null } } },
                 ]);
 
-                emit("variants", { message: introText, variants });
-                emit("done", { reply: responseText, changed: false, patchesApplied: 0, isVariants: true });
-                ctrl.close();
+                console.log(`[edit-campaign] Emitting variants event`);
+                safeEmit("variants", { message: introText, variants });
+                safeEmit("done", { reply: responseText, changed: false, patchesApplied: 0, isVariants: true });
+                safeClose();
                 return;
               }
             } catch (e) {
@@ -484,11 +496,11 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
           const totalMs = Date.now() - startMs;
           console.log(`[edit-campaign] TOTAL: ${totalMs}ms | Prep: ${prepMs}ms | AI: ${aiMs}ms | Patches: ${patchCount} | HtmlChanged: ${htmlChanged}`);
 
-          emit("done", { reply: responseText, changed: htmlChanged, patchesApplied: patchCount });
+          safeEmit("done", { reply: responseText, changed: htmlChanged, patchesApplied: patchCount });
         } catch (err) {
-          emit("error", { message: err instanceof Error ? err.message : "Stream failed" });
+          safeEmit("error", { message: err instanceof Error ? err.message : "Stream failed" });
         } finally {
-          ctrl.close();
+          safeClose();
         }
       },
     });
