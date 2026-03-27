@@ -212,11 +212,12 @@ export default function ReferencePanel({
       }
       const storageKey = `ref-panel-${campaignId}`;
       const stored = localStorage.getItem(storageKey);
-      let strength = 5;
+      let mode: ReferenceMode = "hard";
       if (stored) {
-        try { strength = JSON.parse(stored).strength || 5; } catch {}
+        try { mode = JSON.parse(stored).selectedReference?.mode || "hard"; } catch {}
       }
-      onSelectReference({ type, id, title, thumbnail_url: thumbnailUrl, image_urls: imageUrls, strength });
+      const cfg = MODE_CONFIG[mode];
+      onSelectReference({ type, id, title, thumbnail_url: thumbnailUrl, image_urls: imageUrls, strength: cfg.strength, mode });
     },
     [selectedReference, onSelectReference, campaignId]
   );
