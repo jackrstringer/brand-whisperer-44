@@ -620,13 +620,13 @@ export default function CampaignEditor() {
               </div>
             )}
           </div>
-        </Panel>
+        </div>
 
-        {/* Fixed divider (no drag) */}
+        {/* Divider */}
         <div className="w-px bg-border shrink-0" />
 
-        {/* Right Panel */}
-        <Panel defaultSize={35}>
+        {/* Right Panel (35%) */}
+        <div className="h-full min-w-0 flex-[35] overflow-hidden">
           <div className="h-full flex flex-col overflow-hidden">
             {isDraft && !isGenerating ? (
               <div className="p-6 space-y-5 overflow-y-auto flex-1">
