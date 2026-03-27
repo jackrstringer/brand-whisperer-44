@@ -474,6 +474,12 @@ export default function ProductSelector({
                         images={shopifyImages[id] || []}
                         pinnedUrls={pinnedAssetUrls}
                         onTogglePin={togglePin}
+                        brandId={brandId}
+                        onUploadComplete={(url) => {
+                          // Auto-pin uploaded images
+                          const newPinned = [...pinnedAssetUrls, url];
+                          onSelectionChange(selectedProductIds, newPinned);
+                        }}
                       />
                     );
                   })}
