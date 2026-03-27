@@ -658,7 +658,7 @@ export default function CampaignEditor() {
               streamingTextRef.current = "";
               serverReply = "__VARIANTS_HANDLED__";
               setAgentState("idle");
-              ideateActive = false;
+              setIdeateActive(false);
               const variantMsg: ChatMessage = {
                 id: crypto.randomUUID(),
                 campaign_id: campaignId,
