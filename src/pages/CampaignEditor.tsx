@@ -920,7 +920,7 @@ export default function CampaignEditor() {
   // The active version index (null = latest = allVersions.length - 1)
   const resolvedActiveIndex = activeVersionIndex ?? allVersions.length - 1;
 
-  const handleUndo = async () => {
+  const handleUndo = useCallback(async () => {
     if (!campaign || !campaignId) return;
     const history = campaign.html_history;
     if (!Array.isArray(history) || history.length === 0) return;
@@ -933,9 +933,9 @@ export default function CampaignEditor() {
     setActiveVersionIndex(null);
     setRedoStack(prev => [...prev, currentHtml]);
     toast.success("Undo successful");
-  };
+  }, [campaign, campaignId]);
 
-  const handleRedo = async () => {
+  const handleRedo = useCallback(async () => {
     if (!campaign || !campaignId || redoStack.length === 0) return;
     const redoHtml = redoStack[redoStack.length - 1];
     const newRedoStack = redoStack.slice(0, -1);
@@ -947,7 +947,20 @@ export default function CampaignEditor() {
     setRedoStack(newRedoStack);
     setActiveVersionIndex(null);
     toast.success("Redo successful");
-  };
+  }, [campaign, campaignId, redoStack]);
+
+  // Keyboard shortcuts: Cmd/Ctrl+Z for undo, Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y for redo
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); handleUndo(); }
+      if (e.key === 'z' && e.shiftKey) { e.preventDefault(); handleRedo(); }
+      if (e.key === 'y') { e.preventDefault(); handleRedo(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleUndo, handleRedo]);
 
   const handleSwitchToVersion = (versionIndex: number) => {
     if (versionIndex === resolvedActiveIndex) return;
