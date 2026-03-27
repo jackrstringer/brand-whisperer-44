@@ -67,6 +67,7 @@ export default function CampaignEditor() {
   const [goal, setGoal] = useState("promotional");
   const [extraCopy, setExtraCopy] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [visualQaRunning, setVisualQaRunning] = useState(false);
 
   const [chatInput, setChatInput] = useState("");
   const [sending, setSending] = useState(false);
