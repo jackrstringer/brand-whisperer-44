@@ -737,27 +737,49 @@ export default function CampaignEditor() {
       setAgentState("idle");
     }
   };
+  // Helper: scan the current HTML to find what text is actually live for a variant set.
+  // This handles cross-set applies where the original `find` text has been replaced by another set.
+  const findLiveTarget = useCallback((variantData: NonNullable<ChatMessage['variant_data']>, html: string): string | null => {
+    const originalFind = variantData.variants[0]?.find;
+    if (!originalFind) return null;
+
+    // 1. Original text still present — nothing has changed it
+    if (html.includes(originalFind)) return originalFind;
+
+    // 2. Check currently applied variant's replace text (most likely match after same-set switch)
+    const appliedTexts = variantData.applied_texts || {};
+    const appliedIdx = variantData.applied_index;
+    if (appliedIdx !== null && appliedIdx !== undefined) {
+      const liveText = appliedTexts[appliedIdx] || variantData.variants[appliedIdx]?.replace;
+      if (liveText && html.includes(liveText)) return liveText;
+    }
+
+    // 3. Check all variant replace texts (cross-set apply may have used one from this set)
+    for (const v of variantData.variants) {
+      if (html.includes(v.replace)) return v.replace;
+    }
+
+    // 4. Check all tracked applied texts
+    for (const text of Object.values(appliedTexts)) {
+      if (typeof text === 'string' && html.includes(text)) return text;
+    }
+
+    return null;
+  }, []);
+
   const handleApplyVariant = async (variant: VariantOption, index: number, messageId: string) => {
     if (!campaign?.html || !campaignId) return;
     const html = campaign.html;
 
-    // Determine the correct find target: if a previous variant was applied, find the applied text instead of original
     const msg = messages.find(m => m.id === messageId);
-    const prevAppliedIndex = msg?.variant_data?.applied_index;
-    const appliedTexts = msg?.variant_data?.applied_texts || {};
-    let findTarget = variant.find;
+    if (!msg?.variant_data) return;
 
-    if (prevAppliedIndex !== null && prevAppliedIndex !== undefined && prevAppliedIndex !== index) {
-      // A different variant was previously applied — use its replace text as the find target
-      const prevVariant = msg?.variant_data?.variants[prevAppliedIndex];
-      const liveText = appliedTexts[prevAppliedIndex] || prevVariant?.replace;
-      if (liveText) findTarget = liveText;
-    }
-
-    if (!html.includes(findTarget)) {
+    const findTarget = findLiveTarget(msg.variant_data, html);
+    if (!findTarget) {
       toast.error("Could not find the text to replace — it may have already changed.");
       return;
     }
+
     const useAll = variant.apply_all === true;
     const newHtml = useAll ? html.split(findTarget).join(variant.replace) : html.replace(findTarget, variant.replace);
     // Save to history
@@ -769,9 +791,10 @@ export default function CampaignEditor() {
     setRedoStack([]);
 
     // Track which text is now live for this variant index
+    const appliedTexts = msg.variant_data.applied_texts || {};
     const newAppliedTexts = { ...appliedTexts, [index]: variant.replace };
 
-    // Update the message's applied_index and applied_texts
+    // Update this message's applied_index and applied_texts
     setMessages(prev => prev.map(m => {
       if (m.id === messageId && m.variant_data) {
         return { ...m, variant_data: { ...m.variant_data, applied_index: index, applied_texts: newAppliedTexts } };
@@ -779,10 +802,26 @@ export default function CampaignEditor() {
       return m;
     }));
 
+    // Cross-set sync: update any OTHER variant messages that share the same original find text
+    // so they can locate the new live text on their next apply/preview
+    setMessages(prev => prev.map(m => {
+      if (m.id === messageId || !m.variant_data || m.message_type !== 'variants') return m;
+      const otherOriginal = m.variant_data.variants[0]?.find;
+      if (!otherOriginal) return m;
+      // Check if this other set targets the same text we just replaced
+      const otherLive = findLiveTarget(m.variant_data, html);
+      if (otherLive === findTarget) {
+        // This set's live text was just replaced — record the new text so findLiveTarget can find it
+        const otherAppliedTexts = { ...(m.variant_data.applied_texts || {}), _crossSetLive: variant.replace };
+        return { ...m, variant_data: { ...m.variant_data, applied_texts: otherAppliedTexts } };
+      }
+      return m;
+    }));
+
     // Persist to DB
-    const variantData = msg?.variant_data;
+    const variantData = msg.variant_data;
     await supabase.from("chat_messages").update({
-      tool_calls: { type: "variants", data: { message: variantData?.message || "", variants: variantData?.variants || [], applied_index: index, applied_texts: newAppliedTexts } },
+      tool_calls: { type: "variants", data: { message: variantData.message || "", variants: variantData.variants || [], applied_index: index, applied_texts: newAppliedTexts } },
     } as any).eq("id", messageId);
 
     toast.success(`Applied: ${variant.label}`);
@@ -792,20 +831,14 @@ export default function CampaignEditor() {
     const html = iframeOwnedHtmlRef.current || campaign?.html;
     if (!html) return;
     const msg = messages.find(m => m.id === messageId);
-    const prevAppliedIndex = msg?.variant_data?.applied_index;
-    const appliedTexts = msg?.variant_data?.applied_texts || {};
-    let findTarget = variant.find;
+    if (!msg?.variant_data) return;
 
-    if (prevAppliedIndex !== null && prevAppliedIndex !== undefined && prevAppliedIndex !== index) {
-      const prevVariant = msg?.variant_data?.variants[prevAppliedIndex];
-      const liveText = appliedTexts[prevAppliedIndex] || prevVariant?.replace;
-      if (liveText) findTarget = liveText;
-    }
+    const findTarget = findLiveTarget(msg.variant_data, html);
+    if (!findTarget) return; // silently skip — text no longer in HTML
 
-    if (!html.includes(findTarget)) return;
     const useAll = variant.apply_all === true;
     setPreviewHtml(useAll ? html.split(findTarget).join(variant.replace) : html.replace(findTarget, variant.replace));
-  }, [campaign?.html, messages]);
+  }, [campaign?.html, messages, findLiveTarget]);
 
   const handlePreviewClear = useCallback(() => {
     setPreviewHtml(null);
