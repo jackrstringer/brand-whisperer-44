@@ -274,6 +274,7 @@ export default function CampaignEditor() {
           id: selectedReference.id,
           image_urls: selectedReference.image_urls,
           strength: selectedReference.strength,
+          mode: selectedReference.mode,
         } : undefined,
       }),
     }).catch(() => {});
@@ -391,6 +392,7 @@ export default function CampaignEditor() {
               id: selectedReference.id,
               image_urls: selectedReference.image_urls,
               strength: selectedReference.strength,
+              mode: selectedReference.mode,
             },
           } : {}),
         },
@@ -636,7 +638,7 @@ export default function CampaignEditor() {
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-xs">
                     <span className="text-primary font-medium">Reference:</span>
                     <span className="truncate">{selectedReference.title}</span>
-                    <Badge className="text-[9px] ml-auto bg-primary/20 text-primary">Strength {selectedReference.strength}</Badge>
+                    <Badge className="text-[9px] ml-auto bg-primary/20 text-primary">{selectedReference.mode === "dupe" ? "Dupe" : selectedReference.mode === "hard" ? "Hard Inspo" : "Loose Inspo"}</Badge>
                   </div>
                 )}
                 <div>
@@ -805,7 +807,7 @@ export default function CampaignEditor() {
                   <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-primary/5 text-xs">
                     <span className="text-muted-foreground">Generating with reference:</span>
                     <span className="font-medium truncate">{selectedReference.title}</span>
-                    <span className="text-muted-foreground">(strength {selectedReference.strength})</span>
+                    <span className="text-muted-foreground">({selectedReference.mode === "dupe" ? "Dupe" : selectedReference.mode === "hard" ? "Hard Inspo" : "Loose Inspo"})</span>
                   </div>
                 )}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">

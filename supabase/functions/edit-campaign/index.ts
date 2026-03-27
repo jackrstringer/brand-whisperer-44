@@ -196,13 +196,20 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
 
     // Reference campaign images if provided
     if (reference && reference.image_urls && reference.image_urls.length > 0) {
-      const strength = reference.strength || 5;
-      let refLabel = "TONAL REFERENCE";
-      if (strength >= 4 && strength <= 6) refLabel = "STRUCTURAL REFERENCE";
-      else if (strength >= 7 && strength <= 9) refLabel = "STRUCTURAL TEMPLATE";
-      else if (strength >= 10) refLabel = "DIRECT TEMPLATE";
+      // Resolve mode
+      let refMode: "loose" | "hard" | "dupe" = "hard";
+      if (reference.mode === "loose" || reference.mode === "hard" || reference.mode === "dupe") {
+        refMode = reference.mode;
+      } else {
+        const s = reference.strength || 5;
+        refMode = s <= 3 ? "loose" : s <= 7 ? "hard" : "dupe";
+      }
 
-      userContent.push({ type: "text", text: `[${refLabel} — strength ${strength}/10] The following campaign is provided as a reference. ${strength >= 7 ? "Closely follow its layout and structure." : strength >= 4 ? "Borrow its general section flow." : "Use it for subtle tonal inspiration only."}` });
+      let refLabel = "LOOSE INSPIRATION";
+      if (refMode === "hard") refLabel = "HARD INSPIRATION";
+      else if (refMode === "dupe") refLabel = "DUPE — EXACT LAYOUT CLONE";
+
+      userContent.push({ type: "text", text: `[${refLabel}] The following campaign is provided as a reference. ${refMode === "dupe" ? "Replicate its exact layout structure section-for-section." : refMode === "hard" ? "Closely follow its layout and section flow." : "Use it for subtle tonal inspiration only."}` });
 
       for (const url of reference.image_urls.slice(0, 5)) {
         try {
