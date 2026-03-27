@@ -107,6 +107,7 @@ export default function CampaignEditor() {
   const refScrollRef = useRef<HTMLDivElement>(null);
   const [syncingScroll, setSyncingScroll] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [dragSelect, setDragSelect] = useState<{ startX: number; startY: number; x: number; y: number; active: boolean } | null>(null);
 
   // Restore reference panel state from localStorage
   useEffect(() => {
@@ -1442,11 +1443,14 @@ export default function CampaignEditor() {
     var bw = bar.offsetWidth || 380;
     var bh = bar.offsetHeight || 38;
     var left = Math.max(4, Math.min(r.left + r.width/2 - bw/2, window.innerWidth - bw - 4));
+    var top;
     if(r.top > bh + 12){
-      bar.style.top = (r.top - bh - 8) + 'px';
+      top = r.top - bh - 8;
     } else {
-      bar.style.top = (r.bottom + 8) + 'px';
+      top = r.bottom + 8;
     }
+    top = Math.max(4, Math.min(top, window.innerHeight - bh - 4));
+    bar.style.top = top + 'px';
     bar.style.left = left + 'px';
   }
 
@@ -1738,7 +1742,9 @@ export default function CampaignEditor() {
       opt.selected = true;
       sizeSelect.insertBefore(opt, sizeSelect.firstChild);
     }
-    sizeSelect.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+    sizeSelect.addEventListener('mousedown', function(e){ e.stopPropagation(); clearTimeout(ftbBlurTimer); });
+    sizeSelect.addEventListener('focus', function(){ clearTimeout(ftbBlurTimer); });
+    sizeSelect.addEventListener('click', function(e){ e.stopPropagation(); clearTimeout(ftbBlurTimer); });
     sizeSelect.addEventListener('change', function(){
       restoreSelection();
       el.focus();
@@ -1844,35 +1850,67 @@ export default function CampaignEditor() {
 
     bar.appendChild(makeSep());
 
-    // Padding controls
-    var padLabel = document.createElement('span');
-    padLabel.style.cssText = 'font-size:9px;color:rgba(255,255,255,0.35);letter-spacing:0.05em;font-weight:600;padding:0 2px;';
-    padLabel.textContent = 'PAD';
-    bar.appendChild(padLabel);
-    var padMinus = document.createElement('button');
-    padMinus.className = 'ftb-pad-btn';
-    padMinus.innerHTML = '−';
-    padMinus.title = 'Decrease padding';
-    padMinus.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
-    padMinus.addEventListener('click', function(e){
+    // Padding controls — expandable directional
+    var padWrap = document.createElement('div');
+    padWrap.style.cssText = 'position:relative;display:flex;align-items:center;gap:2px;';
+    var padToggle = document.createElement('button');
+    padToggle.className = 'ftb-btn';
+    padToggle.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>';
+    padToggle.title = 'Padding';
+    var padExpanded = false;
+    var padPanel = document.createElement('div');
+    padPanel.className = 'ftb-cpanel';
+    padPanel.style.cssText += 'display:none;min-width:160px;padding:8px;';
+    function buildPadPanel(){
+      padPanel.innerHTML = '';
+      var dirs = [{label:'Top',prop:'paddingTop'},{label:'Right',prop:'paddingRight'},{label:'Bottom',prop:'paddingBottom'},{label:'Left',prop:'paddingLeft'}];
+      dirs.forEach(function(d){
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px;';
+        var lbl = document.createElement('span');
+        lbl.style.cssText = 'font-size:10px;color:rgba(255,255,255,0.5);width:36px;';
+        lbl.textContent = d.label;
+        row.appendChild(lbl);
+        var minus = document.createElement('button');
+        minus.className = 'ftb-pad-btn';
+        minus.innerHTML = '−';
+        minus.addEventListener('mousedown',function(ev){ev.preventDefault();ev.stopPropagation();});
+        minus.addEventListener('click',function(ev){
+          ev.stopPropagation();
+          var cur = parseInt(window.getComputedStyle(el)[d.prop]) || 0;
+          el.style[d.prop] = Math.max(0, cur - 4) + 'px';
+          syncHtml(); buildPadPanel();
+        });
+        row.appendChild(minus);
+        var val = document.createElement('span');
+        val.style.cssText = 'font-size:11px;color:rgba(255,255,255,0.7);width:28px;text-align:center;font-family:monospace;';
+        val.textContent = (parseInt(window.getComputedStyle(el)[d.prop]) || 0) + '';
+        row.appendChild(val);
+        var plus = document.createElement('button');
+        plus.className = 'ftb-pad-btn';
+        plus.innerHTML = '+';
+        plus.addEventListener('mousedown',function(ev){ev.preventDefault();ev.stopPropagation();});
+        plus.addEventListener('click',function(ev){
+          ev.stopPropagation();
+          var cur = parseInt(window.getComputedStyle(el)[d.prop]) || 0;
+          el.style[d.prop] = (cur + 4) + 'px';
+          syncHtml(); buildPadPanel();
+        });
+        row.appendChild(plus);
+        padPanel.appendChild(row);
+      });
+    }
+    buildPadPanel();
+    padToggle.addEventListener('mousedown',function(e){e.preventDefault();e.stopPropagation();clearTimeout(ftbBlurTimer);});
+    padToggle.addEventListener('click',function(e){
       e.stopPropagation();
-      var cur = parseInt(window.getComputedStyle(el).paddingTop) || 0;
-      el.style.padding = Math.max(0, cur - 4) + 'px';
-      syncHtml();
+      padExpanded = !padExpanded;
+      padPanel.style.display = padExpanded ? 'block' : 'none';
+      if(ftbColorPanel){ftbColorPanel.remove();ftbColorPanel=null;}
     });
-    bar.appendChild(padMinus);
-    var padPlus = document.createElement('button');
-    padPlus.className = 'ftb-pad-btn';
-    padPlus.innerHTML = '+';
-    padPlus.title = 'Increase padding';
-    padPlus.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
-    padPlus.addEventListener('click', function(e){
-      e.stopPropagation();
-      var cur = parseInt(window.getComputedStyle(el).paddingTop) || 0;
-      el.style.padding = (cur + 4) + 'px';
-      syncHtml();
-    });
-    bar.appendChild(padPlus);
+    padWrap.appendChild(padToggle);
+    padWrap.appendChild(padPanel);
+    bar.appendChild(padWrap);
 
     bar.appendChild(makeSep());
 
@@ -2097,7 +2135,8 @@ export default function CampaignEditor() {
   /* --- CLICK-TO-SELECT ELEMENT --- */
   var selectedEl = null;
   function clearElSelection(){
-    if(selectedEl){ selectedEl.classList.remove('el-selected'); selectedEl = null; }
+    document.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
+    selectedEl = null;
     window.parent.postMessage({ type: 'elementDeselected' }, '*');
   }
 
@@ -2105,24 +2144,36 @@ export default function CampaignEditor() {
     if(ftbEl && ftbEl.contains(e.target)) return;
     if(ftbColorPanel && ftbColorPanel.contains(e.target)) return;
     if(ctxMenu && ctxMenu.contains(e.target)) return;
+    if(e.target.closest && e.target.closest('.ftb-cpanel')) return;
 
     var el = e.target;
+    // Walk up to find a meaningful element, but stop at generic wrappers
+    var found = null;
     while(el && el !== document.body && el !== document.documentElement){
-      if(el.tagName && /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL|TD|TH|TR|TABLE|DIV|IMG|SECTION)$/i.test(el.tagName)) break;
+      if(el.tagName && /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL|TD|TH|IMG)$/i.test(el.tagName)){
+        found = el;
+        break;
+      }
+      // For DIV/TABLE/TR, only select if it has direct text content or is a leaf
+      if(el.tagName && /^(DIV|TABLE|TR|SECTION)$/i.test(el.tagName)){
+        // Only select if this is a reasonably specific element (not a huge wrapper)
+        var childEls = el.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img');
+        if(childEls.length <= 2){ found = el; break; }
+      }
       el = el.parentElement;
     }
-    if(!el || el === document.body || el === document.documentElement){
+    if(!found){
       clearElSelection();
       return;
     }
 
-    if(selectedEl && selectedEl !== el) selectedEl.classList.remove('el-selected');
-    selectedEl = el;
-    el.classList.add('el-selected');
+    if(selectedEl && selectedEl !== found) selectedEl.classList.remove('el-selected');
+    selectedEl = found;
+    found.classList.add('el-selected');
 
-    var text = el.textContent ? el.textContent.trim().slice(0, 300) : '';
-    var outerHTML = el.outerHTML ? el.outerHTML.slice(0, 1000) : '';
-    window.parent.postMessage({ type: 'elementSelected', tagName: el.tagName, text: text, outerHTML: outerHTML }, '*');
+    var text = found.textContent ? found.textContent.trim().slice(0, 300) : '';
+    var outerHTML = found.outerHTML ? found.outerHTML.slice(0, 1000) : '';
+    window.parent.postMessage({ type: 'elementSelected', tagName: found.tagName, text: text, outerHTML: outerHTML }, '*');
   });
 
   document.addEventListener('keydown', function(e){
@@ -2131,61 +2182,24 @@ export default function CampaignEditor() {
     }
   });
 
-  /* --- SHIFT+DRAG REGION SELECT --- */
-  var regionOverlay = null;
-  var regionStart = null;
-
-  document.addEventListener('mousedown', function(e){
-    if(!e.shiftKey) return;
-    if(ftbEl && ftbEl.contains(e.target)) return;
-    e.preventDefault();
-    regionStart = { x: e.clientX, y: e.clientY };
-    regionOverlay = document.createElement('div');
-    regionOverlay.className = 'region-select-overlay';
-    document.body.appendChild(regionOverlay);
-  });
-
-  document.addEventListener('mousemove', function(e){
-    if(!regionOverlay || !regionStart) return;
-    var x = Math.min(regionStart.x, e.clientX);
-    var y = Math.min(regionStart.y, e.clientY);
-    var w = Math.abs(e.clientX - regionStart.x);
-    var h = Math.abs(e.clientY - regionStart.y);
-    regionOverlay.style.left = x + 'px';
-    regionOverlay.style.top = y + 'px';
-    regionOverlay.style.width = w + 'px';
-    regionOverlay.style.height = h + 'px';
-  });
-
-  document.addEventListener('mouseup', function(e){
-    if(!regionOverlay || !regionStart) return;
-    var rect = {
-      left: Math.min(regionStart.x, e.clientX),
-      top: Math.min(regionStart.y, e.clientY),
-      right: Math.max(regionStart.x, e.clientX),
-      bottom: Math.max(regionStart.y, e.clientY)
-    };
-    regionOverlay.remove();
-    regionOverlay = null;
-    regionStart = null;
-
-    if(rect.right - rect.left < 10 || rect.bottom - rect.top < 10) return;
-
-    // Clear previous selections
-    document.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
-
-    var elements = [];
-    document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img,td,div').forEach(function(el){
-      var r = el.getBoundingClientRect();
-      if(r.width < 1 || r.height < 1) return;
-      if(r.right > rect.left && r.left < rect.right && r.bottom > rect.top && r.top < rect.bottom){
-        elements.push({ tagName: el.tagName, text: (el.textContent || '').trim().slice(0, 100) });
-        el.classList.add('el-selected');
+  /* --- DRAG-TO-SELECT (desktop-style, no shift needed) --- */
+  /* Parent handles the drag overlay — iframe just responds to regionSelect messages */
+  window.addEventListener('message', function(e){
+    if(e.data && e.data.type === 'regionSelectQuery'){
+      var rect = e.data.rect; // in iframe viewport coords
+      document.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
+      var elements = [];
+      document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img,td,div').forEach(function(el){
+        var r = el.getBoundingClientRect();
+        if(r.width < 1 || r.height < 1) return;
+        if(r.right > rect.left && r.left < rect.right && r.bottom > rect.top && r.top < rect.bottom){
+          elements.push({ tagName: el.tagName, text: (el.textContent || '').trim().slice(0, 100) });
+          el.classList.add('el-selected');
+        }
+      });
+      if(elements.length > 0){
+        window.parent.postMessage({ type: 'regionSelected', elements: elements }, '*');
       }
-    });
-
-    if(elements.length > 0){
-      window.parent.postMessage({ type: 'regionSelected', elements: elements }, '*');
     }
   });
 })();
@@ -2367,11 +2381,12 @@ export default function CampaignEditor() {
           {/* Campaign preview / Inspiration panel */}
           <div
             ref={previewPanelRef}
-            className="h-full min-w-0 bg-card overflow-y-auto scrollbar-hide"
+            className="h-full min-w-0 bg-card overflow-y-auto scrollbar-hide relative"
             style={{
               width: showReferenceDialog && campaign?.html && selectedReference ? '50%' : '100%',
               scrollbarWidth: 'none',
               msOverflowStyle: 'none' as any,
+              cursor: dragSelect?.active ? 'crosshair' : undefined,
             }}
             onScroll={(e) => {
               if (!showReferenceDialog || syncingScroll) return;
@@ -2384,7 +2399,88 @@ export default function CampaignEditor() {
               }
               requestAnimationFrame(() => setSyncingScroll(false));
             }}
+            onMouseDown={(e) => {
+              // Only start drag select on left button, not on interactive elements
+              if (e.button !== 0) return;
+              const tag = (e.target as HTMLElement).tagName;
+              if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+              // Don't start if clicking inside the iframe (iframe handles its own clicks)
+              if ((e.target as HTMLElement).tagName === 'IFRAME') return;
+              const panelRect = previewPanelRef.current?.getBoundingClientRect();
+              if (!panelRect) return;
+              const x = e.clientX - panelRect.left;
+              const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+              setDragSelect({ startX: x, startY: y, x, y, active: false });
+            }}
+            onMouseMove={(e) => {
+              if (!dragSelect) return;
+              const panelRect = previewPanelRef.current?.getBoundingClientRect();
+              if (!panelRect) return;
+              const x = e.clientX - panelRect.left;
+              const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+              const dx = Math.abs(x - dragSelect.startX);
+              const dy = Math.abs(y - dragSelect.startY);
+              if (!dragSelect.active && (dx > 8 || dy > 8)) {
+                setDragSelect({ ...dragSelect, x, y, active: true });
+              } else if (dragSelect.active) {
+                setDragSelect({ ...dragSelect, x, y });
+              }
+            }}
+            onMouseUp={(e) => {
+              if (!dragSelect || !dragSelect.active) {
+                setDragSelect(null);
+                return;
+              }
+              // Calculate the drag rect relative to the iframe
+              const panelRect = previewPanelRef.current?.getBoundingClientRect();
+              if (!panelRect) { setDragSelect(null); return; }
+              // Find the iframe element
+              const iframe = previewPanelRef.current?.querySelector('iframe');
+              if (!iframe) { setDragSelect(null); return; }
+              const iframeRect = iframe.getBoundingClientRect();
+              const iframePanelLeft = iframeRect.left - panelRect.left;
+              const iframePanelTop = iframeRect.top - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+              const scale = zoomScale;
+              // Convert drag rect from panel coords to iframe content coords
+              const left = Math.min(dragSelect.startX, dragSelect.x);
+              const top = Math.min(dragSelect.startY, dragSelect.y);
+              const right = Math.max(dragSelect.startX, dragSelect.x);
+              const bottom = Math.max(dragSelect.startY, dragSelect.y);
+              const iframeRect2 = {
+                left: (left - iframePanelLeft) / scale,
+                top: (top - iframePanelTop) / scale,
+                right: (right - iframePanelLeft) / scale,
+                bottom: (bottom - iframePanelTop) / scale,
+              };
+              // Send to iframe for element detection
+              try {
+                iframe.contentWindow?.postMessage({ type: 'regionSelectQuery', rect: iframeRect2 }, '*');
+              } catch (err) {}
+              setDragSelect(null);
+            }}
+            onMouseLeave={() => {
+              if (dragSelect && !dragSelect.active) setDragSelect(null);
+            }}
           >
+            {/* Drag selection overlay */}
+            {dragSelect?.active && (() => {
+              const left = Math.min(dragSelect.startX, dragSelect.x);
+              const top = Math.min(dragSelect.startY, dragSelect.y);
+              const w = Math.abs(dragSelect.x - dragSelect.startX);
+              const h = Math.abs(dragSelect.y - dragSelect.startY);
+              return (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left, top, width: w, height: h,
+                    border: '1.5px dashed rgba(200,241,53,0.5)',
+                    background: 'rgba(200,241,53,0.05)',
+                    pointerEvents: 'none',
+                    zIndex: 50,
+                  }}
+                />
+              );
+            })()}
             {isGenerating ? (
               <div className="max-w-[600px] mx-auto space-y-4 p-8 mt-12">
                 <div className="text-center mb-6">
