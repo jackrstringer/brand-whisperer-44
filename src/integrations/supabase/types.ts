@@ -331,6 +331,7 @@ export type Database = {
           created_at: string
           id: string
           role: string
+          tool_calls: Json | null
         }
         Insert: {
           campaign_id: string
@@ -338,6 +339,7 @@ export type Database = {
           created_at?: string
           id?: string
           role: string
+          tool_calls?: Json | null
         }
         Update: {
           campaign_id?: string
@@ -345,6 +347,7 @@ export type Database = {
           created_at?: string
           id?: string
           role?: string
+          tool_calls?: Json | null
         }
         Relationships: [
           {

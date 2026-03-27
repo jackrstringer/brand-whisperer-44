@@ -622,6 +622,20 @@ export default function CampaignEditor() {
               ]);
             }
           }
+          // If we were processing leftover buffer after done=true, break now
+          if (done) break;
+        }
+        // Fallback: stream ended without a done event
+        if (!receivedDone && serverReply !== "__VARIANTS_HANDLED__") {
+          setAgentState("idle");
+          if (streamingTextRef.current) {
+            setMessages(prev => [
+              ...prev,
+              { id: crypto.randomUUID(), campaign_id: campaignId!, role: "assistant", content: streamingTextRef.current, created_at: new Date().toISOString() },
+            ]);
+            setStreamingText("");
+            streamingTextRef.current = "";
+          }
         }
       } else {
         // JSON fallback (shouldn't happen but handle gracefully)
