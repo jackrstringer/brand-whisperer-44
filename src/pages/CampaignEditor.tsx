@@ -2499,10 +2499,11 @@ export default function CampaignEditor() {
             ) : campaign?.html ? (
               <div className={`flex ${showReferenceDialog && selectedReference ? 'justify-start p-1 pl-0.5 pt-4' : 'justify-center p-8'}`}>
                 <div
-                  className="overflow-hidden"
                   style={{
                     width: renderedWidth,
                     height: renderedHeight,
+                    overflow: 'visible',
+                    position: 'relative',
                   }}
                 >
                   <iframe
