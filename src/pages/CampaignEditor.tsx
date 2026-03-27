@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 
 import type { Campaign, ChatMessage } from "@/lib/types";
+import { captureEmailScreenshots } from "@/lib/visualQaCapture";
 
 async function uploadChatImages(files: File[], brandId: string, campaignId: string): Promise<string[]> {
   const urls: string[] = [];
@@ -66,6 +67,7 @@ export default function CampaignEditor() {
   const [goal, setGoal] = useState("promotional");
   const [extraCopy, setExtraCopy] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [visualQaRunning, setVisualQaRunning] = useState(false);
 
   const [chatInput, setChatInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -237,6 +239,71 @@ export default function CampaignEditor() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
+  const runVisualQa = useCallback(async (campaignData: Campaign) => {
+    if (!campaignData.html || !campaignId) return;
+    setVisualQaRunning(true);
+    setMessages((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: "Running visual QA check...", created_at: new Date().toISOString() },
+    ]);
+
+    try {
+      const { slices } = await captureEmailScreenshots(campaignData.html);
+      console.log(`[visual-qa] Captured ${slices.length} slices`);
+
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/visual-qa`;
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+        },
+        body: JSON.stringify({
+          campaignId,
+          html: campaignData.html,
+          slices,
+        }),
+      });
+
+      if (!resp.ok) throw new Error(`Visual QA failed: ${resp.status}`);
+
+      const result = await resp.json();
+      const issueCount = result.issues?.length || 0;
+      const fixCount = result.fixes_applied || 0;
+
+      if (result.html && fixCount > 0) {
+        // Refresh campaign with fixed HTML
+        const { data: updated } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
+        if (updated) setCampaign(updated as Campaign);
+
+        setMessages((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Visual QA: score ${result.overall_score}/10 — ${fixCount} fix${fixCount !== 1 ? "es" : ""} auto-applied. ${result.summary || ""}`, created_at: new Date().toISOString() },
+        ]);
+        toast.success(`Visual QA applied ${fixCount} fix${fixCount !== 1 ? "es" : ""}`);
+      } else if (issueCount > 0) {
+        setMessages((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Visual QA: score ${result.overall_score}/10 — ${issueCount} issue${issueCount !== 1 ? "s" : ""} found (no auto-fix available). ${result.summary || ""}`, created_at: new Date().toISOString() },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Visual QA passed ✓ Score: ${result.overall_score}/10. ${result.summary || ""}`, created_at: new Date().toISOString() },
+        ]);
+      }
+    } catch (err) {
+      console.error("[visual-qa] Error:", err);
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: "Visual QA check failed — campaign is still usable.", created_at: new Date().toISOString() },
+      ]);
+    } finally {
+      setVisualQaRunning(false);
+    }
+  }, [campaignId]);
+
   const generateCampaign = async () => {
     if (!brandId || !campaignId || !brief.trim()) return;
     setGenerating(true);
@@ -310,6 +377,11 @@ export default function CampaignEditor() {
           ...prev,
           { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Campaign generated in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
         ]);
+
+        // === PASS 3: Visual QA — capture screenshots and send to AI ===
+        if (data.html) {
+          runVisualQa(data as Campaign);
+        }
       } else if (data.status === "error") {
         clearInterval(pollInterval);
         setCampaign(data as Campaign);
@@ -569,7 +641,7 @@ export default function CampaignEditor() {
               <div className="max-w-[600px] mx-auto space-y-4 p-8 mt-12">
                 <div className="text-center mb-6">
                   <p className="text-lg font-medium text-foreground tabular-nums">{formatTimer(genElapsed)}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Generating campaign...</p>
+                  <p className="text-xs text-muted-foreground mt-1">{visualQaRunning ? "Running visual QA..." : "Generating campaign..."}</p>
                 </div>
                 <Skeleton className="h-8 w-3/4" />
                 <Skeleton className="h-48 w-full" />
