@@ -1070,22 +1070,47 @@ export default function CampaignEditor() {
         /<\/body>/i,
         `<script>
 (function(){
-  var els = document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,td,th,li,button,label');
-  els.forEach(function(el){
-    if(el.querySelector('img') || el.querySelector('table')) return;
-    if(el.children.length > 0 && el.textContent.trim() === '') return;
-    el.contentEditable = 'true';
+  var blocks = ['TABLE','TR','TD','TH','DIV','UL','OL','IMG'];
+  document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label').forEach(function(el){
+    if(el.querySelector('img,table,div')) return;
+    var hasBlock = Array.from(el.children).some(function(c){ return blocks.indexOf(c.tagName)>=0; });
+    if(hasBlock) return;
+    if(!el.textContent.trim()) return;
+    try { el.contentEditable = 'plaintext-only'; } catch(e) { el.contentEditable = 'true'; }
     el.style.cursor = 'text';
+  });
+  document.addEventListener('paste', function(e){
+    if(!e.target.isContentEditable) return;
+    e.preventDefault();
+    var text = (e.clipboardData||window.clipboardData).getData('text/plain');
+    document.execCommand('insertText', false, text);
+  });
+  document.addEventListener('keydown', function(e){
+    if(!e.target.isContentEditable) return;
+    if((e.metaKey || e.ctrlKey) && e.key === 'z'){
+      e.preventDefault();
+      e.stopPropagation();
+      window.parent.postMessage({ type: e.shiftKey ? 'redo' : 'undo' }, '*');
+    }
+    if((e.metaKey || e.ctrlKey) && e.key === 'y'){
+      e.preventDefault();
+      e.stopPropagation();
+      window.parent.postMessage({ type: 'redo' }, '*');
+    }
   });
   var timer = null;
   document.addEventListener('input', function(){
     clearTimeout(timer);
     timer = setTimeout(function(){
       var clone = document.documentElement.cloneNode(true);
-      var scripts = clone.querySelectorAll('script');
-      scripts.forEach(function(s){ s.remove(); });
-      var editables = clone.querySelectorAll('[contenteditable]');
-      editables.forEach(function(el){ el.removeAttribute('contenteditable'); el.style.removeProperty('cursor'); });
+      clone.querySelectorAll('script').forEach(function(s){ s.remove(); });
+      clone.querySelectorAll('[contenteditable]').forEach(function(el){
+        el.removeAttribute('contenteditable');
+        el.style.removeProperty('cursor');
+      });
+      clone.querySelectorAll('style').forEach(function(s){
+        if(s.textContent && s.textContent.indexOf('[contenteditable]')>=0) s.remove();
+      });
       window.parent.postMessage({ type: 'textEdited', html: clone.outerHTML }, '*');
     }, 300);
   });
