@@ -1849,37 +1849,67 @@ export default function CampaignEditor() {
 
     bar.appendChild(makeSep());
 
-    // Padding controls
-    var padLabel = document.createElement('span');
-    padLabel.style.cssText = 'font-size:9px;color:rgba(255,255,255,0.35);letter-spacing:0.05em;font-weight:600;padding:0 2px;';
-    padLabel.textContent = 'PAD';
-    bar.appendChild(padLabel);
-    var padMinus = document.createElement('button');
-    padMinus.className = 'ftb-pad-btn';
-    padMinus.innerHTML = '−';
-    padMinus.title = 'Decrease padding';
-    padMinus.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
-    padMinus.addEventListener('click', function(e){
+    // Padding controls — expandable directional
+    var padWrap = document.createElement('div');
+    padWrap.style.cssText = 'position:relative;display:flex;align-items:center;gap:2px;';
+    var padToggle = document.createElement('button');
+    padToggle.className = 'ftb-btn';
+    padToggle.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>';
+    padToggle.title = 'Padding';
+    var padExpanded = false;
+    var padPanel = document.createElement('div');
+    padPanel.className = 'ftb-cpanel';
+    padPanel.style.cssText += 'display:none;min-width:160px;padding:8px;';
+    function buildPadPanel(){
+      padPanel.innerHTML = '';
+      var dirs = [{label:'Top',prop:'paddingTop'},{label:'Right',prop:'paddingRight'},{label:'Bottom',prop:'paddingBottom'},{label:'Left',prop:'paddingLeft'}];
+      dirs.forEach(function(d){
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px;';
+        var lbl = document.createElement('span');
+        lbl.style.cssText = 'font-size:10px;color:rgba(255,255,255,0.5);width:36px;';
+        lbl.textContent = d.label;
+        row.appendChild(lbl);
+        var minus = document.createElement('button');
+        minus.className = 'ftb-pad-btn';
+        minus.innerHTML = '−';
+        minus.addEventListener('mousedown',function(ev){ev.preventDefault();ev.stopPropagation();});
+        minus.addEventListener('click',function(ev){
+          ev.stopPropagation();
+          var cur = parseInt(window.getComputedStyle(el)[d.prop]) || 0;
+          el.style[d.prop] = Math.max(0, cur - 4) + 'px';
+          syncHtml(); buildPadPanel();
+        });
+        row.appendChild(minus);
+        var val = document.createElement('span');
+        val.style.cssText = 'font-size:11px;color:rgba(255,255,255,0.7);width:28px;text-align:center;font-family:monospace;';
+        val.textContent = (parseInt(window.getComputedStyle(el)[d.prop]) || 0) + '';
+        row.appendChild(val);
+        var plus = document.createElement('button');
+        plus.className = 'ftb-pad-btn';
+        plus.innerHTML = '+';
+        plus.addEventListener('mousedown',function(ev){ev.preventDefault();ev.stopPropagation();});
+        plus.addEventListener('click',function(ev){
+          ev.stopPropagation();
+          var cur = parseInt(window.getComputedStyle(el)[d.prop]) || 0;
+          el.style[d.prop] = (cur + 4) + 'px';
+          syncHtml(); buildPadPanel();
+        });
+        row.appendChild(plus);
+        padPanel.appendChild(row);
+      });
+    }
+    buildPadPanel();
+    padToggle.addEventListener('mousedown',function(e){e.preventDefault();e.stopPropagation();clearTimeout(ftbBlurTimer);});
+    padToggle.addEventListener('click',function(e){
       e.stopPropagation();
-      var cur = parseInt(window.getComputedStyle(el).paddingTop) || 0;
-      el.style.padding = Math.max(0, cur - 4) + 'px';
-      syncHtml();
+      padExpanded = !padExpanded;
+      padPanel.style.display = padExpanded ? 'block' : 'none';
+      if(ftbColorPanel){ftbColorPanel.remove();ftbColorPanel=null;}
     });
-    bar.appendChild(padMinus);
-    var padPlus = document.createElement('button');
-    padPlus.className = 'ftb-pad-btn';
-    padPlus.innerHTML = '+';
-    padPlus.title = 'Increase padding';
-    padPlus.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
-    padPlus.addEventListener('click', function(e){
-      e.stopPropagation();
-      var cur = parseInt(window.getComputedStyle(el).paddingTop) || 0;
-      el.style.padding = (cur + 4) + 'px';
-      syncHtml();
-    });
-    bar.appendChild(padPlus);
-
-    bar.appendChild(makeSep());
+    padWrap.appendChild(padToggle);
+    padWrap.appendChild(padPanel);
+    bar.appendChild(padWrap);
 
     // Ideate button — stroke-only gradient border
     var ideateBtn = document.createElement('button');
