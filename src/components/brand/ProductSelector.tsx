@@ -78,54 +78,134 @@ function getUsableImages(images: ShopifyImage[]): ShopifyImage[] {
   return images.filter((i) => i.is_usable_product_photo === true && i.processing_status === "ready");
 }
 
+const BUCKET_TYPES = [
+  { value: "transparent_bg", label: "Transparent BG" },
+  { value: "lifestyle", label: "Lifestyle" },
+  { value: "hero_shots", label: "Hero Shot" },
+] as const;
+
 /* ── Expanded detail for a selected Shopify product ── */
 function ShopifyProductDetail({
   product,
   images,
   pinnedUrls,
   onTogglePin,
+  brandId,
+  onUploadComplete,
 }: {
   product: ShopifyProduct;
   images: ShopifyImage[];
   pinnedUrls: string[];
   onTogglePin: (url: string) => void;
+  brandId: string;
+  onUploadComplete: (url: string) => void;
 }) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadBucket, setUploadBucket] = useState<string>("hero_shots");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const usable = getUsableImages(images);
-  if (usable.length === 0) return null;
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const ext = file.name.split(".").pop() || "jpg";
+        const path = `${brandId}/products/${product.id}/${Date.now()}.${ext}`;
+        const { error: uploadErr } = await supabase.storage
+          .from("brand-assets")
+          .upload(path, file, { contentType: file.type });
+        if (uploadErr) { toast.error(`Upload failed: ${uploadErr.message}`); continue; }
+
+        const { data: urlData } = supabase.storage.from("brand-assets").getPublicUrl(path);
+        const publicUrl = urlData.publicUrl;
+
+        // Create product_asset record — use shopify product's internal id
+        // We store it as a product_asset linked to a manual "products" row if one exists,
+        // otherwise we just pin the URL directly
+        onUploadComplete(publicUrl);
+        toast.success(`Uploaded ${file.name}`);
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Upload failed");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       <p className="text-[10px] text-muted-foreground font-medium">
-        {product.title} — {usable.length} usable image{usable.length !== 1 ? "s" : ""}
-        <span className="ml-1 opacity-60">(click to pin specific images)</span>
+        {product.title}
+        {usable.length > 0 && (
+          <span> — {usable.length} usable image{usable.length !== 1 ? "s" : ""}</span>
+        )}
+        <span className="ml-1 opacity-60">(click to pin)</span>
       </p>
-      <div className="grid grid-cols-4 gap-1.5">
-        {usable.map((img) => {
-          const url = getImageUrl(img);
-          const isPinned = pinnedUrls.includes(url);
-          return (
-            <button
-              key={img.id}
-              onClick={() => onTogglePin(url)}
-              className={`relative aspect-square rounded overflow-hidden border-2 transition-all ${
-                isPinned ? "border-primary ring-1 ring-primary/30" : "border-border hover:border-muted-foreground"
-              }`}
-              title={img.subject_description || img.image_type || "Click to pin"}
-            >
-              <img src={url} alt="" className="w-full h-full object-cover" />
-              {isPinned && (
-                <div className="absolute top-0.5 right-0.5 bg-primary rounded-full p-0.5">
-                  <Pin className="w-2 h-2 text-primary-foreground" />
-                </div>
-              )}
-              {img.image_type && (
-                <div className="absolute bottom-0 left-0 right-0 bg-background/70 text-[8px] text-center py-0.5 truncate">
-                  {img.image_type.replace(/_/g, " ")}
-                </div>
-              )}
-            </button>
-          );
-        })}
+
+      {/* Existing usable images */}
+      {usable.length > 0 && (
+        <div className="grid grid-cols-4 gap-1.5">
+          {usable.map((img) => {
+            const url = getImageUrl(img);
+            const isPinned = pinnedUrls.includes(url);
+            return (
+              <button
+                key={img.id}
+                onClick={() => onTogglePin(url)}
+                className={`relative aspect-square rounded overflow-hidden border-2 transition-all ${
+                  isPinned ? "border-primary ring-1 ring-primary/30" : "border-border hover:border-muted-foreground"
+                }`}
+                title={img.subject_description || img.image_type || "Click to pin"}
+              >
+                <img src={url} alt="" className="w-full h-full object-cover" />
+                {isPinned && (
+                  <div className="absolute top-0.5 right-0.5 bg-primary rounded-full p-0.5">
+                    <Pin className="w-2 h-2 text-primary-foreground" />
+                  </div>
+                )}
+                {img.image_type && (
+                  <div className="absolute bottom-0 left-0 right-0 bg-background/70 text-[8px] text-center py-0.5 truncate">
+                    {img.image_type.replace(/_/g, " ")}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Upload own images */}
+      <div className="flex items-center gap-1.5 pt-1">
+        <select
+          value={uploadBucket}
+          onChange={(e) => setUploadBucket(e.target.value)}
+          className="h-6 text-[10px] rounded border border-border bg-background px-1.5"
+        >
+          {BUCKET_TYPES.map((b) => (
+            <option key={b.value} value={b.value}>{b.label}</option>
+          ))}
+        </select>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-6 text-[10px] px-2"
+          disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <Upload className="w-2.5 h-2.5 mr-1" />
+          {uploading ? "Uploading..." : "Upload Image"}
+        </Button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleUpload}
+          className="hidden"
+        />
       </div>
     </div>
   );
