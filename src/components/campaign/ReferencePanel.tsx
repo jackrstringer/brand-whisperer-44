@@ -100,13 +100,16 @@ interface SavedReference {
   reference_id: string;
 }
 
+export type ReferenceMode = "loose" | "hard" | "dupe";
+
 export interface SelectedReference {
   type: "library" | "campaign";
   id: string;
   title: string;
   thumbnail_url: string;
   image_urls: string[];
-  strength: number;
+  strength: number; // kept for backwards compat / DB storage
+  mode: ReferenceMode;
 }
 
 interface ReferencePanelProps {
