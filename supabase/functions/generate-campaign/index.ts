@@ -432,30 +432,45 @@ You MUST feature these products prominently in the campaign. Use at least one im
     // Build reference campaign block if provided
     let referenceBlock = "";
     const referenceImageBlocks: any[] = [];
+    // Determine reference mode — supports new "mode" field or legacy numeric "strength"
+    let referenceMode: "loose" | "hard" | "dupe" | null = null;
     if (reference && reference.image_urls && reference.image_urls.length > 0) {
-      const strength = reference.strength || 5;
+      // Resolve mode
+      if (reference.mode === "loose" || reference.mode === "hard" || reference.mode === "dupe") {
+        referenceMode = reference.mode;
+      } else {
+        const s = reference.strength || 5;
+        referenceMode = s <= 3 ? "loose" : s <= 7 ? "hard" : "dupe";
+      }
+
       let referencePrompt = "";
-      if (strength <= 3) {
-        referencePrompt = `TONAL REFERENCE (light influence):
+      if (referenceMode === "loose") {
+        referencePrompt = `LOOSE INSPIRATION (light influence):
 The following campaign is provided for subtle inspiration only.
 Do not replicate its structure or design. Let it gently influence
-the energy and pacing of the writing.`;
-      } else if (strength <= 6) {
-        referencePrompt = `STRUCTURAL REFERENCE (medium influence):
-Use the following campaign as loose structural inspiration.
-You may borrow its general section flow and visual rhythm,
-but the output must fully conform to the brand's design system.`;
-      } else if (strength <= 9) {
-        referencePrompt = `STRUCTURAL TEMPLATE (strong influence):
+the energy, pacing, and tonal feel of the writing and layout choices.`;
+      } else if (referenceMode === "hard") {
+        referencePrompt = `HARD INSPIRATION (strong influence):
 Closely follow the layout approach and section sequence of the
-following campaign. Replicate its visual hierarchy and pacing.
-Apply the brand's colors, fonts, and copy style throughout.`;
+following campaign. Replicate its visual hierarchy, section types,
+sizing proportions, and content pacing. Apply the brand's colors,
+fonts, and copy style throughout — but the skeleton should clearly
+echo this reference.`;
       } else {
-        referencePrompt = `DIRECT TEMPLATE (full influence):
-Treat the following campaign as a structural template.
-Replicate its exact section order and layout approach.
-Apply the brand's complete design system on top of this structure.
-The output should feel like this campaign re-skinned for the brand.`;
+        referencePrompt = `DUPE — EXACT LAYOUT CLONE:
+You MUST replicate the EXACT layout of the following campaign.
+Same number of sections, same section types, same image placements,
+same sizing proportions, same spacing patterns, same visual hierarchy.
+Count every section in the reference and reproduce each one 1:1.
+If the reference has a full-bleed hero, you have a full-bleed hero.
+If it has a 2-column product grid, you have a 2-column product grid.
+If it has a quote pullout, you have a quote pullout — in the same position.
+The ONLY things that change are: brand colors, brand fonts, brand imagery,
+and the actual copy (which should match the brief). Everything else —
+layout structure, section order, element sizing, padding patterns,
+image-to-text ratios — must be a near-exact match.
+Think of it as: take this email, delete the content, keep the wireframe,
+then fill it back in with the new brand's design system and copy.`;
       }
 
       referenceBlock = `\n\n=== ${referencePrompt} ===`;
