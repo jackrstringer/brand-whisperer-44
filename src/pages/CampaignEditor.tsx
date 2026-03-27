@@ -1164,7 +1164,7 @@ export default function CampaignEditor() {
         const displayText = `✨ Ideate ${typeLabel}: "${shortText}"`;
 
         ideatePayloadRef.current = { realPrompt, displayText };
-        ideateActive = true;
+        setIdeateActive(true);
         sendMessage();
         return;
       }
