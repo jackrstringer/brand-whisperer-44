@@ -193,6 +193,30 @@ Return only the complete updated HTML. No commentary. No markdown fences.`;
 
     const userContent: any[] = [];
     if (imageBlocks.length > 0) userContent.push(...imageBlocks);
+
+    // Reference campaign images if provided
+    if (reference && reference.image_urls && reference.image_urls.length > 0) {
+      const strength = reference.strength || 5;
+      let refLabel = "TONAL REFERENCE";
+      if (strength >= 4 && strength <= 6) refLabel = "STRUCTURAL REFERENCE";
+      else if (strength >= 7 && strength <= 9) refLabel = "STRUCTURAL TEMPLATE";
+      else if (strength >= 10) refLabel = "DIRECT TEMPLATE";
+
+      userContent.push({ type: "text", text: `[${refLabel} — strength ${strength}/10] The following campaign is provided as a reference. ${strength >= 7 ? "Closely follow its layout and structure." : strength >= 4 ? "Borrow its general section flow." : "Use it for subtle tonal inspiration only."}` });
+
+      for (const url of reference.image_urls.slice(0, 5)) {
+        try {
+          const imgResp = await fetch(url);
+          const contentType = imgResp.headers.get("content-type") || "image/jpeg";
+          const mediaType = contentType.split(";")[0].trim();
+          const buf = await imgResp.arrayBuffer();
+          if (buf.byteLength > 3_800_000) continue;
+          const b64 = arrayBufferToBase64(buf);
+          userContent.push({ type: "image", source: { type: "base64", media_type: mediaType, data: b64 } });
+        } catch {}
+      }
+    }
+
     const hasUserAttached = userAttachedUrls.length > 0;
     const imageRulesText = embeddableUrls.length > 0
       ? `Image URL rules:\n${hasUserAttached ? "- The first images above are USER-ATTACHED reference images for this specific edit request. Use them as visual reference for the requested change.\n" : ""}- Brand reference screenshots are for STYLE only — never embed them.\n- Never invent or use external stock URLs.\n- For <img src> values, use ONLY from these approved asset URLs:\n${embeddableUrls.join("\n")}${hasUserAttached ? "\n" + userAttachedUrls.join("\n") : ""}`
