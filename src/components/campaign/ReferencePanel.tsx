@@ -320,20 +320,16 @@ export default function ReferencePanel({
               const saved = isSavedRef(item._source === "Mine" ? "campaign" : item._source === "Library" ? "library" : type, id);
               const refType: "library" | "campaign" = item._source === "Mine" ? "campaign" : item._source === "Library" ? "library" : type;
 
-              // For iframe rendering: 470px content scaled to ~258px card width = ~55% zoom
-              const iframeWidth = 470;
-              const iframeScale = 0.55;
-
               return (
                 <div
                   key={id}
-                  className={`relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all mb-2 ${
+                  className={`relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all mb-1 ${
                     isSelected ? "border-primary ring-2 ring-primary/20" : "border-transparent hover:border-border"
                   }`}
                   style={{ breakInside: "avoid" }}
                 >
                   {hasHtml ? (
-                    <CampaignIframeThumbnail html={item.html} scale={iframeScale} width={iframeWidth} title={item.title} />
+                    <CampaignIframeThumbnail html={item.html} title={item.title} />
                   ) : imageUrl ? (
                     <div style={{ aspectRatio: "470 / 470" }}>
                       <img
