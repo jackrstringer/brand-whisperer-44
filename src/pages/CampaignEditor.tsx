@@ -600,6 +600,14 @@ export default function CampaignEditor() {
           <div className="h-full flex flex-col overflow-hidden">
             {isDraft && !isGenerating ? (
               <div className="p-6 space-y-5 overflow-y-auto flex-1">
+                {/* Reference indicator */}
+                {selectedReference && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-xs">
+                    <span className="text-primary font-medium">Reference:</span>
+                    <span className="truncate">{selectedReference.title}</span>
+                    <Badge className="text-[9px] ml-auto bg-primary/20 text-primary">Strength {selectedReference.strength}</Badge>
+                  </div>
+                )
                 <div>
                   <h2 className="text-sm font-medium mb-4">Campaign Brief</h2>
                 </div>
