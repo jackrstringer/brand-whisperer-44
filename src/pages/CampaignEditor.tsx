@@ -1590,12 +1590,6 @@ export default function CampaignEditor() {
                   <div ref={chatEndRef} />
                 </div>
 
-                {canUndo && (
-                  <div className="px-4 pb-2">
-                    <Button variant="ghost" size="sm" onClick={handleUndo} className="text-muted-foreground hover:text-foreground">
-                      <Undo2 className="w-3 h-3 mr-1" /> Undo last change
-                    </Button>
-                  </div>
                 )}
 
                 {/* Quick prompt chips */}
