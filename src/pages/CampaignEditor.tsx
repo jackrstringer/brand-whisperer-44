@@ -988,7 +988,7 @@ export default function CampaignEditor() {
 
   // Background edit: sends instruction to AI silently (no chat message)
   const sendBackgroundEdit = useCallback(async (instruction: string, onComplete?: () => void) => {
-    if (!campaignId || !brandId || !campaign?.html) return;
+    if (!campaignId || !brandId || !(iframeOwnedHtmlRef.current || campaign?.html)) return;
     try {
       const session = await supabase.auth.getSession();
       const token = session.data.session?.access_token;
