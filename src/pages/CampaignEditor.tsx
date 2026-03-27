@@ -638,7 +638,7 @@ export default function CampaignEditor() {
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-xs">
                     <span className="text-primary font-medium">Reference:</span>
                     <span className="truncate">{selectedReference.title}</span>
-                    <Badge className="text-[9px] ml-auto bg-primary/20 text-primary">{selectedReference.mode === "dupe" ? "Dupe" : selectedReference.mode === "hard" ? "Hard Inspo" : "Loose Inspo"}</Badge>
+                    <Badge className="text-[9px] ml-auto bg-primary/20 text-primary">{selectedReference.mode === "dupe" ? "Dupe" : "Reference"}</Badge>
                   </div>
                 )}
                 <div>
