@@ -41,6 +41,7 @@ export default function ShopifyProductGrid({ brandId }: { brandId: string }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showRejected, setShowRejected] = useState(false);
+  const [classifying, setClassifying] = useState(false);
 
   useEffect(() => {
     const load = async () => {
