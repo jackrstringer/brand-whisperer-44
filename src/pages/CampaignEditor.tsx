@@ -503,6 +503,7 @@ export default function CampaignEditor() {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
+        let serverReply: string | null = null;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -538,9 +539,20 @@ export default function CampaignEditor() {
               setCanUndo(true);
             }
 
+            if (eventType === "no_change") {
+              const noChangeText = data?.message ? `No change applied. ${data.message}` : "No change applied.";
+              serverReply = noChangeText;
+              streamingTextRef.current = noChangeText;
+              setStreamingText(noChangeText);
+            }
+
             if (eventType === "done") {
               setAgentState("idle");
-              const finalText = streamingTextRef.current || "Changes applied.";
+              const finalText =
+                (typeof data?.reply === "string" && data.reply.trim()) ||
+                serverReply ||
+                streamingTextRef.current ||
+                "Changes applied.";
               setMessages(prev => [
                 ...prev,
                 { id: crypto.randomUUID(), campaign_id: campaignId, role: "assistant", content: finalText, created_at: new Date().toISOString() },
@@ -641,7 +653,7 @@ export default function CampaignEditor() {
   const srcdocHtml = htmlForPreview
     ? htmlForPreview.replace(
         /(<head[^>]*>)/i,
-        '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%!important;height:auto!important;}td{box-sizing:border-box!important;}</style>'
+        '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}</style>'
       )
     : "";
 
