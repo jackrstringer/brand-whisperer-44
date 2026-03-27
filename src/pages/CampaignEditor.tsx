@@ -848,6 +848,24 @@ export default function CampaignEditor() {
     ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls)
     : "";
 
+  // Push content updates to iframe via postMessage (no srcDoc swap = no white flash)
+  useEffect(() => {
+    if (!htmlForPreview || htmlForPreview === prevHtmlForPreviewRef.current) return;
+    prevHtmlForPreviewRef.current = htmlForPreview;
+
+    const injectedHtml = htmlForPreview.replace(
+      /(<head[^>]*>)/i,
+      '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}</style>'
+    );
+
+    const iframe = iframeRef.current;
+    if (iframe?.contentWindow && iframeReadyRef.current) {
+      iframe.contentWindow.postMessage({ type: 'updateHtml', html: injectedHtml }, '*');
+    } else {
+      pendingHtmlRef.current = injectedHtml;
+    }
+  }, [htmlForPreview]);
+
   const shellHtml = `<!DOCTYPE html><html><head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;background:#fff;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;height:auto!important;}td{box-sizing:border-box!important;}</style>
