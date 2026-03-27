@@ -35,7 +35,17 @@ serve(async (req) => {
             content: [
               {
                 type: "text",
-                text: `Look at this email campaign image. Does it have uniform-color padding (blank space) on BOTH the left AND right sides? This padding is extra space from the email client — not part of the email design itself. The padding is typically a single solid color (white, gray, or matching the email background) that runs the full height of the image on both edges.
+                text: `You are an email screenshot padding detector. Your job is to say YES if there is ANY extra space on the left and right edges of this email campaign screenshot.
+
+Look at the LEFT and RIGHT edges of this image. Is there blank/empty space (padding, margin, background) on both sides that is NOT part of the email content? This padding could be:
+- Solid white, gray, dark, or any color
+- Slightly different shade from the email body
+- Even a matching color that creates dead space
+
+The email content itself typically has text, images, buttons, or designed sections. The padding is the gap between the image edge and where the actual email layout begins.
+
+If there is ANY side padding visible — even subtle — answer "yes".
+Only answer "no" if the email content goes edge-to-edge with zero empty space on the sides.
 
 Answer with ONLY "yes" or "no".`,
               },
