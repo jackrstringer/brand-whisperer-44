@@ -89,6 +89,7 @@ export default function CampaignEditor() {
   const [subjectLine, setSubjectLine] = useState("");
   const [previewText, setPreviewText] = useState("");
   const [starredCampaign, setStarredCampaign] = useState(false);
+  const [showReferenceDialog, setShowReferenceDialog] = useState(false);
 
   // Restore reference panel state from localStorage
   useEffect(() => {
