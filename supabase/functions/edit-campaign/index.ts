@@ -304,25 +304,18 @@ The complete updated HTML here — no markdown fences, no commentary.
 
                   // Stream text_delta for content inside <response> tags only
                   // We parse incrementally: if we're inside <response>, stream it
-                  const responseMatch = fullText.match(/<response>([\s\S]*?)(<\/response>|$)/);
+                  const responseMatch = fullText.match(/<reply>([\s\S]*?)(<\/reply>|$)/);
                   if (responseMatch) {
-                    const responseContent = responseMatch[1];
-                    // Only emit the new delta if it's part of the response section
-                    if (!fullText.includes("</response>") || fullText.indexOf(text) < fullText.indexOf("</response>")) {
-                      // Check if current text addition is within response tags
-                      const beforeThis = fullText.slice(0, fullText.length - text.length);
-                      const wasInResponse = beforeThis.includes("<response>") && !beforeThis.includes("</response>");
-                      const isInHtml = beforeThis.includes("<html>") && !beforeThis.includes("</html>");
+                    const beforeThis = fullText.slice(0, fullText.length - text.length);
+                    const wasInResponse = beforeThis.includes("<reply>") && !beforeThis.includes("</reply>");
                       
-                      if (wasInResponse && !beforeThis.includes("</response>")) {
-                        // Strip any tag fragments from the delta
-                        let cleanDelta = text;
-                        if (cleanDelta.includes("</response>")) {
-                          cleanDelta = cleanDelta.split("</response>")[0];
-                        }
-                        if (cleanDelta) {
-                          emit("text_delta", { content: cleanDelta });
-                        }
+                    if (wasInResponse) {
+                      let cleanDelta = text;
+                      if (cleanDelta.includes("</reply>")) {
+                        cleanDelta = cleanDelta.split("</reply>")[0];
+                      }
+                      if (cleanDelta) {
+                        emit("text_delta", { content: cleanDelta });
                       }
                     }
                   }
