@@ -573,6 +573,7 @@ export default function CampaignEditor() {
 
             if (eventType === "html_patch") {
               setAgentState("editing");
+              iframeOwnedHtmlRef.current = null; // clear iframe ownership on chat edit
               setCampaign(c => c ? { ...c, html: data.html } : c);
               setCanUndo(true);
               setRedoStack([]);
