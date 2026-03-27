@@ -14,7 +14,7 @@ import { ArrowLeft, Download, Send, Undo2, Zap, Paperclip, X, Image as ImageIcon
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+
 
 import type { Campaign, ChatMessage } from "@/lib/types";
 
