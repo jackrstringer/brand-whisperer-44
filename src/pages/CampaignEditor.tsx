@@ -524,10 +524,19 @@ export default function CampaignEditor() {
         let buffer = "";
         let serverReply: string | null = null;
 
+        let receivedDone = false;
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
+          if (done) {
+            // Process any remaining buffer before exiting
+            if (buffer.trim()) {
+              buffer += "\n\n"; // ensure trailing delimiter for parser
+            } else {
+              break;
+            }
+          } else {
+            buffer += decoder.decode(value, { stream: true });
+          }
 
           // Parse complete SSE events (separated by double newline)
           const blocks = buffer.split("\n\n");

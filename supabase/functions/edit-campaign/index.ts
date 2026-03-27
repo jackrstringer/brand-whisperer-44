@@ -496,11 +496,11 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
           const totalMs = Date.now() - startMs;
           console.log(`[edit-campaign] TOTAL: ${totalMs}ms | Prep: ${prepMs}ms | AI: ${aiMs}ms | Patches: ${patchCount} | HtmlChanged: ${htmlChanged}`);
 
-          emit("done", { reply: responseText, changed: htmlChanged, patchesApplied: patchCount });
+          safeEmit("done", { reply: responseText, changed: htmlChanged, patchesApplied: patchCount });
         } catch (err) {
-          emit("error", { message: err instanceof Error ? err.message : "Stream failed" });
+          safeEmit("error", { message: err instanceof Error ? err.message : "Stream failed" });
         } finally {
-          ctrl.close();
+          safeClose();
         }
       },
     });
