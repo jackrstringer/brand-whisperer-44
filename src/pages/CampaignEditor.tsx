@@ -713,6 +713,40 @@ export default function CampaignEditor() {
   const isDraft = !campaign?.html || campaign?.status === "draft";
   const isGenerating = campaign?.status === "generating" || generating;
 
+  const importFromClickUp = async () => {
+    if (!clickupUrl.trim() || !brandId) return;
+    setClickupLoading(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/clickup-fetch-task`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ brandId, taskUrl: clickupUrl.trim() }),
+        }
+      );
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: "Import failed" }));
+        throw new Error(err.error || `Error ${resp.status}`);
+      }
+      const data = await resp.json();
+      if (data.name) setNameValue(data.name);
+      if (data.brief) setBrief(data.brief);
+      if (data.copy) setExtraCopy(data.copy);
+      if (data.suggestedGoal) setGoal(data.suggestedGoal);
+      toast.success("Imported from ClickUp");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to import from ClickUp");
+    } finally {
+      setClickupLoading(false);
+    }
+  };
+
   const zoomScale = screenZoom / 100;
   const renderedWidth = Math.round(viewportWidth * zoomScale);
   const renderedHeight = Math.round(iframeContentHeight * zoomScale);
