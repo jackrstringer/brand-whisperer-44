@@ -173,12 +173,12 @@ ${brandValues.text_color ? `- Default body text color: ${brandValues.text_color}
 These defaults are OVERRIDDEN by any explicit user request. The user's word is final.
 
 RESPONSE FORMAT — you MUST use these exact XML tags:
-<response>
+<reply>
 Brief conversational reply confirming what was changed (2-3 sentences max). Ask if anything else needs adjusting.
-</response>
-<html>
+</reply>
+<email_html>
 The complete updated HTML here — no markdown fences, no commentary.
-</html>`;
+</email_html>`;
 
     // Build messages array with conversation history
     const anthropicMessages: any[] = [];
