@@ -119,17 +119,10 @@ interface ReferencePanelProps {
   onSelectReference: (ref: SelectedReference | null) => void;
 }
 
-const STRENGTH_HINTS: Record<string, string> = {
-  "1": "Light — subtle tonal influence on copy energy",
-  "2": "Light — subtle tonal influence on copy energy",
-  "3": "Light — subtle tonal influence on copy energy",
-  "4": "Medium — borrows structural approach and pacing",
-  "5": "Medium — borrows structural approach and pacing",
-  "6": "Medium — borrows structural approach and pacing",
-  "7": "Strong — closely follows layout and section flow",
-  "8": "Strong — closely follows layout and section flow",
-  "9": "Strong — closely follows layout and section flow",
-  "10": "Full — direct structural template, brand applied on top",
+const MODE_CONFIG: Record<ReferenceMode, { label: string; strength: number; description: string }> = {
+  loose: { label: "Loose Inspo", strength: 3, description: "Borrows vibe and energy — layout is original" },
+  hard: { label: "Hard Inspo", strength: 7, description: "Follows the section flow and visual hierarchy closely" },
+  dupe: { label: "Dupe", strength: 10, description: "Exact layout clone — your brand rules applied on top" },
 };
 
 type TabValue = "library" | "mine" | "saved";
