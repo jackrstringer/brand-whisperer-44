@@ -621,12 +621,13 @@ export default function CampaignEditor() {
               </div>
             )}
           </div>
-        </ResizablePanel>
+        </div>
 
-        <ResizableHandle withHandle />
+        {/* Divider */}
+        <div className="w-px bg-border shrink-0" />
 
-        {/* Right Panel */}
-        <ResizablePanel defaultSize={25} minSize={15} maxSize={65} className="h-full min-w-0 overflow-hidden">
+        {/* Right Panel — fixed 35% */}
+        <div className="h-full overflow-hidden" style={{ width: '35%', minWidth: 0 }}>
           <div className="h-full flex flex-col overflow-hidden">
             {isDraft && !isGenerating ? (
               <div className="p-6 space-y-5 overflow-y-auto flex-1">
