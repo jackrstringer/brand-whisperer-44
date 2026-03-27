@@ -1590,7 +1590,7 @@ export default function CampaignEditor() {
                   <div ref={chatEndRef} />
                 </div>
 
-                )}
+
 
                 {/* Quick prompt chips */}
                 {campaign?.html && agentState === "idle" && !sending && (
