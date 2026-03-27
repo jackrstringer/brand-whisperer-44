@@ -983,11 +983,115 @@ export default function CampaignEditor() {
   // Debounced inline-edit save
   const inlineEditTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Listen for postMessage from iframe for inline text edits
+  // Background edit: sends instruction to AI silently (no chat message)
+  const sendBackgroundEdit = useCallback(async (instruction: string, onComplete?: () => void) => {
+    if (!campaignId || !brandId || !campaign?.html) return;
+    try {
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edit-campaign`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            campaignId,
+            message: instruction,
+            currentHtml: campaign.html,
+            silent: true,
+          }),
+        }
+      );
+      if (!response.ok || !response.body) return;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const blocks = buffer.split('\n\n');
+        buffer = blocks.pop() || '';
+        for (const block of blocks) {
+          const eventLine = block.split('\n').find(l => l.startsWith('event:'));
+          const dataLine = block.split('\n').find(l => l.startsWith('data:'));
+          if (!eventLine || !dataLine) continue;
+          const eventType = eventLine.replace('event:', '').trim();
+          let data: any;
+          try { data = JSON.parse(dataLine.replace('data:', '').trim()); } catch { continue; }
+          if (eventType === 'html_patch' && data.html) {
+            setCampaign(c => c ? { ...c, html: data.html } : c);
+            setCanUndo(true);
+            setRedoStack([]);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Background edit failed:', err);
+    } finally {
+      onComplete?.();
+    }
+  }, [campaignId, brandId, campaign?.html]);
+
+  // Color replace: Tier 1 instant change
+  const handleColorReplace = useCallback(async (oldHex: string, newHex: string) => {
+    if (!campaign?.html || !campaignId) return;
+    const currentHtml = campaign.html;
+    let newHtml = currentHtml.split(oldHex).join(newHex);
+    newHtml = newHtml.split(oldHex.toUpperCase()).join(newHex);
+    newHtml = newHtml.split(oldHex.toLowerCase()).join(newHex);
+    if (newHtml === currentHtml) return;
+    const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
+    history.push(currentHtml);
+    setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
+    setCanUndo(true);
+    setRedoStack([]);
+    if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
+    inlineEditTimerRef.current = setTimeout(async () => {
+      await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
+    }, 500);
+  }, [campaign, campaignId]);
+
+  // Listen for postMessage from iframe for inline text edits + section events
   useEffect(() => {
     const handler = (e: MessageEvent) => {
       if (e.data?.type === 'undo') { handleUndo(); return; }
       if (e.data?.type === 'redo') { handleRedo(); return; }
+
+      // Section reorder — Tier 2
+      if (e.data?.type === 'sectionReordered') {
+        const { movedSection, fromIndex, toIndex } = e.data;
+        const direction = toIndex < fromIndex ? 'up' : 'down';
+        const positions = Math.abs(toIndex - fromIndex);
+        const instruction = `Move the ${movedSection} section ${direction} by ${positions} position${positions > 1 ? 's' : ''}`;
+        setIsSyncing(true);
+        sendBackgroundEdit(instruction, () => setIsSyncing(false));
+        return;
+      }
+
+      // Section duplicated — Tier 2
+      if (e.data?.type === 'sectionDuplicated') {
+        setIsSyncing(true);
+        sendBackgroundEdit(`Duplicate the ${e.data.sectionName} section`, () => setIsSyncing(false));
+        return;
+      }
+
+      // Section deleted — already removed from DOM, sync HTML comes via textEdited
+      if (e.data?.type === 'sectionDeleted') {
+        // The syncHtml() in iframe already fires textEdited, which handles the save
+        return;
+      }
+
+      // Color replace from iframe
+      if (e.data?.type === 'colorReplace') {
+        handleColorReplace(e.data.oldHex, e.data.newHex);
+        return;
+      }
+
       if (e.data?.type !== "textEdited" || !e.data?.html) return;
       if (!campaignId || !campaign) return;
       const newHtml = e.data.html as string;
@@ -1012,7 +1116,7 @@ export default function CampaignEditor() {
       window.removeEventListener("message", handler);
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
     };
-  }, [campaignId, campaign, handleUndo, handleRedo]);
+  }, [campaignId, campaign, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace]);
 
   if (loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
