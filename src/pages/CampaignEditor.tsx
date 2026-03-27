@@ -1251,7 +1251,7 @@ export default function CampaignEditor() {
                     {["3 headline ideas", "CTA alternatives", "Vary the tone"].map((chip) => (
                       <button
                         key={chip}
-                        onClick={() => { setChatInput(chip); setTimeout(() => sendMessage(), 0); }}
+                        onClick={() => { setChatInput(chip); }}
                         className="text-[11px] px-2.5 py-1 rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
                       >
                         {chip}
