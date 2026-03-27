@@ -763,19 +763,20 @@ You may make minor adjustments to fit the brief, but the overall skeleton should
       // Try to derive from brief first
       if (brief && brief.trim().length > 3) {
         const briefWords = brief.trim().split(/\s+/);
-        campaignName = briefWords.length <= 8
+        campaignName = briefWords.length <= 7
           ? brief.trim()
-          : briefWords.slice(0, 8).join(" ") + "…";
+          : briefWords.slice(0, 7).join(" ");
       } else {
         // No brief — extract a name from the generated HTML content
         // Pull the first headline or subject-like text from the email
         const h1Match = html.match(/<(?:h1|h2)[^>]*>([\s\S]*?)<\/(?:h1|h2)>/i);
         const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
         const rawTitle = (h1Match?.[1] || titleMatch?.[1] || "").replace(/<[^>]*>/g, "").replace(/&[^;]+;/g, " ").replace(/\s+/g, " ").trim();
-        if (rawTitle.length > 3 && rawTitle.length <= 60) {
-          campaignName = rawTitle;
-        } else if (rawTitle.length > 60) {
-          campaignName = rawTitle.slice(0, 57) + "…";
+        const titleWords = rawTitle.split(/\s+/);
+        if (rawTitle.length > 3) {
+          campaignName = titleWords.length <= 7
+            ? rawTitle
+            : titleWords.slice(0, 7).join(" ");
         } else {
           // Last resort: use goal
           const goalLabels: Record<string, string> = {
