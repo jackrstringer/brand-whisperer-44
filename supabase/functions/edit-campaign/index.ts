@@ -294,8 +294,19 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
     const stream = new ReadableStream({
       async start(ctrl) {
         const encoder = new TextEncoder();
-        const emit = (event: string, data: any) => {
-          ctrl.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        let isClosed = false;
+        const safeEmit = (event: string, data: any) => {
+          if (isClosed) return;
+          try {
+            ctrl.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+          } catch (e) {
+            console.error(`[edit-campaign] safeEmit failed for ${event}:`, e);
+          }
+        };
+        const safeClose = () => {
+          if (isClosed) return;
+          isClosed = true;
+          try { ctrl.close(); } catch {}
         };
 
         let fullText = "";
