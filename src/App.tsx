@@ -15,6 +15,7 @@ import CampaignsList from "./pages/CampaignsList";
 import CampaignEditor from "./pages/CampaignEditor";
 import CampaignQA from "./pages/CampaignQA";
 import AppLayout from "./components/AppLayout";
+import AdminLibrary from "./pages/AdminLibrary";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
