@@ -1095,14 +1095,20 @@ export default function CampaignEditor() {
         return;
       }
 
-      // Ideate element from floating toolbar
+      // Ideate element from floating toolbar — auto-send
       if (e.data?.type === 'ideateElement') {
         const { text, tagName } = e.data;
         let prompt = '';
         if (/^H[1-6]$/.test(tagName)) prompt = `Give me 5 alternative headline options for: "${text}"`;
         else if (tagName === 'A' || tagName === 'BUTTON') prompt = `Give me 5 alternative CTA button text options for: "${text}"`;
         else prompt = `Give me 5 alternative copy options for this text: "${text}"`;
+        // Auto-send by setting input then triggering send
         setChatInput(prompt);
+        // Use a microtask to let state update, then trigger send
+        setTimeout(() => {
+          const sendBtn = document.querySelector('[data-send-btn]') as HTMLButtonElement;
+          if (sendBtn) sendBtn.click();
+        }, 100);
         return;
       }
 
