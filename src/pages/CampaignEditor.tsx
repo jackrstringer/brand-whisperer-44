@@ -1620,6 +1620,89 @@ export default function CampaignEditor() {
     ftbColorPanel = panel;
   }
 
+  function showBgColorPanel(swatchWrap, swatch, el){
+    if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; return; }
+    var panel = document.createElement('div');
+    panel.className = 'ftb-cpanel';
+    var currentBg = rgbToHex(window.getComputedStyle(el).backgroundColor) || '';
+
+    function applyBg(hex){
+      addRecentColor(hex);
+      el.style.backgroundColor = hex;
+      if(el.hasAttribute('bgcolor')) el.setAttribute('bgcolor', hex);
+      swatch.style.backgroundColor = hex;
+      swatch.style.backgroundImage = 'none';
+      if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; }
+      syncHtml();
+    }
+
+    function makeBgSwatch(hex, isActive){
+      var cs = document.createElement('div');
+      cs.className = 'ftb-cpanel-swatch' + (isActive ? ' active' : '');
+      cs.style.backgroundColor = hex;
+      cs.title = hex;
+      cs.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
+      cs.addEventListener('click', function(ev){ ev.stopPropagation(); applyBg(hex); });
+      return cs;
+    }
+
+    var defaults = ['#000000','#ffffff','#333333','#666666','#999999','#cc0000','#ff6600','#ffcc00','#33cc33','#0066cc','#6633cc','#cc33cc'];
+    var defLabel = document.createElement('div');
+    defLabel.className = 'ftb-cpanel-label';
+    defLabel.textContent = 'Default';
+    panel.appendChild(defLabel);
+    var defRow = document.createElement('div');
+    defRow.className = 'ftb-cpanel-row';
+    defaults.forEach(function(hex){ defRow.appendChild(makeBgSwatch(hex, currentBg === hex)); });
+    panel.appendChild(defRow);
+
+    var docColors = extractEmailColors();
+    if(docColors.length > 0){
+      var docLabel = document.createElement('div');
+      docLabel.className = 'ftb-cpanel-label';
+      docLabel.textContent = 'Document';
+      panel.appendChild(docLabel);
+      var docRow = document.createElement('div');
+      docRow.className = 'ftb-cpanel-row';
+      docColors.forEach(function(hex){ docRow.appendChild(makeBgSwatch(hex, currentBg === hex)); });
+      panel.appendChild(docRow);
+    }
+
+    var hexRow = document.createElement('div');
+    hexRow.className = 'ftb-hex-row';
+    var hexLabel = document.createElement('span');
+    hexLabel.style.cssText = 'color:rgba(255,255,255,0.35);font-size:10px;font-weight:600;';
+    hexLabel.textContent = '#';
+    hexRow.appendChild(hexLabel);
+    var hexInput = document.createElement('input');
+    hexInput.type = 'text';
+    hexInput.className = 'ftb-hex-input';
+    hexInput.value = currentBg ? currentBg.replace('#','') : '';
+    hexInput.maxLength = 6;
+    hexInput.placeholder = '000000';
+    hexInput.addEventListener('mousedown', function(ev){ ev.stopPropagation(); });
+    hexInput.addEventListener('keydown', function(ev){
+      ev.stopPropagation();
+      if(ev.key === 'Enter'){
+        var val = hexInput.value.trim().replace('#','');
+        if(/^[0-9a-fA-F]{3,6}$/.test(val)) applyBg(normalizeHex('#'+val));
+      }
+    });
+    hexRow.appendChild(hexInput);
+    var nativePicker = document.createElement('input');
+    nativePicker.type = 'color';
+    nativePicker.className = 'ftb-hex-native';
+    nativePicker.value = currentBg || '#ffffff';
+    nativePicker.addEventListener('mousedown', function(ev){ ev.stopPropagation(); });
+    nativePicker.addEventListener('input', function(){ hexInput.value = nativePicker.value.replace('#',''); });
+    nativePicker.addEventListener('change', function(){ applyBg(nativePicker.value); });
+    hexRow.appendChild(nativePicker);
+    panel.appendChild(hexRow);
+
+    swatchWrap.appendChild(panel);
+    ftbColorPanel = panel;
+  }
+
   function showFtb(el){
     removeFtb();
     ftbTarget = el;
