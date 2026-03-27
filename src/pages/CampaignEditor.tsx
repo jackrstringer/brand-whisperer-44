@@ -492,10 +492,13 @@ export default function CampaignEditor() {
     streamingTextRef.current = "";
     setActiveVersionIndex(null);
 
-    setMessages((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), campaign_id: campaignId, role: "user", content: displayContent, created_at: new Date().toISOString() },
-    ]);
+    // Don't show a user message bubble for ideate requests
+    if (!ideateOverride) {
+      setMessages((prev) => [
+        ...prev,
+        { id: crypto.randomUUID(), campaign_id: campaignId, role: "user", content: displayContent, created_at: new Date().toISOString() },
+      ]);
+    }
 
     try {
       let attachedImageUrls: string[] = [];
