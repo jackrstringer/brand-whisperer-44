@@ -1560,9 +1560,10 @@ export default function CampaignEditor() {
     }
   }, true);
 
-  // Keep toolbar alive when interacting with it
+  // Keep toolbar alive when interacting with it — preventDefault stops blur from firing
   document.addEventListener('mousedown', function(e){
     if(ftbEl && (ftbEl.contains(e.target) || (ftbColorPanel && ftbColorPanel.contains(e.target)))){
+      e.preventDefault();
       clearTimeout(ftbBlurTimer);
     }
   });
