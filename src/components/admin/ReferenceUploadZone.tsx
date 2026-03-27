@@ -31,13 +31,21 @@ export default function ReferenceUploadZone({ onUploaded, campaignCount }: Refer
     for (const file of imageFiles) {
       try {
         const id = crypto.randomUUID();
-        const ext = file.name.split(".").pop() || "png";
+        const ext = "png"; // always PNG after potential crop
+
+        // Auto-crop padding before upload
+        const cropResult = await autoCropPadding(file);
+        const uploadBlob = cropResult.blob;
+        if (cropResult.cropped) {
+          toast.info(`Auto-cropped ${cropResult.left + cropResult.right}px horizontal + ${cropResult.top + cropResult.bottom}px vertical padding from ${file.name}`);
+        }
+
         const path = `${id}/${crypto.randomUUID()}.${ext}`;
 
         // Upload to storage
         const { error: uploadErr } = await supabase.storage
           .from("reference-campaigns")
-          .upload(path, file, { contentType: file.type });
+          .upload(path, uploadBlob, { contentType: "image/png" });
         if (uploadErr) throw uploadErr;
 
         const { data: urlData } = supabase.storage
