@@ -2389,17 +2389,29 @@ export default function CampaignEditor() {
                   )}
                   {/* Agent state indicator */}
                   {agentState !== "idle" && !streamingText && (
-                    <div className="flex justify-start">
-                      <div className="rounded-lg px-3 py-2 text-xs text-muted-foreground flex items-center gap-1.5">
-                        {agentState === "thinking" && (
-                          <>
-                            <span className="inline-block animate-spin" style={{ animationDuration: '2s' }}>✨</span>
-                            <span>Generating ideas<span className="inline-block w-6 text-left"><span className="animate-pulse">...</span></span></span>
-                          </>
-                        )}
-                        {agentState === "editing" && (
-                          <><span className="inline-block w-3 h-3">✏️</span> Editing...</>
-                        )}
+                    <div className="flex justify-center my-2">
+                      <div
+                        className="relative rounded-full px-5 py-2 text-xs font-medium flex items-center gap-2 overflow-hidden"
+                        style={{
+                          background: 'linear-gradient(135deg, rgba(200,241,53,0.08), rgba(99,102,241,0.08))',
+                          border: '1px solid rgba(200,241,53,0.2)',
+                          animation: 'ideate-pill-pulse 2s ease-in-out infinite',
+                        }}
+                      >
+                        <span
+                          className="absolute inset-0 rounded-full opacity-40"
+                          style={{
+                            background: 'linear-gradient(90deg, transparent, rgba(200,241,53,0.15), transparent)',
+                            animation: 'ideate-pill-shimmer 2s ease-in-out infinite',
+                          }}
+                        />
+                        <span className="relative" style={{ color: 'rgba(200,241,53,0.9)' }}>
+                          {agentState === "thinking" ? "⚡" : "✏️"}
+                        </span>
+                        <span className="relative" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                          {agentState === "thinking" ? "Ideating" : "Editing"}
+                          <span className="inline-block w-4 text-left animate-pulse">...</span>
+                        </span>
                       </div>
                     </div>
                   )}
