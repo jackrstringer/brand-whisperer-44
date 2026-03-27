@@ -29,6 +29,30 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+function enforceNoStackingLayout(html: string): string {
+  if (!html) return html;
+
+  // Remove common mobile-collapse overrides that force side-by-side layouts into a single column
+  const collapseSelectors = [".product-grid-cell", ".two-col-cell", ".gift-cell", ".column-cell", ".grid-cell"];
+  let output = html;
+
+  for (const selector of collapseSelectors) {
+    const escaped = selector.replace(".", "\\.");
+    const blockRegex = new RegExp(`(${escaped}\\s*\\{[^}]*?)\\}`, "gi");
+    output = output.replace(blockRegex, (full) => {
+      let cleaned = full
+        .replace(/display\s*:\s*block\s*!important;?/gi, "")
+        .replace(/width\s*:\s*100%\s*!important;?/gi, "");
+
+      // Cleanup duplicate semicolons that may be left after removals
+      cleaned = cleaned.replace(/;\s*;/g, ";");
+      return cleaned;
+    });
+  }
+
+  return output;
+}
+
 /** Anthropic API call with AbortController timeout */
 async function callAnthropic(body: object, apiKey: string, timeoutMs = 240000): Promise<Response> {
   const maxRetries = 2;
