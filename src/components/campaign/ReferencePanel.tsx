@@ -325,7 +325,7 @@ export default function ReferencePanel({
               return (
                 <div
                   key={id}
-                  className={`relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all mb-1 ${
+                  className={`relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all min-w-0 w-full ${
                     isSelected ? "border-primary ring-2 ring-primary/20" : "border-transparent hover:border-border"
                   }`}
                   style={{ breakInside: "avoid" }}
