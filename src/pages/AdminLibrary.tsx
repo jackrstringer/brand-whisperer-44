@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { autoCropPadding } from "@/lib/autoCropPadding";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -171,15 +172,50 @@ export default function AdminLibrary() {
   };
 
   const reanalyze = async (item: RefCampaign) => {
-    if (!item.image_urls?.length) { toast.error("No images to analyze"); return; }
-    toast.info("Re-analyzing campaign...");
+    if (!item.image_urls?.length && !item.thumbnail_url) { toast.error("No images to analyze"); return; }
+    toast.info("Re-processing campaign...");
+
+    // Step 1: Auto-crop check on the primary image
+    const imgUrl = item.image_urls?.[0] || item.thumbnail_url;
+    let finalImageUrls = item.image_urls || [item.thumbnail_url];
+    let finalThumbnail = item.thumbnail_url;
+
+    try {
+      const imgResp = await fetch(imgUrl);
+      if (imgResp.ok) {
+        const blob = await imgResp.blob();
+        const cropResult = await autoCropPadding(blob);
+        if (cropResult.cropped) {
+          // Re-upload the cropped version
+          const path = `${item.id}/${crypto.randomUUID()}.png`;
+          const { error: upErr } = await supabase.storage
+            .from("reference-campaigns")
+            .upload(path, cropResult.blob, { contentType: "image/png" });
+          if (!upErr) {
+            const { data: urlData } = supabase.storage
+              .from("reference-campaigns")
+              .getPublicUrl(path);
+            finalThumbnail = urlData.publicUrl;
+            finalImageUrls = [urlData.publicUrl];
+            await supabase.from("reference_campaigns")
+              .update({ thumbnail_url: finalThumbnail, image_urls: finalImageUrls })
+              .eq("id", item.id);
+            toast.info(`Auto-cropped ${cropResult.left + cropResult.right}px horizontal padding`);
+          }
+        }
+      }
+    } catch (cropErr) {
+      console.error("Auto-crop during reprocess failed:", cropErr);
+    }
+
+    // Step 2: Re-analyze with AI
     const { error } = await supabase.functions.invoke("analyze-reference", {
-      body: { referenceId: item.id, imageUrls: item.image_urls },
+      body: { referenceId: item.id, imageUrls: finalImageUrls },
     });
     if (error) {
       toast.error("Analysis failed");
     } else {
-      toast.success("Analysis complete");
+      toast.success("Re-processing complete");
       loadCampaigns();
     }
   };
