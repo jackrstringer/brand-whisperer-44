@@ -580,6 +580,15 @@ export default function CampaignEditor() {
     }
   };
 
+  // All versions: history entries + current html as the last version
+  const allVersions: string[] = (() => {
+    const history = Array.isArray(campaign?.html_history) ? campaign.html_history as string[] : [];
+    const current = campaign?.html || "";
+    return [...history, current];
+  })();
+  // The active version index (null = latest = allVersions.length - 1)
+  const resolvedActiveIndex = activeVersionIndex ?? allVersions.length - 1;
+
   const handleUndo = async () => {
     if (!campaign || !campaignId) return;
     const history = campaign.html_history;
@@ -589,29 +598,15 @@ export default function CampaignEditor() {
     await supabase.from("campaigns").update({ html: previousHtml, html_history: newHistory }).eq("id", campaignId);
     setCampaign((c) => c ? { ...c, html: previousHtml as string, html_history: newHistory } : c);
     setCanUndo(newHistory.length > 0);
+    setActiveVersionIndex(null);
     toast.success("Undo successful");
   };
 
-  const handleRevertToVersion = async (editIndex: number) => {
-    if (!campaign || !campaignId) return;
-    const history = Array.isArray(campaign.html_history) ? campaign.html_history : [];
-    if (history.length === 0) return;
-
-    // editIndex is the 0-based index of the assistant edit message
-    // history[editIndex] = the HTML that was current BEFORE that edit
-    // The result AFTER that edit = history[editIndex + 1] if it exists, else campaign.html
-    const isLastEdit = editIndex >= history.length - 1;
-    if (isLastEdit) {
-      toast("Already on this version");
-      return;
-    }
-
-    const targetHtml = history[editIndex + 1] as string;
-    const newHistory = history.slice(0, editIndex + 1);
-    await supabase.from("campaigns").update({ html: targetHtml, html_history: newHistory }).eq("id", campaignId);
-    setCampaign((c) => c ? { ...c, html: targetHtml, html_history: newHistory } : c);
-    setCanUndo(newHistory.length > 0);
-    toast.success("Reverted to this version");
+  const handleSwitchToVersion = (versionIndex: number) => {
+    if (versionIndex === resolvedActiveIndex) return;
+    if (versionIndex < 0 || versionIndex >= allVersions.length) return;
+    setActiveVersionIndex(versionIndex === allVersions.length - 1 ? null : versionIndex);
+    toast.success(versionIndex === allVersions.length - 1 ? "Switched to latest version" : `Switched to version ${versionIndex + 1}`);
   };
 
   const exportHtml = () => {
