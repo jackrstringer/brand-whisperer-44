@@ -32,6 +32,11 @@ interface RefCampaign {
   image_urls: string[] | null;
   is_published: boolean;
   sort_order: number;
+  industry: string | null;
+  campaign_type: string | null;
+  message_type: string | null;
+  extracted_copy: string | null;
+  ai_metadata: any | null;
 }
 
 export default function AdminLibrary() {
