@@ -736,7 +736,8 @@ export default function CampaignEditor() {
       toast.error("Could not find the text to replace — it may have already changed.");
       return;
     }
-    const newHtml = html.replace(findTarget, variant.replace);
+    const useAll = variant.apply_all === true;
+    const newHtml = useAll ? html.split(findTarget).join(variant.replace) : html.replace(findTarget, variant.replace);
     // Save to history
     const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
     history.push(html);
