@@ -90,6 +90,8 @@ export default function CampaignEditor() {
   const [previewText, setPreviewText] = useState("");
   const [starredCampaign, setStarredCampaign] = useState(false);
   const [showReferenceDialog, setShowReferenceDialog] = useState(false);
+  const refScrollRef = useRef<HTMLDivElement>(null);
+  const [syncingScroll, setSyncingScroll] = useState(false);
 
   // Restore reference panel state from localStorage
   useEffect(() => {
