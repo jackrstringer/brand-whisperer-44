@@ -524,12 +524,19 @@ then fill it back in with the new brand's design system and copy.`;
 
     part3 += `\n\n=== ${creativeDir}`;
 
-    part3 += `\n\n=== STRUCTURAL VARIETY RULES ===
+    // Structural variety rules — suppressed when reference mode is "dupe" (exact clone)
+    if (referenceMode !== "dupe") {
+      part3 += `\n\n=== STRUCTURAL VARIETY RULES ===
 1. DO NOT use the same layout structure for every email. Each campaign should feel uniquely designed for its specific purpose.
 2. Vary your section types: use hero images, split layouts, card grids, quote pullouts, metric callouts, editorial columns — mix it up based on what serves the content.
 3. The reference campaigns show the BRAND STYLE (colors, fonts, spacing, tone) — NOT a template to copy verbatim. Extract the design language, then apply it to a FRESH layout.
 4. Never start every email the same way. Vary your openings: sometimes a full-bleed hero, sometimes a headline-first approach, sometimes a personal greeting, sometimes a provocative question.
 5. Section count should vary by campaign type — a welcome email might be 3-4 sections, a newsletter might be 6-8, an abandoned cart might be just 2.`;
+    } else {
+      part3 += `\n\n=== LAYOUT CLONING ACTIVE ===
+You are in DUPE mode. Do NOT vary the layout. Do NOT add creative structural changes.
+Replicate the reference campaign's layout section-for-section. The structure IS the reference.`;
+    }
 
     part3 += `\n\n=== IMAGE RULES ===
 1. The reference campaign screenshots above are STYLE REFERENCES ONLY. NEVER embed them as <img> tags.
