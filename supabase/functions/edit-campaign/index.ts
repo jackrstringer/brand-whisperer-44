@@ -173,12 +173,12 @@ ${brandValues.text_color ? `- Default body text color: ${brandValues.text_color}
 These defaults are OVERRIDDEN by any explicit user request. The user's word is final.
 
 RESPONSE FORMAT — you MUST use these exact XML tags:
-<response>
+<reply>
 Brief conversational reply confirming what was changed (2-3 sentences max). Ask if anything else needs adjusting.
-</response>
-<html>
+</reply>
+<email_html>
 The complete updated HTML here — no markdown fences, no commentary.
-</html>`;
+</email_html>`;
 
     // Build messages array with conversation history
     const anthropicMessages: any[] = [];
@@ -304,25 +304,18 @@ The complete updated HTML here — no markdown fences, no commentary.
 
                   // Stream text_delta for content inside <response> tags only
                   // We parse incrementally: if we're inside <response>, stream it
-                  const responseMatch = fullText.match(/<response>([\s\S]*?)(<\/response>|$)/);
+                  const responseMatch = fullText.match(/<reply>([\s\S]*?)(<\/reply>|$)/);
                   if (responseMatch) {
-                    const responseContent = responseMatch[1];
-                    // Only emit the new delta if it's part of the response section
-                    if (!fullText.includes("</response>") || fullText.indexOf(text) < fullText.indexOf("</response>")) {
-                      // Check if current text addition is within response tags
-                      const beforeThis = fullText.slice(0, fullText.length - text.length);
-                      const wasInResponse = beforeThis.includes("<response>") && !beforeThis.includes("</response>");
-                      const isInHtml = beforeThis.includes("<html>") && !beforeThis.includes("</html>");
+                    const beforeThis = fullText.slice(0, fullText.length - text.length);
+                    const wasInResponse = beforeThis.includes("<reply>") && !beforeThis.includes("</reply>");
                       
-                      if (wasInResponse && !beforeThis.includes("</response>")) {
-                        // Strip any tag fragments from the delta
-                        let cleanDelta = text;
-                        if (cleanDelta.includes("</response>")) {
-                          cleanDelta = cleanDelta.split("</response>")[0];
-                        }
-                        if (cleanDelta) {
-                          emit("text_delta", { content: cleanDelta });
-                        }
+                    if (wasInResponse) {
+                      let cleanDelta = text;
+                      if (cleanDelta.includes("</reply>")) {
+                        cleanDelta = cleanDelta.split("</reply>")[0];
+                      }
+                      if (cleanDelta) {
+                        emit("text_delta", { content: cleanDelta });
                       }
                     }
                   }
@@ -332,8 +325,8 @@ The complete updated HTML here — no markdown fences, no commentary.
           }
 
           // Parse the complete response
-          const responseMatch = fullText.match(/<response>([\s\S]*?)<\/response>/);
-          const htmlMatch = fullText.match(/<html>([\s\S]*?)<\/html>/);
+          const responseMatch = fullText.match(/<reply>([\s\S]*?)<\/reply>/);
+          const htmlMatch = fullText.match(/<email_html>([\s\S]*?)<\/email_html>/);
 
           const responseText = responseMatch ? responseMatch[1].trim() : "Changes applied.";
           let html = htmlMatch ? htmlMatch[1].trim() : "";
