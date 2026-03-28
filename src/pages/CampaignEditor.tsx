@@ -1255,6 +1255,17 @@ export default function CampaignEditor() {
     };
   }, [campaignId, campaign, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace]);
 
+  // Image swap handler — sends new src to iframe
+  const handleImageSwap = useCallback((newUrl: string) => {
+    const iframe = previewPanelRef.current?.querySelector('iframe');
+    if (!iframe) return;
+    try {
+      iframe.contentWindow?.postMessage({ type: 'swapImageSrc', newSrc: newUrl }, '*');
+    } catch {}
+    // Also update the imageSwap state so panel knows which is current
+    setImageSwap(prev => prev ? { ...prev, src: newUrl } : null);
+  }, []);
+
   if (loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
   }
