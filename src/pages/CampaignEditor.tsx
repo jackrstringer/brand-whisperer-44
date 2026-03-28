@@ -1490,21 +1490,15 @@ export default function CampaignEditor() {
 
   function positionFtb(bar, el){
     var r = el.getBoundingClientRect();
-    var frameRect = null;
-    try { frameRect = window.frameElement ? window.frameElement.getBoundingClientRect() : null; } catch(e) {}
-    var scaleX = frameRect ? (frameRect.width / Math.max(1, window.innerWidth)) : 1;
-    var scaleY = frameRect ? (frameRect.height / Math.max(1, window.innerHeight)) : 1;
-
-    var anchorLeft = frameRect ? (frameRect.left + (r.left + r.width / 2) * scaleX) : (r.left + r.width / 2);
-    var anchorTop = frameRect ? (frameRect.top + r.top * scaleY) : r.top;
-    var anchorBottom = frameRect ? (frameRect.top + r.bottom * scaleY) : r.bottom;
-
-    var hostWindow = (window.parent && window.parent !== window) ? window.parent : window;
     var bw = bar.offsetWidth || 380;
     var bh = bar.offsetHeight || 38;
-    var left = Math.max(8, Math.min(anchorLeft - bw/2, hostWindow.innerWidth - bw - 8));
+    var anchorLeft = r.left + r.width / 2;
+    var anchorTop = r.top;
+    var anchorBottom = r.bottom;
+
+    var left = Math.max(8, Math.min(anchorLeft - bw/2, window.innerWidth - bw - 8));
     var top = anchorTop > bh + 20 ? (anchorTop - bh - 8) : (anchorBottom + 8);
-    top = Math.max(8, Math.min(top, hostWindow.innerHeight - bh - 8));
+    top = Math.max(8, Math.min(top, window.innerHeight - bh - 8));
     bar.style.top = top + 'px';
     bar.style.left = left + 'px';
     if(ftbColorPanel) positionPanelNear(bar, ftbColorPanel);
