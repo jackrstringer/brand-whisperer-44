@@ -1220,6 +1220,29 @@ export default function CampaignEditor() {
         setImageSwap(null);
         return;
       }
+      if (e.data?.type === 'imageSwapCategoryChange') {
+        setImageSwap(prev => prev ? { ...prev, category: e.data.category } : null);
+        return;
+      }
+      // Arrow navigation — cycle through assets
+      if (e.data?.type === 'imageSwapPrev' || e.data?.type === 'imageSwapNext') {
+        // Handled by cycling logic in imageSwapAssets
+        const dir = e.data.type === 'imageSwapPrev' ? -1 : 1;
+        setImageSwap(prev => {
+          if (!prev || imageSwapAssetsRef.current.length === 0) return prev;
+          const assets = imageSwapAssetsRef.current;
+          const currentIdx = assets.findIndex(a => prev.src.includes(a.split('?')[0]) || a.includes(prev.src.split('?')[0]));
+          const nextIdx = currentIdx < 0 ? 0 : (currentIdx + dir + assets.length) % assets.length;
+          const newSrc = assets[nextIdx];
+          // Send to iframe
+          const iframe = previewPanelRef.current?.querySelector('iframe');
+          if (iframe) {
+            try { iframe.contentWindow?.postMessage({ type: 'swapImageSrc', newSrc }, '*'); } catch {}
+          }
+          return { ...prev, src: newSrc };
+        });
+        return;
+      }
 
       if (e.data?.type !== "textEdited" || !e.data?.html) return;
       if (!campaignId || !campaign) return;
