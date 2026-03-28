@@ -508,12 +508,16 @@ export default function CampaignEditor() {
         clearInterval(pollInterval);
         const variants = data.variant_htmls as any[];
         setVariantHtmls(variants); setGenerating(false); setGenStartTime(null);
+        setShowVariantPicker(true);
         const elapsed = genStartTime ? Math.floor((Date.now() - genStartTime) / 1000) : 0;
-        setMessages((prev) => [...prev, { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `3 variants generated in ${formatTimer(elapsed)}. Running aggressive QA...`, created_at: new Date().toISOString() }]);
-        const refUrls = selectedReference?.image_urls || [];
-        const qaVariants = await runAggressiveQaLoop(variants, refUrls);
-        setVariantHtmls(qaVariants); setShowVariantPicker(true);
-        setMessages((prev) => [...prev, { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `QA complete. Choose your favorite variant.`, created_at: new Date().toISOString() }]);
+        const successCount = variants.filter((v: any) => v.html).length;
+        setMessages((prev) => [...prev, { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `${successCount}/3 variants generated in ${formatTimer(elapsed)}. Choose your favorite!`, created_at: new Date().toISOString() }]);
+        // Run QA in background — picker is already visible
+        try {
+          const refUrls = selectedReference?.image_urls || [];
+          const qaVariants = await runAggressiveQaLoop(variants, refUrls);
+          setVariantHtmls(qaVariants);
+        } catch (err) { console.error("[perfection] QA loop failed, variants still available:", err); }
       } else if (data.status === "error") { clearInterval(pollInterval); setGenerating(false); setGenStartTime(null); toast.error("Perfection mode generation failed."); }
     }, 5000);
     setTimeout(() => { clearInterval(pollInterval); setGenerating(false); setGenStartTime(null); toast.error("Perfection mode timed out."); }, 900000);
