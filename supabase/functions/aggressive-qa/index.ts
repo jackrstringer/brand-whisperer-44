@@ -159,23 +159,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Apply fixes if there are issues
-    let fixedHtml: string | null = null;
-    let fixesApplied = 0;
-    if (!qaResult.passed && Array.isArray(qaResult.issues)) {
-      let workingHtml = html;
-      for (const issue of qaResult.issues) {
-        if (issue.find && issue.replace && workingHtml.includes(issue.find)) {
-          workingHtml = workingHtml.replace(issue.find, issue.replace);
-          fixesApplied++;
-        }
-      }
-      if (fixesApplied > 0) {
-        fixedHtml = workingHtml;
-      }
-    }
-
-    console.log(`[aggressive-qa] Result: score=${qaResult.score}, passed=${qaResult.passed}, issues=${qaResult.issues?.length || 0}, fixes=${fixesApplied}`);
+    // Score-only mode — no auto-patching (was degrading quality)
+    const passed = qaResult.passed || qaResult.score >= 7;
+    console.log(`[aggressive-qa] Result: score=${qaResult.score}, passed=${passed}, issues=${qaResult.issues?.length || 0}`);
 
     // If we have a campaignId and variant index, update the variant_htmls
     if (campaignId && variantIndex !== undefined && fixedHtml) {
