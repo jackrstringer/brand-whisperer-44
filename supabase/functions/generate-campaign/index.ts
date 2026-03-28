@@ -238,16 +238,18 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { brandId, campaignId, brief, goal, copy, speedMode, productIds, pinnedAssetUrls: pinnedUrls, matchProductColors, designNotes, shopifyProducts, reference } = await req.json();
-    campaignIdForError = campaignId;
+    const { brandId, campaignId, brief, goal, copy, speedMode, productIds, pinnedAssetUrls: pinnedUrls, matchProductColors, designNotes, shopifyProducts, reference, _isSubGeneration, _variantIndex } = await req.json();
+    campaignIdForError = _isSubGeneration ? null : campaignId; // Don't error-update campaign in sub-generation mode
 
     // Always use Opus 4.6
     const GENERATION_MODEL = "claude-opus-4-6";
     const QA_MODEL = "claude-sonnet-4-6";
 
-    // Mark campaign as generating with start timestamp
+    // Only mark campaign as generating if NOT a sub-generation call
     const genStartedAt = new Date().toISOString();
-    await supabase.from("campaigns").update({ status: "generating", generation_started_at: genStartedAt, generation_duration_secs: null }).eq("id", campaignId);
+    if (!_isSubGeneration) {
+      await supabase.from("campaigns").update({ status: "generating", generation_started_at: genStartedAt, generation_duration_secs: null }).eq("id", campaignId);
+    }
 
     // FIX 2: Parallelize independent DB reads
     const [profileResult, brandResult] = await Promise.all([
