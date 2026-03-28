@@ -10,15 +10,15 @@ const corsHeaders = {
 const CREATIVE_SEEDS = [
   {
     label: "Editorial & Bold",
-    seed: "CREATIVE DIRECTION: Editorial & bold — dramatic imagery, magazine-style layout with strong visual hierarchy, bold headlines, and cinematic image treatment. Think high-fashion editorial meets email. Use large hero images, bold typography contrasts, and confident whitespace.",
+    seed: "CREATIVE DIRECTION: Editorial & bold — Use a dramatic large hero image taking up significant screen space, magazine-style asymmetric layouts, bold oversized headlines with strong typographic contrast, cinematic image treatment. Think high-fashion editorial meets email.",
   },
   {
     label: "Clean & Minimal",
-    seed: "CREATIVE DIRECTION: Clean & minimal — generous whitespace, restrained palette, elegant typography. Think Apple-meets-Aesop. Focus on breathing room, single-column clarity, and let the product imagery speak for itself with minimal surrounding elements.",
+    seed: "CREATIVE DIRECTION: Clean & minimal — generous whitespace everywhere, single-column layout, restrained color usage, elegant understated typography, let the product imagery be the star with minimal text. Think Apple product announcement email.",
   },
   {
     label: "Dynamic & Engaging",
-    seed: "CREATIVE DIRECTION: Dynamic & engaging — mixed media sections, product grids, alternating layouts, and an energetic visual rhythm. Think vibrant lookbook. Use varied section types (hero, grid, split, testimonial) to create visual interest and momentum.",
+    seed: "CREATIVE DIRECTION: Dynamic & engaging — Use a multi-section layout with alternating full-width and grid sections, product comparison grids, multiple CTAs throughout, energetic visual rhythm with varied section types. Think a vibrant shopping lookbook email.",
   },
 ];
 

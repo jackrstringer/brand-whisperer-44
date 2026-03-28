@@ -40,22 +40,20 @@ Return ONLY a JSON object:
     {
       "severity": "critical" | "major" | "minor",
       "category": "layout" | "image" | "spacing" | "text" | "button" | "logo" | "footer" | "color" | "cohesion" | "proportion",
-      "description": "Clear description of what's wrong",
-      "find": "exact HTML string to find (if fixable via code)",
-      "replace": "corrected HTML string (if fixable via code)"
+      "description": "Clear description of what's wrong"
     }
   ],
   "summary": "One sentence assessment"
 }
 
 Rules:
-- Score must be ≥ 9 to pass. Be strict.
-- ANY critical issue = automatic fail regardless of score.
-- "find" and "replace" must be EXACT substrings of the provided HTML.
-- Critical = broken layout, stacking, broken images, image proportion mismatches, missing sections.
-- Major = spacing/alignment issues, typography inconsistencies.
-- Minor = small polish items.
-- Provide actionable fixes. Use ImageKit transforms (?tr=w-X,h-Y,fo-auto) for image issues on ik.imagekit.io URLs.`;
+- Score 1-10 based on production-readiness. 7+ = pass.
+- Be fair — minor polish issues should not tank the score.
+- Critical = broken layout, missing images, completely wrong structure.
+- Major = noticeable spacing/alignment issues, image proportion problems.
+- Minor = small polish items a typical subscriber wouldn't notice.
+- Do NOT provide find/replace fixes. Just describe issues clearly.
+- Focus on what a REAL subscriber would notice, not pixel-perfect comparisons.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -161,26 +159,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Apply fixes if there are issues
-    let fixedHtml: string | null = null;
-    let fixesApplied = 0;
-    if (!qaResult.passed && Array.isArray(qaResult.issues)) {
-      let workingHtml = html;
-      for (const issue of qaResult.issues) {
-        if (issue.find && issue.replace && workingHtml.includes(issue.find)) {
-          workingHtml = workingHtml.replace(issue.find, issue.replace);
-          fixesApplied++;
-        }
-      }
-      if (fixesApplied > 0) {
-        fixedHtml = workingHtml;
-      }
-    }
+    // Score-only mode — no auto-patching (was degrading quality)
+    const passed = qaResult.passed || qaResult.score >= 7;
+    console.log(`[aggressive-qa] Result: score=${qaResult.score}, passed=${passed}, issues=${qaResult.issues?.length || 0}`);
 
-    console.log(`[aggressive-qa] Result: score=${qaResult.score}, passed=${qaResult.passed}, issues=${qaResult.issues?.length || 0}, fixes=${fixesApplied}`);
-
-    // If we have a campaignId and variant index, update the variant_htmls
-    if (campaignId && variantIndex !== undefined && fixedHtml) {
+    // Update variant score in DB if applicable
+    if (campaignId && variantIndex !== undefined) {
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -197,11 +181,10 @@ Deno.serve(async (req) => {
         if (variants[variantIndex]) {
           variants[variantIndex] = {
             ...variants[variantIndex],
-            html: fixedHtml,
             qa_score: qaResult.score,
             qa_summary: qaResult.summary,
             qa_round: roundNumber,
-            status: qaResult.passed ? "qa_passed" : "qa_fixing",
+            status: passed ? "qa_passed" : "qa_reviewed",
           };
           await supabase.from("campaigns").update({ variant_htmls: variants }).eq("id", campaignId);
         }
@@ -210,12 +193,10 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        passed: qaResult.passed,
+        passed,
         score: qaResult.score,
         issues: qaResult.issues || [],
         summary: qaResult.summary,
-        fixedHtml,
-        fixesApplied,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

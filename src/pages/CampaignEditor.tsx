@@ -461,31 +461,25 @@ export default function CampaignEditor() {
   };
 
   const runAggressiveQaLoop = useCallback(async (variants: any[], referenceUrls: string[]) => {
-    const MAX_QA_ROUNDS = 3;
     const updatedVariants = [...variants];
+    // Score each variant once (no re-render loop — auto-patching was degrading quality)
     for (let idx = 0; idx < updatedVariants.length; idx++) {
       const variant = updatedVariants[idx];
       if (!variant.html || variant.status === "error") continue;
-      let currentHtml = variant.html;
-      let passed = false;
-      for (let round = 1; round <= MAX_QA_ROUNDS; round++) {
-        setQaProgress((prev) => ({ ...prev, [idx]: `QA Round ${round}...` }));
-        try {
-          const { slices } = await captureEmailScreenshots(currentHtml);
-          const qaUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aggressive-qa`;
-          const resp = await fetch(qaUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` },
-            body: JSON.stringify({ campaignId, html: currentHtml, slices, referenceImageUrls: referenceUrls, variantIndex: idx, roundNumber: round }),
-          });
-          if (!resp.ok) break;
+      setQaProgress((prev) => ({ ...prev, [idx]: `Scoring...` }));
+      try {
+        const { slices } = await captureEmailScreenshots(variant.html);
+        const qaUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aggressive-qa`;
+        const resp = await fetch(qaUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` },
+          body: JSON.stringify({ campaignId, html: variant.html, slices, referenceImageUrls: referenceUrls, variantIndex: idx, roundNumber: 1 }),
+        });
+        if (resp.ok) {
           const result = await resp.json();
-          updatedVariants[idx] = { ...updatedVariants[idx], qa_score: result.score, qa_summary: result.summary, qa_round: round };
-          if (result.passed || result.score >= 9) { updatedVariants[idx].status = "qa_passed"; updatedVariants[idx].html = result.fixedHtml || currentHtml; passed = true; break; }
-          if (result.fixedHtml) { currentHtml = result.fixedHtml; updatedVariants[idx].html = currentHtml; } else { updatedVariants[idx].status = "qa_passed"; passed = true; break; }
-        } catch (err) { console.error(`[perfection] QA error variant ${idx} round ${round}:`, err); break; }
-      }
-      if (!passed) updatedVariants[idx].status = "qa_passed";
+          updatedVariants[idx] = { ...updatedVariants[idx], qa_score: result.score, qa_summary: result.summary, qa_round: 1, status: result.passed ? "qa_passed" : "qa_reviewed" };
+        }
+      } catch (err) { console.error(`[perfection] QA error variant ${idx}:`, err); }
       setQaProgress((prev) => { const next = { ...prev }; delete next[idx]; return next; });
       setVariantHtmls([...updatedVariants]);
     }
