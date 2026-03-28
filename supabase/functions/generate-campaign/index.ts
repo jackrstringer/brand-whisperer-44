@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { rehostHtmlImagesWithImageKit } from "../_shared/imagekit.ts";
 import { normalizeGridImages } from "../_shared/normalizeGridImages.ts";
+import { enforceNoStackingLayout } from "../_shared/enforceNoStackingLayout.ts";
 
 /** Strip any AI commentary and extract only the HTML document */
 function extractHtmlOnly(text: string): string {
@@ -30,32 +31,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-function enforceNoStackingLayout(html: string): string {
-  if (!html) return html;
-
-  let output = html;
-
-  // Remove common mobile-collapse rules that force side-by-side layouts into a single column
-  const collapseSelectorPattern = /\.(?:[a-z0-9_-]*?(?:grid|col|column|two-col|two_col|product|gift)[a-z0-9_-]*?(?:cell|col|column)?|(?:product-grid-cell|two-col-cell|gift-cell|column-cell|grid-cell))\s*\{[^}]*\}/gi;
-  output = output.replace(collapseSelectorPattern, (rule) => {
-    return rule
-      .replace(/display\s*:\s*block\s*!important;?/gi, "")
-      .replace(/width\s*:\s*100%\s*!important;?/gi, "")
-      .replace(/float\s*:\s*none\s*!important;?/gi, "")
-      .replace(/max-width\s*:\s*100%\s*!important;?/gi, "")
-      .replace(/;\s*;/g, ";");
-  });
-
-  // Force common multi-column classes to remain side-by-side at all breakpoints
-  if (/<head[^>]*>/i.test(output)) {
-    output = output.replace(
-      /(<head[^>]*>)/i,
-      `$1<style>.product-grid-cell,.two-col-cell,.gift-cell,.column-cell,.grid-cell{display:table-cell !important;vertical-align:top !important;}.product-grid-cell,.two-col-cell,.column-cell,.grid-cell{width:auto !important;}</style>`
-    );
-  }
-
-  return output;
-}
+// enforceNoStackingLayout is now imported from _shared/enforceNoStackingLayout.ts
 
 /** Anthropic API call with AbortController timeout */
 async function callAnthropic(body: object, apiKey: string, timeoutMs = 240000): Promise<Response> {
@@ -481,9 +457,21 @@ You MUST feature these products prominently in the campaign. Use at least one im
 
       // Part 2: Reference campaign images (layout to clone)
       if (referenceImageBlocks.length > 0) {
+        const dupeLabel = referenceMode === "dupe"
+          ? `DUPE MODE — EXACT STRUCTURAL CLONE REQUIRED.
+This is the reference layout. You must produce an IDENTICAL structural replica:
+- SAME number of sections, in the SAME order
+- SAME column layouts (if it has a 2-column grid, yours has a 2-column grid)
+- SAME image slot count and positions (if it has 4 images in a 2×2 grid, yours has 4 images in a 2×2 grid)
+- SAME image aspect ratios and sizing (if images are square, yours are square)
+- SAME section types (hero, text block, product grid, CTA, footer — match them 1:1)
+- SAME visual rhythm (spacing proportions between sections)
+- ONLY change: swap in the brand's colors, fonts, copy, and images. The skeleton stays identical.
+Do NOT add sections that don't exist in the reference. Do NOT remove sections that do exist. Do NOT rearrange anything.`
+          : `This is the reference layout. Strongly follow its structure, section count, column layout, image sizing, and proportions. Apply the brand's colors, fonts, and copy on top. You may adapt minor details but keep the overall skeleton very close.`;
         userContent.push({
           type: "text",
-          text: "This is the reference layout to replicate. Clone its exact structure, section count, column layout, image sizing, and proportions. Apply the brand's colors, fonts, and copy on top.",
+          text: dupeLabel,
         });
         userContent.push(...referenceImageBlocks);
       }
