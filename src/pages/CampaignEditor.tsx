@@ -1437,13 +1437,12 @@ export default function CampaignEditor() {
 
   function clampPanelPosition(panel){
     if(!panel) return;
-    var hostWindow = (window.parent && window.parent !== window) ? window.parent : window;
     var rect = panel.getBoundingClientRect();
     var left = parseFloat(panel.style.left || '0');
     var top = parseFloat(panel.style.top || '0');
-    if(rect.right > hostWindow.innerWidth - 8) left -= (rect.right - (hostWindow.innerWidth - 8));
+    if(rect.right > window.innerWidth - 8) left -= (rect.right - (window.innerWidth - 8));
     if(rect.left < 8) left += (8 - rect.left);
-    if(rect.bottom > hostWindow.innerHeight - 8) top -= (rect.bottom - (hostWindow.innerHeight - 8));
+    if(rect.bottom > window.innerHeight - 8) top -= (rect.bottom - (window.innerHeight - 8));
     if(rect.top < 8) top += (8 - rect.top);
     panel.style.left = Math.max(8, left) + 'px';
     panel.style.top = Math.max(8, top) + 'px';
