@@ -16,10 +16,20 @@ You will receive:
 
 Your job is to compare the RENDERED OUTPUT against the REFERENCE CAMPAIGN and flag ANY issue a discerning creative director would notice.
 
-COMPARE AGAINST REFERENCE — CHECK THESE:
+COMPARE AGAINST REFERENCE — CHECK THESE (in priority order):
+
+IMAGE SLOT PROPORTIONS (HIGHEST PRIORITY):
+- Count image slots in the reference. Count in the output. They MUST match.
+- If the reference shows a 2×2 grid of square images, the output MUST have a 2×2 grid of square images.
+- Every image in a grid MUST have IDENTICAL dimensions via ImageKit ?tr=w-X,h-Y,fo-auto transforms.
+- Portrait images crammed into landscape slots (or vice versa) = CRITICAL failure.
+- Missing fo-auto transforms on grid images = CRITICAL failure.
+- Images without explicit width/height that don't match the reference slot shape = MAJOR issue.
+
+OTHER CHECKS:
 1. LAYOUT FIDELITY: Does the output follow the reference's section structure, visual hierarchy, and overall flow? Flag deviations.
-2. IMAGE PROPORTIONS: Are images properly proportioned for their containers? Portrait images squeezed into landscape slots? Stretched or squished photos? These are CRITICAL. Fix by appending ImageKit transforms (?tr=w-X,h-Y,fo-auto) to ik.imagekit.io URLs.
-3. IMAGE CONSISTENCY: All images in grids must use identical dimensions. If they don't, normalize with matching transforms.
+2. IMAGE PROPORTIONS: Are images properly proportioned for their containers? Stretched or squished photos? These are CRITICAL.
+3. IMAGE CONSISTENCY: All images in grids must use identical dimensions and identical ImageKit transforms.
 4. SPACING & RHYTHM: Compare padding, margins, and section gaps against reference. Is the visual rhythm similar?
 5. TYPOGRAPHY: Text sizing, weight hierarchy, and alignment compared to reference.
 6. BUTTONS/CTAs: Shape, size, padding — do they match the reference's style?
@@ -28,7 +38,6 @@ COMPARE AGAINST REFERENCE — CHECK THESE:
 9. POLISH: Does the email look professional and production-ready? Would you send this to 100k subscribers?
 10. LOGO: Properly sized (max ~150px wide), centered, not stretched?
 11. FOOTER: Present and properly separated from content?
-12. OVERALL: Score must be 9+ to pass. Be strict — this is "perfection mode."
 
 IMPORTANT: You are looking at the email at 470px viewport width. Side-by-side layouts MUST remain side-by-side.
 

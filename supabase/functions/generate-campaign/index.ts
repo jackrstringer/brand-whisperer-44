@@ -613,33 +613,40 @@ You may make minor adjustments to fit the brief, but the overall skeleton should
 5. CONSISTENCY: Every image must have the same padding treatment — either ALL full-bleed or ALL with equal side padding. Never mix.
 6. CRITICAL NO-STACK RULE: Any side-by-side layout in the chosen reference (product grids, two-column image blocks, split text/image sections) MUST remain side-by-side at all viewport widths. Do NOT add media-query rules that convert these to single-column stacked blocks.
 
-=== IMAGEKIT IMAGE TRANSFORMS (use these to fit images into layout slots) ===
+=== OBJECT-FIT RULE (CRITICAL — like Figma's "Fill" mode) ===
+When placing ANY image into a layout slot, you MUST think like a designer using Figma's "Fill" mode:
+1. DETERMINE the slot's aspect ratio from the reference (square = 1:1, wide banner ≈ 2.4:1, portrait ≈ 2:3, etc.)
+2. CALCULATE pixel dimensions for a 470px-wide email viewport:
+   - Full-width hero: w-470 (height varies by reference)
+   - 2-column grid (with 10px gap): each slot ≈ w-220
+   - 3-column grid: each slot ≈ w-145
+   - Single centered product: w-300 to w-400
+3. APPLY fo-auto smart crop: append ?tr=w-{W},h-{H},fo-auto to the ik.imagekit.io URL
+4. SET matching width and height attributes on the <img> tag AND its container <td>
+
+Common slot patterns to recognize in references:
+- 2×2 square grid → each image: ?tr=w-220,h-220,fo-auto
+- Full-width hero banner → ?tr=w-470,h-300,fo-auto (or taller if reference is tall)
+- 2-column product cards → ?tr=w-220,h-280,fo-auto
+- Single centered product → ?tr=w-300,h-400,fo-auto
+- Wide lifestyle banner → ?tr=w-470,h-200,fo-auto
+
+EVERY image in a grid MUST use IDENTICAL transform dimensions. No exceptions.
+If you place 4 images in a 2×2 grid, ALL 4 must have the exact same ?tr= params.
+
+=== IMAGEKIT TRANSFORM SYNTAX ===
 All brand/product images hosted on ik.imagekit.io support URL-based transforms.
-Append ?tr=<params> to any ik.imagekit.io URL. Available transforms:
-
-SIZING & CROPPING:
-- w-{N}         → resize to width N pixels
-- h-{N}         → resize to height N pixels
-- w-{N},h-{N},c-maintain_ratio   → fit within box, maintain aspect ratio
-- w-{N},h-{N},c-force            → force exact dimensions (may distort)
-- w-{N},h-{N},c-at_max           → scale down to fit, never upscale
-- w-{N},h-{N},fo-auto            → smart crop to exact dimensions (AI selects focal point)
-- ar-{W}-{H},w-{N}               → crop to aspect ratio at given width (e.g. ar-1-1,w-300 for square)
-
-BACKGROUND:
-- e-bgremove    → remove background (transparent PNG)
-
-EXAMPLES:
-- Square thumbnail: ?tr=w-280,h-280,fo-auto
-- Wide banner from portrait photo: ?tr=w-600,h-250,fo-auto
-- Remove background: ?tr=e-bgremove
-- Fit in slot without distortion: ?tr=w-400,h-300,c-at_max
+Append ?tr=<params> to any ik.imagekit.io URL:
+- w-{N},h-{N},fo-auto  → PREFERRED: smart crop to exact dimensions (AI focal point)
+- ar-{W}-{H},w-{N}     → crop to aspect ratio at given width (e.g. ar-1-1,w-300)
+- w-{N},h-{N},c-at_max → scale down to fit without cropping
+- e-bgremove            → remove background (transparent PNG)
 
 RULES:
 - ONLY modify ik.imagekit.io URLs. Leave all other URLs untouched.
-- When the reference layout has specific image slot proportions, use fo-auto cropping to match.
-- Prefer c-at_max or fo-auto over c-force to avoid distortion.
-- For product grids, ensure all product images use the SAME transform dimensions.`;
+- ALWAYS use fo-auto for grid images so the AI picks the best focal point.
+- NEVER use c-force (causes distortion).
+- For product grids, EVERY image MUST use the SAME ?tr= dimensions.`;
 
     if (hostedAssetEntries.length > 0) {
       part3 += `\n\nAVAILABLE BRAND ASSETS (use selectively — pick what serves the campaign):\n${assetCatalog}`;
