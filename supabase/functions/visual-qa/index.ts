@@ -156,9 +156,9 @@ Deno.serve(async (req) => {
 
     console.log(`[visual-qa] Result: score=${qaResult.overall_score}, issues=${qaResult.issues?.length || 0}, passes=${qaResult.passes_visual_qa}`);
 
-    // If there are fixable issues, apply them to the HTML
-    // First: always run deterministic grid normalization
+    // Always run deterministic fixers: grid normalization + no-stacking enforcement
     let fixedHtml = normalizeGridImages(html);
+    fixedHtml = enforceNoStackingLayout(fixedHtml);
     let fixesApplied = fixedHtml !== html ? 1 : 0;
 
     // For image proportion issues flagged by QA, normalization already handled them.
