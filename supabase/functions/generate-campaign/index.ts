@@ -659,7 +659,7 @@ RULES:
     const response = await callAnthropic({
       model: GENERATION_MODEL,
       max_tokens: 16384,
-      system: UNIVERSAL_EMAIL_RULES,
+      system: referenceMode ? REFERENCE_MODE_SYSTEM : UNIVERSAL_EMAIL_RULES,
       messages: [{ role: "user", content: userContent }],
     }, ANTHROPIC_API_KEY);
 
