@@ -60,20 +60,34 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const { campaignId, html, slices } = await req.json();
+    const { campaignId, html, slices, referenceImageUrls, usePro } = await req.json();
     if (!html || !slices?.length) {
       throw new Error("html and slices are required");
     }
 
     console.log(`[visual-qa] Starting visual QA for campaign ${campaignId}, ${slices.length} slices`);
 
-    // Build vision content: slices as images + HTML as text
-    const content: any[] = [
-      {
+    // Build vision content
+    const content: any[] = [];
+
+    // Add reference images if provided (for comparison)
+    if (Array.isArray(referenceImageUrls) && referenceImageUrls.length > 0) {
+      content.push({
         type: "text",
-        text: `Here are ${slices.length} screenshot slices of the rendered email at 470px viewport width. Examine them carefully for visual issues:`,
-      },
-    ];
+        text: `Here are the REFERENCE campaign screenshots the user chose as inspiration. Compare the output against these for quality and structure:`,
+      });
+      for (let i = 0; i < referenceImageUrls.length; i++) {
+        content.push({
+          type: "image_url",
+          image_url: { url: referenceImageUrls[i] },
+        });
+      }
+    }
+
+    content.push({
+      type: "text",
+      text: `Here are ${slices.length} screenshot slices of the rendered email at 470px viewport width. Examine them carefully for visual issues:`,
+    });
 
     for (let i = 0; i < slices.length; i++) {
       const dataUrl = slices[i] as string;
@@ -109,7 +123,7 @@ Deno.serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: usePro ? "google/gemini-2.5-pro" : "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content },
