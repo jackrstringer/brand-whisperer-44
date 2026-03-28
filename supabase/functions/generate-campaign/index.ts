@@ -216,8 +216,8 @@ Rules:
   6. A CTA button appears in the first fold
   7. Footer is present
   8. The HTML is mobile-responsive (uses max-width, not fixed widths on outer tables)
-  9. IMAGE FIT: Check that every <img> tag's dimensions are appropriate for its container. If an image is portrait but placed in a landscape slot (or vice versa), add ImageKit transforms (?tr=w-X,h-Y,fo-auto) to the src URL to make it fit. Only modify ik.imagekit.io URLs. Flag as "major" severity.
-  10. IMAGE CONSISTENCY IN GRIDS: All images in a product grid or multi-image section must use the same dimensions. If they don't, normalize them with matching ImageKit transforms (?tr=w-X,h-Y,fo-auto).
+  9. IMAGE SLOT PROPORTIONS (CRITICAL): For every <img> in a grid or multi-image section, verify ALL images use IDENTICAL width and height attributes AND identical ImageKit transforms. If any image in a 2×2 or 2×3 grid has different dimensions than its siblings, normalize them all to the same ?tr=w-X,h-Y,fo-auto transform. This is a CRITICAL issue — fix it immediately.
+  10. ASPECT RATIO MATCH: If the reference shows square image slots, every image MUST be cropped square via fo-auto. Portrait images jammed into landscape slots (or vice versa) MUST be fixed with appropriate ?tr=w-X,h-Y,fo-auto transforms. Count image slots in the reference vs the output — they must match. Missing fo-auto transforms on grid images is a CRITICAL issue.
 
 Return ONLY the JSON object. No markdown fences, no explanation, no preamble.`;
 
@@ -484,6 +484,14 @@ Study the following campaign screenshot carefully. Your output MUST closely matc
 - Visual hierarchy (what's big, what's small, what's prominent)
 - Logo placement (same position — top-left, centered, etc.)
 - CTA button positions (same locations within sections)
+
+IMAGE SLOT ANALYSIS (DO THIS FIRST):
+Before generating, analyze each image slot in the reference screenshot:
+- Is it square (1:1)? Wide banner (~2.4:1)? Portrait (~2:3)? Landscape (~3:2)?
+- Is it a 2×2 grid? A 2×3 grid? A single hero? Side-by-side pair?
+- Note the APPROXIMATE ASPECT RATIO of every image slot.
+Then when placing brand images, apply the MATCHING ImageKit fo-auto crop to force-fit each image into that exact slot shape. Example: if the reference has 4 square images in a 2×2 grid, every brand image you place there MUST use ?tr=w-220,h-220,fo-auto.
+
 You may make minor adjustments to fit the brief content, but the structural skeleton should be clearly recognizable as the same layout.
 CRITICAL: Do NOT copy the reference's colors, fonts, or brand identity.
 Apply the brand's own color palette, typography, and design tokens throughout.
@@ -492,17 +500,26 @@ Structure comes from the reference. Skin comes from the brand.`;
         referencePrompt = `DUPE — PIXEL-PERFECT LAYOUT CLONE (THIS IS THE MOST IMPORTANT INSTRUCTION):
 You are looking at a screenshot of an email campaign. Your job is to CLONE ITS EXACT LAYOUT.
 
+IMAGE SLOT ANALYSIS (DO THIS FIRST — BEFORE ANYTHING ELSE):
+Examine every image in the reference screenshot and note:
+- How many image slots are there? (e.g., 1 hero + 4 grid images = 5 slots)
+- What is each slot's aspect ratio? (square 1:1, wide banner ~2.4:1, portrait ~2:3, etc.)
+- What grid pattern are they in? (2×2, 2×3, single column, side-by-side pair, etc.)
+- What are the approximate pixel dimensions at 470px viewport? (e.g., 2-col grid = ~220px per image)
+For EVERY image you place, you MUST apply ImageKit fo-auto cropping that matches the reference slot's aspect ratio exactly.
+
 MANDATORY CLONING RULES — violating ANY of these is a failure:
 1. COUNT every distinct section in the reference screenshot. Your output MUST have the EXACT SAME NUMBER of sections.
 2. Each section MUST be the SAME TYPE as the reference (hero image, text block, product grid, testimonial, divider, footer, etc.)
 3. Each section MUST be in the EXACT SAME ORDER as the reference.
 4. IMAGE PLACEMENT: If the reference has an image on the left with text on the right, yours must too. If it has a full-bleed hero, yours must too. If it has a centered product image at 50% width, yours must too.
 5. IMAGE SIZING: Match the proportions. If a hero image takes up 60% of the viewport height, yours should too. If product images are small thumbnails in a grid, yours should be too.
-6. LOGO PLACEMENT: If the logo is top-center, yours is top-center. If it's top-left with navigation links, yours is top-left with navigation links. EXACT match.
-7. CTA BUTTONS: Same number of CTAs, in the same positions, with the same approximate sizing.
-8. TEXT-TO-IMAGE RATIO: If a section is 70% image and 30% text, match that ratio.
-9. SPACING & PADDING: Match the whitespace patterns. If sections have tight spacing, use tight spacing. If there's generous padding, use generous padding.
-10. FOOTER STRUCTURE: Clone the footer layout exactly — same elements, same arrangement.
+6. IMAGE SLOT DIMENSIONS: Every image MUST have explicit width and height attributes matching the reference slot dimensions, AND an ImageKit ?tr=w-X,h-Y,fo-auto transform on the URL to force-fit the image. All images in a grid MUST use identical dimensions.
+7. LOGO PLACEMENT: If the logo is top-center, yours is top-center. If it's top-left with navigation links, yours is top-left with navigation links. EXACT match.
+8. CTA BUTTONS: Same number of CTAs, in the same positions, with the same approximate sizing.
+9. TEXT-TO-IMAGE RATIO: If a section is 70% image and 30% text, match that ratio.
+10. SPACING & PADDING: Match the whitespace patterns. If sections have tight spacing, use tight spacing. If there's generous padding, use generous padding.
+11. FOOTER STRUCTURE: Clone the footer layout exactly — same elements, same arrangement.
 
 WHAT CHANGES (and ONLY these things):
 - Colors → use the brand's color palette
@@ -596,33 +613,40 @@ You may make minor adjustments to fit the brief, but the overall skeleton should
 5. CONSISTENCY: Every image must have the same padding treatment — either ALL full-bleed or ALL with equal side padding. Never mix.
 6. CRITICAL NO-STACK RULE: Any side-by-side layout in the chosen reference (product grids, two-column image blocks, split text/image sections) MUST remain side-by-side at all viewport widths. Do NOT add media-query rules that convert these to single-column stacked blocks.
 
-=== IMAGEKIT IMAGE TRANSFORMS (use these to fit images into layout slots) ===
+=== OBJECT-FIT RULE (CRITICAL — like Figma's "Fill" mode) ===
+When placing ANY image into a layout slot, you MUST think like a designer using Figma's "Fill" mode:
+1. DETERMINE the slot's aspect ratio from the reference (square = 1:1, wide banner ≈ 2.4:1, portrait ≈ 2:3, etc.)
+2. CALCULATE pixel dimensions for a 470px-wide email viewport:
+   - Full-width hero: w-470 (height varies by reference)
+   - 2-column grid (with 10px gap): each slot ≈ w-220
+   - 3-column grid: each slot ≈ w-145
+   - Single centered product: w-300 to w-400
+3. APPLY fo-auto smart crop: append ?tr=w-{W},h-{H},fo-auto to the ik.imagekit.io URL
+4. SET matching width and height attributes on the <img> tag AND its container <td>
+
+Common slot patterns to recognize in references:
+- 2×2 square grid → each image: ?tr=w-220,h-220,fo-auto
+- Full-width hero banner → ?tr=w-470,h-300,fo-auto (or taller if reference is tall)
+- 2-column product cards → ?tr=w-220,h-280,fo-auto
+- Single centered product → ?tr=w-300,h-400,fo-auto
+- Wide lifestyle banner → ?tr=w-470,h-200,fo-auto
+
+EVERY image in a grid MUST use IDENTICAL transform dimensions. No exceptions.
+If you place 4 images in a 2×2 grid, ALL 4 must have the exact same ?tr= params.
+
+=== IMAGEKIT TRANSFORM SYNTAX ===
 All brand/product images hosted on ik.imagekit.io support URL-based transforms.
-Append ?tr=<params> to any ik.imagekit.io URL. Available transforms:
-
-SIZING & CROPPING:
-- w-{N}         → resize to width N pixels
-- h-{N}         → resize to height N pixels
-- w-{N},h-{N},c-maintain_ratio   → fit within box, maintain aspect ratio
-- w-{N},h-{N},c-force            → force exact dimensions (may distort)
-- w-{N},h-{N},c-at_max           → scale down to fit, never upscale
-- w-{N},h-{N},fo-auto            → smart crop to exact dimensions (AI selects focal point)
-- ar-{W}-{H},w-{N}               → crop to aspect ratio at given width (e.g. ar-1-1,w-300 for square)
-
-BACKGROUND:
-- e-bgremove    → remove background (transparent PNG)
-
-EXAMPLES:
-- Square thumbnail: ?tr=w-280,h-280,fo-auto
-- Wide banner from portrait photo: ?tr=w-600,h-250,fo-auto
-- Remove background: ?tr=e-bgremove
-- Fit in slot without distortion: ?tr=w-400,h-300,c-at_max
+Append ?tr=<params> to any ik.imagekit.io URL:
+- w-{N},h-{N},fo-auto  → PREFERRED: smart crop to exact dimensions (AI focal point)
+- ar-{W}-{H},w-{N}     → crop to aspect ratio at given width (e.g. ar-1-1,w-300)
+- w-{N},h-{N},c-at_max → scale down to fit without cropping
+- e-bgremove            → remove background (transparent PNG)
 
 RULES:
 - ONLY modify ik.imagekit.io URLs. Leave all other URLs untouched.
-- When the reference layout has specific image slot proportions, use fo-auto cropping to match.
-- Prefer c-at_max or fo-auto over c-force to avoid distortion.
-- For product grids, ensure all product images use the SAME transform dimensions.`;
+- ALWAYS use fo-auto for grid images so the AI picks the best focal point.
+- NEVER use c-force (causes distortion).
+- For product grids, EVERY image MUST use the SAME ?tr= dimensions.`;
 
     if (hostedAssetEntries.length > 0) {
       part3 += `\n\nAVAILABLE BRAND ASSETS (use selectively — pick what serves the campaign):\n${assetCatalog}`;
