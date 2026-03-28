@@ -1211,6 +1211,16 @@ export default function CampaignEditor() {
         return;
       }
 
+      // Image selected for swap
+      if (e.data?.type === 'imageSelectedForSwap') {
+        setImageSwap({ src: e.data.src, category: e.data.category || 'all' });
+        return;
+      }
+      if (e.data?.type === 'imageSwapPanelClose') {
+        setImageSwap(null);
+        return;
+      }
+
       if (e.data?.type !== "textEdited" || !e.data?.html) return;
       if (!campaignId || !campaign) return;
       const newHtml = e.data.html as string;
