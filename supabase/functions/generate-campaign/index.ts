@@ -484,6 +484,14 @@ Study the following campaign screenshot carefully. Your output MUST closely matc
 - Visual hierarchy (what's big, what's small, what's prominent)
 - Logo placement (same position — top-left, centered, etc.)
 - CTA button positions (same locations within sections)
+
+IMAGE SLOT ANALYSIS (DO THIS FIRST):
+Before generating, analyze each image slot in the reference screenshot:
+- Is it square (1:1)? Wide banner (~2.4:1)? Portrait (~2:3)? Landscape (~3:2)?
+- Is it a 2×2 grid? A 2×3 grid? A single hero? Side-by-side pair?
+- Note the APPROXIMATE ASPECT RATIO of every image slot.
+Then when placing brand images, apply the MATCHING ImageKit fo-auto crop to force-fit each image into that exact slot shape. Example: if the reference has 4 square images in a 2×2 grid, every brand image you place there MUST use ?tr=w-220,h-220,fo-auto.
+
 You may make minor adjustments to fit the brief content, but the structural skeleton should be clearly recognizable as the same layout.
 CRITICAL: Do NOT copy the reference's colors, fonts, or brand identity.
 Apply the brand's own color palette, typography, and design tokens throughout.
