@@ -1,82 +1,120 @@
 
 
-## Plan: Intelligent Image Fitting with ImageKit Transforms + Stricter QA
+## Plan: Premium "Perfection Mode" — 3 Variants with Aggressive QA Loop
 
-### Problem
+### What this adds
 
-The generation prompt currently tells the AI "Do NOT modify, crop, or transform the URLs" (line 591). When the AI clones a reference layout that has specific image slot proportions (e.g., square thumbnails, wide hero banners), it jams in brand/product images at their original aspect ratios, causing visual mismatches. The QA Pass 2 is text-only (checks brand values via JSON patch) and doesn't catch visual image-fit issues.
+A new generation mode ("Perfection Mode") that generates 3 distinct campaign options in parallel, each with a unique creative direction, then QA-loops each one aggressively (including reference comparison and rendered screenshot comparison) until they pass. The user picks their favorite.
 
-### Solution
+### Architecture
 
-Two changes: (1) teach the AI to use ImageKit URL transforms during generation, and (2) add image-fit auditing to the QA pass.
+```text
+┌─────────────────────────────┐
+│  User clicks "Perfection"   │
+│  (new toggle in editor)     │
+└─────────┬───────────────────┘
+          │
+          ▼
+┌─────────────────────────────────┐
+│  generate-campaign-multi (new)  │
+│  Creates 3 sub-campaigns        │
+│  Each gets a unique creative    │
+│  direction seed + same brief    │
+│  Calls generate-campaign 3x     │
+│  in parallel (reuses existing)  │
+└─────────┬───────────────────────┘
+          │ Each sub-campaign saved
+          ▼
+┌─────────────────────────────────┐
+│  aggressive-qa (new function)   │
+│  For each variant:              │
+│  1. Render screenshot server-   │
+│     side-style (passed in)      │
+│  2. Send screenshot + reference │
+│     campaign images + HTML to   │
+│     vision AI                   │
+│  3. AI compares against ref,    │
+│     flags ALL issues            │
+│  4. Apply fixes → re-render →   │
+│     re-QA (up to 3 rounds)      │
+│  5. Only "pass" when score ≥ 9  │
+└─────────┬───────────────────────┘
+          │
+          ▼
+┌─────────────────────────────────┐
+│  Frontend: Variant Picker UI    │
+│  Shows 3 side-by-side previews  │
+│  User clicks to select winner   │
+│  Winner becomes the campaign    │
+└─────────────────────────────────┘
+```
 
 ### Changes
 
-**File: `supabase/functions/generate-campaign/index.ts`**
+#### 1. Database: Add variant storage columns
+**Migration**: Add `variant_htmls` (jsonb, nullable) and `generation_mode` (text, default 'standard') to `campaigns` table. `variant_htmls` stores an array of `{ html, qa_score, qa_summary, creative_seed }` objects during multi-generation.
 
-#### 1. Replace "Do NOT modify URLs" with ImageKit transform guide
+#### 2. New edge function: `generate-campaign-multi/index.ts`
+- Accepts same params as `generate-campaign` plus `mode: "perfection"`
+- Creates 3 creative direction seeds:
+  - Variant A: "Editorial & bold — dramatic imagery, magazine-style layout"
+  - Variant B: "Clean & minimal — generous whitespace, restrained palette"  
+  - Variant C: "Dynamic & engaging — mixed media sections, interactive feel"
+- Calls existing `generate-campaign` function 3x in parallel (via internal fetch), each with a different `creativeSeed` appended to the brief/designNotes
+- After all 3 complete, triggers aggressive QA on each
 
-Remove line 591's prohibition. Replace with an ImageKit transform reference that teaches the AI how to append `?tr=` params to ImageKit-hosted URLs:
+#### 3. New edge function: `aggressive-qa/index.ts`
+The key improvement: this function receives both the **reference campaign images** AND the **rendered output screenshots**, and does a true side-by-side comparison.
 
-```text
-=== IMAGEKIT IMAGE TRANSFORMS (use these to fit images into layout slots) ===
-All brand/product images hosted on ik.imagekit.io support URL-based transforms.
-Append ?tr=<params> to any ik.imagekit.io URL. Available transforms:
+- Inputs: `{ html, referenceImageUrls, renderedSlices, brandValues, roundNumber }`
+- Uses Gemini 2.5 Pro (vision) for maximum quality
+- System prompt explicitly asks: "Compare the rendered output against the reference. Flag ANY deviation the user would notice."
+- Scoring: must reach score ≥ 9/10 to pass
+- If fails: applies fixes, returns `{ fixedHtml, passed: false, score, issues }` — caller re-renders and re-submits (up to 3 rounds)
+- Checks: layout match, image proportions, spacing, color accuracy, text readability, button styling, overall polish
 
-SIZING & CROPPING:
-- w-{N}         → resize to width N pixels
-- h-{N}         → resize to height N pixels  
-- w-{N},h-{N},c-maintain_ratio   → fit within box, maintain aspect ratio
-- w-{N},h-{N},c-force            → force exact dimensions (may distort)
-- w-{N},h-{N},c-at_max           → scale down to fit, never upscale
-- w-{N},h-{N},fo or fo-auto      → smart crop to exact dimensions (AI selects focal point)
-- ar-{W}-{H},w-{N}               → crop to aspect ratio at given width (e.g. ar-1-1,w-300 for square)
+#### 4. Frontend: Perfection Mode toggle + Variant Picker
 
-BACKGROUND:
-- e-bgremove    → remove background (transparent PNG)
+**`src/pages/CampaignEditor.tsx`**:
+- Add `generationMode` state: `"standard" | "perfection"`
+- Toggle button in the generation form area (next to brief)
+- When `perfection` mode:
+  - Calls `generate-campaign-multi` instead of `generate-campaign`
+  - Polls for `variant_htmls` on the campaign record
+  - When all 3 variants are ready, shows a **Variant Picker overlay**
 
-EXAMPLES:
-- Square thumbnail: ?tr=w-280,h-280,fo-auto
-- Wide banner from portrait photo: ?tr=w-600,h-250,fo-auto  
-- Remove background: ?tr=e-bgremove
-- Fit in slot without distortion: ?tr=w-400,h-300,c-at_max
+**New component: `src/components/campaign/VariantPicker.tsx`**:
+- Full-width overlay showing 3 scaled iframe previews side-by-side
+- Each shows QA score badge and creative direction label
+- Click to select → sets `campaign.html` to chosen variant, clears `variant_htmls`
+- "Regenerate" button per variant if user wants a fresh attempt
 
-RULES:
-- ONLY modify ik.imagekit.io URLs. Leave all other URLs untouched.
-- When the reference layout has specific image slot proportions, use fo-auto cropping to match.
-- Prefer c-at_max or fo-auto over c-force to avoid distortion.
-- For product grids, ensure all product images use the SAME transform dimensions.
-```
+#### 5. Visual QA improvements (existing `visual-qa/index.ts`)
+- Add `referenceImageUrls` input parameter
+- When provided, include reference images in the vision prompt: "Here is the reference campaign the user chose. Compare the output against it."
+- Increase quality threshold: issues with severity "critical" auto-fail regardless of score
+- Use `google/gemini-2.5-pro` instead of flash for perfection mode QA
 
-#### 2. Add image-fit checks to QA Pass 2 prompt
+#### 6. Client-side rendering for QA
+- Move screenshot capture to happen per-variant on the client
+- After each variant HTML arrives, render in hidden iframe, capture slices, send to `aggressive-qa`
+- Loop: if QA returns fixes, update HTML, re-capture, re-submit (max 3 rounds)
+- Show per-variant progress: "Generating... → QA Round 1... → QA Round 2... → Ready ✓"
 
-Extend `QA_SYSTEM_PROMPT` to include image-fit auditing:
+### Files summary
 
-```text
-9. IMAGE FIT: Check that every <img> tag's dimensions are appropriate for its container. 
-   If an image is portrait but placed in a landscape slot (or vice versa), add ImageKit 
-   transforms (?tr=w-X,h-Y,fo-auto) to the src URL to make it fit. Only modify 
-   ik.imagekit.io URLs. Flag as "major" severity.
-10. IMAGE CONSISTENCY IN GRIDS: All images in a product grid or multi-image section must 
-    use the same dimensions. If they don't, normalize them with matching transforms.
-```
+| File | What |
+|------|------|
+| Migration | Add `variant_htmls` jsonb and `generation_mode` text to campaigns |
+| `supabase/functions/generate-campaign-multi/index.ts` | New: orchestrates 3 parallel generations with creative seeds |
+| `supabase/functions/aggressive-qa/index.ts` | New: reference-compared vision QA with fix loop |
+| `supabase/functions/visual-qa/index.ts` | Add reference image comparison, use Pro model option |
+| `src/components/campaign/VariantPicker.tsx` | New: 3-up variant preview picker UI |
+| `src/pages/CampaignEditor.tsx` | Add perfection mode toggle, variant polling, QA loop orchestration |
+| `src/lib/visualQaCapture.ts` | No changes needed (already captures slices) |
 
-#### 3. Add image-fit check to Visual QA prompt
-
-Extend the `visual-qa` function's `SYSTEM_PROMPT` to explicitly check for image proportion mismatches:
-
-```text
-10. IMAGE FIT: Are images properly proportioned for their containers? Look for: 
-    portrait images squeezed into landscape slots, stretched/squished photos, 
-    images that clearly don't match the aspect ratio of their container. 
-    These are CRITICAL issues. In the fix, append ImageKit transforms 
-    (?tr=w-X,h-Y,fo-auto) to ik.imagekit.io URLs.
-```
-
-### Files modified
-
-| File | What changes |
-|------|-------------|
-| `supabase/functions/generate-campaign/index.ts` | Replace URL-modification prohibition with ImageKit transform guide; add image-fit items to QA Pass 2 prompt |
-| `supabase/functions/visual-qa/index.ts` | Add image-fit checking to visual QA system prompt |
+### Not included (future)
+- Server-side rendering (Puppeteer) — sticking with client-side html2canvas for now
+- More than 3 variants
+- A/B testing integration
 
