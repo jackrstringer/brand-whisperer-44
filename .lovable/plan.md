@@ -1,73 +1,82 @@
 
 
-## Plan: Element Selection with Chat Context & Visual Controls
+## Plan: Intelligent Image Fitting with ImageKit Transforms + Stricter QA
 
-### What this adds
-1. **Click-to-select any element** in the preview — shows a persistent selection outline (not just text elements). Clicking a different element changes selection; clicking empty space deselects.
-2. **Selection context feeds into chat** — when an element is selected and the user types in chat, the message automatically includes the element's context (tag, text, outerHTML) so the AI knows what to edit.
-3. **Background color control** — the floating toolbar gains a background-color swatch (in addition to the existing text color swatch), using the same panel UI.
-4. **Frame alignment controls** — padding and margin quick-adjust buttons on the toolbar for the selected element.
-5. **Drag-to-select region** — hold Shift + click-drag to draw a rectangle; all elements within get grouped as a "region" selection that feeds into chat context.
+### Problem
 
-### Technical approach
+The generation prompt currently tells the AI "Do NOT modify, crop, or transform the URLs" (line 591). When the AI clones a reference layout that has specific image slot proportions (e.g., square thumbnails, wide hero banners), it jams in brand/product images at their original aspect ratios, causing visual mismatches. The QA Pass 2 is text-only (checks brand values via JSON patch) and doesn't catch visual image-fit issues.
 
-**File: `src/pages/CampaignEditor.tsx`**
+### Solution
 
-#### 1. Element selection state (parent React side)
-- Add `selectedElementContext` state: `{ tagName, text, outerHTML, boundingRect } | null`
-- Listen for new postMessage type `elementSelected` from iframe
-- Listen for `elementDeselected` to clear
-- When user sends a chat message and `selectedElementContext` is set, prepend context to the prompt sent to the backend: `"[Targeting <H2> element: \"Shop Now\"]\n\n" + userMsg`
-- Show a small indicator chip above the chat input: `"Targeting: <H2> Shop Now..."` with an X to clear
+Two changes: (1) teach the AI to use ImageKit URL transforms during generation, and (2) add image-fit auditing to the QA pass.
 
-#### 2. Iframe script additions (inside the injected `<script>`)
+### Changes
 
-**Click-to-select (single element):**
-- On `click` of any element (not just contenteditable), if not already editing text, set a `selectedEl` variable
-- Apply a visual outline: `2px solid rgba(200,241,53,0.6)` with `outline-offset: 2px`
-- Post `elementSelected` message to parent with `{ tagName, text, outerHTML, computedStyles }`
-- Click on empty space or `Escape` → clear selection, post `elementDeselected`
-- Selected element gets the floating toolbar (extended with bg-color + alignment)
+**File: `supabase/functions/generate-campaign/index.ts`**
 
-**Floating toolbar extensions:**
-- Add a second swatch for background-color (reuses `showColorPanel` with a mode param)
-- Add padding +/- buttons (adjust `padding` in 4px increments)
-- These controls work on any selected element, not just contenteditable text
+#### 1. Replace "Do NOT modify URLs" with ImageKit transform guide
 
-**Drag-to-select region (Shift+drag):**
-- On `mousedown` with Shift held, start tracking a selection rectangle
-- Draw a semi-transparent overlay rectangle as the user drags
-- On `mouseup`, find all elements whose bounding rect intersects the selection
-- Post `regionSelected` message with array of `{ tagName, text, outerHTML }` for all captured elements
-- Parent stores this as `selectedElementContext` with a combined description
+Remove line 591's prohibition. Replace with an ImageKit transform reference that teaches the AI how to append `?tr=` params to ImageKit-hosted URLs:
 
-#### 3. CSS additions (in the injected styles)
-```css
-.el-selected {
-  outline: 2px solid rgba(200,241,53,0.6);
-  outline-offset: 2px;
-}
-.region-select-overlay {
-  position: fixed;
-  border: 1.5px dashed rgba(200,241,53,0.5);
-  background: rgba(200,241,53,0.05);
-  pointer-events: none;
-  z-index: 99997;
-}
+```text
+=== IMAGEKIT IMAGE TRANSFORMS (use these to fit images into layout slots) ===
+All brand/product images hosted on ik.imagekit.io support URL-based transforms.
+Append ?tr=<params> to any ik.imagekit.io URL. Available transforms:
+
+SIZING & CROPPING:
+- w-{N}         → resize to width N pixels
+- h-{N}         → resize to height N pixels  
+- w-{N},h-{N},c-maintain_ratio   → fit within box, maintain aspect ratio
+- w-{N},h-{N},c-force            → force exact dimensions (may distort)
+- w-{N},h-{N},c-at_max           → scale down to fit, never upscale
+- w-{N},h-{N},fo or fo-auto      → smart crop to exact dimensions (AI selects focal point)
+- ar-{W}-{H},w-{N}               → crop to aspect ratio at given width (e.g. ar-1-1,w-300 for square)
+
+BACKGROUND:
+- e-bgremove    → remove background (transparent PNG)
+
+EXAMPLES:
+- Square thumbnail: ?tr=w-280,h-280,fo-auto
+- Wide banner from portrait photo: ?tr=w-600,h-250,fo-auto  
+- Remove background: ?tr=e-bgremove
+- Fit in slot without distortion: ?tr=w-400,h-300,c-at_max
+
+RULES:
+- ONLY modify ik.imagekit.io URLs. Leave all other URLs untouched.
+- When the reference layout has specific image slot proportions, use fo-auto cropping to match.
+- Prefer c-at_max or fo-auto over c-force to avoid distortion.
+- For product grids, ensure all product images use the SAME transform dimensions.
 ```
 
-#### 4. Chat input context chip
-- Render a small chip above the textarea when `selectedElementContext` is set
-- Shows tag + truncated text: `"H2: Shop the Collection..."` with X to dismiss
-- Styled with the lime/indigo theme to match the Ideate pill
+#### 2. Add image-fit checks to QA Pass 2 prompt
 
-### Changes summary
+Extend `QA_SYSTEM_PROMPT` to include image-fit auditing:
+
+```text
+9. IMAGE FIT: Check that every <img> tag's dimensions are appropriate for its container. 
+   If an image is portrait but placed in a landscape slot (or vice versa), add ImageKit 
+   transforms (?tr=w-X,h-Y,fo-auto) to the src URL to make it fit. Only modify 
+   ik.imagekit.io URLs. Flag as "major" severity.
+10. IMAGE CONSISTENCY IN GRIDS: All images in a product grid or multi-image section must 
+    use the same dimensions. If they don't, normalize them with matching transforms.
+```
+
+#### 3. Add image-fit check to Visual QA prompt
+
+Extend the `visual-qa` function's `SYSTEM_PROMPT` to explicitly check for image proportion mismatches:
+
+```text
+10. IMAGE FIT: Are images properly proportioned for their containers? Look for: 
+    portrait images squeezed into landscape slots, stretched/squished photos, 
+    images that clearly don't match the aspect ratio of their container. 
+    These are CRITICAL issues. In the fix, append ImageKit transforms 
+    (?tr=w-X,h-Y,fo-auto) to ik.imagekit.io URLs.
+```
+
+### Files modified
 
 | File | What changes |
 |------|-------------|
-| `src/pages/CampaignEditor.tsx` | Add `selectedElementContext` state, message listeners for `elementSelected`/`elementDeselected`/`regionSelected`, context injection in `sendMessage`, context chip UI above chat input, extend injected iframe script with click-to-select, bg-color swatch, padding controls, and shift-drag region select |
-
-### Not included (future)
-- Margin controls (just padding for now to keep scope tight)
-- Multi-element toolbar actions beyond chat context
+| `supabase/functions/generate-campaign/index.ts` | Replace URL-modification prohibition with ImageKit transform guide; add image-fit items to QA Pass 2 prompt |
+| `supabase/functions/visual-qa/index.ts` | Add image-fit checking to visual QA system prompt |
 
