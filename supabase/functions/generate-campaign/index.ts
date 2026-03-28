@@ -182,6 +182,17 @@ FOOTER (required on every email):
 
 Return only complete HTML. No commentary. No markdown fences.`;
 
+const REFERENCE_MODE_SYSTEM = `You are an expert HTML email developer.
+Technical requirements — apply these always:
+- HTML tables for all layout, all styles inline
+- Wrapper: width="100%" style="max-width:600px; width:100%; margin:0 auto;"
+- Gmail dark mode: add background-image:linear-gradient(#ffffff,#ffffff) alongside background-color:#ffffff on every white <td> and the wrapper
+- Add in <style>: u+.body .gmail-blend-screen{background:#000;mix-blend-mode:screen;}
+                  u+.body .gmail-blend-difference{background:#000;mix-blend-mode:difference;}
+- No emoji anywhere — use inline SVG for all icons
+- Footer required: brand name, unsubscribe link (#unsubscribe), address
+- Return only complete HTML, no commentary, no markdown fences.`;
+
 const QA_SYSTEM_PROMPT = `You are an email QA auditor. You will receive a generated HTML email and brand rules.
 Audit the HTML against the rules and return ONLY a JSON response in this exact format:
 
