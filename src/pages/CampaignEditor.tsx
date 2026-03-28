@@ -1976,14 +1976,14 @@ export default function CampaignEditor() {
   }
 
   function makeBtn(html, title){
-    var btn = document.createElement('button');
+    var btn = ftbDoc.createElement('button');
     btn.className = 'ftb-btn';
     btn.innerHTML = html;
     btn.title = title;
     return btn;
   }
   function makeSep(){
-    var sep = document.createElement('div');
+    var sep = ftbDoc.createElement('div');
     sep.className = 'ftb-sep';
     return sep;
   }
