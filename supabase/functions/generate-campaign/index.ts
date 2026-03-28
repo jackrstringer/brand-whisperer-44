@@ -643,7 +643,7 @@ RULES:
       }
       part3 += `\n\nThese images MUST appear in the email. Use them as follows:
 - product_isolated or product_lifestyle: use as hero or mid-email product feature
-- Do not modify image URLs in any way
+- Apply ImageKit transforms (?tr=w-X,h-Y,fo-auto) to fit images into layout slots. Only modify ik.imagekit.io URLs.
 - Do not use any other product image URLs`;
     }
 
