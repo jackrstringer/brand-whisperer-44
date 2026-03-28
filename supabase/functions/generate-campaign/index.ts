@@ -182,6 +182,17 @@ FOOTER (required on every email):
 
 Return only complete HTML. No commentary. No markdown fences.`;
 
+const REFERENCE_MODE_SYSTEM = `You are an expert HTML email developer.
+Technical requirements — apply these always:
+- HTML tables for all layout, all styles inline
+- Wrapper: width="100%" style="max-width:600px; width:100%; margin:0 auto;"
+- Gmail dark mode: add background-image:linear-gradient(#ffffff,#ffffff) alongside background-color:#ffffff on every white <td> and the wrapper
+- Add in <style>: u+.body .gmail-blend-screen{background:#000;mix-blend-mode:screen;}
+                  u+.body .gmail-blend-difference{background:#000;mix-blend-mode:difference;}
+- No emoji anywhere — use inline SVG for all icons
+- Footer required: brand name, unsubscribe link (#unsubscribe), address
+- Return only complete HTML, no commentary, no markdown fences.`;
+
 const QA_SYSTEM_PROMPT = `You are an email QA auditor. You will receive a generated HTML email and brand rules.
 Audit the HTML against the rules and return ONLY a JSON response in this exact format:
 
@@ -432,40 +443,9 @@ You MUST feature these products prominently in the campaign. Use at least one im
     // Build the user content array
     const userContent: any[] = [];
 
-    if (imageBlocks.length > 0) {
-      userContent.push({
-        type: "text",
-        text: `Here are ${imageBlocks.length} past email campaigns from this brand. Study them carefully for STYLE and DESIGN PATTERNS ONLY. These are screenshots — NEVER embed them as <img> tags in your output. Your output must feel like it belongs in this exact same family.`,
-      });
-      userContent.push(...imageBlocks);
-    }
-
-    // Inject explicit brand values
-    let brandValuesText = `\nFrom analyzing these campaigns, here are the specific rules to follow precisely:\n${profile.system_prompt}`;
-    brandValuesText += `\n\n=== BRAND DESIGN VALUES (use these EXACTLY) ===`;
-    brandValuesText += `\nCard/container border-radius: ${brandValues.card_radius}px — apply to ALL cards, contrast sections, and containers`;
-    brandValuesText += `\nButton border-radius: ${brandValues.button_radius}px`;
-    if (brandValues.accent_color) brandValuesText += `\nAccent/primary color: ${brandValues.accent_color}`;
-    if (brandValues.text_color) brandValuesText += `\nBody text color: ${brandValues.text_color} — NEVER use generic gray (#999, #666, etc.)`;
-    if (brandValues.background_color) brandValuesText += `\nBackground color: ${brandValues.background_color}`;
-
-    if (brandInstructions) {
-      brandValuesText += `\n\n=== BRAND-SPECIFIC INSTRUCTIONS ===\n${brandInstructions}`;
-    }
-
-    if (globalRules) {
-      brandValuesText += `\n\n=== GLOBAL GENERATION RULES ===\n${globalRules}`;
-    }
-
-    if (designNotes) {
-      brandValuesText += `\n\n=== USER DESIGN NOTES FOR THIS CAMPAIGN ===\n${designNotes}`;
-    }
-
-    // Build reference campaign block if provided
-    let referenceBlock = "";
-    const referenceImageBlocks: any[] = [];
-    // Determine reference mode — supports "mode" field or legacy numeric "strength"
+    // Determine reference mode early
     let referenceMode: "reference" | "dupe" | null = null;
+    const referenceImageBlocks: any[] = [];
     if (reference && reference.image_urls && reference.image_urls.length > 0) {
       if (reference.mode === "reference" || reference.mode === "dupe") {
         referenceMode = reference.mode;
@@ -473,66 +453,6 @@ You MUST feature these products prominently in the campaign. Use at least one im
         const s = reference.strength || 5;
         referenceMode = s >= 9 ? "dupe" : "reference";
       }
-
-      let referencePrompt = "";
-      if (referenceMode === "reference") {
-        referencePrompt = `REFERENCE MODE — STRONG STRUCTURAL MATCH:
-Study the following campaign screenshot carefully. Your output MUST closely match its:
-- Section sequence (same order of sections top to bottom)
-- Image placements (where images appear relative to text)
-- Sizing proportions (how large images are vs text blocks)
-- Spacing patterns (padding, gaps between sections)
-- Visual hierarchy (what's big, what's small, what's prominent)
-- Logo placement (same position — top-left, centered, etc.)
-- CTA button positions (same locations within sections)
-
-IMAGE SLOT ANALYSIS (DO THIS FIRST):
-Before generating, analyze each image slot in the reference screenshot:
-- Is it square (1:1)? Wide banner (~2.4:1)? Portrait (~2:3)? Landscape (~3:2)?
-- Is it a 2×2 grid? A 2×3 grid? A single hero? Side-by-side pair?
-- Note the APPROXIMATE ASPECT RATIO of every image slot.
-Then when placing brand images, apply the MATCHING ImageKit fo-auto crop to force-fit each image into that exact slot shape. Example: if the reference has 4 square images in a 2×2 grid, every brand image you place there MUST use ?tr=w-220,h-220,fo-auto.
-
-You may make minor adjustments to fit the brief content, but the structural skeleton should be clearly recognizable as the same layout.
-CRITICAL: Do NOT copy the reference's colors, fonts, or brand identity.
-Apply the brand's own color palette, typography, and design tokens throughout.
-Structure comes from the reference. Skin comes from the brand.`;
-      } else {
-        referencePrompt = `DUPE — PIXEL-PERFECT LAYOUT CLONE (THIS IS THE MOST IMPORTANT INSTRUCTION):
-You are looking at a screenshot of an email campaign. Your job is to CLONE ITS EXACT LAYOUT.
-
-IMAGE SLOT ANALYSIS (DO THIS FIRST — BEFORE ANYTHING ELSE):
-Examine every image in the reference screenshot and note:
-- How many image slots are there? (e.g., 1 hero + 4 grid images = 5 slots)
-- What is each slot's aspect ratio? (square 1:1, wide banner ~2.4:1, portrait ~2:3, etc.)
-- What grid pattern are they in? (2×2, 2×3, single column, side-by-side pair, etc.)
-- What are the approximate pixel dimensions at 470px viewport? (e.g., 2-col grid = ~220px per image)
-For EVERY image you place, you MUST apply ImageKit fo-auto cropping that matches the reference slot's aspect ratio exactly.
-
-MANDATORY CLONING RULES — violating ANY of these is a failure:
-1. COUNT every distinct section in the reference screenshot. Your output MUST have the EXACT SAME NUMBER of sections.
-2. Each section MUST be the SAME TYPE as the reference (hero image, text block, product grid, testimonial, divider, footer, etc.)
-3. Each section MUST be in the EXACT SAME ORDER as the reference.
-4. IMAGE PLACEMENT: If the reference has an image on the left with text on the right, yours must too. If it has a full-bleed hero, yours must too. If it has a centered product image at 50% width, yours must too.
-5. IMAGE SIZING: Match the proportions. If a hero image takes up 60% of the viewport height, yours should too. If product images are small thumbnails in a grid, yours should be too.
-6. IMAGE SLOT DIMENSIONS: Every image MUST have explicit width and height attributes matching the reference slot dimensions, AND an ImageKit ?tr=w-X,h-Y,fo-auto transform on the URL to force-fit the image. All images in a grid MUST use identical dimensions.
-7. LOGO PLACEMENT: If the logo is top-center, yours is top-center. If it's top-left with navigation links, yours is top-left with navigation links. EXACT match.
-8. CTA BUTTONS: Same number of CTAs, in the same positions, with the same approximate sizing.
-9. TEXT-TO-IMAGE RATIO: If a section is 70% image and 30% text, match that ratio.
-10. SPACING & PADDING: Match the whitespace patterns. If sections have tight spacing, use tight spacing. If there's generous padding, use generous padding.
-11. FOOTER STRUCTURE: Clone the footer layout exactly — same elements, same arrangement.
-
-WHAT CHANGES (and ONLY these things):
-- Colors → use the brand's color palette
-- Fonts → use the brand's typography
-- Images → use the brand's available image assets (but in the SAME positions and sizes as the reference)
-- Copy text → write new copy that matches the brief (but SAME length and structure as the reference copy)
-
-Think of it as: you are TRACING the reference layout, then painting over it with the brand's colors and filling in the brand's content. The wireframe is IDENTICAL.`;
-      }
-
-      referenceBlock = `\n\n=== ${referencePrompt} ===\n\nThe following image(s) show the EXACT campaign you must ${referenceMode === "dupe" ? "clone" : "reference"}. Study every detail — section count, image positions, text placement, button locations, logo position, spacing:`;
-
       // Fetch reference images
       for (const url of reference.image_urls.slice(0, 10)) {
         try {
@@ -548,65 +468,122 @@ Think of it as: you are TRACING the reference layout, then painting over it with
       }
     }
 
-    userContent.push({ type: "text", text: brandValuesText });
+    if (referenceMode) {
+      // ========== REFERENCE / DUPE MODE — STRIPPED-DOWN PROMPT ==========
+      // Part 1: Brand reference screenshots (design language only)
+      if (imageBlocks.length > 0) {
+        userContent.push({
+          type: "text",
+          text: "These are past campaigns from this brand — study them for design language, colors, fonts, and spacing only.",
+        });
+        userContent.push(...imageBlocks);
+      }
 
-    // Goal-specific creative direction for structural variety
-    const goalCreativeDirection: Record<string, string> = {
-      welcome: `CREATIVE DIRECTION: This is a Welcome email — the brand's first impression. Lead with warmth and personality. Consider: a bold hero moment with the brand's most striking visual, a personal tone, and a clear single CTA. Structure ideas: full-bleed hero image → warm welcome copy → 2-3 brand value props as styled cards → single CTA. Or: logo → headline → lifestyle image → copy → CTA. Keep it concise — don't overwhelm new subscribers.`,
-      social_proof: `CREATIVE DIRECTION: This is a Social Proof campaign — build trust and credibility. Lead with real results or testimonials. Structure ideas: headline stat or quote as the hero → supporting testimonials in a grid or stacked layout → product image → CTA. Or: customer quote pullout → before/after or results metrics → lifestyle imagery → CTA. Use contrast cards for testimonial callouts. Make the social proof feel authentic, not corporate.`,
-      highlight: `CREATIVE DIRECTION: This is a General Highlight — showcase the best of the brand. Be editorially creative. Structure ideas: magazine-style editorial layout with alternating image/text sections → feature callout cards → CTA. Or: hero lifestyle image → 3 product spotlights in a grid → brand story section → CTA. Think editorial, not catalog.`,
-      promotional: `CREATIVE DIRECTION: This is a Promotional email — drive urgency and action. Lead with the offer. Structure ideas: bold headline with the offer front-and-center → hero product image → supporting details → urgency element → CTA. Or: animated-feel countdown section → product grid → offer details → CTA. Use the brand's accent color boldly for the offer elements.`,
-      educational: `CREATIVE DIRECTION: This is an Educational email — teach and provide value. Structure ideas: compelling question as headline → step-by-step content with numbered sections → supporting imagery → resource CTA. Or: "Did you know?" hook → 3 insight cards with icons → deeper content section → CTA. Make it scannable with clear visual hierarchy.`,
-      re_engagement: `CREATIVE DIRECTION: This is a Re-engagement email — win back attention. Be bold and personal. Structure ideas: "We miss you" or provocative headline → single compelling image → what's new/what they're missing → incentive if applicable → CTA. Keep it SHORT — 2-3 sections max. Less is more for re-engagement.`,
-      seasonal: `CREATIVE DIRECTION: This is a Seasonal campaign — tap into the moment. Be festive or timely without being generic. Structure ideas: seasonal hero image → themed headline → curated product picks → CTA. Or: lifestyle imagery that captures the season → story-driven copy → product spotlight → CTA. Make it feel current and relevant.`,
-      product_launch: `CREATIVE DIRECTION: This is a Product Launch — build excitement and showcase the new. Structure ideas: dramatic reveal hero → product detail shots with feature callouts → lifestyle context image → launch CTA. Or: teaser headline → full-bleed product hero → 3 key features as cards → social proof snippet → CTA. Make it feel like an event.`,
-      abandoned_cart: `CREATIVE DIRECTION: This is an Abandoned Cart email — be helpful, not pushy. Structure ideas: "Still thinking it over?" headline → product image reminder → 1-2 supporting reasons (reviews, benefits) → CTA. Keep it minimal — 2 sections max. The product image does the heavy lifting.`,
-      win_back: `CREATIVE DIRECTION: This is a Win-back email — reconnect with lapsed customers. Structure ideas: "It's been a while" headline → what's new since they left → single compelling offer or reason to return → CTA. Or: nostalgia angle → new products/features showcase → incentive → CTA. Be concise and genuine.`,
-      newsletter: `CREATIVE DIRECTION: This is a Newsletter — curate and inform. Structure ideas: branded header → 3-4 content blocks with varied layouts (image-left/image-right alternating, or card grid) → each with its own mini-CTA → footer. Make each section visually distinct but cohesive. Think magazine layout.`,
-      announcement: `CREATIVE DIRECTION: This is an Announcement — deliver news with impact. Structure ideas: bold headline announcement → supporting detail → single hero image → CTA. Or: "Big News" header → announcement details → what it means for the reader → CTA. Keep it focused — one message, one action.`,
-    };
-
-    const creativeDir = goalCreativeDirection[goal] || goalCreativeDirection[goal?.replace(/[-\s]/g, '_')] || 
-      `CREATIVE DIRECTION: Be creative with the layout structure. Don't default to a generic template. Consider the campaign goal "${goal}" and design a unique layout that serves that purpose. Vary section types, image placements, and content flow. Think like an editorial designer.`;
-
-    // Inject reference block before the campaign brief
-    if (referenceBlock) {
-      userContent.push({ type: "text", text: referenceBlock });
+      // Part 2: Reference campaign images (layout to clone)
       if (referenceImageBlocks.length > 0) {
+        userContent.push({
+          type: "text",
+          text: "This is the reference layout to replicate. Clone its exact structure, section count, column layout, image sizing, and proportions. Apply the brand's colors, fonts, and copy on top.",
+        });
         userContent.push(...referenceImageBlocks);
       }
-    }
 
-    let part3 = `Generate a ${goal} email campaign.\nBrief: ${brief}`;
-    if (copy) part3 += `\nThe following copy must be used verbatim: ${copy}`;
+      // Part 3: Brand rules (system_prompt from brand_profiles)
+      let brandRulesText = `Brand design rules:\n${profile.system_prompt}`;
+      if (brandInstructions) brandRulesText += `\n\nBrand-specific instructions:\n${brandInstructions}`;
+      if (globalRules) brandRulesText += `\n\nGlobal rules:\n${globalRules}`;
+      if (designNotes) brandRulesText += `\n\nDesign notes for this campaign:\n${designNotes}`;
+      userContent.push({ type: "text", text: brandRulesText });
 
-    part3 += `\n\n=== ${creativeDir}`;
+      // Part 4: Available assets + product requirements
+      let assetsText = "";
+      if (hostedAssetEntries.length > 0) {
+        assetsText += `Available image assets — use these URLs only, do not invent URLs:\n${assetCatalog}`;
+      } else {
+        assetsText += "No brand asset images available. Use solid color blocks, gradients, or text-only sections instead. Do NOT include <img> tags.";
+      }
+      if (productRequirements) assetsText += productRequirements;
+      if (Array.isArray(shopifyProducts) && shopifyProducts.length > 0) {
+        assetsText += `\n\n=== PRODUCT IMAGES TO FEATURE ===`;
+        for (const sp of shopifyProducts) {
+          assetsText += `\n- ${sp.title}: ${sp.image_url}`;
+          if (sp.description) assetsText += `\n  Description: ${sp.description}`;
+          if (sp.image_type) assetsText += `\n  Image type: ${sp.image_type}`;
+          if (sp.variant) assetsText += `\n  Variant: ${sp.variant}`;
+        }
+        assetsText += `\nThese images MUST appear in the email. Apply ImageKit transforms (?tr=w-X,h-Y,fo-auto) to fit images into layout slots.`;
+      }
+      userContent.push({ type: "text", text: assetsText });
 
-    // Structural variety rules — suppressed when ANY reference is selected (both modes follow structure)
-    if (!referenceMode) {
+      // Part 5: Brief
+      let briefText = `Generate a ${goal} email. Brief: ${brief}`;
+      if (copy) briefText += `\nThe following copy must be used verbatim: ${copy}`;
+      briefText += `\nReturn only complete HTML.`;
+      userContent.push({ type: "text", text: briefText });
+
+    } else {
+      // ========== STANDARD MODE — FULL PROMPT (unchanged) ==========
+      if (imageBlocks.length > 0) {
+        userContent.push({
+          type: "text",
+          text: `Here are ${imageBlocks.length} past email campaigns from this brand. Study them carefully for STYLE and DESIGN PATTERNS ONLY. These are screenshots — NEVER embed them as <img> tags in your output. Your output must feel like it belongs in this exact same family.`,
+        });
+        userContent.push(...imageBlocks);
+      }
+
+      // Inject explicit brand values
+      let brandValuesText = `\nFrom analyzing these campaigns, here are the specific rules to follow precisely:\n${profile.system_prompt}`;
+      brandValuesText += `\n\n=== BRAND DESIGN VALUES (use these EXACTLY) ===`;
+      brandValuesText += `\nCard/container border-radius: ${brandValues.card_radius}px — apply to ALL cards, contrast sections, and containers`;
+      brandValuesText += `\nButton border-radius: ${brandValues.button_radius}px`;
+      if (brandValues.accent_color) brandValuesText += `\nAccent/primary color: ${brandValues.accent_color}`;
+      if (brandValues.text_color) brandValuesText += `\nBody text color: ${brandValues.text_color} — NEVER use generic gray (#999, #666, etc.)`;
+      if (brandValues.background_color) brandValuesText += `\nBackground color: ${brandValues.background_color}`;
+
+      if (brandInstructions) {
+        brandValuesText += `\n\n=== BRAND-SPECIFIC INSTRUCTIONS ===\n${brandInstructions}`;
+      }
+      if (globalRules) {
+        brandValuesText += `\n\n=== GLOBAL GENERATION RULES ===\n${globalRules}`;
+      }
+      if (designNotes) {
+        brandValuesText += `\n\n=== USER DESIGN NOTES FOR THIS CAMPAIGN ===\n${designNotes}`;
+      }
+
+      userContent.push({ type: "text", text: brandValuesText });
+
+      // Goal-specific creative direction for structural variety
+      const goalCreativeDirection: Record<string, string> = {
+        welcome: `CREATIVE DIRECTION: This is a Welcome email — the brand's first impression. Lead with warmth and personality. Consider: a bold hero moment with the brand's most striking visual, a personal tone, and a clear single CTA. Structure ideas: full-bleed hero image → warm welcome copy → 2-3 brand value props as styled cards → single CTA. Or: logo → headline → lifestyle image → copy → CTA. Keep it concise — don't overwhelm new subscribers.`,
+        social_proof: `CREATIVE DIRECTION: This is a Social Proof campaign — build trust and credibility. Lead with real results or testimonials. Structure ideas: headline stat or quote as the hero → supporting testimonials in a grid or stacked layout → product image → CTA. Or: customer quote pullout → before/after or results metrics → lifestyle imagery → CTA. Use contrast cards for testimonial callouts. Make the social proof feel authentic, not corporate.`,
+        highlight: `CREATIVE DIRECTION: This is a General Highlight — showcase the best of the brand. Be editorially creative. Structure ideas: magazine-style editorial layout with alternating image/text sections → feature callout cards → CTA. Or: hero lifestyle image → 3 product spotlights in a grid → brand story section → CTA. Think editorial, not catalog.`,
+        promotional: `CREATIVE DIRECTION: This is a Promotional email — drive urgency and action. Lead with the offer. Structure ideas: bold headline with the offer front-and-center → hero product image → supporting details → urgency element → CTA. Or: animated-feel countdown section → product grid → offer details → CTA. Use the brand's accent color boldly for the offer elements.`,
+        educational: `CREATIVE DIRECTION: This is an Educational email — teach and provide value. Structure ideas: compelling question as headline → step-by-step content with numbered sections → supporting imagery → resource CTA. Or: "Did you know?" hook → 3 insight cards with icons → deeper content section → CTA. Make it scannable with clear visual hierarchy.`,
+        re_engagement: `CREATIVE DIRECTION: This is a Re-engagement email — win back attention. Be bold and personal. Structure ideas: "We miss you" or provocative headline → single compelling image → what's new/what they're missing → incentive if applicable → CTA. Keep it SHORT — 2-3 sections max. Less is more for re-engagement.`,
+        seasonal: `CREATIVE DIRECTION: This is a Seasonal campaign — tap into the moment. Be festive or timely without being generic. Structure ideas: seasonal hero image → themed headline → curated product picks → CTA. Or: lifestyle imagery that captures the season → story-driven copy → product spotlight → CTA. Make it feel current and relevant.`,
+        product_launch: `CREATIVE DIRECTION: This is a Product Launch — build excitement and showcase the new. Structure ideas: dramatic reveal hero → product detail shots with feature callouts → lifestyle context image → launch CTA. Or: teaser headline → full-bleed product hero → 3 key features as cards → social proof snippet → CTA. Make it feel like an event.`,
+        abandoned_cart: `CREATIVE DIRECTION: This is an Abandoned Cart email — be helpful, not pushy. Structure ideas: "Still thinking it over?" headline → product image reminder → 1-2 supporting reasons (reviews, benefits) → CTA. Keep it minimal — 2 sections max. The product image does the heavy lifting.`,
+        win_back: `CREATIVE DIRECTION: This is a Win-back email — reconnect with lapsed customers. Structure ideas: "It's been a while" headline → what's new since they left → single compelling offer or reason to return → CTA. Or: nostalgia angle → new products/features showcase → incentive → CTA. Be concise and genuine.`,
+        newsletter: `CREATIVE DIRECTION: This is a Newsletter — curate and inform. Structure ideas: branded header → 3-4 content blocks with varied layouts (image-left/image-right alternating, or card grid) → each with its own mini-CTA → footer. Make each section visually distinct but cohesive. Think magazine layout.`,
+        announcement: `CREATIVE DIRECTION: This is an Announcement — deliver news with impact. Structure ideas: bold headline announcement → supporting detail → single hero image → CTA. Or: "Big News" header → announcement details → what it means for the reader → CTA. Keep it focused — one message, one action.`,
+      };
+
+      const creativeDir = goalCreativeDirection[goal] || goalCreativeDirection[goal?.replace(/[-\s]/g, '_')] || 
+        `CREATIVE DIRECTION: Be creative with the layout structure. Don't default to a generic template. Consider the campaign goal "${goal}" and design a unique layout that serves that purpose. Vary section types, image placements, and content flow. Think like an editorial designer.`;
+
+      let part3 = `Generate a ${goal} email campaign.\nBrief: ${brief}`;
+      if (copy) part3 += `\nThe following copy must be used verbatim: ${copy}`;
+
+      part3 += `\n\n=== ${creativeDir}`;
+
       part3 += `\n\n=== STRUCTURAL VARIETY RULES ===
 1. DO NOT use the same layout structure for every email. Each campaign should feel uniquely designed for its specific purpose.
 2. Vary your section types: use hero images, split layouts, card grids, quote pullouts, metric callouts, editorial columns — mix it up based on what serves the content.
 3. The reference campaigns show the BRAND STYLE (colors, fonts, spacing, tone) — NOT a template to copy verbatim. Extract the design language, then apply it to a FRESH layout.
 4. Never start every email the same way. Vary your openings: sometimes a full-bleed hero, sometimes a headline-first approach, sometimes a personal greeting, sometimes a provocative question.
 5. Section count should vary by campaign type — a welcome email might be 3-4 sections, a newsletter might be 6-8, an abandoned cart might be just 2.`;
-    } else if (referenceMode === "dupe") {
-      part3 += `\n\n=== ⚠️ LAYOUT CLONING ACTIVE — THIS OVERRIDES ALL OTHER LAYOUT INSTRUCTIONS ⚠️ ===
-You are in DUPE mode. The reference campaign screenshot IS your layout blueprint.
-Do NOT vary the layout. Do NOT add creative structural changes. Do NOT add or remove sections.
-Do NOT rearrange anything. TRACE the reference layout exactly.
-Count the sections in the reference image. Your output must have the SAME count, SAME types, SAME order, SAME sizing.
-If your output has a different number of sections than the reference, you have FAILED.
-Use the brand's own colors and typography — NOT the reference's colors.`;
-    } else {
-      part3 += `\n\n=== REFERENCE MODE ACTIVE — FOLLOW THE STRUCTURE ===
-The reference campaign screenshot defines your layout skeleton.
-Follow its structure, section sequence, image placements, sizing, and spacing closely.
-Use the brand's own colors and typography — NOT the reference's colors.
-You may make minor adjustments to fit the brief, but the overall skeleton should clearly match the reference.`;
-    }
 
-    part3 += `\n\n=== IMAGE & GRID LAYOUT RULES ===
+      part3 += `\n\n=== IMAGE & GRID LAYOUT RULES ===
 1. The reference campaign screenshots above are STYLE REFERENCES ONLY. NEVER embed them as <img> tags.
 2. Never invent, guess, or use external stock image URLs (Unsplash, Pexels, etc).
 3. You are the CREATIVE DIRECTOR. Choose ONLY the images that best serve this campaign's story. You do NOT need to use every available image — be selective.
@@ -649,45 +626,40 @@ RULES:
 - NEVER use c-force (causes distortion).
 - For product grids, EVERY image MUST use the SAME ?tr= dimensions.`;
 
-    if (hostedAssetEntries.length > 0) {
-      part3 += `\n\nAVAILABLE BRAND ASSETS (use selectively — pick what serves the campaign):\n${assetCatalog}`;
-    } else {
-      part3 += `\n\nNo brand asset images available. Use solid color blocks, gradients, or text-only sections instead. Do NOT include <img> tags.`;
-    }
-
-    if (productRequirements) {
-      part3 += productRequirements;
-    }
-
-    // Shopify product images injection
-    if (Array.isArray(shopifyProducts) && shopifyProducts.length > 0) {
-      part3 += `\n\n=== PRODUCT IMAGES TO FEATURE ===`;
-      for (const sp of shopifyProducts) {
-        part3 += `\n- ${sp.title}: ${sp.image_url}`;
-        if (sp.description) part3 += `\n  Description: ${sp.description}`;
-        if (sp.image_type) part3 += `\n  Image type: ${sp.image_type}`;
-        if (sp.variant) part3 += `\n  Variant: ${sp.variant}`;
+      if (hostedAssetEntries.length > 0) {
+        part3 += `\n\nAVAILABLE BRAND ASSETS (use selectively — pick what serves the campaign):\n${assetCatalog}`;
+      } else {
+        part3 += `\n\nNo brand asset images available. Use solid color blocks, gradients, or text-only sections instead. Do NOT include <img> tags.`;
       }
-      part3 += `\n\nThese images MUST appear in the email. Use them as follows:
+
+      if (productRequirements) {
+        part3 += productRequirements;
+      }
+
+      // Shopify product images injection
+      if (Array.isArray(shopifyProducts) && shopifyProducts.length > 0) {
+        part3 += `\n\n=== PRODUCT IMAGES TO FEATURE ===`;
+        for (const sp of shopifyProducts) {
+          part3 += `\n- ${sp.title}: ${sp.image_url}`;
+          if (sp.description) part3 += `\n  Description: ${sp.description}`;
+          if (sp.image_type) part3 += `\n  Image type: ${sp.image_type}`;
+          if (sp.variant) part3 += `\n  Variant: ${sp.variant}`;
+        }
+        part3 += `\n\nThese images MUST appear in the email. Use them as follows:
 - product_isolated or product_lifestyle: use as hero or mid-email product feature
 - Apply ImageKit transforms (?tr=w-X,h-Y,fo-auto) to fit images into layout slots. Only modify ik.imagekit.io URLs.
 - Do not use any other product image URLs`;
-    }
+      }
 
-    if (referenceMode === "dupe") {
-      part3 += `\n\nThe output must use the brand's colors, fonts, and design tokens — but the LAYOUT and STRUCTURE must be an EXACT CLONE of the reference campaign screenshot. Do NOT deviate from the reference layout. Return only the complete HTML.`;
-    } else if (referenceMode === "reference") {
-      part3 += `\n\nThe output must use the brand's colors, fonts, and design tokens. Follow the reference campaign's layout structure closely. Return only the complete HTML.`;
-    } else {
       part3 += `\n\nThe output must MATCH the brand's design language (colors, fonts, spacing, tone) from the references above, but the LAYOUT and STRUCTURE must be original and tailored to this specific campaign goal. Return only the complete HTML.`;
+      userContent.push({ type: "text", text: part3 });
     }
-    userContent.push({ type: "text", text: part3 });
 
     // === PASS 1: Generate (FIX 1: max_tokens 16384, FIX 6: callAnthropic with timeout) ===
     const response = await callAnthropic({
       model: GENERATION_MODEL,
       max_tokens: 16384,
-      system: UNIVERSAL_EMAIL_RULES,
+      system: referenceMode ? REFERENCE_MODE_SYSTEM : UNIVERSAL_EMAIL_RULES,
       messages: [{ role: "user", content: userContent }],
     }, ANTHROPIC_API_KEY);
 
