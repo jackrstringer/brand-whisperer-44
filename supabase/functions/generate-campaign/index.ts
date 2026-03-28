@@ -216,6 +216,8 @@ Rules:
   6. A CTA button appears in the first fold
   7. Footer is present
   8. The HTML is mobile-responsive (uses max-width, not fixed widths on outer tables)
+  9. IMAGE FIT: Check that every <img> tag's dimensions are appropriate for its container. If an image is portrait but placed in a landscape slot (or vice versa), add ImageKit transforms (?tr=w-X,h-Y,fo-auto) to the src URL to make it fit. Only modify ik.imagekit.io URLs. Flag as "major" severity.
+  10. IMAGE CONSISTENCY IN GRIDS: All images in a product grid or multi-image section must use the same dimensions. If they don't, normalize them with matching ImageKit transforms (?tr=w-X,h-Y,fo-auto).
 
 Return ONLY the JSON object. No markdown fences, no explanation, no preamble.`;
 
@@ -588,10 +590,37 @@ You may make minor adjustments to fit the brief, but the overall skeleton should
 1. The reference campaign screenshots above are STYLE REFERENCES ONLY. NEVER embed them as <img> tags.
 2. Never invent, guess, or use external stock image URLs (Unsplash, Pexels, etc).
 3. You are the CREATIVE DIRECTOR. Choose ONLY the images that best serve this campaign's story. You do NOT need to use every available image — be selective.
-4. Use the image URLs from the AVAILABLE BRAND ASSETS list exactly as provided. Do NOT modify, crop, or transform the URLs.
-5. If an image doesn't fit the campaign's story, skip it entirely rather than forcing it in.
-6. CONSISTENCY: Every image must have the same padding treatment — either ALL full-bleed or ALL with equal side padding. Never mix.
-7. CRITICAL NO-STACK RULE: Any side-by-side layout in the chosen reference (product grids, two-column image blocks, split text/image sections) MUST remain side-by-side at all viewport widths. Do NOT add media-query rules that convert these to single-column stacked blocks.`;
+4. If an image doesn't fit the campaign's story, skip it entirely rather than forcing it in.
+5. CONSISTENCY: Every image must have the same padding treatment — either ALL full-bleed or ALL with equal side padding. Never mix.
+6. CRITICAL NO-STACK RULE: Any side-by-side layout in the chosen reference (product grids, two-column image blocks, split text/image sections) MUST remain side-by-side at all viewport widths. Do NOT add media-query rules that convert these to single-column stacked blocks.
+
+=== IMAGEKIT IMAGE TRANSFORMS (use these to fit images into layout slots) ===
+All brand/product images hosted on ik.imagekit.io support URL-based transforms.
+Append ?tr=<params> to any ik.imagekit.io URL. Available transforms:
+
+SIZING & CROPPING:
+- w-{N}         → resize to width N pixels
+- h-{N}         → resize to height N pixels
+- w-{N},h-{N},c-maintain_ratio   → fit within box, maintain aspect ratio
+- w-{N},h-{N},c-force            → force exact dimensions (may distort)
+- w-{N},h-{N},c-at_max           → scale down to fit, never upscale
+- w-{N},h-{N},fo-auto            → smart crop to exact dimensions (AI selects focal point)
+- ar-{W}-{H},w-{N}               → crop to aspect ratio at given width (e.g. ar-1-1,w-300 for square)
+
+BACKGROUND:
+- e-bgremove    → remove background (transparent PNG)
+
+EXAMPLES:
+- Square thumbnail: ?tr=w-280,h-280,fo-auto
+- Wide banner from portrait photo: ?tr=w-600,h-250,fo-auto
+- Remove background: ?tr=e-bgremove
+- Fit in slot without distortion: ?tr=w-400,h-300,c-at_max
+
+RULES:
+- ONLY modify ik.imagekit.io URLs. Leave all other URLs untouched.
+- When the reference layout has specific image slot proportions, use fo-auto cropping to match.
+- Prefer c-at_max or fo-auto over c-force to avoid distortion.
+- For product grids, ensure all product images use the SAME transform dimensions.`;
 
     if (hostedAssetEntries.length > 0) {
       part3 += `\n\nAVAILABLE BRAND ASSETS (use selectively — pick what serves the campaign):\n${assetCatalog}`;
@@ -614,7 +643,7 @@ You may make minor adjustments to fit the brief, but the overall skeleton should
       }
       part3 += `\n\nThese images MUST appear in the email. Use them as follows:
 - product_isolated or product_lifestyle: use as hero or mid-email product feature
-- Do not modify image URLs in any way
+- Apply ImageKit transforms (?tr=w-X,h-Y,fo-auto) to fit images into layout slots. Only modify ik.imagekit.io URLs.
 - Do not use any other product image URLs`;
     }
 

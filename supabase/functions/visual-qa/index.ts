@@ -25,6 +25,7 @@ CHECK FOR THESE SPECIFIC ISSUES:
 7. FOOTER: Present and properly separated from content?
 8. COLORS: Do colors look cohesive? No jarring contrasts or unreadable text?
 9. OVERALL COHESION: Does the email look professional and polished? Any elements that feel "off"?
+10. IMAGE FIT: Are images properly proportioned for their containers? Look for: portrait images squeezed into landscape slots, stretched/squished photos, images that clearly don't match the aspect ratio of their container. These are CRITICAL issues. In the fix, append ImageKit transforms (?tr=w-X,h-Y,fo-auto) to ik.imagekit.io URLs to smart-crop them to the correct dimensions.
 
 IMPORTANT: You are looking at the email at 470px viewport width. Side-by-side layouts MUST remain side-by-side — they should NOT stack. If you see grids or two-column sections stacking into single columns, that is a CRITICAL issue.
 
@@ -47,7 +48,7 @@ Return ONLY a JSON object:
 Rules:
 - Only flag REAL issues visible in the screenshots. Don't nitpick.
 - "find" and "replace" must be EXACT substrings of the provided HTML. If you can't provide an exact fix, omit those fields.
-- Critical = broken layout, stacking, broken images. Major = spacing/alignment issues. Minor = small polish items.
+- Critical = broken layout, stacking, broken images, image proportion mismatches. Major = spacing/alignment issues. Minor = small polish items.
 - If the email looks great, return passes_visual_qa: true with empty issues array and a high score.`;
 
 Deno.serve(async (req) => {
