@@ -104,6 +104,18 @@ export default function ImageSwapPanel({ brandId, currentSrc, currentCategory, o
     return result;
   }, [assets, activeTab, search]);
 
+  // Report filtered asset URLs to parent for arrow cycling
+  useEffect(() => {
+    onAssetsLoaded?.(filtered.map(a => a.url));
+  }, [filtered, onAssetsLoaded]);
+
+  // Sync activeTab when parent changes currentCategory
+  useEffect(() => {
+    if (currentCategory && currentCategory !== activeTab) {
+      setActiveTab(currentCategory);
+    }
+  }, [currentCategory]);
+
   return (
     <div className="h-full flex flex-col bg-background border-r border-border" style={{ width: 320 }}>
       {/* Header */}
