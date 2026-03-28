@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { normalizeGridImages } from "../_shared/normalizeGridImages.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -155,10 +156,22 @@ Deno.serve(async (req) => {
     console.log(`[visual-qa] Result: score=${qaResult.overall_score}, issues=${qaResult.issues?.length || 0}, passes=${qaResult.passes_visual_qa}`);
 
     // If there are fixable issues, apply them to the HTML
-    let fixedHtml = html;
-    let fixesApplied = 0;
+    // First: always run deterministic grid normalization
+    let fixedHtml = normalizeGridImages(html);
+    let fixesApplied = fixedHtml !== html ? 1 : 0;
+
+    // For image proportion issues flagged by QA, normalization already handled them.
+    // Only apply find/replace for NON-image issues.
     if (!qaResult.passes_visual_qa && Array.isArray(qaResult.issues)) {
-      for (const issue of qaResult.issues) {
+      const nonImageIssues = qaResult.issues.filter(
+        (i: any) => !(i.category === 'image' && 
+          (i.description?.includes('dimension') || 
+           i.description?.includes('proportion') ||
+           i.description?.includes('aspect ratio') ||
+           i.description?.includes('grid') ||
+           i.description?.includes('identical')))
+      );
+      for (const issue of nonImageIssues) {
         if (issue.find && issue.replace && fixedHtml.includes(issue.find)) {
           fixedHtml = fixedHtml.replace(issue.find, issue.replace);
           fixesApplied++;
