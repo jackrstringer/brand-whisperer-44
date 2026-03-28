@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import ProductSelector, { type SelectedShopifyProduct } from "@/components/brand/ProductSelector";
 import SegmentSelector from "@/components/brand/SegmentSelector";
 import ReferencePanel, { type SelectedReference } from "@/components/campaign/ReferencePanel";
+import ImageSwapPanel from "@/components/campaign/ImageSwapPanel";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
