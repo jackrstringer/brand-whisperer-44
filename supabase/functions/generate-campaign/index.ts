@@ -500,17 +500,26 @@ Structure comes from the reference. Skin comes from the brand.`;
         referencePrompt = `DUPE — PIXEL-PERFECT LAYOUT CLONE (THIS IS THE MOST IMPORTANT INSTRUCTION):
 You are looking at a screenshot of an email campaign. Your job is to CLONE ITS EXACT LAYOUT.
 
+IMAGE SLOT ANALYSIS (DO THIS FIRST — BEFORE ANYTHING ELSE):
+Examine every image in the reference screenshot and note:
+- How many image slots are there? (e.g., 1 hero + 4 grid images = 5 slots)
+- What is each slot's aspect ratio? (square 1:1, wide banner ~2.4:1, portrait ~2:3, etc.)
+- What grid pattern are they in? (2×2, 2×3, single column, side-by-side pair, etc.)
+- What are the approximate pixel dimensions at 470px viewport? (e.g., 2-col grid = ~220px per image)
+For EVERY image you place, you MUST apply ImageKit fo-auto cropping that matches the reference slot's aspect ratio exactly.
+
 MANDATORY CLONING RULES — violating ANY of these is a failure:
 1. COUNT every distinct section in the reference screenshot. Your output MUST have the EXACT SAME NUMBER of sections.
 2. Each section MUST be the SAME TYPE as the reference (hero image, text block, product grid, testimonial, divider, footer, etc.)
 3. Each section MUST be in the EXACT SAME ORDER as the reference.
 4. IMAGE PLACEMENT: If the reference has an image on the left with text on the right, yours must too. If it has a full-bleed hero, yours must too. If it has a centered product image at 50% width, yours must too.
 5. IMAGE SIZING: Match the proportions. If a hero image takes up 60% of the viewport height, yours should too. If product images are small thumbnails in a grid, yours should be too.
-6. LOGO PLACEMENT: If the logo is top-center, yours is top-center. If it's top-left with navigation links, yours is top-left with navigation links. EXACT match.
-7. CTA BUTTONS: Same number of CTAs, in the same positions, with the same approximate sizing.
-8. TEXT-TO-IMAGE RATIO: If a section is 70% image and 30% text, match that ratio.
-9. SPACING & PADDING: Match the whitespace patterns. If sections have tight spacing, use tight spacing. If there's generous padding, use generous padding.
-10. FOOTER STRUCTURE: Clone the footer layout exactly — same elements, same arrangement.
+6. IMAGE SLOT DIMENSIONS: Every image MUST have explicit width and height attributes matching the reference slot dimensions, AND an ImageKit ?tr=w-X,h-Y,fo-auto transform on the URL to force-fit the image. All images in a grid MUST use identical dimensions.
+7. LOGO PLACEMENT: If the logo is top-center, yours is top-center. If it's top-left with navigation links, yours is top-left with navigation links. EXACT match.
+8. CTA BUTTONS: Same number of CTAs, in the same positions, with the same approximate sizing.
+9. TEXT-TO-IMAGE RATIO: If a section is 70% image and 30% text, match that ratio.
+10. SPACING & PADDING: Match the whitespace patterns. If sections have tight spacing, use tight spacing. If there's generous padding, use generous padding.
+11. FOOTER STRUCTURE: Clone the footer layout exactly — same elements, same arrangement.
 
 WHAT CHANGES (and ONLY these things):
 - Colors → use the brand's color palette
