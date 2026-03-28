@@ -2226,7 +2226,129 @@ export default function CampaignEditor() {
         window.parent.postMessage({ type: 'regionSelected', elements: elements }, '*');
       }
     }
+    if(e.data && e.data.type === 'swapImageSrc'){
+      var newSrc = e.data.newSrc;
+      if(imgSwapTarget && newSrc){
+        imgSwapTarget.src = newSrc;
+        imgSwapTarget.setAttribute('src', newSrc);
+        syncHtml();
+      }
+    }
   });
+
+  /* --- IMAGE SWAP TOOLBAR --- */
+  var imgSwapTarget = null;
+  var imgAssetList = [];
+  var imgAssetIndex = 0;
+  var imgSwapCategory = 'all';
+
+  function removeImgSwapUI(){
+    document.querySelectorAll('.img-selected').forEach(function(el){ el.classList.remove('img-selected'); });
+    document.querySelectorAll('.img-swap-arrow,.img-swap-cats').forEach(function(el){ el.remove(); });
+    imgSwapTarget = null;
+  }
+
+  function guessCategory(src){
+    if(!src) return 'all';
+    var s = src.toLowerCase();
+    if(s.indexOf('transparent')>=0 || s.indexOf('bg-remove')>=0 || s.indexOf('bgremove')>=0) return 'transparent_bg';
+    if(s.indexOf('lifestyle')>=0) return 'lifestyle';
+    if(s.indexOf('hero')>=0) return 'hero_shots';
+    if(s.indexOf('product')>=0) return 'product_imagery';
+    if(s.indexOf('logo')>=0) return 'logo';
+    return 'all';
+  }
+
+  function showImgSwapUI(img){
+    removeImgSwapUI();
+    imgSwapTarget = img;
+    var parent = img.parentElement;
+    if(!parent) return;
+    parent.style.position = parent.style.position || 'relative';
+    img.classList.add('img-selected');
+
+    // Left arrow
+    var leftArrow = document.createElement('button');
+    leftArrow.className = 'img-swap-arrow left';
+    leftArrow.innerHTML = '‹';
+    leftArrow.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
+    leftArrow.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      window.parent.postMessage({ type: 'imageSwapPrev' }, '*');
+    });
+    parent.appendChild(leftArrow);
+
+    // Right arrow
+    var rightArrow = document.createElement('button');
+    rightArrow.className = 'img-swap-arrow right';
+    rightArrow.innerHTML = '›';
+    rightArrow.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
+    rightArrow.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      window.parent.postMessage({ type: 'imageSwapNext' }, '*');
+    });
+    parent.appendChild(rightArrow);
+
+    // Category toggle + library button
+    var cats = document.createElement('div');
+    cats.className = 'img-swap-cats';
+    var categories = [
+      {id:'all',label:'All'},
+      {id:'lifestyle',label:'Lifestyle'},
+      {id:'product_imagery',label:'Product'},
+      {id:'transparent_bg',label:'Transparent'}
+    ];
+    var detectedCat = guessCategory(img.src);
+    imgSwapCategory = detectedCat;
+
+    categories.forEach(function(cat){
+      var btn = document.createElement('button');
+      btn.className = 'img-swap-cat' + (cat.id === detectedCat ? ' active' : '');
+      btn.textContent = cat.label;
+      btn.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
+      btn.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        imgSwapCategory = cat.id;
+        cats.querySelectorAll('.img-swap-cat').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        window.parent.postMessage({ type: 'imageSwapCategoryChange', category: cat.id }, '*');
+      });
+      cats.appendChild(btn);
+    });
+
+    // Library button
+    var libBtn = document.createElement('button');
+    libBtn.className = 'img-swap-lib';
+    libBtn.textContent = '📂 Library';
+    libBtn.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
+    libBtn.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      window.parent.postMessage({ type: 'imageSelectedForSwap', src: img.src, category: detectedCat }, '*');
+    });
+    cats.appendChild(libBtn);
+    parent.appendChild(cats);
+  }
+
+  // Attach click handler to all images
+  document.querySelectorAll('img').forEach(function(img){
+    img.style.cursor = 'pointer';
+    img.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      if(imgSwapTarget === img) return; // already selected
+      showImgSwapUI(img);
+      window.parent.postMessage({ type: 'imageSelectedForSwap', src: img.src, category: guessCategory(img.src) }, '*');
+    });
+  });
+
+  // Clear image swap on clicking non-image areas
+  var origClearEl = clearElSelection;
+  clearElSelection = function(){
+    removeImgSwapUI();
+    document.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
+    selectedEl = null;
+    window.parent.postMessage({ type: 'elementDeselected' }, '*');
+    window.parent.postMessage({ type: 'imageSwapPanelClose' }, '*');
+  };
 })();
 <\/script></body>`
       )
