@@ -498,7 +498,8 @@ export default function CampaignEditor() {
     try {
       const resp = await fetch(genUrl, { method: "POST", headers: { "Content-Type": "application/json", "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` },
         body: JSON.stringify({ brandId, campaignId, brief, goal, copy: extraCopy || undefined, speedMode, productIds: selectedProductIds.length > 0 ? selectedProductIds : undefined, pinnedAssetUrls: allPinned.length > 0 ? allPinned : undefined, matchProductColors: matchProductColors || undefined, designNotes: designNotes.trim() || undefined, shopifyProducts: selectedShopifyProducts.length > 0 ? selectedShopifyProducts : undefined, reference: selectedReference ? { type: selectedReference.type, id: selectedReference.id, image_urls: selectedReference.image_urls, strength: selectedReference.strength, mode: selectedReference.mode } : undefined }) });
-      if (!resp.ok) throw new Error(`Generation failed: ${resp.status}`);
+      if (!resp.ok && resp.status !== 202) throw new Error(`Generation failed: ${resp.status}`);
+      // Function returns 202 immediately; variants arrive via polling below
     } catch (err) { console.error("[perfection] Error:", err); toast.error("Failed to start perfection mode"); setGenerating(false); setGenStartTime(null); return; }
     const pollInterval = setInterval(async () => {
       const { data } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();

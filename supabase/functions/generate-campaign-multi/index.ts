@@ -47,73 +47,84 @@ Deno.serve(async (req) => {
       variant_htmls: [],
     }).eq("id", campaignId);
 
-    // Build base URL for calling generate-campaign
+    // Return immediately — do heavy work in background
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Fire 3 parallel generation calls with different creative seeds
-    const generationPromises = CREATIVE_SEEDS.map(async (direction, index) => {
-      const variantBody = {
-        ...body,
-        // Append creative seed to design notes
-        designNotes: [body.designNotes || "", direction.seed].filter(Boolean).join("\n\n"),
-        // Don't let sub-calls change status — we manage that
-        _isSubGeneration: true,
-        _variantIndex: index,
-      };
+    // Use EdgeRuntime.waitUntil to process in the background
+    (globalThis as any).EdgeRuntime.waitUntil(
+      (async () => {
+        try {
+          // Fire 3 parallel generation calls with different creative seeds
+          const generationPromises = CREATIVE_SEEDS.map(async (direction, index) => {
+            const variantBody = {
+              ...body,
+              designNotes: [body.designNotes || "", direction.seed].filter(Boolean).join("\n\n"),
+              _isSubGeneration: true,
+              _variantIndex: index,
+            };
 
-      try {
-        console.log(`[multi] Starting variant ${index}: ${direction.label}`);
-        const resp = await fetch(`${supabaseUrl}/functions/v1/generate-campaign`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${serviceKey}`,
-            "apikey": serviceKey,
-          },
-          body: JSON.stringify(variantBody),
-        });
+            try {
+              console.log(`[multi] Starting variant ${index}: ${direction.label}`);
+              const resp = await fetch(`${supabaseUrl}/functions/v1/generate-campaign`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": `Bearer ${serviceKey}`,
+                  "apikey": serviceKey,
+                },
+                body: JSON.stringify(variantBody),
+              });
 
-        if (!resp.ok) {
-          const errText = await resp.text();
-          console.error(`[multi] Variant ${index} failed: ${resp.status} ${errText}`);
-          return { index, label: direction.label, html: null, error: errText };
+              if (!resp.ok) {
+                const errText = await resp.text();
+                console.error(`[multi] Variant ${index} failed: ${resp.status} ${errText}`);
+                return { index, label: direction.label, html: null, error: errText };
+              }
+
+              const result = await resp.json();
+              console.log(`[multi] Variant ${index} (${direction.label}) complete, html length: ${result.html?.length || 0}`);
+              return { index, label: direction.label, html: result.html, error: null };
+            } catch (err: any) {
+              console.error(`[multi] Variant ${index} error:`, err);
+              return { index, label: direction.label, html: null, error: err.message };
+            }
+          });
+
+          const results = await Promise.all(generationPromises);
+
+          // Build variant_htmls array
+          const variantHtmls = results.map((r) => ({
+            label: r.label,
+            html: r.html || null,
+            qa_score: null,
+            qa_summary: null,
+            qa_round: 0,
+            status: r.html ? "generated" : "error",
+            error: r.error,
+          }));
+
+          const successCount = variantHtmls.filter((v) => v.html).length;
+          console.log(`[multi] ${successCount}/3 variants generated successfully`);
+
+          // Save variants and set status
+          await supabase.from("campaigns").update({
+            variant_htmls: variantHtmls,
+            status: successCount > 0 ? "variants_ready" : "error",
+          }).eq("id", campaignId);
+        } catch (err: any) {
+          console.error("[multi] Background processing error:", err);
+          await supabase.from("campaigns").update({
+            status: "error",
+          }).eq("id", campaignId);
         }
+      })()
+    );
 
-        const result = await resp.json();
-        console.log(`[multi] Variant ${index} (${direction.label}) complete, html length: ${result.html?.length || 0}`);
-        return { index, label: direction.label, html: result.html, error: null };
-      } catch (err) {
-        console.error(`[multi] Variant ${index} error:`, err);
-        return { index, label: direction.label, html: null, error: err.message };
-      }
-    });
-
-    const results = await Promise.all(generationPromises);
-
-    // Build variant_htmls array
-    const variantHtmls = results.map((r) => ({
-      label: r.label,
-      html: r.html || null,
-      qa_score: null,
-      qa_summary: null,
-      qa_round: 0,
-      status: r.html ? "generated" : "error",
-      error: r.error,
-    }));
-
-    const successCount = variantHtmls.filter((v) => v.html).length;
-    console.log(`[multi] ${successCount}/3 variants generated successfully`);
-
-    // Save variants and set status
-    await supabase.from("campaigns").update({
-      variant_htmls: variantHtmls,
-      status: successCount > 0 ? "variants_ready" : "error",
-    }).eq("id", campaignId);
-
+    // Return immediately with accepted status
     return new Response(
-      JSON.stringify({ success: true, variants: variantHtmls.length, generated: successCount }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      JSON.stringify({ success: true, message: "Generation started" }),
+      { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err: any) {
     console.error("[multi] Error:", err);
