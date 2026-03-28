@@ -49,13 +49,13 @@ Return ONLY a JSON object:
 }
 
 Rules:
-- Score must be ≥ 9 to pass. Be strict.
-- ANY critical issue = automatic fail regardless of score.
-- "find" and "replace" must be EXACT substrings of the provided HTML.
-- Critical = broken layout, stacking, broken images, image proportion mismatches, missing sections.
-- Major = spacing/alignment issues, typography inconsistencies.
-- Minor = small polish items.
-- Provide actionable fixes. Use ImageKit transforms (?tr=w-X,h-Y,fo-auto) for image issues on ik.imagekit.io URLs.`;
+- Score 1-10 based on production-readiness. 7+ = pass.
+- Be fair — minor polish issues should not tank the score.
+- Critical = broken layout, missing images, completely wrong structure.
+- Major = noticeable spacing/alignment issues, image proportion problems.
+- Minor = small polish items a typical subscriber wouldn't notice.
+- Do NOT provide find/replace fixes. Just describe issues clearly.
+- Focus on what a REAL subscriber would notice, not pixel-perfect comparisons.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
