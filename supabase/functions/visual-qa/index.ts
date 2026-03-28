@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const { campaignId, html, slices } = await req.json();
+    const { campaignId, html, slices, referenceImageUrls, usePro } = await req.json();
     if (!html || !slices?.length) {
       throw new Error("html and slices are required");
     }
