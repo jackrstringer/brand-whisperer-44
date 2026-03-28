@@ -67,13 +67,27 @@ Deno.serve(async (req) => {
 
     console.log(`[visual-qa] Starting visual QA for campaign ${campaignId}, ${slices.length} slices`);
 
-    // Build vision content: slices as images + HTML as text
-    const content: any[] = [
-      {
+    // Build vision content
+    const content: any[] = [];
+
+    // Add reference images if provided (for comparison)
+    if (Array.isArray(referenceImageUrls) && referenceImageUrls.length > 0) {
+      content.push({
         type: "text",
-        text: `Here are ${slices.length} screenshot slices of the rendered email at 470px viewport width. Examine them carefully for visual issues:`,
-      },
-    ];
+        text: `Here are the REFERENCE campaign screenshots the user chose as inspiration. Compare the output against these for quality and structure:`,
+      });
+      for (let i = 0; i < referenceImageUrls.length; i++) {
+        content.push({
+          type: "image_url",
+          image_url: { url: referenceImageUrls[i] },
+        });
+      }
+    }
+
+    content.push({
+      type: "text",
+      text: `Here are ${slices.length} screenshot slices of the rendered email at 470px viewport width. Examine them carefully for visual issues:`,
+    });
 
     for (let i = 0; i < slices.length; i++) {
       const dataUrl = slices[i] as string;
