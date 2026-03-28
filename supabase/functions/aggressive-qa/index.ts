@@ -163,8 +163,8 @@ Deno.serve(async (req) => {
     const passed = qaResult.passed || qaResult.score >= 7;
     console.log(`[aggressive-qa] Result: score=${qaResult.score}, passed=${passed}, issues=${qaResult.issues?.length || 0}`);
 
-    // If we have a campaignId and variant index, update the variant_htmls
-    if (campaignId && variantIndex !== undefined && fixedHtml) {
+    // Update variant score in DB if applicable
+    if (campaignId && variantIndex !== undefined) {
       const supabase = createClient(
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -181,11 +181,10 @@ Deno.serve(async (req) => {
         if (variants[variantIndex]) {
           variants[variantIndex] = {
             ...variants[variantIndex],
-            html: fixedHtml,
             qa_score: qaResult.score,
             qa_summary: qaResult.summary,
             qa_round: roundNumber,
-            status: qaResult.passed ? "qa_passed" : "qa_fixing",
+            status: passed ? "qa_passed" : "qa_reviewed",
           };
           await supabase.from("campaigns").update({ variant_htmls: variants }).eq("id", campaignId);
         }
@@ -194,12 +193,10 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        passed: qaResult.passed,
+        passed,
         score: qaResult.score,
         issues: qaResult.issues || [],
         summary: qaResult.summary,
-        fixedHtml,
-        fixesApplied,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
