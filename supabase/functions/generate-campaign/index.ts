@@ -807,6 +807,9 @@ RULES:
 
     html = enforceNoStackingLayout(html);
 
+    // Deterministic: normalize grid image dimensions before rehosting
+    html = normalizeGridImages(html);
+
     // In sub-generation mode, just return the HTML without updating campaign status
     if (_isSubGeneration) {
       return new Response(JSON.stringify({ html }), {
