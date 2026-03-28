@@ -20,6 +20,7 @@ interface ImageSwapPanelProps {
   currentCategory: string;
   onSwap: (url: string) => void;
   onClose: () => void;
+  onAssetsLoaded?: (urls: string[]) => void;
 }
 
 const CATEGORY_TABS = [
