@@ -216,6 +216,8 @@ Rules:
   6. A CTA button appears in the first fold
   7. Footer is present
   8. The HTML is mobile-responsive (uses max-width, not fixed widths on outer tables)
+  9. IMAGE FIT: Check that every <img> tag's dimensions are appropriate for its container. If an image is portrait but placed in a landscape slot (or vice versa), add ImageKit transforms (?tr=w-X,h-Y,fo-auto) to the src URL to make it fit. Only modify ik.imagekit.io URLs. Flag as "major" severity.
+  10. IMAGE CONSISTENCY IN GRIDS: All images in a product grid or multi-image section must use the same dimensions. If they don't, normalize them with matching ImageKit transforms (?tr=w-X,h-Y,fo-auto).
 
 Return ONLY the JSON object. No markdown fences, no explanation, no preamble.`;
 
