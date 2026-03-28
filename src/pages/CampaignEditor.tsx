@@ -1781,7 +1781,194 @@ export default function CampaignEditor() {
 
     var bar = ftbDoc.createElement('div');
     bar.className = 'ftb';
-...
+
+    var tag = ftbDoc.createElement('span');
+    tag.className = 'ftb-tag';
+    tag.textContent = getTagLabel(el);
+    bar.appendChild(tag);
+    bar.appendChild(makeSep());
+
+    var sizeSelect = ftbDoc.createElement('select');
+    sizeSelect.className = 'ftb-select';
+    sizeSelect.title = 'Font size';
+    var sizes = [10,12,13,14,16,18,20,24,28,32,40,48,64];
+    var currentSize = getCurrentFontSize(el);
+    sizes.forEach(function(s){
+      var opt = ftbDoc.createElement('option');
+      opt.value = s;
+      opt.textContent = s + 'px';
+      if(s === currentSize) opt.selected = true;
+      sizeSelect.appendChild(opt);
+    });
+    if(sizes.indexOf(currentSize) < 0){
+      var dynOpt = ftbDoc.createElement('option');
+      dynOpt.value = currentSize;
+      dynOpt.textContent = currentSize + 'px';
+      dynOpt.selected = true;
+      sizeSelect.insertBefore(dynOpt, sizeSelect.firstChild);
+    }
+    sizeSelect.addEventListener('mousedown', function(e){ e.stopPropagation(); clearTimeout(ftbBlurTimer); });
+    sizeSelect.addEventListener('focus', function(){ clearTimeout(ftbBlurTimer); });
+    sizeSelect.addEventListener('click', function(e){ e.stopPropagation(); clearTimeout(ftbBlurTimer); });
+    sizeSelect.addEventListener('change', function(){
+      restoreSelection();
+      el.focus();
+      var sel = window.getSelection();
+      if(!sel || !sel.rangeCount || sel.isCollapsed){
+        el.style.fontSize = sizeSelect.value + 'px';
+      } else {
+        document.execCommand('fontSize', false, '7');
+        el.querySelectorAll('font[size="7"]').forEach(function(f){
+          var span = document.createElement('span');
+          span.style.fontSize = sizeSelect.value + 'px';
+          span.innerHTML = f.innerHTML;
+          f.replaceWith(span);
+        });
+      }
+      syncHtml();
+    });
+    bar.appendChild(sizeSelect);
+
+    var swatchWrap = ftbDoc.createElement('div');
+    var swatch = ftbDoc.createElement('div');
+    swatch.className = 'ftb-swatch';
+    swatch.style.backgroundColor = window.getComputedStyle(el).color;
+    swatch.title = 'Text color';
+    swatch.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    swatch.addEventListener('click', function(e){ e.stopPropagation(); showColorPanel(swatchWrap, swatch, el); });
+    swatchWrap.appendChild(swatch);
+    bar.appendChild(swatchWrap);
+
+    var bgSwatchWrap = ftbDoc.createElement('div');
+    var bgSwatch = ftbDoc.createElement('div');
+    bgSwatch.className = 'ftb-swatch';
+    var currentBg = window.getComputedStyle(el).backgroundColor;
+    var bgHex = rgbToHex(currentBg);
+    bgSwatch.style.backgroundColor = bgHex && currentBg !== 'rgba(0, 0, 0, 0)' ? currentBg : 'transparent';
+    if(!bgHex || currentBg === 'rgba(0, 0, 0, 0)'){
+      bgSwatch.style.backgroundImage = 'linear-gradient(45deg,#555 25%,transparent 25%,transparent 75%,#555 75%),linear-gradient(45deg,#555 25%,transparent 25%,transparent 75%,#555 75%)';
+      bgSwatch.style.backgroundSize = '8px 8px';
+      bgSwatch.style.backgroundPosition = '0 0,4px 4px';
+    }
+    bgSwatch.title = 'Background color';
+    bgSwatch.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    bgSwatch.addEventListener('click', function(e){ e.stopPropagation(); showBgColorPanel(bgSwatchWrap, bgSwatch, el); });
+    bgSwatchWrap.appendChild(bgSwatch);
+    bar.appendChild(bgSwatchWrap);
+
+    bar.appendChild(makeSep());
+
+    var boldBtn = makeBtn('<b style="font-size:13px;">B</b>', 'Bold');
+    boldBtn.setAttribute('data-ftb', 'bold');
+    boldBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    boldBtn.addEventListener('click', function(e){ e.stopPropagation(); applyCommand('bold'); updateBIUState(bar); });
+    bar.appendChild(boldBtn);
+
+    var italicBtn = makeBtn('<i style="font-size:13px;font-family:Georgia,serif;">I</i>', 'Italic');
+    italicBtn.setAttribute('data-ftb', 'italic');
+    italicBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    italicBtn.addEventListener('click', function(e){ e.stopPropagation(); applyCommand('italic'); updateBIUState(bar); });
+    bar.appendChild(italicBtn);
+
+    var underlineBtn = makeBtn('<u style="font-size:13px;">U</u>', 'Underline');
+    underlineBtn.setAttribute('data-ftb', 'underline');
+    underlineBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    underlineBtn.addEventListener('click', function(e){ e.stopPropagation(); applyCommand('underline'); updateBIUState(bar); });
+    bar.appendChild(underlineBtn);
+
+    bar.appendChild(makeSep());
+
+    var alignSvgs = {
+      left: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>',
+      center: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>',
+      right: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="6" y1="18" x2="21" y2="18"/></svg>'
+    };
+    var currentAlign = getCurrentAlignment(el);
+    var alignBtn = makeBtn(alignSvgs[currentAlign] || alignSvgs.left, 'Alignment');
+    alignBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    alignBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var next = currentAlign === 'left' ? 'center' : currentAlign === 'center' ? 'right' : 'left';
+      el.style.textAlign = next;
+      currentAlign = next;
+      alignBtn.innerHTML = alignSvgs[next];
+      syncHtml();
+      restoreSelection();
+      el.focus();
+    });
+    bar.appendChild(alignBtn);
+
+    bar.appendChild(makeSep());
+
+    var padToggle = makeBtn('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>', 'Padding');
+    padToggle.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); clearTimeout(ftbBlurTimer); });
+    padToggle.addEventListener('click', function(e){
+      e.stopPropagation();
+      if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; }
+      if(ftbPadPanel){ ftbPadPanel.remove(); ftbPadPanel = null; return; }
+      var padPanel = ftbDoc.createElement('div');
+      padPanel.className = 'ftb-cpanel';
+      padPanel.style.minWidth = '160px';
+      padPanel.style.padding = '8px';
+      var dirs = [{label:'Top',prop:'paddingTop'},{label:'Right',prop:'paddingRight'},{label:'Bottom',prop:'paddingBottom'},{label:'Left',prop:'paddingLeft'}];
+      dirs.forEach(function(d){
+        var row = ftbDoc.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px;';
+        var lbl = ftbDoc.createElement('span');
+        lbl.style.cssText = 'font-size:10px;color:rgba(255,255,255,0.5);width:36px;';
+        lbl.textContent = d.label;
+        row.appendChild(lbl);
+        var minus = ftbDoc.createElement('button');
+        minus.className = 'ftb-pad-btn';
+        minus.innerHTML = '−';
+        minus.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
+        minus.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          var cur = parseInt(window.getComputedStyle(el)[d.prop]) || 0;
+          el.style[d.prop] = Math.max(0, cur - 4) + 'px';
+          syncHtml();
+          if(val) val.textContent = (parseInt(window.getComputedStyle(el)[d.prop]) || 0) + '';
+        });
+        row.appendChild(minus);
+        var val = ftbDoc.createElement('span');
+        val.style.cssText = 'font-size:11px;color:rgba(255,255,255,0.7);width:28px;text-align:center;font-family:monospace;';
+        val.textContent = (parseInt(window.getComputedStyle(el)[d.prop]) || 0) + '';
+        row.appendChild(val);
+        var plus = ftbDoc.createElement('button');
+        plus.className = 'ftb-pad-btn';
+        plus.innerHTML = '+';
+        plus.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
+        plus.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          var cur = parseInt(window.getComputedStyle(el)[d.prop]) || 0;
+          el.style[d.prop] = (cur + 4) + 'px';
+          syncHtml();
+          if(val) val.textContent = (parseInt(window.getComputedStyle(el)[d.prop]) || 0) + '';
+        });
+        row.appendChild(plus);
+        padPanel.appendChild(row);
+      });
+      ftbDoc.body.appendChild(padPanel);
+      ftbPadPanel = padPanel;
+      positionPanelNear(padToggle, padPanel);
+    });
+    bar.appendChild(padToggle);
+
+    bar.appendChild(makeSep());
+
+    var ideateBtn = ftbDoc.createElement('button');
+    ideateBtn.className = 'ftb-ideate';
+    ideateBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg> Ideate';
+    ideateBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+    ideateBtn.addEventListener('click', function(e){
+      e.stopPropagation();
+      var innerHTML = el.innerHTML;
+      var outerHTML = el.outerHTML;
+      var styles = el.getAttribute('style') || '';
+      window.parent.postMessage({ type: 'ideateElement', text: el.textContent.trim(), tagName: el.tagName, innerHTML: innerHTML, outerHTML: outerHTML, elementStyle: styles }, '*');
+    });
+    bar.appendChild(ideateBtn);
+
     ftbDoc.body.appendChild(bar);
     ftbEl = bar;
     positionFtb(bar, el);
