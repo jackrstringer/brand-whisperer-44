@@ -1424,9 +1424,6 @@ export default function CampaignEditor() {
   var recentColors = [];
 
   function getFtbDoc(){
-    try {
-      if(window.parent && window.parent !== window && window.parent.document) return window.parent.document;
-    } catch(e) {}
     return document;
   }
 
@@ -1440,13 +1437,12 @@ export default function CampaignEditor() {
 
   function clampPanelPosition(panel){
     if(!panel) return;
-    var hostWindow = (window.parent && window.parent !== window) ? window.parent : window;
     var rect = panel.getBoundingClientRect();
     var left = parseFloat(panel.style.left || '0');
     var top = parseFloat(panel.style.top || '0');
-    if(rect.right > hostWindow.innerWidth - 8) left -= (rect.right - (hostWindow.innerWidth - 8));
+    if(rect.right > window.innerWidth - 8) left -= (rect.right - (window.innerWidth - 8));
     if(rect.left < 8) left += (8 - rect.left);
-    if(rect.bottom > hostWindow.innerHeight - 8) top -= (rect.bottom - (hostWindow.innerHeight - 8));
+    if(rect.bottom > window.innerHeight - 8) top -= (rect.bottom - (window.innerHeight - 8));
     if(rect.top < 8) top += (8 - rect.top);
     panel.style.left = Math.max(8, left) + 'px';
     panel.style.top = Math.max(8, top) + 'px';
@@ -1462,16 +1458,14 @@ export default function CampaignEditor() {
 
   function bindFtbHostListeners(){
     if(ftbHostListenersBound) return;
-    var hostDoc = getFtbDoc();
-    var hostWindow = (window.parent && window.parent !== window) ? window.parent : window;
-    hostDoc.addEventListener('mousedown', function(e){
+    document.addEventListener('mousedown', function(e){
       if(ftbEl && (ftbEl.contains(e.target) || (ftbColorPanel && ftbColorPanel.contains(e.target)) || (ftbPadPanel && ftbPadPanel.contains(e.target)))){
         e.preventDefault();
         clearTimeout(ftbBlurTimer);
       }
     }, true);
-    hostWindow.addEventListener('scroll', function(){ if(ftbEl && ftbTarget) positionFtb(ftbEl, ftbTarget); }, true);
-    hostWindow.addEventListener('resize', function(){ if(ftbEl && ftbTarget) positionFtb(ftbEl, ftbTarget); });
+    window.addEventListener('scroll', function(){ if(ftbEl && ftbTarget) positionFtb(ftbEl, ftbTarget); }, true);
+    window.addEventListener('resize', function(){ if(ftbEl && ftbTarget) positionFtb(ftbEl, ftbTarget); });
     ftbHostListenersBound = true;
   }
 
@@ -1496,21 +1490,15 @@ export default function CampaignEditor() {
 
   function positionFtb(bar, el){
     var r = el.getBoundingClientRect();
-    var frameRect = null;
-    try { frameRect = window.frameElement ? window.frameElement.getBoundingClientRect() : null; } catch(e) {}
-    var scaleX = frameRect ? (frameRect.width / Math.max(1, window.innerWidth)) : 1;
-    var scaleY = frameRect ? (frameRect.height / Math.max(1, window.innerHeight)) : 1;
-
-    var anchorLeft = frameRect ? (frameRect.left + (r.left + r.width / 2) * scaleX) : (r.left + r.width / 2);
-    var anchorTop = frameRect ? (frameRect.top + r.top * scaleY) : r.top;
-    var anchorBottom = frameRect ? (frameRect.top + r.bottom * scaleY) : r.bottom;
-
-    var hostWindow = (window.parent && window.parent !== window) ? window.parent : window;
     var bw = bar.offsetWidth || 380;
     var bh = bar.offsetHeight || 38;
-    var left = Math.max(8, Math.min(anchorLeft - bw/2, hostWindow.innerWidth - bw - 8));
+    var anchorLeft = r.left + r.width / 2;
+    var anchorTop = r.top;
+    var anchorBottom = r.bottom;
+
+    var left = Math.max(8, Math.min(anchorLeft - bw/2, window.innerWidth - bw - 8));
     var top = anchorTop > bh + 20 ? (anchorTop - bh - 8) : (anchorBottom + 8);
-    top = Math.max(8, Math.min(top, hostWindow.innerHeight - bh - 8));
+    top = Math.max(8, Math.min(top, window.innerHeight - bh - 8));
     bar.style.top = top + 'px';
     bar.style.left = left + 'px';
     if(ftbColorPanel) positionPanelNear(bar, ftbColorPanel);
