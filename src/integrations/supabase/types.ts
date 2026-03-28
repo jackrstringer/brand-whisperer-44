@@ -232,6 +232,7 @@ export type Database = {
           exclude_segment_ids: string[] | null
           extra_copy: string | null
           generation_duration_secs: number | null
+          generation_mode: string
           generation_started_at: string | null
           goal: string | null
           html: string | null
@@ -253,6 +254,7 @@ export type Database = {
           status: string
           subject_line: string | null
           updated_at: string
+          variant_htmls: Json | null
         }
         Insert: {
           brand_id: string
@@ -262,6 +264,7 @@ export type Database = {
           exclude_segment_ids?: string[] | null
           extra_copy?: string | null
           generation_duration_secs?: number | null
+          generation_mode?: string
           generation_started_at?: string | null
           goal?: string | null
           html?: string | null
@@ -283,6 +286,7 @@ export type Database = {
           status?: string
           subject_line?: string | null
           updated_at?: string
+          variant_htmls?: Json | null
         }
         Update: {
           brand_id?: string
@@ -292,6 +296,7 @@ export type Database = {
           exclude_segment_ids?: string[] | null
           extra_copy?: string | null
           generation_duration_secs?: number | null
+          generation_mode?: string
           generation_started_at?: string | null
           goal?: string | null
           html?: string | null
@@ -313,6 +318,7 @@ export type Database = {
           status?: string
           subject_line?: string | null
           updated_at?: string
+          variant_htmls?: Json | null
         }
         Relationships: [
           {
