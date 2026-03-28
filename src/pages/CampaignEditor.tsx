@@ -1418,61 +1418,11 @@ export default function CampaignEditor() {
   var ftbTarget = null;
   var ftbBlurTimer = null;
   var ftbColorPanel = null;
-  var ftbPadPanel = null;
-  var ftbDoc = document;
-  var ftbHostListenersBound = false;
   var recentColors = [];
-
-  function getFtbDoc(){
-    return document;
-  }
-
-  function ensureFtbStyles(doc){
-    if(!doc || doc.getElementById('ftb-parent-styles')) return;
-    var style = doc.createElement('style');
-    style.id = 'ftb-parent-styles';
-    style.textContent = '@keyframes ftb-in{from{opacity:0;transform:translateY(6px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}.ftb{position:fixed;z-index:2147483000;background:rgba(18,18,20,0.97);backdrop-filter:blur(16px) saturate(1.4);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:4px 6px;display:flex;align-items:center;gap:2px;box-shadow:0 8px 32px rgba(0,0,0,0.6),0 0 0 1px rgba(255,255,255,0.04) inset;animation:ftb-in 0.18s cubic-bezier(0.16,1,0.3,1);font-family:-apple-system,BlinkMacSystemFont,\'SF Pro Text\',sans-serif;}.ftb-btn{background:none;border:none;color:rgba(255,255,255,0.55);width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all 0.12s;padding:0;}.ftb-btn:hover{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.9);}.ftb-btn.active{background:rgba(99,102,241,0.2);color:#a5b4fc;}.ftb-sep{width:1px;height:18px;background:rgba(255,255,255,0.08);margin:0 4px;flex-shrink:0;}.ftb-tag{font-size:9px;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.08em;padding:2px 8px;white-space:nowrap;font-weight:600;}.ftb-select{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.75);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:11px;padding:3px 6px;cursor:pointer;outline:none;height:28px;font-weight:500;transition:all 0.12s;-webkit-appearance:none;appearance:none;}.ftb-select:hover{border-color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.1);}.ftb-select:focus{border-color:rgba(99,102,241,0.5);}.ftb-swatch{width:24px;height:24px;border-radius:6px;border:2px solid rgba(255,255,255,0.15);cursor:pointer;position:relative;transition:all 0.12s;}.ftb-swatch:hover{border-color:rgba(255,255,255,0.4);transform:scale(1.1);}.ftb-cpanel{position:fixed;background:rgba(18,18,20,0.98);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px;box-shadow:0 12px 40px rgba(0,0,0,0.6);min-width:200px;animation:ftb-in 0.12s cubic-bezier(0.16,1,0.3,1);z-index:2147483001;}.ftb-cpanel-label{font-size:9px;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.08em;margin:6px 0 4px;font-weight:600;}.ftb-cpanel-label:first-child{margin-top:0;}.ftb-cpanel-row{display:flex;flex-wrap:wrap;gap:4px;}.ftb-cpanel-swatch{width:26px;height:26px;border-radius:5px;border:2px solid transparent;cursor:pointer;transition:all 0.12s;position:relative;}.ftb-cpanel-swatch:hover{border-color:rgba(255,255,255,0.4);transform:scale(1.12);}.ftb-cpanel-swatch.active{border-color:#818cf8;box-shadow:0 0 0 2px rgba(129,140,248,0.3);}.ftb-cpanel-swatch.active::after{content:\'✓\';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.5);}.ftb-hex-row{display:flex;gap:4px;margin-top:8px;align-items:center;}.ftb-hex-input{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:rgba(255,255,255,0.8);font-size:11px;padding:4px 6px;width:72px;outline:none;font-family:monospace;}.ftb-hex-input:focus{border-color:rgba(99,102,241,0.5);}.ftb-hex-native{width:28px;height:28px;border:none;padding:0;background:none;cursor:pointer;border-radius:4px;}.ftb-ideate{background:transparent;color:#c8f135;border:1.5px solid transparent;border-radius:7px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;transition:all 0.15s;position:relative;background-image:linear-gradient(rgba(18,18,20,0.97),rgba(18,18,20,0.97)),linear-gradient(135deg,#c8f135,#a5b4fc,#c8f135);background-origin:border-box;background-clip:padding-box,border-box;}.ftb-ideate:hover{background-image:linear-gradient(rgba(200,241,53,0.08),rgba(200,241,53,0.08)),linear-gradient(135deg,#c8f135,#a5b4fc,#c8f135);color:#d4f55a;box-shadow:0 0 16px rgba(200,241,53,0.2);}.ftb-pad-btn{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.6);border-radius:5px;font-size:11px;width:26px;height:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.12s;padding:0;}.ftb-pad-btn:hover{background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.9);}';
-    doc.head.appendChild(style);
-  }
-
-  function clampPanelPosition(panel){
-    if(!panel) return;
-    var rect = panel.getBoundingClientRect();
-    var left = parseFloat(panel.style.left || '0');
-    var top = parseFloat(panel.style.top || '0');
-    if(rect.right > window.innerWidth - 8) left -= (rect.right - (window.innerWidth - 8));
-    if(rect.left < 8) left += (8 - rect.left);
-    if(rect.bottom > window.innerHeight - 8) top -= (rect.bottom - (window.innerHeight - 8));
-    if(rect.top < 8) top += (8 - rect.top);
-    panel.style.left = Math.max(8, left) + 'px';
-    panel.style.top = Math.max(8, top) + 'px';
-  }
-
-  function positionPanelNear(anchorEl, panel){
-    if(!anchorEl || !panel) return;
-    var anchor = anchorEl.getBoundingClientRect();
-    panel.style.left = anchor.left + 'px';
-    panel.style.top = (anchor.bottom + 8) + 'px';
-    requestAnimationFrame(function(){ clampPanelPosition(panel); });
-  }
-
-  function bindFtbHostListeners(){
-    if(ftbHostListenersBound) return;
-    document.addEventListener('mousedown', function(e){
-      if(ftbEl && (ftbEl.contains(e.target) || (ftbColorPanel && ftbColorPanel.contains(e.target)) || (ftbPadPanel && ftbPadPanel.contains(e.target)))){
-        e.preventDefault();
-        clearTimeout(ftbBlurTimer);
-      }
-    }, true);
-    window.addEventListener('scroll', function(){ if(ftbEl && ftbTarget) positionFtb(ftbEl, ftbTarget); }, true);
-    window.addEventListener('resize', function(){ if(ftbEl && ftbTarget) positionFtb(ftbEl, ftbTarget); });
-    ftbHostListenersBound = true;
-  }
 
   function removeFtb(){
     if(ftbEl){ ftbEl.remove(); ftbEl = null; }
     if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; }
-    if(ftbPadPanel){ ftbPadPanel.remove(); ftbPadPanel = null; }
     ftbTarget = null;
     savedRange = null;
   }
@@ -1492,17 +1442,16 @@ export default function CampaignEditor() {
     var r = el.getBoundingClientRect();
     var bw = bar.offsetWidth || 380;
     var bh = bar.offsetHeight || 38;
-    var anchorLeft = r.left + r.width / 2;
-    var anchorTop = r.top;
-    var anchorBottom = r.bottom;
-
-    var left = Math.max(8, Math.min(anchorLeft - bw/2, window.innerWidth - bw - 8));
-    var top = anchorTop > bh + 20 ? (anchorTop - bh - 8) : (anchorBottom + 8);
-    top = Math.max(8, Math.min(top, window.innerHeight - bh - 8));
+    var left = Math.max(4, Math.min(r.left + r.width/2 - bw/2, window.innerWidth - bw - 4));
+    var top;
+    if(r.top > bh + 12){
+      top = r.top - bh - 8;
+    } else {
+      top = r.bottom + 8;
+    }
+    top = Math.max(4, Math.min(top, window.innerHeight - bh - 4));
     bar.style.top = top + 'px';
     bar.style.left = left + 'px';
-    if(ftbColorPanel) positionPanelNear(bar, ftbColorPanel);
-    if(ftbPadPanel) positionPanelNear(bar, ftbPadPanel);
   }
 
   function extractEmailColors(){
@@ -1763,37 +1712,37 @@ export default function CampaignEditor() {
   function showFtb(el){
     removeFtb();
     ftbTarget = el;
-    ftbDoc = getFtbDoc();
-    ensureFtbStyles(ftbDoc);
-    bindFtbHostListeners();
 
-    var bar = ftbDoc.createElement('div');
+    var bar = document.createElement('div');
     bar.className = 'ftb';
 
-    var tag = ftbDoc.createElement('span');
+    // Tag label
+    var tag = document.createElement('span');
     tag.className = 'ftb-tag';
     tag.textContent = getTagLabel(el);
     bar.appendChild(tag);
+
     bar.appendChild(makeSep());
 
-    var sizeSelect = ftbDoc.createElement('select');
+    // Font size select
+    var sizeSelect = document.createElement('select');
     sizeSelect.className = 'ftb-select';
     sizeSelect.title = 'Font size';
     var sizes = [10,12,13,14,16,18,20,24,28,32,40,48,64];
     var currentSize = getCurrentFontSize(el);
     sizes.forEach(function(s){
-      var opt = ftbDoc.createElement('option');
+      var opt = document.createElement('option');
       opt.value = s;
       opt.textContent = s + 'px';
       if(s === currentSize) opt.selected = true;
       sizeSelect.appendChild(opt);
     });
     if(sizes.indexOf(currentSize) < 0){
-      var dynOpt = ftbDoc.createElement('option');
-      dynOpt.value = currentSize;
-      dynOpt.textContent = currentSize + 'px';
-      dynOpt.selected = true;
-      sizeSelect.insertBefore(dynOpt, sizeSelect.firstChild);
+      var opt = document.createElement('option');
+      opt.value = currentSize;
+      opt.textContent = currentSize + 'px';
+      opt.selected = true;
+      sizeSelect.insertBefore(opt, sizeSelect.firstChild);
     }
     sizeSelect.addEventListener('mousedown', function(e){ e.stopPropagation(); clearTimeout(ftbBlurTimer); });
     sizeSelect.addEventListener('focus', function(){ clearTimeout(ftbBlurTimer); });
@@ -1817,20 +1766,28 @@ export default function CampaignEditor() {
     });
     bar.appendChild(sizeSelect);
 
-    var swatchWrap = ftbDoc.createElement('div');
-    var swatch = ftbDoc.createElement('div');
+    // Text color swatch
+    var currentColor = window.getComputedStyle(el).color;
+    var swatchWrap = document.createElement('div');
+    swatchWrap.style.position = 'relative';
+    var swatch = document.createElement('div');
     swatch.className = 'ftb-swatch';
-    swatch.style.backgroundColor = window.getComputedStyle(el).color;
+    swatch.style.backgroundColor = currentColor;
     swatch.title = 'Text color';
     swatch.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
-    swatch.addEventListener('click', function(e){ e.stopPropagation(); showColorPanel(swatchWrap, swatch, el); });
+    swatch.addEventListener('click', function(e){
+      e.stopPropagation();
+      showColorPanel(swatchWrap, swatch, el);
+    });
     swatchWrap.appendChild(swatch);
     bar.appendChild(swatchWrap);
 
-    var bgSwatchWrap = ftbDoc.createElement('div');
-    var bgSwatch = ftbDoc.createElement('div');
-    bgSwatch.className = 'ftb-swatch';
+    // Background color swatch
     var currentBg = window.getComputedStyle(el).backgroundColor;
+    var bgSwatchWrap = document.createElement('div');
+    bgSwatchWrap.style.position = 'relative';
+    var bgSwatch = document.createElement('div');
+    bgSwatch.className = 'ftb-swatch';
     var bgHex = rgbToHex(currentBg);
     bgSwatch.style.backgroundColor = bgHex && currentBg !== 'rgba(0, 0, 0, 0)' ? currentBg : 'transparent';
     if(!bgHex || currentBg === 'rgba(0, 0, 0, 0)'){
@@ -1840,24 +1797,30 @@ export default function CampaignEditor() {
     }
     bgSwatch.title = 'Background color';
     bgSwatch.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
-    bgSwatch.addEventListener('click', function(e){ e.stopPropagation(); showBgColorPanel(bgSwatchWrap, bgSwatch, el); });
+    bgSwatch.addEventListener('click', function(e){
+      e.stopPropagation();
+      showBgColorPanel(bgSwatchWrap, bgSwatch, el);
+    });
     bgSwatchWrap.appendChild(bgSwatch);
     bar.appendChild(bgSwatchWrap);
 
     bar.appendChild(makeSep());
 
+    // Bold
     var boldBtn = makeBtn('<b style="font-size:13px;">B</b>', 'Bold');
     boldBtn.setAttribute('data-ftb', 'bold');
     boldBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
     boldBtn.addEventListener('click', function(e){ e.stopPropagation(); applyCommand('bold'); updateBIUState(bar); });
     bar.appendChild(boldBtn);
 
+    // Italic
     var italicBtn = makeBtn('<i style="font-size:13px;font-family:Georgia,serif;">I</i>', 'Italic');
     italicBtn.setAttribute('data-ftb', 'italic');
     italicBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
     italicBtn.addEventListener('click', function(e){ e.stopPropagation(); applyCommand('italic'); updateBIUState(bar); });
     bar.appendChild(italicBtn);
 
+    // Underline
     var underlineBtn = makeBtn('<u style="font-size:13px;">U</u>', 'Underline');
     underlineBtn.setAttribute('data-ftb', 'underline');
     underlineBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
@@ -1866,6 +1829,7 @@ export default function CampaignEditor() {
 
     bar.appendChild(makeSep());
 
+    // Text align — SVG icons
     var alignSvgs = {
       left: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>',
       center: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg>',
@@ -1888,68 +1852,78 @@ export default function CampaignEditor() {
 
     bar.appendChild(makeSep());
 
-    var padToggle = makeBtn('<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>', 'Padding');
-    padToggle.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); clearTimeout(ftbBlurTimer); });
-    padToggle.addEventListener('click', function(e){
-      e.stopPropagation();
-      if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; }
-      if(ftbPadPanel){ ftbPadPanel.remove(); ftbPadPanel = null; return; }
-      var padPanel = ftbDoc.createElement('div');
-      padPanel.className = 'ftb-cpanel';
-      padPanel.style.minWidth = '160px';
-      padPanel.style.padding = '8px';
+    // Padding controls — expandable directional
+    var padWrap = document.createElement('div');
+    padWrap.style.cssText = 'position:relative;display:flex;align-items:center;gap:2px;';
+    var padToggle = document.createElement('button');
+    padToggle.className = 'ftb-btn';
+    padToggle.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>';
+    padToggle.title = 'Padding';
+    var padExpanded = false;
+    var padPanel = document.createElement('div');
+    padPanel.className = 'ftb-cpanel';
+    padPanel.style.cssText += 'display:none;min-width:160px;padding:8px;';
+    function buildPadPanel(){
+      padPanel.innerHTML = '';
       var dirs = [{label:'Top',prop:'paddingTop'},{label:'Right',prop:'paddingRight'},{label:'Bottom',prop:'paddingBottom'},{label:'Left',prop:'paddingLeft'}];
       dirs.forEach(function(d){
-        var row = ftbDoc.createElement('div');
+        var row = document.createElement('div');
         row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px;';
-        var lbl = ftbDoc.createElement('span');
+        var lbl = document.createElement('span');
         lbl.style.cssText = 'font-size:10px;color:rgba(255,255,255,0.5);width:36px;';
         lbl.textContent = d.label;
         row.appendChild(lbl);
-        var minus = ftbDoc.createElement('button');
+        var minus = document.createElement('button');
         minus.className = 'ftb-pad-btn';
         minus.innerHTML = '−';
-        minus.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
-        minus.addEventListener('click', function(ev){
+        minus.addEventListener('mousedown',function(ev){ev.preventDefault();ev.stopPropagation();});
+        minus.addEventListener('click',function(ev){
           ev.stopPropagation();
           var cur = parseInt(window.getComputedStyle(el)[d.prop]) || 0;
           el.style[d.prop] = Math.max(0, cur - 4) + 'px';
-          syncHtml();
-          if(val) val.textContent = (parseInt(window.getComputedStyle(el)[d.prop]) || 0) + '';
+          syncHtml(); buildPadPanel();
         });
         row.appendChild(minus);
-        var val = ftbDoc.createElement('span');
+        var val = document.createElement('span');
         val.style.cssText = 'font-size:11px;color:rgba(255,255,255,0.7);width:28px;text-align:center;font-family:monospace;';
         val.textContent = (parseInt(window.getComputedStyle(el)[d.prop]) || 0) + '';
         row.appendChild(val);
-        var plus = ftbDoc.createElement('button');
+        var plus = document.createElement('button');
         plus.className = 'ftb-pad-btn';
         plus.innerHTML = '+';
-        plus.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
-        plus.addEventListener('click', function(ev){
+        plus.addEventListener('mousedown',function(ev){ev.preventDefault();ev.stopPropagation();});
+        plus.addEventListener('click',function(ev){
           ev.stopPropagation();
           var cur = parseInt(window.getComputedStyle(el)[d.prop]) || 0;
           el.style[d.prop] = (cur + 4) + 'px';
-          syncHtml();
-          if(val) val.textContent = (parseInt(window.getComputedStyle(el)[d.prop]) || 0) + '';
+          syncHtml(); buildPadPanel();
         });
         row.appendChild(plus);
         padPanel.appendChild(row);
       });
-      ftbDoc.body.appendChild(padPanel);
-      ftbPadPanel = padPanel;
-      positionPanelNear(padToggle, padPanel);
+    }
+    buildPadPanel();
+    padToggle.addEventListener('mousedown',function(e){e.preventDefault();e.stopPropagation();clearTimeout(ftbBlurTimer);});
+    padToggle.addEventListener('click',function(e){
+      e.stopPropagation();
+      padExpanded = !padExpanded;
+      padPanel.style.display = padExpanded ? 'block' : 'none';
+      if(ftbColorPanel){ftbColorPanel.remove();ftbColorPanel=null;}
     });
-    bar.appendChild(padToggle);
+    padWrap.appendChild(padToggle);
+    padWrap.appendChild(padPanel);
+    bar.appendChild(padWrap);
 
     bar.appendChild(makeSep());
 
-    var ideateBtn = ftbDoc.createElement('button');
+    // Ideate button — stroke-only gradient border
+    var ideateBtn = document.createElement('button');
     ideateBtn.className = 'ftb-ideate';
     ideateBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg> Ideate';
     ideateBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
     ideateBtn.addEventListener('click', function(e){
       e.stopPropagation();
+      // Capture innerHTML to preserve inline styling (highlights, colors, etc.)
       var innerHTML = el.innerHTML;
       var outerHTML = el.outerHTML;
       var styles = el.getAttribute('style') || '';
@@ -1957,21 +1931,21 @@ export default function CampaignEditor() {
     });
     bar.appendChild(ideateBtn);
 
-    ftbDoc.body.appendChild(bar);
+    document.body.appendChild(bar);
     ftbEl = bar;
     positionFtb(bar, el);
     updateBIUState(bar);
   }
 
   function makeBtn(html, title){
-    var btn = ftbDoc.createElement('button');
+    var btn = document.createElement('button');
     btn.className = 'ftb-btn';
     btn.innerHTML = html;
     btn.title = title;
     return btn;
   }
   function makeSep(){
-    var sep = ftbDoc.createElement('div');
+    var sep = document.createElement('div');
     sep.className = 'ftb-sep';
     return sep;
   }
