@@ -1424,9 +1424,6 @@ export default function CampaignEditor() {
   var recentColors = [];
 
   function getFtbDoc(){
-    try {
-      if(window.parent && window.parent !== window && window.parent.document) return window.parent.document;
-    } catch(e) {}
     return document;
   }
 
