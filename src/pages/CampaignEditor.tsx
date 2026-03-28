@@ -1458,16 +1458,14 @@ export default function CampaignEditor() {
 
   function bindFtbHostListeners(){
     if(ftbHostListenersBound) return;
-    var hostDoc = getFtbDoc();
-    var hostWindow = (window.parent && window.parent !== window) ? window.parent : window;
-    hostDoc.addEventListener('mousedown', function(e){
+    document.addEventListener('mousedown', function(e){
       if(ftbEl && (ftbEl.contains(e.target) || (ftbColorPanel && ftbColorPanel.contains(e.target)) || (ftbPadPanel && ftbPadPanel.contains(e.target)))){
         e.preventDefault();
         clearTimeout(ftbBlurTimer);
       }
     }, true);
-    hostWindow.addEventListener('scroll', function(){ if(ftbEl && ftbTarget) positionFtb(ftbEl, ftbTarget); }, true);
-    hostWindow.addEventListener('resize', function(){ if(ftbEl && ftbTarget) positionFtb(ftbEl, ftbTarget); });
+    window.addEventListener('scroll', function(){ if(ftbEl && ftbTarget) positionFtb(ftbEl, ftbTarget); }, true);
+    window.addEventListener('resize', function(){ if(ftbEl && ftbTarget) positionFtb(ftbEl, ftbTarget); });
     ftbHostListenersBound = true;
   }
 
