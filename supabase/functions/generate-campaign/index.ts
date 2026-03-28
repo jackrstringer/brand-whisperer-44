@@ -774,8 +774,19 @@ RULES:
 
     // Final guard: never persist incomplete HTML
     if (!isCompleteHtml(html)) {
-      await supabase.from("campaigns").update({ status: "error" }).eq("id", campaignId);
+      if (!_isSubGeneration) {
+        await supabase.from("campaigns").update({ status: "error" }).eq("id", campaignId);
+      }
       throw new Error("Generated HTML was incomplete. Please try again.");
+    }
+
+    html = enforceNoStackingLayout(html);
+
+    // In sub-generation mode, just return the HTML without updating campaign status
+    if (_isSubGeneration) {
+      return new Response(JSON.stringify({ html }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Derive a short campaign name — always generate a meaningful one
@@ -791,39 +802,18 @@ RULES:
 
     let campaignName = existingNameRaw;
     if (isDefaultName) {
-      // Try to derive from brief first
       if (brief && brief.trim().length > 3) {
         const briefWords = brief.trim().split(/\s+/);
-        campaignName = briefWords.length <= 7
-          ? brief.trim()
-          : briefWords.slice(0, 7).join(" ");
+        campaignName = briefWords.length <= 7 ? brief.trim() : briefWords.slice(0, 7).join(" ");
       } else {
-        // No brief — extract a name from the generated HTML content
-        // Pull the first headline or subject-like text from the email
         const h1Match = html.match(/<(?:h1|h2)[^>]*>([\s\S]*?)<\/(?:h1|h2)>/i);
         const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
         const rawTitle = (h1Match?.[1] || titleMatch?.[1] || "").replace(/<[^>]*>/g, "").replace(/&[^;]+;/g, " ").replace(/\s+/g, " ").trim();
         const titleWords = rawTitle.split(/\s+/);
         if (rawTitle.length > 3) {
-          campaignName = titleWords.length <= 7
-            ? rawTitle
-            : titleWords.slice(0, 7).join(" ");
+          campaignName = titleWords.length <= 7 ? rawTitle : titleWords.slice(0, 7).join(" ");
         } else {
-          // Last resort: use goal
-          const goalLabels: Record<string, string> = {
-            promotional: "Promotional Campaign",
-            educational: "Educational Campaign",
-            "re-engagement": "Re-engagement Campaign",
-            seasonal: "Seasonal Campaign",
-            welcome: "Welcome Email",
-            social_proof: "Social Proof Campaign",
-            highlight: "Brand Highlight",
-            product_launch: "Product Launch",
-            abandoned_cart: "Abandoned Cart",
-            win_back: "Win-back Campaign",
-            newsletter: "Newsletter",
-            announcement: "Announcement",
-          };
+          const goalLabels: Record<string, string> = { promotional: "Promotional Campaign", educational: "Educational Campaign", "re-engagement": "Re-engagement Campaign", seasonal: "Seasonal Campaign", welcome: "Welcome Email", social_proof: "Social Proof Campaign", highlight: "Brand Highlight", product_launch: "Product Launch", abandoned_cart: "Abandoned Cart", win_back: "Win-back Campaign", newsletter: "Newsletter", announcement: "Announcement" };
           campaignName = goalLabels[goal] || "Campaign";
         }
       }
@@ -831,21 +821,12 @@ RULES:
 
     const durationSecs = Math.round((Date.now() - new Date(genStartedAt).getTime()) / 1000);
 
-    html = enforceNoStackingLayout(html);
-
     await supabase.from("campaigns").update({
-      html,
-      status: "ready",
-      brief,
-      goal,
-      name: campaignName,
-      generation_duration_secs: durationSecs,
+      html, status: "ready", brief, goal, name: campaignName, generation_duration_secs: durationSecs,
     }).eq("id", campaignId);
 
     await supabase.from("chat_messages").insert({
-      campaign_id: campaignId,
-      role: "system",
-      content: "Campaign generated",
+      campaign_id: campaignId, role: "system", content: "Campaign generated",
     });
 
     return new Response(JSON.stringify({ html }), {
