@@ -31,32 +31,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-function enforceNoStackingLayout(html: string): string {
-  if (!html) return html;
-
-  let output = html;
-
-  // Remove common mobile-collapse rules that force side-by-side layouts into a single column
-  const collapseSelectorPattern = /\.(?:[a-z0-9_-]*?(?:grid|col|column|two-col|two_col|product|gift)[a-z0-9_-]*?(?:cell|col|column)?|(?:product-grid-cell|two-col-cell|gift-cell|column-cell|grid-cell))\s*\{[^}]*\}/gi;
-  output = output.replace(collapseSelectorPattern, (rule) => {
-    return rule
-      .replace(/display\s*:\s*block\s*!important;?/gi, "")
-      .replace(/width\s*:\s*100%\s*!important;?/gi, "")
-      .replace(/float\s*:\s*none\s*!important;?/gi, "")
-      .replace(/max-width\s*:\s*100%\s*!important;?/gi, "")
-      .replace(/;\s*;/g, ";");
-  });
-
-  // Force common multi-column classes to remain side-by-side at all breakpoints
-  if (/<head[^>]*>/i.test(output)) {
-    output = output.replace(
-      /(<head[^>]*>)/i,
-      `$1<style>.product-grid-cell,.two-col-cell,.gift-cell,.column-cell,.grid-cell{display:table-cell !important;vertical-align:top !important;}.product-grid-cell,.two-col-cell,.column-cell,.grid-cell{width:auto !important;}</style>`
-    );
-  }
-
-  return output;
-}
+// enforceNoStackingLayout is now imported from _shared/enforceNoStackingLayout.ts
 
 /** Anthropic API call with AbortController timeout */
 async function callAnthropic(body: object, apiKey: string, timeoutMs = 240000): Promise<Response> {
