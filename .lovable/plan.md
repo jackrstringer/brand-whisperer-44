@@ -1,65 +1,60 @@
 
 
-## Plan: Teach the AI to Analyze Reference Image Slot Dimensions and Apply "Object-Fit" Logic
+## Plan: Strip Down Reference/Dupe Mode Prompts
 
 ### Problem
-The AI has ImageKit transform instructions but doesn't **analyze the reference's actual image slot proportions**. When a reference shows a 2×2 grid of square images, the AI sees it but doesn't extract "these are ~280×280 square slots" and apply `?tr=w-280,h-280,fo-auto` to force-fit the brand's images. It just drops images in at their native aspect ratio.
+When a reference campaign is provided, the AI receives too many competing instructions (UNIVERSAL_EMAIL_RULES, OBJECT-FIT RULE, STRUCTURAL VARIETY, CREATIVE DIRECTION, etc.) that dilute focus. The reference screenshot should be the primary instruction — everything else is noise.
 
-### Solution
-Strengthen the generation prompt to explicitly instruct the AI to **measure and replicate reference image slot proportions** using a "Figma object-fit" mental model. Also strengthen the QA pass to catch proportion mismatches.
+### Changes — `supabase/functions/generate-campaign/index.ts`
 
-### Changes
+#### 1. Add a minimal system prompt constant (~line 183, after UNIVERSAL_EMAIL_RULES)
 
-#### 1. `supabase/functions/generate-campaign/index.ts` — Generation prompt improvements
-
-**In the reference mode instructions** (both "reference" and "dupe" blocks, ~lines 478-513):
-Add an explicit step: "Before generating, analyze each image slot in the reference: Is it square? Wide banner? Portrait? 2×2 grid? Note the approximate aspect ratio of every image slot, then apply the matching ImageKit `fo-auto` crop to every brand image you place in that slot."
-
-**In the IMAGE & GRID LAYOUT RULES section** (~line 591-625):
-Replace the current generic transform docs with a stronger "Object-Fit" paradigm:
-
-```
-=== OBJECT-FIT RULE (CRITICAL — like Figma's "Fill" mode) ===
-When placing ANY image into a layout slot defined by the reference:
-1. DETERMINE the slot's aspect ratio from the reference (square = 1:1, wide banner ≈ 2.4:1, etc.)
-2. CALCULATE pixel dimensions: for a 2-column grid at 470px width with gaps, each slot ≈ 220px wide. Square = 220×220. Wide = 470×200.
-3. APPLY fo-auto crop: append ?tr=w-{W},h-{H},fo-auto to the ik.imagekit.io URL
-4. SET matching width/height on the <img> tag AND its container
-
-Common slot patterns to recognize in references:
-- 2×2 square grid → each image: ?tr=w-220,h-220,fo-auto (or ar-1-1,w-220)
-- Full-width hero banner → ?tr=w-470,h-300,fo-auto
-- 2-column product cards → ?tr=w-220,h-280,fo-auto
-- Single centered product → ?tr=w-300,h-400,fo-auto
-
-EVERY image in a grid MUST use identical transform dimensions. No exceptions.
+```typescript
+const REFERENCE_MODE_SYSTEM = `You are an expert HTML email developer.
+Technical requirements — apply these always:
+- HTML tables for all layout, all styles inline
+- Wrapper: width="100%" style="max-width:600px; width:100%; margin:0 auto;"
+- Gmail dark mode: add background-image:linear-gradient(#ffffff,#ffffff) alongside background-color:#ffffff on every white <td> and the wrapper
+- Add in <style>: u+.body .gmail-blend-screen{background:#000;mix-blend-mode:screen;}
+                  u+.body .gmail-blend-difference{background:#000;mix-blend-mode:difference;}
+- No emoji anywhere — use inline SVG for all icons
+- Footer required: brand name, unsubscribe link (#unsubscribe), address
+- Return only complete HTML, no commentary, no markdown fences.`;
 ```
 
-#### 2. `supabase/functions/generate-campaign/index.ts` — QA Pass 2 prompt
+#### 2. Restructure user message construction for reference modes (~lines 432-690)
 
-In the QA system prompt (~line 219-220), strengthen the image-fit checks:
+When `referenceMode` is set ("dupe" or "reference"), build a completely different `userContent` array with only these 5 parts in order:
 
-```
-9. IMAGE SLOT PROPORTIONS: For every <img> in a grid or multi-image section, verify ALL images use IDENTICAL width and height attributes AND identical ImageKit transforms. If any image in a 2×2 or 2×3 grid has different dimensions than its siblings, normalize them all to the same ?tr=w-X,h-Y,fo-auto transform. This is a CRITICAL issue.
-10. ASPECT RATIO MATCH: If the reference shows square image slots, every image must be cropped square via fo-auto. Portrait images jammed into landscape slots (or vice versa) MUST be fixed with appropriate fo-auto transforms.
+1. **Brand reference screenshots** (existing `imageBlocks`) with label: "These are past campaigns from this brand — study them for design language, colors, fonts, and spacing only."
+2. **Reference campaign images** (`referenceImageBlocks`) with label: "This is the reference layout to replicate. Clone its exact structure, section count, column layout, image sizing, and proportions. Apply the brand's colors, fonts, and copy on top."
+3. **Brand rules** — just `profile.system_prompt` (colors, fonts, spacing tokens)
+4. **Asset catalog** + product requirements (keep these — Claude needs to know what images exist)
+5. **Brief** — "Generate a [goal] email. Brief: [brief]. [copy if provided]. Return only complete HTML."
+
+**Remove from reference mode path:**
+- `brandValuesText` block (brand values already in `system_prompt`)
+- `CREATIVE DIRECTION` block
+- `STRUCTURAL VARIETY RULES`
+- `IMAGE & GRID LAYOUT RULES` / `OBJECT-FIT RULE` / `IMAGEKIT TRANSFORM SYNTAX` blocks
+- `NO-STACK RULE`
+- Dupe warning block
+- The long reference/dupe instruction blocks (lines 478-531) — replaced by the simpler labels above
+
+#### 3. Switch system prompt based on mode (~line 690)
+
+```typescript
+const systemPrompt = referenceMode ? REFERENCE_MODE_SYSTEM : UNIVERSAL_EMAIL_RULES;
+// Use systemPrompt in the callAnthropic call
 ```
 
-#### 3. `supabase/functions/aggressive-qa/index.ts` — Perfection mode QA
+#### 4. Standard mode (no reference) — completely unchanged
 
-Add to the system prompt's comparison checklist:
-```
-IMAGE SLOT PROPORTIONS (HIGHEST PRIORITY):
-- Count image slots in the reference. Count in the output. Must match.
-- If reference shows a 2×2 grid of square images, output MUST have 2×2 square images.
-- Every image in a grid must have IDENTICAL dimensions via ImageKit ?tr=w-X,h-Y,fo-auto.
-- Portrait images in landscape slots = CRITICAL failure.
-- Missing fo-auto transforms on grid images = CRITICAL failure.
-```
+All existing logic for `!referenceMode` stays exactly as-is.
 
 ### Files modified
 
 | File | What changes |
 |------|-------------|
-| `supabase/functions/generate-campaign/index.ts` | Rewrite IMAGE & GRID LAYOUT RULES with object-fit paradigm; strengthen reference mode instructions to extract slot proportions; strengthen QA Pass 2 image checks |
-| `supabase/functions/aggressive-qa/index.ts` | Add image slot proportion checks as highest-priority items in system prompt |
+| `supabase/functions/generate-campaign/index.ts` | Add `REFERENCE_MODE_SYSTEM` constant; fork user message construction into reference vs standard paths; use minimal system prompt for reference modes |
 
