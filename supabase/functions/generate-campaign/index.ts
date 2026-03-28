@@ -457,9 +457,21 @@ You MUST feature these products prominently in the campaign. Use at least one im
 
       // Part 2: Reference campaign images (layout to clone)
       if (referenceImageBlocks.length > 0) {
+        const dupeLabel = referenceMode === "dupe"
+          ? `DUPE MODE — EXACT STRUCTURAL CLONE REQUIRED.
+This is the reference layout. You must produce an IDENTICAL structural replica:
+- SAME number of sections, in the SAME order
+- SAME column layouts (if it has a 2-column grid, yours has a 2-column grid)
+- SAME image slot count and positions (if it has 4 images in a 2×2 grid, yours has 4 images in a 2×2 grid)
+- SAME image aspect ratios and sizing (if images are square, yours are square)
+- SAME section types (hero, text block, product grid, CTA, footer — match them 1:1)
+- SAME visual rhythm (spacing proportions between sections)
+- ONLY change: swap in the brand's colors, fonts, copy, and images. The skeleton stays identical.
+Do NOT add sections that don't exist in the reference. Do NOT remove sections that do exist. Do NOT rearrange anything.`
+          : `This is the reference layout. Strongly follow its structure, section count, column layout, image sizing, and proportions. Apply the brand's colors, fonts, and copy on top. You may adapt minor details but keep the overall skeleton very close.`;
         userContent.push({
           type: "text",
-          text: "This is the reference layout to replicate. Clone its exact structure, section count, column layout, image sizing, and proportions. Apply the brand's colors, fonts, and copy on top.",
+          text: dupeLabel,
         });
         userContent.push(...referenceImageBlocks);
       }
