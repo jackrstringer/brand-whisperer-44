@@ -40,9 +40,7 @@ Return ONLY a JSON object:
     {
       "severity": "critical" | "major" | "minor",
       "category": "layout" | "image" | "spacing" | "text" | "button" | "logo" | "footer" | "color" | "cohesion" | "proportion",
-      "description": "Clear description of what's wrong",
-      "find": "exact HTML string to find (if fixable via code)",
-      "replace": "corrected HTML string (if fixable via code)"
+      "description": "Clear description of what's wrong"
     }
   ],
   "summary": "One sentence assessment"
