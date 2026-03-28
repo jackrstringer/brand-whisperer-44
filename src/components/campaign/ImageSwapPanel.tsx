@@ -32,7 +32,7 @@ const CATEGORY_TABS = [
   { id: "logo", label: "Logo" },
 ];
 
-export default function ImageSwapPanel({ brandId, currentSrc, currentCategory, onSwap, onClose }: ImageSwapPanelProps) {
+export default function ImageSwapPanel({ brandId, currentSrc, currentCategory, onSwap, onClose, onAssetsLoaded }: ImageSwapPanelProps) {
   const [assets, setAssets] = useState<AssetItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
