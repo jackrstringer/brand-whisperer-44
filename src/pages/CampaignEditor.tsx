@@ -2510,8 +2510,21 @@ export default function CampaignEditor() {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
+        {/* Image Swap Panel */}
+        {imageSwap && brandId && (
+          <ImageSwapPanel
+            brandId={brandId}
+            currentSrc={imageSwap.src}
+            currentCategory={imageSwap.category}
+            onSwap={(url) => {
+              handleImageSwap(url);
+            }}
+            onClose={() => setImageSwap(null)}
+            onAssetsLoaded={(urls) => { imageSwapAssetsRef.current = urls; }}
+          />
+        )}
         {/* Left Panel — Preview or Inspiration — fixed 65% */}
-        <div className="h-full overflow-hidden flex" style={{ width: '65%', minWidth: 0 }}>
+        <div className="h-full overflow-hidden flex" style={{ width: imageSwap ? 'calc(65% - 320px)' : '65%', minWidth: 0 }}>
           {/* Reference side-by-side (when toggled on post-generation) */}
           {showReferenceDialog && campaign?.html && selectedReference && (
             <>
