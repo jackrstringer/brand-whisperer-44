@@ -41,6 +41,9 @@ interface RefCampaign {
   message_type: string | null;
   extracted_copy: string | null;
   ai_metadata: any | null;
+  slicing_status: string | null;
+  image_slice_urls: any[] | null;
+  image_total_height: number | null;
 }
 
 export default function AdminLibrary() {
