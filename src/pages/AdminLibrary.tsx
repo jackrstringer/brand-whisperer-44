@@ -48,6 +48,7 @@ export default function AdminLibrary() {
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
   const [editingItem, setEditingItem] = useState<RefCampaign | null>(null);
+  const [detailItem, setDetailItem] = useState<RefCampaign | null>(null);
 
   // Form state
   const [title, setTitle] = useState("");
