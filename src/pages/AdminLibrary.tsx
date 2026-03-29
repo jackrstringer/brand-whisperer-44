@@ -12,6 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { toast } from "sonner";
 import { MoreVertical, Trash2, Pencil, Eye, EyeOff, Sparkles } from "lucide-react";
 import ReferenceUploadZone from "@/components/admin/ReferenceUploadZone";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ReferenceCampaignSlicesTab } from "@/components/admin/ReferenceCampaignSlicesTab";
 import {
   DropdownMenu,
   DropdownMenuContent,
