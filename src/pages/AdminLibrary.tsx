@@ -76,7 +76,7 @@ export default function AdminLibrary() {
       .from("reference_campaigns")
       .select("*")
       .order("sort_order", { ascending: true });
-    if (data) setCampaigns(data as RefCampaign[]);
+    if (data) setCampaigns(data as unknown as RefCampaign[]);
     setLoading(false);
   }, []);
 
