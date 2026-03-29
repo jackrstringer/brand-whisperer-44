@@ -48,6 +48,7 @@ export default function AdminLibrary() {
   const [loading, setLoading] = useState(true);
   const [showUpload, setShowUpload] = useState(false);
   const [editingItem, setEditingItem] = useState<RefCampaign | null>(null);
+  const [detailItem, setDetailItem] = useState<RefCampaign | null>(null);
 
   // Form state
   const [title, setTitle] = useState("");
@@ -254,7 +255,7 @@ export default function AdminLibrary() {
         <ReferenceUploadZone onUploaded={loadCampaigns} campaignCount={campaigns.length} />
         <div className="grid grid-cols-3 gap-4">
           {campaigns.map((item) => (
-            <div key={item.id} className="rounded-lg border border-border overflow-hidden bg-card group">
+            <div key={item.id} className="rounded-lg border border-border overflow-hidden bg-card group cursor-pointer" onClick={() => setDetailItem(item)}>
               <div className="relative">
                 <img src={item.thumbnail_url} alt={item.title} className="w-full h-[200px] object-cover object-top" />
                 <div className="absolute top-2 right-2">
