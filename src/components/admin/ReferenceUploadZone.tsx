@@ -74,7 +74,15 @@ export default function ReferenceUploadZone({ onUploaded, campaignCount }: Refer
           body: { referenceId: id, imageUrls: [publicUrl] },
         }).then(({ error }) => {
           if (error) console.error("AI analysis error:", error);
-          else onUploaded(); // Refresh to show AI metadata
+          else onUploaded();
+        });
+
+        // Fire-and-forget slicing
+        supabase.functions.invoke("slice-reference", {
+          body: { referenceCampaignId: id },
+        }).then(({ error }) => {
+          if (error) console.error("Slice-reference error:", error);
+          else onUploaded();
         });
 
         toast.success(`Uploaded: ${title}`);

@@ -429,8 +429,33 @@ You MUST feature these products prominently in the campaign. Use at least one im
         const s = reference.strength || 5;
         referenceMode = s >= 9 ? "dupe" : "reference";
       }
-      // Fetch reference images
-      for (const url of reference.image_urls.slice(0, 10)) {
+
+      // Check if this reference campaign has pre-computed slices
+      let sliceImageUrls: string[] = [];
+      if (reference.id) {
+        const { data: refCampaign } = await supabase
+          .from("reference_campaigns")
+          .select("slicing_status, image_slice_urls")
+          .eq("id", reference.id)
+          .single();
+
+        if (
+          refCampaign &&
+          (refCampaign as any).slicing_status === "complete" &&
+          Array.isArray((refCampaign as any).image_slice_urls) &&
+          (refCampaign as any).image_slice_urls.length > 0
+        ) {
+          const slices = (refCampaign as any).image_slice_urls as Array<{ index: number; label: string; url: string }>;
+          slices.sort((a, b) => a.index - b.index);
+          sliceImageUrls = slices.map((s) => s.url);
+          console.log(`[generate-campaign] Using ${sliceImageUrls.length} pre-computed slices for reference campaign ${reference.id}`);
+        }
+      }
+
+      // Use slices if available, otherwise fall back to original image_urls
+      const urlsToFetch = sliceImageUrls.length > 0 ? sliceImageUrls : reference.image_urls.slice(0, 10);
+
+      for (const url of urlsToFetch) {
         try {
           const imgResp = await fetch(url);
           if (!imgResp.ok) continue;
@@ -441,6 +466,14 @@ You MUST feature these products prominently in the campaign. Use at least one im
           const b64 = arrayBufferToBase64(buf);
           referenceImageBlocks.push({ type: "image", source: { type: "base64", media_type: mediaType, data: b64 } });
         } catch {}
+      }
+
+      // Add slice context prefix to help Claude understand the multi-image layout
+      if (sliceImageUrls.length > 1 && referenceImageBlocks.length > 1) {
+        referenceImageBlocks.unshift({
+          type: "text",
+          text: "The following images are sequential horizontal slices of a reference email campaign, from top to bottom. Image 1 is a full overview for layout context. Images 2+ are full-resolution detail sections. Use all slices together to understand the complete reference email.",
+        });
       }
     }
 
