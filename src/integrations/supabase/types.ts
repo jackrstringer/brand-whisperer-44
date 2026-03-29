@@ -507,10 +507,13 @@ export type Database = {
           created_at: string | null
           extracted_copy: string | null
           id: string
+          image_slice_urls: Json | null
+          image_total_height: number | null
           image_urls: string[] | null
           industry: string | null
           is_published: boolean | null
           message_type: string | null
+          slicing_status: string
           sort_order: number | null
           tags: string[] | null
           thumbnail_url: string
@@ -524,10 +527,13 @@ export type Database = {
           created_at?: string | null
           extracted_copy?: string | null
           id?: string
+          image_slice_urls?: Json | null
+          image_total_height?: number | null
           image_urls?: string[] | null
           industry?: string | null
           is_published?: boolean | null
           message_type?: string | null
+          slicing_status?: string
           sort_order?: number | null
           tags?: string[] | null
           thumbnail_url: string
@@ -541,10 +547,13 @@ export type Database = {
           created_at?: string | null
           extracted_copy?: string | null
           id?: string
+          image_slice_urls?: Json | null
+          image_total_height?: number | null
           image_urls?: string[] | null
           industry?: string | null
           is_published?: boolean | null
           message_type?: string | null
+          slicing_status?: string
           sort_order?: number | null
           tags?: string[] | null
           thumbnail_url?: string
