@@ -175,12 +175,12 @@ export default function CampaignEditor() {
         // speedMode is always "normal" now
         const history = campaign.html_history;
         setCanUndo(Array.isArray(history) && history.length > 0);
-        // If variants are ready from a previous session, show picker
-        if ((c as any).status === "variants_ready" && (c as any).variant_htmls) {
+        // If variants are ready from a previous session, restore them
+        if ((c as any).variant_htmls && Array.isArray((c as any).variant_htmls)) {
           const variants = (c as any).variant_htmls as any[];
-          setVariantHtmls(variants);
-          setShowVariantPicker(true);
-          setGenerationMode("perfection");
+          if (variants.some((v: any) => v.html)) {
+            setVariantHtmls(variants);
+          }
         }
       }
       const { data: msgs } = await supabase
