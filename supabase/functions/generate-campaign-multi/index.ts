@@ -7,18 +7,18 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const CREATIVE_SEEDS = [
+const VARIANT_SEEDS = [
   {
-    label: "Editorial & Bold",
-    seed: "CREATIVE DIRECTION: Editorial & bold — Use a dramatic large hero image taking up significant screen space, magazine-style asymmetric layouts, bold oversized headlines with strong typographic contrast, cinematic image treatment. Think high-fashion editorial meets email.",
+    label: "Original",
+    seed: "", // No modification — identical to standard generation
   },
   {
-    label: "Clean & Minimal",
-    seed: "CREATIVE DIRECTION: Clean & minimal — generous whitespace everywhere, single-column layout, restrained color usage, elegant understated typography, let the product imagery be the star with minimal text. Think Apple product announcement email.",
+    label: "Creative",
+    seed: "CREATIVE DIRECTION OVERRIDE: Push the creative boundaries — use bolder typography choices, more dramatic visual hierarchy, unexpected layout compositions, and stronger color contrasts. Be more experimental with spacing, imagery placement, and section arrangements. Think editorial magazine meets email.",
   },
   {
-    label: "Dynamic & Engaging",
-    seed: "CREATIVE DIRECTION: Dynamic & engaging — Use a multi-section layout with alternating full-width and grid sections, product comparison grids, multiple CTAs throughout, energetic visual rhythm with varied section types. Think a vibrant shopping lookbook email.",
+    label: "Conservative",
+    seed: "CREATIVE DIRECTION OVERRIDE: Keep this clean, proven, and conversion-focused — use a straightforward single-column layout, conventional typography hierarchy, generous whitespace, clear visual flow from top to bottom, and standard CTA placement. Prioritize readability and clarity over creative risk.",
   },
 ];
 
@@ -37,17 +37,15 @@ Deno.serve(async (req) => {
     const { brandId, campaignId } = body;
     if (!brandId || !campaignId) throw new Error("brandId and campaignId required");
 
-    console.log(`[multi] Starting perfection mode for campaign ${campaignId}`);
+    console.log(`[multi] Starting 3-variant generation for campaign ${campaignId}`);
 
-    // Mark as generating with mode
+    // Mark as generating
     await supabase.from("campaigns").update({
       status: "generating",
-      generation_mode: "perfection",
       generation_started_at: new Date().toISOString(),
       variant_htmls: [],
     }).eq("id", campaignId);
 
-    // Return immediately — do heavy work in background
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -55,11 +53,13 @@ Deno.serve(async (req) => {
     (globalThis as any).EdgeRuntime.waitUntil(
       (async () => {
         try {
-          // Fire 3 parallel generation calls with different creative seeds
-          const generationPromises = CREATIVE_SEEDS.map(async (direction, index) => {
+          const generationPromises = VARIANT_SEEDS.map(async (direction, index) => {
             const variantBody = {
               ...body,
-              designNotes: [body.designNotes || "", direction.seed].filter(Boolean).join("\n\n"),
+              // Only append seed if non-empty (Original has no seed)
+              designNotes: direction.seed
+                ? [body.designNotes || "", direction.seed].filter(Boolean).join("\n\n")
+                : body.designNotes || "",
               _isSubGeneration: true,
               _variantIndex: index,
             };
@@ -93,13 +93,9 @@ Deno.serve(async (req) => {
 
           const results = await Promise.all(generationPromises);
 
-          // Build variant_htmls array
           const variantHtmls = results.map((r) => ({
             label: r.label,
             html: r.html || null,
-            qa_score: null,
-            qa_summary: null,
-            qa_round: 0,
             status: r.html ? "generated" : "error",
             error: r.error,
           }));
@@ -107,21 +103,45 @@ Deno.serve(async (req) => {
           const successCount = variantHtmls.filter((v) => v.html).length;
           console.log(`[multi] ${successCount}/3 variants generated successfully`);
 
-          // Save variants and set status
+          // STATUS GUARD: only update if campaign is still in "generating" state
+          const { data: latest } = await supabase
+            .from("campaigns")
+            .select("status")
+            .eq("id", campaignId)
+            .single();
+
+          if (latest?.status !== "generating") {
+            console.log(`[multi] Campaign status is "${latest?.status}", skipping update (race condition guard)`);
+            return;
+          }
+
+          // If at least variant 0 (Original) succeeded, also set the main html
+          const originalHtml = variantHtmls[0]?.html || variantHtmls.find(v => v.html)?.html || null;
+
           await supabase.from("campaigns").update({
             variant_htmls: variantHtmls,
+            html: originalHtml,
             status: successCount > 0 ? "variants_ready" : "error",
           }).eq("id", campaignId);
         } catch (err: any) {
           console.error("[multi] Background processing error:", err);
-          await supabase.from("campaigns").update({
-            status: "error",
-          }).eq("id", campaignId);
+
+          // STATUS GUARD: don't overwrite if already moved past generating
+          const { data: latest } = await supabase
+            .from("campaigns")
+            .select("status")
+            .eq("id", campaignId)
+            .single();
+
+          if (latest?.status === "generating") {
+            await supabase.from("campaigns").update({
+              status: "error",
+            }).eq("id", campaignId);
+          }
         }
       })()
     );
 
-    // Return immediately with accepted status
     return new Response(
       JSON.stringify({ success: true, message: "Generation started" }),
       { status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" } },

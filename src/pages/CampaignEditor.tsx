@@ -4,7 +4,6 @@ import ProductSelector, { type SelectedShopifyProduct } from "@/components/brand
 import SegmentSelector from "@/components/brand/SegmentSelector";
 import ReferencePanel, { type SelectedReference } from "@/components/campaign/ReferencePanel";
 import ImageSwapPanel from "@/components/campaign/ImageSwapPanel";
-import VariantPicker from "@/components/campaign/VariantPicker";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -12,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, Send, Undo2, Redo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, RotateCcw, Link2, Loader2, Sparkles } from "lucide-react";
+import { ArrowLeft, Download, Send, Undo2, Redo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, RotateCcw, Link2, Loader2, Copy } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -112,10 +111,9 @@ export default function CampaignEditor() {
   const [dragSelect, setDragSelect] = useState<{ startX: number; startY: number; x: number; y: number; active: boolean } | null>(null);
    const [imageSwap, setImageSwap] = useState<{ src: string; category: string } | null>(null);
   const imageSwapAssetsRef = useRef<string[]>([]);
-  const [generationMode, setGenerationMode] = useState<"standard" | "perfection">("standard");
-  const [showVariantPicker, setShowVariantPicker] = useState(false);
   const [variantHtmls, setVariantHtmls] = useState<any[]>([]);
-  const [qaProgress, setQaProgress] = useState<{ [index: number]: string }>({});
+  const [activeVariantIndex, setActiveVariantIndex] = useState(0);
+  const generationCompletedRef = useRef(false);
 
   // Restore reference panel state from localStorage
   useEffect(() => {
@@ -177,12 +175,12 @@ export default function CampaignEditor() {
         // speedMode is always "normal" now
         const history = campaign.html_history;
         setCanUndo(Array.isArray(history) && history.length > 0);
-        // If variants are ready from a previous session, show picker
-        if ((c as any).status === "variants_ready" && (c as any).variant_htmls) {
+        // If variants are ready from a previous session, restore them
+        if ((c as any).variant_htmls && Array.isArray((c as any).variant_htmls)) {
           const variants = (c as any).variant_htmls as any[];
-          setVariantHtmls(variants);
-          setShowVariantPicker(true);
-          setGenerationMode("perfection");
+          if (variants.some((v: any) => v.html)) {
+            setVariantHtmls(variants);
+          }
         }
       }
       const { data: msgs } = await supabase
@@ -365,7 +363,10 @@ export default function CampaignEditor() {
     setGenerating(true);
     setGenStartTime(Date.now());
     setGenElapsed(0);
+    generationCompletedRef.current = false;
     setCampaign((c) => c ? { ...c, status: "generating" } : c);
+    setVariantHtmls([]);
+    setActiveVariantIndex(0);
 
     // Upload any draft reference images
     let draftRefUrls: string[] = [];
@@ -376,31 +377,6 @@ export default function CampaignEditor() {
     }
 
     const allPinned = [...pinnedAssetUrls, ...draftRefUrls];
-
-    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-campaign`;
-    fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-      },
-      body: JSON.stringify({
-        brandId, campaignId, brief, goal, copy: extraCopy || undefined, speedMode,
-        productIds: selectedProductIds.length > 0 ? selectedProductIds : undefined,
-        pinnedAssetUrls: allPinned.length > 0 ? allPinned : undefined,
-        matchProductColors: matchProductColors || undefined,
-        designNotes: designNotes.trim() || undefined,
-        shopifyProducts: selectedShopifyProducts.length > 0 ? selectedShopifyProducts : undefined,
-        reference: selectedReference ? {
-          type: selectedReference.type,
-          id: selectedReference.id,
-          image_urls: selectedReference.image_urls,
-          strength: selectedReference.strength,
-          mode: selectedReference.mode,
-        } : undefined,
-      }),
-    }).catch(() => {});
 
     // Persist all draft preferences to campaign record
     await supabase.from("campaigns").update({
@@ -416,6 +392,41 @@ export default function CampaignEditor() {
       send_segment_ids: sendSegmentIds.length > 0 ? sendSegmentIds : null,
     } as any).eq("id", campaignId);
 
+    // Always use generate-campaign-multi for 3 variants
+    const genUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-campaign-multi`;
+    try {
+      const resp = await fetch(genUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+        },
+        body: JSON.stringify({
+          brandId, campaignId, brief, goal, copy: extraCopy || undefined, speedMode,
+          productIds: selectedProductIds.length > 0 ? selectedProductIds : undefined,
+          pinnedAssetUrls: allPinned.length > 0 ? allPinned : undefined,
+          matchProductColors: matchProductColors || undefined,
+          designNotes: designNotes.trim() || undefined,
+          shopifyProducts: selectedShopifyProducts.length > 0 ? selectedShopifyProducts : undefined,
+          reference: selectedReference ? {
+            type: selectedReference.type,
+            id: selectedReference.id,
+            image_urls: selectedReference.image_urls,
+            strength: selectedReference.strength,
+            mode: selectedReference.mode,
+          } : undefined,
+        }),
+      });
+      if (!resp.ok && resp.status !== 202) throw new Error(`Generation failed: ${resp.status}`);
+    } catch (err: any) {
+      console.error("[generate] Error:", err);
+      toast.error("Failed to start generation");
+      setGenerating(false);
+      setGenStartTime(null);
+      return;
+    }
+
     const pollInterval = setInterval(async () => {
       const { data } = await supabase
         .from("campaigns")
@@ -423,8 +434,30 @@ export default function CampaignEditor() {
         .eq("id", campaignId)
         .single();
       if (!data) return;
-      if (data.status === "ready") {
+
+      if (data.status === "variants_ready" && data.variant_htmls) {
         clearInterval(pollInterval);
+        generationCompletedRef.current = true;
+        const variants = data.variant_htmls as any[];
+        setVariantHtmls(variants);
+        setCampaign(data as Campaign);
+        setGenerating(false);
+        const elapsed = genStartTime ? Math.floor((Date.now() - genStartTime) / 1000) : 0;
+        setGenStartTime(null);
+        const successCount = variants.filter((v: any) => v.html).length;
+        setMessages((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `${successCount}/3 variants generated in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
+        ]);
+
+        // Run visual QA on the primary variant
+        if (data.html) {
+          runVisualQa(data as Campaign);
+        }
+      } else if (data.status === "ready") {
+        // Single-generation fallback
+        clearInterval(pollInterval);
+        generationCompletedRef.current = true;
         setCampaign(data as Campaign);
         setGenerating(false);
         const elapsed = genStartTime ? Math.floor((Date.now() - genStartTime) / 1000) : 0;
@@ -433,106 +466,71 @@ export default function CampaignEditor() {
           ...prev,
           { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Campaign generated in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
         ]);
-
-        // === PASS 3: Visual QA — capture screenshots and send to AI ===
-        if (data.html) {
-          runVisualQa(data as Campaign);
-        }
+        if (data.html) runVisualQa(data as Campaign);
       } else if (data.status === "error") {
-        clearInterval(pollInterval);
-        setCampaign(data as Campaign);
-        setGenerating(false);
-        setGenStartTime(null);
-        toast.error("Campaign generation failed. Please try again.");
-        setMessages((prev) => [
-          ...prev,
-          { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: "Generation failed", created_at: new Date().toISOString() },
-        ]);
+        // Only act on error if we haven't already completed
+        if (!generationCompletedRef.current) {
+          clearInterval(pollInterval);
+          setCampaign(data as Campaign);
+          setGenerating(false);
+          setGenStartTime(null);
+          toast.error("Campaign generation failed. Please try again.");
+          setMessages((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: "Generation failed", created_at: new Date().toISOString() },
+          ]);
+        }
       }
     }, 4000);
 
-    setTimeout(() => {
-      clearInterval(pollInterval);
-      setGenerating(false);
-      setGenStartTime(null);
-      setCampaign((c) => c ? { ...c, status: "draft" } : c);
-      toast.error("Generation timed out. Please try again.");
+    const timeoutId = setTimeout(() => {
+      if (!generationCompletedRef.current) {
+        clearInterval(pollInterval);
+        setGenerating(false);
+        setGenStartTime(null);
+        setCampaign((c) => c ? { ...c, status: "draft" } : c);
+        toast.error("Generation timed out. Please try again.");
+      }
     }, 300000);
   };
 
-  const runAggressiveQaLoop = useCallback(async (variants: any[], referenceUrls: string[]) => {
-    const updatedVariants = [...variants];
-    // Score each variant once (no re-render loop — auto-patching was degrading quality)
-    for (let idx = 0; idx < updatedVariants.length; idx++) {
-      const variant = updatedVariants[idx];
-      if (!variant.html || variant.status === "error") continue;
-      setQaProgress((prev) => ({ ...prev, [idx]: `Scoring...` }));
-      try {
-        const { slices } = await captureEmailScreenshots(variant.html);
-        const qaUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aggressive-qa`;
-        const resp = await fetch(qaUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` },
-          body: JSON.stringify({ campaignId, html: variant.html, slices, referenceImageUrls: referenceUrls, variantIndex: idx, roundNumber: 1 }),
-        });
-        if (resp.ok) {
-          const result = await resp.json();
-          updatedVariants[idx] = { ...updatedVariants[idx], qa_score: result.score, qa_summary: result.summary, qa_round: 1, status: result.passed ? "qa_passed" : "qa_reviewed" };
-        }
-      } catch (err) { console.error(`[perfection] QA error variant ${idx}:`, err); }
-      setQaProgress((prev) => { const next = { ...prev }; delete next[idx]; return next; });
-      setVariantHtmls([...updatedVariants]);
-    }
-    return updatedVariants;
-  }, [campaignId]);
-
-  const generatePerfectionMode = async () => {
-    if (!brandId || !campaignId || !brief.trim()) return;
-    setGenerating(true); setGenStartTime(Date.now()); setGenElapsed(0);
-    setVariantHtmls([]); setShowVariantPicker(false);
-    setCampaign((c) => c ? { ...c, status: "generating" } : c);
-    let draftRefUrls: string[] = [];
-    if (draftRefImages.length > 0) { draftRefUrls = await uploadChatImages(draftRefImages, brandId, campaignId); setDraftRefImages([]); setDraftRefPreviews((prev) => { prev.forEach((u) => URL.revokeObjectURL(u)); return []; }); }
-    const allPinned = [...pinnedAssetUrls, ...draftRefUrls];
-    await supabase.from("campaigns").update({ brief, goal, extra_copy: extraCopy || null, speed_mode: speedMode, product_ids: selectedProductIds.length > 0 ? selectedProductIds : null, pinned_asset_urls: pinnedAssetUrls.length > 0 ? pinnedAssetUrls : null, subject_line: subjectLine || null, preview_text: previewText || null, send_list_ids: sendListIds.length > 0 ? sendListIds : null, send_segment_ids: sendSegmentIds.length > 0 ? sendSegmentIds : null } as any).eq("id", campaignId);
-    const genUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-campaign-multi`;
-    try {
-      const resp = await fetch(genUrl, { method: "POST", headers: { "Content-Type": "application/json", "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` },
-        body: JSON.stringify({ brandId, campaignId, brief, goal, copy: extraCopy || undefined, speedMode, productIds: selectedProductIds.length > 0 ? selectedProductIds : undefined, pinnedAssetUrls: allPinned.length > 0 ? allPinned : undefined, matchProductColors: matchProductColors || undefined, designNotes: designNotes.trim() || undefined, shopifyProducts: selectedShopifyProducts.length > 0 ? selectedShopifyProducts : undefined, reference: selectedReference ? { type: selectedReference.type, id: selectedReference.id, image_urls: selectedReference.image_urls, strength: selectedReference.strength, mode: selectedReference.mode } : undefined }) });
-      if (!resp.ok && resp.status !== 202) throw new Error(`Generation failed: ${resp.status}`);
-      // Function returns 202 immediately; variants arrive via polling below
-    } catch (err) { console.error("[perfection] Error:", err); toast.error("Failed to start perfection mode"); setGenerating(false); setGenStartTime(null); return; }
-    const pollInterval = setInterval(async () => {
-      const { data } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
-      if (!data) return;
-      if (data.status === "variants_ready" && data.variant_htmls) {
-        clearInterval(pollInterval);
-        const variants = data.variant_htmls as any[];
-        setVariantHtmls(variants); setGenerating(false); setGenStartTime(null);
-        setShowVariantPicker(true);
-        const elapsed = genStartTime ? Math.floor((Date.now() - genStartTime) / 1000) : 0;
-        const successCount = variants.filter((v: any) => v.html).length;
-        setMessages((prev) => [...prev, { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `${successCount}/3 variants generated in ${formatTimer(elapsed)}. Choose your favorite!`, created_at: new Date().toISOString() }]);
-        // Run QA in background — picker is already visible
-        try {
-          const refUrls = selectedReference?.image_urls || [];
-          const qaVariants = await runAggressiveQaLoop(variants, refUrls);
-          setVariantHtmls(qaVariants);
-        } catch (err) { console.error("[perfection] QA loop failed, variants still available:", err); }
-      } else if (data.status === "error") { clearInterval(pollInterval); setGenerating(false); setGenStartTime(null); toast.error("Perfection mode generation failed."); }
-    }, 5000);
-    setTimeout(() => { clearInterval(pollInterval); setGenerating(false); setGenStartTime(null); toast.error("Perfection mode timed out."); }, 900000);
-  };
-
-  const handleVariantSelect = async (index: number) => {
+  const handleVariantSwitch = useCallback(async (index: number) => {
     if (!campaignId || !variantHtmls[index]?.html) return;
-    await supabase.from("campaigns").update({ html: variantHtmls[index].html, status: "ready", variant_htmls: null, generation_mode: "perfection" }).eq("id", campaignId);
-    const { data: updated } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
-    if (updated) setCampaign(updated as Campaign);
-    setShowVariantPicker(false); setVariantHtmls([]);
-    toast.success(`Selected "${variantHtmls[index].label}" variant`);
-    setMessages((prev) => [...prev, { id: crypto.randomUUID(), campaign_id: campaignId!, role: "system", content: `Selected "${variantHtmls[index].label}" — campaign ready!`, created_at: new Date().toISOString() }]);
-  };
+    setActiveVariantIndex(index);
+    iframeOwnedHtmlRef.current = null;
+    await supabase.from("campaigns").update({ html: variantHtmls[index].html, status: "ready" }).eq("id", campaignId);
+    setCampaign(c => c ? { ...c, html: variantHtmls[index].html, status: "ready" } : c);
+  }, [campaignId, variantHtmls]);
+
+  const saveVariantAsNewCampaign = useCallback(async (index: number) => {
+    if (!brandId || !campaignId || !variantHtmls[index]?.html) return;
+    const variant = variantHtmls[index];
+    const { data: original } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
+    if (!original) return;
+    const { data: newCampaign, error } = await supabase.from("campaigns").insert({
+      brand_id: brandId,
+      name: `${original.name} (${variant.label})`,
+      brief: original.brief,
+      goal: original.goal,
+      extra_copy: original.extra_copy,
+      html: variant.html,
+      status: "ready",
+      product_ids: original.product_ids,
+      pinned_asset_urls: original.pinned_asset_urls,
+      subject_line: original.subject_line,
+      preview_text: original.preview_text,
+      send_list_ids: original.send_list_ids,
+      send_segment_ids: original.send_segment_ids,
+    } as any).select("id").single();
+    if (error) {
+      toast.error("Failed to save as new campaign");
+      return;
+    }
+    toast.success(`Saved "${variant.label}" as a new campaign`);
+    navigate(`/brands/${brandId}/campaigns/${newCampaign.id}`);
+  }, [brandId, campaignId, variantHtmls, navigate]);
+        
+
 
   const addChatAttachments = useCallback((files: File[]) => {
     const imageFiles = files.filter(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f.name));
@@ -2767,35 +2765,69 @@ export default function CampaignEditor() {
                 <Skeleton className="h-10 w-1/3" />
               </div>
             ) : campaign?.html ? (
-              <div className={`flex ${showReferenceDialog && selectedReference ? 'justify-start p-1 pl-0.5 pt-4' : 'justify-center p-8'}`}>
-                <div
-                  style={{
-                    width: renderedWidth,
-                    height: renderedHeight,
-                    position: 'relative',
-                  }}
-                >
-                  <iframe
-                    key={`${renderWidth}-${viewportWidth}`}
-                    srcDoc={srcdocHtml}
-                    sandbox="allow-same-origin allow-scripts allow-forms"
-                    className="border-0 block bg-white shadow-2xl"
+              <div className={`flex flex-col ${showReferenceDialog && selectedReference ? 'p-1 pl-0.5 pt-4' : 'p-8'}`}>
+                {/* Variant tabs */}
+                {variantHtmls.length > 1 && (
+                  <div className="flex items-center gap-2 mb-4 justify-center">
+                    <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                      {variantHtmls.map((v: any, idx: number) => (
+                        <button
+                          key={idx}
+                          onClick={() => handleVariantSwitch(idx)}
+                          disabled={!v.html}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            activeVariantIndex === idx
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          } ${!v.html ? "opacity-40 cursor-not-allowed" : ""}`}
+                        >
+                          {v.label}
+                        </button>
+                      ))}
+                    </div>
+                    {activeVariantIndex > 0 && variantHtmls[activeVariantIndex]?.html && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => saveVariantAsNewCampaign(activeVariantIndex)}
+                      >
+                        <Copy className="w-3 h-3" />
+                        Save as New Campaign
+                      </Button>
+                    )}
+                  </div>
+                )}
+                <div className={`flex ${showReferenceDialog && selectedReference ? 'justify-start' : 'justify-center'}`}>
+                  <div
                     style={{
-                      width: renderWidth,
-                      height: iframeContentHeight,
-                      transform: `scale(${zoomScale})`,
-                      transformOrigin: "top left",
+                      width: renderedWidth,
+                      height: renderedHeight,
+                      position: 'relative',
                     }}
-                    title="Email Preview"
-                    onLoad={(e) => {
-                      const iframe = e.currentTarget;
-                      measureIframeHeight(iframe);
-                      setupIframeObserver(iframe);
-                      window.setTimeout(() => measureIframeHeight(iframe), 300);
-                      window.setTimeout(() => measureIframeHeight(iframe), 1000);
-                      window.setTimeout(() => measureIframeHeight(iframe), 3000);
-                    }}
-                  />
+                  >
+                    <iframe
+                      key={`${renderWidth}-${viewportWidth}-${activeVariantIndex}`}
+                      srcDoc={srcdocHtml}
+                      sandbox="allow-same-origin allow-scripts allow-forms"
+                      className="border-0 block bg-white shadow-2xl"
+                      style={{
+                        width: renderWidth,
+                        height: iframeContentHeight,
+                        transform: `scale(${zoomScale})`,
+                        transformOrigin: "top left",
+                      }}
+                      title="Email Preview"
+                      onLoad={(e) => {
+                        const iframe = e.currentTarget;
+                        measureIframeHeight(iframe);
+                        setupIframeObserver(iframe);
+                        window.setTimeout(() => measureIframeHeight(iframe), 300);
+                        window.setTimeout(() => measureIframeHeight(iframe), 1000);
+                        window.setTimeout(() => measureIframeHeight(iframe), 3000);
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
             ) : brandId && campaignId ? (
@@ -2964,27 +2996,12 @@ export default function CampaignEditor() {
                 </div>
 
                 <div className="space-y-3">
-                  {/* Generation Mode Toggle */}
-                  <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-3.5 h-3.5 text-primary" />
-                      <span className="text-xs text-foreground">Perfection Mode</span>
-                    </div>
-                    <Switch checked={generationMode === "perfection"} onCheckedChange={(v) => setGenerationMode(v ? "perfection" : "standard")} />
-                  </div>
-                  {generationMode === "perfection" && (
-                    <p className="text-[11px] text-muted-foreground px-1">
-                      Generates 3 creative variants and QA-loops each until perfect. Takes longer but delivers polished results.
-                    </p>
-                  )}
                   <Button
-                    onClick={generationMode === "perfection" ? generatePerfectionMode : generateCampaign}
+                    onClick={generateCampaign}
                     disabled={!brief.trim() || generating}
                     className="w-full bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all"
                   >
-                    {generating
-                      ? (generationMode === "perfection" ? "Generating 3 Variants..." : "Generating...")
-                      : (generationMode === "perfection" ? "Generate 3 Variants" : "Generate Campaign")}
+                    {generating ? "Generating 3 Variants..." : "Generate Campaign"}
                   </Button>
                 </div>
               </div>
@@ -3276,15 +3293,8 @@ export default function CampaignEditor() {
       </div>
     </div>
 
-    {/* Variant Picker Overlay */}
-    {showVariantPicker && variantHtmls.length > 0 && (
-      <VariantPicker
-        variants={variantHtmls}
-        onSelect={handleVariantSelect}
-        onClose={() => setShowVariantPicker(false)}
-        qaProgress={qaProgress}
-      />
-    )}
+
+
   </>
   );
 }
