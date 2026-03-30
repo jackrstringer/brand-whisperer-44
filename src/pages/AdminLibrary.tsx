@@ -222,12 +222,19 @@ export default function AdminLibrary() {
       console.error("Auto-crop during reprocess failed:", cropErr);
     }
 
-    // Step 2: Re-analyze with AI
-    const { error } = await supabase.functions.invoke("analyze-reference", {
+    // Step 2: Re-analyze with AI + re-slice (parallel, fire-and-forget)
+    const analyzePromise = supabase.functions.invoke("analyze-reference", {
       body: { referenceId: item.id, imageUrls: finalImageUrls },
     });
-    if (error) {
+    const slicePromise = supabase.functions.invoke("slice-reference", {
+      body: { referenceCampaignId: item.id },
+    });
+
+    const [analyzeResult, sliceResult] = await Promise.all([analyzePromise, slicePromise]);
+    if (analyzeResult.error) {
       toast.error("Analysis failed");
+    } else if (sliceResult.error) {
+      toast.error("Slicing failed");
     } else {
       toast.success("Re-processing complete");
       loadCampaigns();
