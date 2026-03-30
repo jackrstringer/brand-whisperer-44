@@ -35,6 +35,7 @@ const MIN_GAP_ROWS = 15;
 const BRIGHTNESS_THRESHOLD = 220;
 const IMAGEKIT_QUALITY = 90;
 const IMAGEKIT_FORMAT = "jpg";
+const IMAGEKIT_UPLOAD_URL = "https://upload.imagekit.io/api/v1/files/upload";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -221,8 +222,14 @@ async function runSlicePipeline(
     label: s.label,
   }));
 
-  // 8. Build ImageKit URLs
-  const imagekitBase = buildImageKitBase(imageUrl);
+  // 8. Build ImageKit-backed slice URLs
+  const imagekitBase = await resolveImageKitBaseUrl({
+    sourceUrl: imageUrl,
+    imageBytes,
+    contentType: imageResp.headers.get("content-type"),
+    referenceCampaignId,
+  });
+
   const sliceRecords: ImageSliceRecord[] = buildSliceRecords(
     imagekitBase,
     originalSlices,
@@ -506,6 +513,68 @@ function buildImageKitBase(imageUrl: string): string {
   return url.toString();
 }
 
+function inferFileExtension(contentType: string | null, sourceUrl: string): string {
+  const normalized = contentType?.split(";")[0].trim().toLowerCase();
+  if (normalized === "image/jpeg" || normalized === "image/jpg") return "jpg";
+  if (normalized === "image/png") return "png";
+  if (normalized === "image/webp") return "webp";
+  if (normalized === "image/gif") return "gif";
+
+  try {
+    const pathname = new URL(sourceUrl).pathname;
+    const ext = pathname.split(".").pop()?.toLowerCase();
+    if (ext && /^[a-z0-9]{2,5}$/.test(ext)) return ext;
+  } catch {
+    // ignore and fallback
+  }
+
+  return "png";
+}
+
+async function resolveImageKitBaseUrl(params: {
+  sourceUrl: string;
+  imageBytes: Uint8Array;
+  contentType: string | null;
+  referenceCampaignId: string;
+}): Promise<string> {
+  if (/^https:\/\/ik\.imagekit\.io\//i.test(params.sourceUrl)) {
+    return buildImageKitBase(params.sourceUrl);
+  }
+
+  const imagekitPrivateKey = Deno.env.get("IMAGEKIT_PRIVATE_KEY");
+  if (!imagekitPrivateKey) {
+    throw new Error("IMAGEKIT_PRIVATE_KEY is not set; cannot generate transformed slice URLs");
+  }
+
+  const fileExt = inferFileExtension(params.contentType, params.sourceUrl);
+  const formData = new FormData();
+  formData.append("file", new Blob([params.imageBytes], { type: params.contentType ?? "application/octet-stream" }));
+  formData.append("fileName", `reference-${params.referenceCampaignId}-${Date.now()}.${fileExt}`);
+  formData.append("folder", "/campaign-studio/reference-slices");
+  formData.append("useUniqueFileName", "true");
+
+  const uploadResp = await fetch(IMAGEKIT_UPLOAD_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${btoa(`${imagekitPrivateKey}:`)}`,
+    },
+    body: formData,
+  });
+
+  if (!uploadResp.ok) {
+    const errText = await uploadResp.text();
+    throw new Error(`ImageKit upload failed (${uploadResp.status}): ${errText}`);
+  }
+
+  const uploadJson = await uploadResp.json();
+  const hostedUrl = uploadJson?.url;
+  if (!hostedUrl || typeof hostedUrl !== "string") {
+    throw new Error("ImageKit upload succeeded but did not return a hosted URL");
+  }
+
+  return buildImageKitBase(hostedUrl);
+}
+
 function buildSliceRecords(
   imagekitBase: string,
   slices: SliceDecision[],
@@ -526,7 +595,7 @@ function buildSliceRecords(
   const detailSlices = slices.filter((s) => s.label !== "full-overview");
 
   detailSlices.forEach((slice, i) => {
-    const height = slice.yBottom - slice.yTop;
+    const height = Math.max(1, slice.yBottom - slice.yTop);
     const url = `${imagekitBase}?tr=x-0,y-${slice.yTop},w-600,h-${height},cm-extract,q-${IMAGEKIT_QUALITY},f-${IMAGEKIT_FORMAT}`;
 
     records.push({
