@@ -494,14 +494,41 @@ export default function CampaignEditor() {
     }, 300000);
   };
 
-  const runAggressiveQaLoop = useCallback(async (variants: any[], referenceUrls: string[]) => {
-    const updatedVariants = [...variants];
-    // Score each variant once (no re-render loop — auto-patching was degrading quality)
-    for (let idx = 0; idx < updatedVariants.length; idx++) {
-      const variant = updatedVariants[idx];
-      if (!variant.html || variant.status === "error") continue;
-      setQaProgress((prev) => ({ ...prev, [idx]: `Scoring...` }));
-      try {
+  const handleVariantSwitch = useCallback(async (index: number) => {
+    if (!campaignId || !variantHtmls[index]?.html) return;
+    setActiveVariantIndex(index);
+    iframeOwnedHtmlRef.current = null;
+    await supabase.from("campaigns").update({ html: variantHtmls[index].html, status: "ready" }).eq("id", campaignId);
+    setCampaign(c => c ? { ...c, html: variantHtmls[index].html, status: "ready" } : c);
+  }, [campaignId, variantHtmls]);
+
+  const saveVariantAsNewCampaign = useCallback(async (index: number) => {
+    if (!brandId || !campaignId || !variantHtmls[index]?.html) return;
+    const variant = variantHtmls[index];
+    const { data: original } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
+    if (!original) return;
+    const { data: newCampaign, error } = await supabase.from("campaigns").insert({
+      brand_id: brandId,
+      name: `${original.name} (${variant.label})`,
+      brief: original.brief,
+      goal: original.goal,
+      extra_copy: original.extra_copy,
+      html: variant.html,
+      status: "ready",
+      product_ids: original.product_ids,
+      pinned_asset_urls: original.pinned_asset_urls,
+      subject_line: original.subject_line,
+      preview_text: original.preview_text,
+      send_list_ids: original.send_list_ids,
+      send_segment_ids: original.send_segment_ids,
+    } as any).select("id").single();
+    if (error) {
+      toast.error("Failed to save as new campaign");
+      return;
+    }
+    toast.success(`Saved "${variant.label}" as a new campaign`);
+    navigate(`/brands/${brandId}/campaigns/${newCampaign.id}`);
+  }, [brandId, campaignId, variantHtmls, navigate]);
         const { slices } = await captureEmailScreenshots(variant.html);
         const qaUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aggressive-qa`;
         const resp = await fetch(qaUrl, {
