@@ -252,6 +252,57 @@ export default function AdminLibrary() {
     loadCampaigns();
   };
 
+  const toggleSelect = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selectedIds.size === campaigns.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(campaigns.map(c => c.id)));
+    }
+  };
+
+  const bulkReprocess = async (mode: "analyze" | "slice" | "both") => {
+    const ids = Array.from(selectedIds);
+    const items = campaigns.filter(c => ids.includes(c.id));
+    if (items.length === 0) return;
+
+    setBulkProcessing(true);
+    toast.info(`Processing ${items.length} campaign(s)...`);
+
+    for (const item of items) {
+      try {
+        if (mode === "analyze" || mode === "both") {
+          const imageUrls = item.image_urls || [item.thumbnail_url];
+          supabase.functions.invoke("analyze-reference", {
+            body: { referenceId: item.id, imageUrls },
+          }).catch(err => console.error("Bulk analyze error:", err));
+        }
+        if (mode === "slice" || mode === "both") {
+          supabase.functions.invoke("slice-reference", {
+            body: { referenceCampaignId: item.id },
+          }).catch(err => console.error("Bulk slice error:", err));
+        }
+      } catch (err) {
+        console.error("Bulk process error:", err);
+      }
+    }
+
+    toast.success(`Triggered ${mode} for ${items.length} campaign(s) — results will appear as they complete`);
+    setBulkProcessing(false);
+    setSelectedIds(new Set());
+    // Refresh after a short delay to show initial status changes
+    setTimeout(loadCampaigns, 2000);
+  };
+
   if (adminLoading || loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
   }
