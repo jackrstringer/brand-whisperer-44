@@ -277,36 +277,27 @@ export default function AdminLibrary() {
     }
   };
 
-  const bulkReprocess = async (mode: "analyze" | "slice" | "both") => {
+  const bulkReprocess = async () => {
     const ids = Array.from(selectedIds);
     const items = campaigns.filter(c => ids.includes(c.id));
     if (items.length === 0) return;
 
     setBulkProcessing(true);
-    toast.info(`Processing ${items.length} campaign(s)...`);
+    toast.info(`Re-processing ${items.length} campaign(s)...`);
 
     for (const item of items) {
-      try {
-        if (mode === "analyze" || mode === "both") {
-          const imageUrls = item.image_urls || [item.thumbnail_url];
-          supabase.functions.invoke("analyze-reference", {
-            body: { referenceId: item.id, imageUrls },
-          }).catch(err => console.error("Bulk analyze error:", err));
-        }
-        if (mode === "slice" || mode === "both") {
-          supabase.functions.invoke("slice-reference", {
-            body: { referenceCampaignId: item.id },
-          }).catch(err => console.error("Bulk slice error:", err));
-        }
-      } catch (err) {
-        console.error("Bulk process error:", err);
-      }
+      const imageUrls = item.image_urls || [item.thumbnail_url];
+      supabase.functions.invoke("analyze-reference", {
+        body: { referenceId: item.id, imageUrls },
+      }).catch(err => console.error("Bulk analyze error:", err));
+      supabase.functions.invoke("slice-reference", {
+        body: { referenceCampaignId: item.id },
+      }).catch(err => console.error("Bulk slice error:", err));
     }
 
-    toast.success(`Triggered ${mode} for ${items.length} campaign(s) — results will appear as they complete`);
+    toast.success(`Triggered re-processing for ${items.length} campaign(s) — results will appear as they complete`);
     setBulkProcessing(false);
     setSelectedIds(new Set());
-    // Refresh after a short delay to show initial status changes
     setTimeout(loadCampaigns, 2000);
   };
 
