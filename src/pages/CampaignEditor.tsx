@@ -363,7 +363,10 @@ export default function CampaignEditor() {
     setGenerating(true);
     setGenStartTime(Date.now());
     setGenElapsed(0);
+    generationCompletedRef.current = false;
     setCampaign((c) => c ? { ...c, status: "generating" } : c);
+    setVariantHtmls([]);
+    setActiveVariantIndex(0);
 
     // Upload any draft reference images
     let draftRefUrls: string[] = [];
@@ -374,31 +377,6 @@ export default function CampaignEditor() {
     }
 
     const allPinned = [...pinnedAssetUrls, ...draftRefUrls];
-
-    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-campaign`;
-    fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-      },
-      body: JSON.stringify({
-        brandId, campaignId, brief, goal, copy: extraCopy || undefined, speedMode,
-        productIds: selectedProductIds.length > 0 ? selectedProductIds : undefined,
-        pinnedAssetUrls: allPinned.length > 0 ? allPinned : undefined,
-        matchProductColors: matchProductColors || undefined,
-        designNotes: designNotes.trim() || undefined,
-        shopifyProducts: selectedShopifyProducts.length > 0 ? selectedShopifyProducts : undefined,
-        reference: selectedReference ? {
-          type: selectedReference.type,
-          id: selectedReference.id,
-          image_urls: selectedReference.image_urls,
-          strength: selectedReference.strength,
-          mode: selectedReference.mode,
-        } : undefined,
-      }),
-    }).catch(() => {});
 
     // Persist all draft preferences to campaign record
     await supabase.from("campaigns").update({
@@ -414,6 +392,41 @@ export default function CampaignEditor() {
       send_segment_ids: sendSegmentIds.length > 0 ? sendSegmentIds : null,
     } as any).eq("id", campaignId);
 
+    // Always use generate-campaign-multi for 3 variants
+    const genUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-campaign-multi`;
+    try {
+      const resp = await fetch(genUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+        },
+        body: JSON.stringify({
+          brandId, campaignId, brief, goal, copy: extraCopy || undefined, speedMode,
+          productIds: selectedProductIds.length > 0 ? selectedProductIds : undefined,
+          pinnedAssetUrls: allPinned.length > 0 ? allPinned : undefined,
+          matchProductColors: matchProductColors || undefined,
+          designNotes: designNotes.trim() || undefined,
+          shopifyProducts: selectedShopifyProducts.length > 0 ? selectedShopifyProducts : undefined,
+          reference: selectedReference ? {
+            type: selectedReference.type,
+            id: selectedReference.id,
+            image_urls: selectedReference.image_urls,
+            strength: selectedReference.strength,
+            mode: selectedReference.mode,
+          } : undefined,
+        }),
+      });
+      if (!resp.ok && resp.status !== 202) throw new Error(`Generation failed: ${resp.status}`);
+    } catch (err: any) {
+      console.error("[generate] Error:", err);
+      toast.error("Failed to start generation");
+      setGenerating(false);
+      setGenStartTime(null);
+      return;
+    }
+
     const pollInterval = setInterval(async () => {
       const { data } = await supabase
         .from("campaigns")
@@ -421,8 +434,30 @@ export default function CampaignEditor() {
         .eq("id", campaignId)
         .single();
       if (!data) return;
-      if (data.status === "ready") {
+
+      if (data.status === "variants_ready" && data.variant_htmls) {
         clearInterval(pollInterval);
+        generationCompletedRef.current = true;
+        const variants = data.variant_htmls as any[];
+        setVariantHtmls(variants);
+        setCampaign(data as Campaign);
+        setGenerating(false);
+        const elapsed = genStartTime ? Math.floor((Date.now() - genStartTime) / 1000) : 0;
+        setGenStartTime(null);
+        const successCount = variants.filter((v: any) => v.html).length;
+        setMessages((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `${successCount}/3 variants generated in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
+        ]);
+
+        // Run visual QA on the primary variant
+        if (data.html) {
+          runVisualQa(data as Campaign);
+        }
+      } else if (data.status === "ready") {
+        // Single-generation fallback
+        clearInterval(pollInterval);
+        generationCompletedRef.current = true;
         setCampaign(data as Campaign);
         setGenerating(false);
         const elapsed = genStartTime ? Math.floor((Date.now() - genStartTime) / 1000) : 0;
@@ -431,30 +466,31 @@ export default function CampaignEditor() {
           ...prev,
           { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Campaign generated in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
         ]);
-
-        // === PASS 3: Visual QA — capture screenshots and send to AI ===
-        if (data.html) {
-          runVisualQa(data as Campaign);
-        }
+        if (data.html) runVisualQa(data as Campaign);
       } else if (data.status === "error") {
-        clearInterval(pollInterval);
-        setCampaign(data as Campaign);
-        setGenerating(false);
-        setGenStartTime(null);
-        toast.error("Campaign generation failed. Please try again.");
-        setMessages((prev) => [
-          ...prev,
-          { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: "Generation failed", created_at: new Date().toISOString() },
-        ]);
+        // Only act on error if we haven't already completed
+        if (!generationCompletedRef.current) {
+          clearInterval(pollInterval);
+          setCampaign(data as Campaign);
+          setGenerating(false);
+          setGenStartTime(null);
+          toast.error("Campaign generation failed. Please try again.");
+          setMessages((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: "Generation failed", created_at: new Date().toISOString() },
+          ]);
+        }
       }
     }, 4000);
 
-    setTimeout(() => {
-      clearInterval(pollInterval);
-      setGenerating(false);
-      setGenStartTime(null);
-      setCampaign((c) => c ? { ...c, status: "draft" } : c);
-      toast.error("Generation timed out. Please try again.");
+    const timeoutId = setTimeout(() => {
+      if (!generationCompletedRef.current) {
+        clearInterval(pollInterval);
+        setGenerating(false);
+        setGenStartTime(null);
+        setCampaign((c) => c ? { ...c, status: "draft" } : c);
+        toast.error("Generation timed out. Please try again.");
+      }
     }, 300000);
   };
 
