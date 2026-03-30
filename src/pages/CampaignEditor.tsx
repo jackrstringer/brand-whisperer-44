@@ -3259,15 +3259,8 @@ export default function CampaignEditor() {
       </div>
     </div>
 
-    {/* Variant Picker Overlay */}
-    {showVariantPicker && variantHtmls.length > 0 && (
-      <VariantPicker
-        variants={variantHtmls}
-        onSelect={handleVariantSelect}
-        onClose={() => setShowVariantPicker(false)}
-        qaProgress={qaProgress}
-      />
-    )}
+
+
   </>
   );
 }
