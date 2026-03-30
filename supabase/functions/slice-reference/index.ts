@@ -222,8 +222,14 @@ async function runSlicePipeline(
     label: s.label,
   }));
 
-  // 8. Build ImageKit URLs
-  const imagekitBase = buildImageKitBase(imageUrl);
+  // 8. Build ImageKit-backed slice URLs
+  const imagekitBase = await resolveImageKitBaseUrl({
+    sourceUrl: imageUrl,
+    imageBytes,
+    contentType: imageResp.headers.get("content-type"),
+    referenceCampaignId,
+  });
+
   const sliceRecords: ImageSliceRecord[] = buildSliceRecords(
     imagekitBase,
     originalSlices,
