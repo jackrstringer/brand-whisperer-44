@@ -35,6 +35,7 @@ const MIN_GAP_ROWS = 15;
 const BRIGHTNESS_THRESHOLD = 220;
 const IMAGEKIT_QUALITY = 90;
 const IMAGEKIT_FORMAT = "jpg";
+const IMAGEKIT_UPLOAD_URL = "https://upload.imagekit.io/api/v1/files/upload";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
