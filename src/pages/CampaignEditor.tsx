@@ -532,53 +532,6 @@ export default function CampaignEditor() {
         const { slices } = await captureEmailScreenshots(variant.html);
 
 
-    if (!brandId || !campaignId || !brief.trim()) return;
-    setGenerating(true); setGenStartTime(Date.now()); setGenElapsed(0);
-    setVariantHtmls([]); setShowVariantPicker(false);
-    setCampaign((c) => c ? { ...c, status: "generating" } : c);
-    let draftRefUrls: string[] = [];
-    if (draftRefImages.length > 0) { draftRefUrls = await uploadChatImages(draftRefImages, brandId, campaignId); setDraftRefImages([]); setDraftRefPreviews((prev) => { prev.forEach((u) => URL.revokeObjectURL(u)); return []; }); }
-    const allPinned = [...pinnedAssetUrls, ...draftRefUrls];
-    await supabase.from("campaigns").update({ brief, goal, extra_copy: extraCopy || null, speed_mode: speedMode, product_ids: selectedProductIds.length > 0 ? selectedProductIds : null, pinned_asset_urls: pinnedAssetUrls.length > 0 ? pinnedAssetUrls : null, subject_line: subjectLine || null, preview_text: previewText || null, send_list_ids: sendListIds.length > 0 ? sendListIds : null, send_segment_ids: sendSegmentIds.length > 0 ? sendSegmentIds : null } as any).eq("id", campaignId);
-    const genUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-campaign-multi`;
-    try {
-      const resp = await fetch(genUrl, { method: "POST", headers: { "Content-Type": "application/json", "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` },
-        body: JSON.stringify({ brandId, campaignId, brief, goal, copy: extraCopy || undefined, speedMode, productIds: selectedProductIds.length > 0 ? selectedProductIds : undefined, pinnedAssetUrls: allPinned.length > 0 ? allPinned : undefined, matchProductColors: matchProductColors || undefined, designNotes: designNotes.trim() || undefined, shopifyProducts: selectedShopifyProducts.length > 0 ? selectedShopifyProducts : undefined, reference: selectedReference ? { type: selectedReference.type, id: selectedReference.id, image_urls: selectedReference.image_urls, strength: selectedReference.strength, mode: selectedReference.mode } : undefined }) });
-      if (!resp.ok && resp.status !== 202) throw new Error(`Generation failed: ${resp.status}`);
-      // Function returns 202 immediately; variants arrive via polling below
-    } catch (err) { console.error("[perfection] Error:", err); toast.error("Failed to start perfection mode"); setGenerating(false); setGenStartTime(null); return; }
-    const pollInterval = setInterval(async () => {
-      const { data } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
-      if (!data) return;
-      if (data.status === "variants_ready" && data.variant_htmls) {
-        clearInterval(pollInterval);
-        const variants = data.variant_htmls as any[];
-        setVariantHtmls(variants); setGenerating(false); setGenStartTime(null);
-        setShowVariantPicker(true);
-        const elapsed = genStartTime ? Math.floor((Date.now() - genStartTime) / 1000) : 0;
-        const successCount = variants.filter((v: any) => v.html).length;
-        setMessages((prev) => [...prev, { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `${successCount}/3 variants generated in ${formatTimer(elapsed)}. Choose your favorite!`, created_at: new Date().toISOString() }]);
-        // Run QA in background — picker is already visible
-        try {
-          const refUrls = selectedReference?.image_urls || [];
-          const qaVariants = await runAggressiveQaLoop(variants, refUrls);
-          setVariantHtmls(qaVariants);
-        } catch (err) { console.error("[perfection] QA loop failed, variants still available:", err); }
-      } else if (data.status === "error") { clearInterval(pollInterval); setGenerating(false); setGenStartTime(null); toast.error("Perfection mode generation failed."); }
-    }, 5000);
-    setTimeout(() => { clearInterval(pollInterval); setGenerating(false); setGenStartTime(null); toast.error("Perfection mode timed out."); }, 900000);
-  };
-
-  const handleVariantSelect = async (index: number) => {
-    if (!campaignId || !variantHtmls[index]?.html) return;
-    await supabase.from("campaigns").update({ html: variantHtmls[index].html, status: "ready", variant_htmls: null, generation_mode: "perfection" }).eq("id", campaignId);
-    const { data: updated } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
-    if (updated) setCampaign(updated as Campaign);
-    setShowVariantPicker(false); setVariantHtmls([]);
-    toast.success(`Selected "${variantHtmls[index].label}" variant`);
-    setMessages((prev) => [...prev, { id: crypto.randomUUID(), campaign_id: campaignId!, role: "system", content: `Selected "${variantHtmls[index].label}" — campaign ready!`, created_at: new Date().toISOString() }]);
-  };
-
   const addChatAttachments = useCallback((files: File[]) => {
     const imageFiles = files.filter(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f.name));
     if (imageFiles.length === 0) return;
