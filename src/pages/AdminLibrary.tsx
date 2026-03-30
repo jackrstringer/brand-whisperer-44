@@ -345,7 +345,13 @@ export default function AdminLibrary() {
             <div key={item.id} className={`rounded-lg border overflow-hidden bg-card group cursor-pointer transition-all ${selectedIds.has(item.id) ? "border-primary ring-2 ring-primary/20" : "border-border"}`} onClick={() => setDetailItem(item)}>
               <div className="relative">
                 <img src={item.thumbnail_url} alt={item.title} className="w-full h-[200px] object-cover object-top" />
-                <div className="absolute top-2 right-2">
+                {/* Selection checkbox */}
+                <div className="absolute top-2 left-2" onClick={(e) => toggleSelect(item.id, e)}>
+                  <Checkbox
+                    checked={selectedIds.has(item.id)}
+                    className={`h-5 w-5 rounded border-2 bg-background/80 ${selectedIds.has(item.id) || selectedIds.size > 0 ? "opacity-100" : "opacity-0 group-hover:opacity-100"} transition-opacity`}
+                  />
+                </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button className="p-1.5 rounded bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity">
