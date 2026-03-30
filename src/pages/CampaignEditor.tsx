@@ -530,24 +530,8 @@ export default function CampaignEditor() {
     navigate(`/brands/${brandId}/campaigns/${newCampaign.id}`);
   }, [brandId, campaignId, variantHtmls, navigate]);
         const { slices } = await captureEmailScreenshots(variant.html);
-        const qaUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/aggressive-qa`;
-        const resp = await fetch(qaUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY, "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}` },
-          body: JSON.stringify({ campaignId, html: variant.html, slices, referenceImageUrls: referenceUrls, variantIndex: idx, roundNumber: 1 }),
-        });
-        if (resp.ok) {
-          const result = await resp.json();
-          updatedVariants[idx] = { ...updatedVariants[idx], qa_score: result.score, qa_summary: result.summary, qa_round: 1, status: result.passed ? "qa_passed" : "qa_reviewed" };
-        }
-      } catch (err) { console.error(`[perfection] QA error variant ${idx}:`, err); }
-      setQaProgress((prev) => { const next = { ...prev }; delete next[idx]; return next; });
-      setVariantHtmls([...updatedVariants]);
-    }
-    return updatedVariants;
-  }, [campaignId]);
 
-  const generatePerfectionMode = async () => {
+
     if (!brandId || !campaignId || !brief.trim()) return;
     setGenerating(true); setGenStartTime(Date.now()); setGenElapsed(0);
     setVariantHtmls([]); setShowVariantPicker(false);
