@@ -2765,35 +2765,69 @@ export default function CampaignEditor() {
                 <Skeleton className="h-10 w-1/3" />
               </div>
             ) : campaign?.html ? (
-              <div className={`flex ${showReferenceDialog && selectedReference ? 'justify-start p-1 pl-0.5 pt-4' : 'justify-center p-8'}`}>
-                <div
-                  style={{
-                    width: renderedWidth,
-                    height: renderedHeight,
-                    position: 'relative',
-                  }}
-                >
-                  <iframe
-                    key={`${renderWidth}-${viewportWidth}`}
-                    srcDoc={srcdocHtml}
-                    sandbox="allow-same-origin allow-scripts allow-forms"
-                    className="border-0 block bg-white shadow-2xl"
+              <div className={`flex flex-col ${showReferenceDialog && selectedReference ? 'p-1 pl-0.5 pt-4' : 'p-8'}`}>
+                {/* Variant tabs */}
+                {variantHtmls.length > 1 && (
+                  <div className="flex items-center gap-2 mb-4 justify-center">
+                    <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                      {variantHtmls.map((v: any, idx: number) => (
+                        <button
+                          key={idx}
+                          onClick={() => handleVariantSwitch(idx)}
+                          disabled={!v.html}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            activeVariantIndex === idx
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          } ${!v.html ? "opacity-40 cursor-not-allowed" : ""}`}
+                        >
+                          {v.label}
+                        </button>
+                      ))}
+                    </div>
+                    {activeVariantIndex > 0 && variantHtmls[activeVariantIndex]?.html && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => saveVariantAsNewCampaign(activeVariantIndex)}
+                      >
+                        <Copy className="w-3 h-3" />
+                        Save as New Campaign
+                      </Button>
+                    )}
+                  </div>
+                )}
+                <div className={`flex ${showReferenceDialog && selectedReference ? 'justify-start' : 'justify-center'}`}>
+                  <div
                     style={{
-                      width: renderWidth,
-                      height: iframeContentHeight,
-                      transform: `scale(${zoomScale})`,
-                      transformOrigin: "top left",
+                      width: renderedWidth,
+                      height: renderedHeight,
+                      position: 'relative',
                     }}
-                    title="Email Preview"
-                    onLoad={(e) => {
-                      const iframe = e.currentTarget;
-                      measureIframeHeight(iframe);
-                      setupIframeObserver(iframe);
-                      window.setTimeout(() => measureIframeHeight(iframe), 300);
-                      window.setTimeout(() => measureIframeHeight(iframe), 1000);
-                      window.setTimeout(() => measureIframeHeight(iframe), 3000);
-                    }}
-                  />
+                  >
+                    <iframe
+                      key={`${renderWidth}-${viewportWidth}-${activeVariantIndex}`}
+                      srcDoc={srcdocHtml}
+                      sandbox="allow-same-origin allow-scripts allow-forms"
+                      className="border-0 block bg-white shadow-2xl"
+                      style={{
+                        width: renderWidth,
+                        height: iframeContentHeight,
+                        transform: `scale(${zoomScale})`,
+                        transformOrigin: "top left",
+                      }}
+                      title="Email Preview"
+                      onLoad={(e) => {
+                        const iframe = e.currentTarget;
+                        measureIframeHeight(iframe);
+                        setupIframeObserver(iframe);
+                        window.setTimeout(() => measureIframeHeight(iframe), 300);
+                        window.setTimeout(() => measureIframeHeight(iframe), 1000);
+                        window.setTimeout(() => measureIframeHeight(iframe), 3000);
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
             ) : brandId && campaignId ? (
