@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { MoreVertical, Trash2, Pencil, Eye, EyeOff, Sparkles } from "lucide-react";
+import { MoreVertical, Trash2, Pencil, Eye, EyeOff, Sparkles, CheckSquare, Square, Scissors, Loader2 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import ReferenceUploadZone from "@/components/admin/ReferenceUploadZone";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ReferenceCampaignSlicesTab } from "@/components/admin/ReferenceCampaignSlicesTab";
@@ -54,6 +55,8 @@ export default function AdminLibrary() {
   const [showUpload, setShowUpload] = useState(false);
   const [editingItem, setEditingItem] = useState<RefCampaign | null>(null);
   const [detailItem, setDetailItem] = useState<RefCampaign | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkProcessing, setBulkProcessing] = useState(false);
 
   // Form state
   const [title, setTitle] = useState("");
@@ -249,6 +252,57 @@ export default function AdminLibrary() {
     loadCampaigns();
   };
 
+  const toggleSelect = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selectedIds.size === campaigns.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(campaigns.map(c => c.id)));
+    }
+  };
+
+  const bulkReprocess = async (mode: "analyze" | "slice" | "both") => {
+    const ids = Array.from(selectedIds);
+    const items = campaigns.filter(c => ids.includes(c.id));
+    if (items.length === 0) return;
+
+    setBulkProcessing(true);
+    toast.info(`Processing ${items.length} campaign(s)...`);
+
+    for (const item of items) {
+      try {
+        if (mode === "analyze" || mode === "both") {
+          const imageUrls = item.image_urls || [item.thumbnail_url];
+          supabase.functions.invoke("analyze-reference", {
+            body: { referenceId: item.id, imageUrls },
+          }).catch(err => console.error("Bulk analyze error:", err));
+        }
+        if (mode === "slice" || mode === "both") {
+          supabase.functions.invoke("slice-reference", {
+            body: { referenceCampaignId: item.id },
+          }).catch(err => console.error("Bulk slice error:", err));
+        }
+      } catch (err) {
+        console.error("Bulk process error:", err);
+      }
+    }
+
+    toast.success(`Triggered ${mode} for ${items.length} campaign(s) — results will appear as they complete`);
+    setBulkProcessing(false);
+    setSelectedIds(new Set());
+    // Refresh after a short delay to show initial status changes
+    setTimeout(loadCampaigns, 2000);
+  };
+
   if (adminLoading || loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
   }
@@ -258,6 +312,29 @@ export default function AdminLibrary() {
       <header className="border-b border-border px-6 py-4 flex items-center gap-4">
         <button onClick={() => navigate("/dashboard")} className="text-sm text-muted-foreground hover:text-foreground">← Dashboard</button>
         <h1 className="text-lg font-semibold">Reference Library</h1>
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={selectAll}>
+            {selectedIds.size === campaigns.length && campaigns.length > 0
+              ? <><CheckSquare className="w-3.5 h-3.5 mr-1.5" /> Deselect All</>
+              : <><Square className="w-3.5 h-3.5 mr-1.5" /> Select All</>
+            }
+          </Button>
+          {selectedIds.size > 0 && (
+            <>
+              <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
+              <Button variant="outline" size="sm" onClick={() => bulkReprocess("analyze")} disabled={bulkProcessing}>
+                <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Re-analyze
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => bulkReprocess("slice")} disabled={bulkProcessing}>
+                <Scissors className="w-3.5 h-3.5 mr-1.5" /> Re-slice
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => bulkReprocess("both")} disabled={bulkProcessing}>
+                {bulkProcessing ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-1.5" />}
+                Re-process All
+              </Button>
+            </>
+          )}
+        </div>
       </header>
 
       <div className="p-6 space-y-6">
@@ -265,10 +342,17 @@ export default function AdminLibrary() {
         <ReferenceUploadZone onUploaded={loadCampaigns} campaignCount={campaigns.length} />
         <div className="grid grid-cols-3 gap-4">
           {campaigns.map((item) => (
-            <div key={item.id} className="rounded-lg border border-border overflow-hidden bg-card group cursor-pointer" onClick={() => setDetailItem(item)}>
+            <div key={item.id} className={`rounded-lg border overflow-hidden bg-card group cursor-pointer transition-all ${selectedIds.has(item.id) ? "border-primary ring-2 ring-primary/20" : "border-border"}`} onClick={() => setDetailItem(item)}>
               <div className="relative">
                 <img src={item.thumbnail_url} alt={item.title} className="w-full h-[200px] object-cover object-top" />
-                <div className="absolute top-2 right-2">
+                {/* Selection checkbox */}
+                <div className="absolute top-2 left-2" onClick={(e) => toggleSelect(item.id, e)}>
+                  <Checkbox
+                    checked={selectedIds.has(item.id)}
+                    className={`h-5 w-5 rounded border-2 bg-background/80 ${selectedIds.has(item.id) || selectedIds.size > 0 ? "opacity-100" : "opacity-0 group-hover:opacity-100"} transition-opacity`}
+                  />
+                </div>
+                <div className="absolute top-2 right-2" onClick={(e) => e.stopPropagation()}>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button className="p-1.5 rounded bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -343,6 +427,22 @@ export default function AdminLibrary() {
                   <p className="text-sm text-muted-foreground">{detailItem.brand_name}</p>
                 )}
               </DialogHeader>
+
+              {/* Action buttons */}
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => { reanalyze(detailItem); }}>
+                  <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Re-analyze
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => {
+                  supabase.functions.invoke("slice-reference", { body: { referenceCampaignId: detailItem.id } })
+                    .then(({ error }) => {
+                      if (error) toast.error("Slice failed");
+                      else { toast.success("Slicing triggered"); loadCampaigns(); }
+                    });
+                }}>
+                  <Scissors className="w-3.5 h-3.5 mr-1.5" /> Re-slice
+                </Button>
+              </div>
 
               <Tabs defaultValue="overview" className="w-full">
                 <TabsList>
