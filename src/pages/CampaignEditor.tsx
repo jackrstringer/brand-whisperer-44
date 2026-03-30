@@ -2962,27 +2962,12 @@ export default function CampaignEditor() {
                 </div>
 
                 <div className="space-y-3">
-                  {/* Generation Mode Toggle */}
-                  <div className="flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-3.5 h-3.5 text-primary" />
-                      <span className="text-xs text-foreground">Perfection Mode</span>
-                    </div>
-                    <Switch checked={generationMode === "perfection"} onCheckedChange={(v) => setGenerationMode(v ? "perfection" : "standard")} />
-                  </div>
-                  {generationMode === "perfection" && (
-                    <p className="text-[11px] text-muted-foreground px-1">
-                      Generates 3 creative variants and QA-loops each until perfect. Takes longer but delivers polished results.
-                    </p>
-                  )}
                   <Button
-                    onClick={generationMode === "perfection" ? generatePerfectionMode : generateCampaign}
+                    onClick={generateCampaign}
                     disabled={!brief.trim() || generating}
                     className="w-full bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all"
                   >
-                    {generating
-                      ? (generationMode === "perfection" ? "Generating 3 Variants..." : "Generating...")
-                      : (generationMode === "perfection" ? "Generate 3 Variants" : "Generate Campaign")}
+                    {generating ? "Generating 3 Variants..." : "Generate Campaign"}
                   </Button>
                 </div>
               </div>
