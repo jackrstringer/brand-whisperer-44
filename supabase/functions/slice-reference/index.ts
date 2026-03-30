@@ -175,16 +175,19 @@ async function runSlicePipeline(
   // Fetch the downscaled image for Claude
   const analysisResp = await fetch(analysisImageUrl);
   let analysisBase64: string;
-  let analysisMediaType = "image/jpeg";
+  let analysisMediaType: string;
   
   if (analysisResp.ok) {
     const analysisBuf = await analysisResp.arrayBuffer();
-    analysisBase64 = uint8ArrayToBase64(new Uint8Array(analysisBuf));
+    const analysisBytes = new Uint8Array(analysisBuf);
+    analysisBase64 = uint8ArrayToBase64(analysisBytes);
+    // Detect actual media type from response header or image bytes
+    const ct = analysisResp.headers.get("content-type")?.split(";")[0].trim();
+    analysisMediaType = ct && ct.startsWith("image/") ? ct : detectMediaType(analysisBytes);
   } else {
     // Fallback: send the original image (Claude will downscale internally)
     analysisBase64 = uint8ArrayToBase64(imageBytes);
-    const ct = imageResp.headers.get("content-type");
-    if (ct) analysisMediaType = ct.split(";")[0].trim();
+    analysisMediaType = detectMediaType(imageBytes);
   }
 
   // Scale OCR paragraph boxes to analysis dimensions
