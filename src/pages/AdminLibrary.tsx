@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { MoreVertical, Trash2, Pencil, Eye, EyeOff, Sparkles, CheckSquare, Square, Scissors, Loader2 } from "lucide-react";
+import { MoreVertical, Trash2, Pencil, Eye, EyeOff, Sparkles, CheckSquare, Square, Loader2 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import ReferenceUploadZone from "@/components/admin/ReferenceUploadZone";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
