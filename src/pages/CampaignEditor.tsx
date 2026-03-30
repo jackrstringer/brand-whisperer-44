@@ -4,7 +4,6 @@ import ProductSelector, { type SelectedShopifyProduct } from "@/components/brand
 import SegmentSelector from "@/components/brand/SegmentSelector";
 import ReferencePanel, { type SelectedReference } from "@/components/campaign/ReferencePanel";
 import ImageSwapPanel from "@/components/campaign/ImageSwapPanel";
-import VariantPicker from "@/components/campaign/VariantPicker";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
