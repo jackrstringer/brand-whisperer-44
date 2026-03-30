@@ -169,6 +169,11 @@ export default function AdminLibrary() {
             loadCampaigns();
           }
         });
+
+        // Fire-and-forget slicing
+        supabase.functions.invoke("slice-reference", {
+          body: { referenceCampaignId: id },
+        }).catch((err) => console.error("Slice-reference trigger failed:", err));
       }
     } catch (err: any) {
       toast.error(err.message);
