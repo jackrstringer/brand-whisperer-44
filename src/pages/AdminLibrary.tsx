@@ -312,6 +312,29 @@ export default function AdminLibrary() {
       <header className="border-b border-border px-6 py-4 flex items-center gap-4">
         <button onClick={() => navigate("/dashboard")} className="text-sm text-muted-foreground hover:text-foreground">← Dashboard</button>
         <h1 className="text-lg font-semibold">Reference Library</h1>
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={selectAll}>
+            {selectedIds.size === campaigns.length && campaigns.length > 0
+              ? <><CheckSquare className="w-3.5 h-3.5 mr-1.5" /> Deselect All</>
+              : <><Square className="w-3.5 h-3.5 mr-1.5" /> Select All</>
+            }
+          </Button>
+          {selectedIds.size > 0 && (
+            <>
+              <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
+              <Button variant="outline" size="sm" onClick={() => bulkReprocess("analyze")} disabled={bulkProcessing}>
+                <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Re-analyze
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => bulkReprocess("slice")} disabled={bulkProcessing}>
+                <Scissors className="w-3.5 h-3.5 mr-1.5" /> Re-slice
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => bulkReprocess("both")} disabled={bulkProcessing}>
+                {bulkProcessing ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-1.5" />}
+                Re-process All
+              </Button>
+            </>
+          )}
+        </div>
       </header>
 
       <div className="p-6 space-y-6">
@@ -319,7 +342,7 @@ export default function AdminLibrary() {
         <ReferenceUploadZone onUploaded={loadCampaigns} campaignCount={campaigns.length} />
         <div className="grid grid-cols-3 gap-4">
           {campaigns.map((item) => (
-            <div key={item.id} className="rounded-lg border border-border overflow-hidden bg-card group cursor-pointer" onClick={() => setDetailItem(item)}>
+            <div key={item.id} className={`rounded-lg border overflow-hidden bg-card group cursor-pointer transition-all ${selectedIds.has(item.id) ? "border-primary ring-2 ring-primary/20" : "border-border"}`} onClick={() => setDetailItem(item)}>
               <div className="relative">
                 <img src={item.thumbnail_url} alt={item.title} className="w-full h-[200px] object-cover object-top" />
                 <div className="absolute top-2 right-2">
