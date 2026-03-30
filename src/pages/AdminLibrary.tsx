@@ -352,6 +352,7 @@ export default function AdminLibrary() {
                     className={`h-5 w-5 rounded border-2 bg-background/80 ${selectedIds.has(item.id) || selectedIds.size > 0 ? "opacity-100" : "opacity-0 group-hover:opacity-100"} transition-opacity`}
                   />
                 </div>
+                <div className="absolute top-2 right-2" onClick={(e) => e.stopPropagation()}>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button className="p-1.5 rounded bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity">
