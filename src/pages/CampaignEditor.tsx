@@ -529,7 +529,7 @@ export default function CampaignEditor() {
     toast.success(`Saved "${variant.label}" as a new campaign`);
     navigate(`/brands/${brandId}/campaigns/${newCampaign.id}`);
   }, [brandId, campaignId, variantHtmls, navigate]);
-        const { slices } = await captureEmailScreenshots(variant.html);
+        
 
 
   const addChatAttachments = useCallback((files: File[]) => {
