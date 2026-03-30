@@ -1,1 +1,4 @@
 project_id = "wauepdkxqhyndsmjzita"
+
+[functions.slice-reference]
+verify_jwt = false

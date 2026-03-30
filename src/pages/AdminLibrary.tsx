@@ -12,6 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { toast } from "sonner";
 import { MoreVertical, Trash2, Pencil, Eye, EyeOff, Sparkles } from "lucide-react";
 import ReferenceUploadZone from "@/components/admin/ReferenceUploadZone";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ReferenceCampaignSlicesTab } from "@/components/admin/ReferenceCampaignSlicesTab";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +41,9 @@ interface RefCampaign {
   message_type: string | null;
   extracted_copy: string | null;
   ai_metadata: any | null;
+  slicing_status: string | null;
+  image_slice_urls: any[] | null;
+  image_total_height: number | null;
 }
 
 export default function AdminLibrary() {
@@ -71,7 +76,7 @@ export default function AdminLibrary() {
       .from("reference_campaigns")
       .select("*")
       .order("sort_order", { ascending: true });
-    if (data) setCampaigns(data as RefCampaign[]);
+    if (data) setCampaigns(data as unknown as RefCampaign[]);
     setLoading(false);
   }, []);
 
@@ -164,6 +169,11 @@ export default function AdminLibrary() {
             loadCampaigns();
           }
         });
+
+        // Fire-and-forget slicing
+        supabase.functions.invoke("slice-reference", {
+          body: { referenceCampaignId: id },
+        }).catch((err) => console.error("Slice-reference trigger failed:", err));
       }
     } catch (err: any) {
       toast.error(err.message);
@@ -318,6 +328,96 @@ export default function AdminLibrary() {
           </div>
         )}
       </div>
+
+      {/* Detail dialog */}
+      <Dialog open={!!detailItem} onOpenChange={(open) => { if (!open) setDetailItem(null); }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          {detailItem && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  {detailItem.title}
+                  {!detailItem.is_published && <Badge variant="secondary" className="text-[9px]">Draft</Badge>}
+                </DialogTitle>
+                {detailItem.brand_name && (
+                  <p className="text-sm text-muted-foreground">{detailItem.brand_name}</p>
+                )}
+              </DialogHeader>
+
+              <Tabs defaultValue="overview" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="overview">Overview</TabsTrigger>
+                  <TabsTrigger value="slices">
+                    Slices
+                    {detailItem.slicing_status === "complete" && detailItem.image_slice_urls?.length
+                      ? ` (${(detailItem.image_slice_urls as any[]).length})`
+                      : ""}
+                  </TabsTrigger>
+                  <TabsTrigger value="metadata">AI Metadata</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="overview" className="space-y-4">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                    <div className="text-muted-foreground">ID</div>
+                    <div className="font-mono text-xs break-all cursor-pointer" onClick={() => { navigator.clipboard.writeText(detailItem.id); toast.success("Copied"); }}>{detailItem.id}</div>
+                    {detailItem.category && <><div className="text-muted-foreground">Category</div><div>{detailItem.category}</div></>}
+                    {detailItem.industry && <><div className="text-muted-foreground">Industry</div><div>{detailItem.industry}</div></>}
+                    {detailItem.campaign_type && <><div className="text-muted-foreground">Campaign Type</div><div>{detailItem.campaign_type}</div></>}
+                    {detailItem.message_type && <><div className="text-muted-foreground">Message Type</div><div>{detailItem.message_type}</div></>}
+                    <div className="text-muted-foreground">Sort Order</div><div>{detailItem.sort_order}</div>
+                  </div>
+                  {detailItem.tags && detailItem.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {detailItem.tags.map((tag, i) => <Badge key={i} variant="outline" className="text-[10px]">{tag}</Badge>)}
+                    </div>
+                  )}
+                  {detailItem.extracted_copy && (
+                    <div>
+                      <h4 className="text-xs font-medium text-muted-foreground mb-1">Extracted Copy</h4>
+                      <p className="text-sm whitespace-pre-wrap bg-muted/30 rounded p-3 max-h-40 overflow-y-auto">{detailItem.extracted_copy}</p>
+                    </div>
+                  )}
+                  {detailItem.image_urls && detailItem.image_urls.length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-medium text-muted-foreground mb-2">All Images ({detailItem.image_urls.length})</h4>
+                      <div className="space-y-2">
+                        {detailItem.image_urls.map((url, i) => (
+                          <div key={i} className="border border-border rounded overflow-hidden">
+                            <div className="px-2 py-1 bg-muted/30 text-[10px] text-muted-foreground">Image {i + 1}</div>
+                            <img src={url} alt={`Image ${i + 1}`} className="w-full" loading="lazy" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="slices">
+                  <ReferenceCampaignSlicesTab
+                    campaign={{
+                      id: detailItem.id,
+                      slicing_status: detailItem.slicing_status,
+                      image_slice_urls: detailItem.image_slice_urls as any,
+                      image_total_height: detailItem.image_total_height,
+                    }}
+                    onRefresh={loadCampaigns}
+                  />
+                </TabsContent>
+
+                <TabsContent value="metadata">
+                  {detailItem.ai_metadata ? (
+                    <pre className="text-xs bg-muted/30 rounded p-3 max-h-96 overflow-auto whitespace-pre-wrap">
+                      {JSON.stringify(detailItem.ai_metadata, null, 2)}
+                    </pre>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No AI metadata available yet.</p>
+                  )}
+                </TabsContent>
+              </Tabs>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Edit-only modal (for existing campaigns) */}
       <Dialog open={showUpload} onOpenChange={(open) => { if (!open) { setShowUpload(false); resetForm(); } }}>
