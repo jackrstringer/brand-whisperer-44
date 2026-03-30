@@ -320,15 +320,9 @@ export default function AdminLibrary() {
           {selectedIds.size > 0 && (
             <>
               <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
-              <Button variant="outline" size="sm" onClick={() => bulkReprocess("analyze")} disabled={bulkProcessing}>
-                <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Re-analyze
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => bulkReprocess("slice")} disabled={bulkProcessing}>
-                <Scissors className="w-3.5 h-3.5 mr-1.5" /> Re-slice
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => bulkReprocess("both")} disabled={bulkProcessing}>
+              <Button variant="outline" size="sm" onClick={bulkReprocess} disabled={bulkProcessing}>
                 {bulkProcessing ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 mr-1.5" />}
-                Re-process All
+                Re-process
               </Button>
             </>
           )}
