@@ -55,6 +55,8 @@ export default function AdminLibrary() {
   const [showUpload, setShowUpload] = useState(false);
   const [editingItem, setEditingItem] = useState<RefCampaign | null>(null);
   const [detailItem, setDetailItem] = useState<RefCampaign | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkProcessing, setBulkProcessing] = useState(false);
 
   // Form state
   const [title, setTitle] = useState("");
