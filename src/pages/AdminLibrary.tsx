@@ -423,16 +423,7 @@ export default function AdminLibrary() {
               {/* Action buttons */}
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={() => { reanalyze(detailItem); }}>
-                  <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Re-analyze
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => {
-                  supabase.functions.invoke("slice-reference", { body: { referenceCampaignId: detailItem.id } })
-                    .then(({ error }) => {
-                      if (error) toast.error("Slice failed");
-                      else { toast.success("Slicing triggered"); loadCampaigns(); }
-                    });
-                }}>
-                  <Scissors className="w-3.5 h-3.5 mr-1.5" /> Re-slice
+                  <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Re-process
                 </Button>
               </div>
 
