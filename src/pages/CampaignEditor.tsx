@@ -111,10 +111,9 @@ export default function CampaignEditor() {
   const [dragSelect, setDragSelect] = useState<{ startX: number; startY: number; x: number; y: number; active: boolean } | null>(null);
    const [imageSwap, setImageSwap] = useState<{ src: string; category: string } | null>(null);
   const imageSwapAssetsRef = useRef<string[]>([]);
-  const [generationMode, setGenerationMode] = useState<"standard" | "perfection">("standard");
-  const [showVariantPicker, setShowVariantPicker] = useState(false);
   const [variantHtmls, setVariantHtmls] = useState<any[]>([]);
-  const [qaProgress, setQaProgress] = useState<{ [index: number]: string }>({});
+  const [activeVariantIndex, setActiveVariantIndex] = useState(0);
+  const generationCompletedRef = useRef(false);
 
   // Restore reference panel state from localStorage
   useEffect(() => {
