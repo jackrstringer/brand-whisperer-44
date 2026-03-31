@@ -2677,7 +2677,6 @@ export default function CampaignEditor() {
                   </div>
                 </div>
               </div>
-            </>
           )}
 
           {/* Campaign preview / Inspiration panel */}
