@@ -2520,7 +2520,7 @@ export default function CampaignEditor() {
           {/* View Reference button — only post-generation when a reference was used */}
           {campaign?.html && selectedReference && (
             <button
-              onClick={() => setShowReferenceDialog(true)}
+              onClick={() => setShowReferenceDialog(prev => !prev)}
               className="text-muted-foreground hover:text-foreground transition-colors"
               title="View reference campaign"
             >
@@ -2610,10 +2610,42 @@ export default function CampaignEditor() {
           />
         )}
         {/* Left Panel — Preview or Inspiration — fixed 65% */}
-        <div className="h-full overflow-hidden flex" style={{ width: imageSwap ? 'calc(65% - 320px)' : '65%', minWidth: 0 }}>
+        <div className="h-full overflow-hidden flex flex-col" style={{ width: imageSwap ? 'calc(65% - 320px)' : '65%', minWidth: 0 }}>
+          {/* Variant tabs — pinned above both panels */}
+          {variantHtmls.length > 1 && campaign?.html && !isGenerating && (
+            <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-card shrink-0 justify-center">
+              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                {variantHtmls.map((v: any, idx: number) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleVariantSwitch(idx)}
+                    disabled={!v.html}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                      activeVariantIndex === idx
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    } ${!v.html ? "opacity-40 cursor-not-allowed" : ""}`}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+              {activeVariantIndex > 0 && variantHtmls[activeVariantIndex]?.html && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => saveVariantAsNewCampaign(activeVariantIndex)}
+                >
+                  <Copy className="w-3 h-3" />
+                  Save as New Campaign
+                </Button>
+              )}
+            </div>
+          )}
+          <div className="flex-1 overflow-hidden flex min-h-0">
           {/* Reference side-by-side (when toggled on post-generation) */}
           {showReferenceDialog && campaign?.html && selectedReference && (
-            <>
               <div
                 ref={refScrollRef}
                 className="h-full overflow-y-auto bg-muted/30 border-r border-border"
@@ -2645,7 +2677,6 @@ export default function CampaignEditor() {
                   </div>
                 </div>
               </div>
-            </>
           )}
 
           {/* Campaign preview / Inspiration panel */}
@@ -2766,38 +2797,6 @@ export default function CampaignEditor() {
               </div>
             ) : campaign?.html ? (
               <div className={`flex flex-col ${showReferenceDialog && selectedReference ? 'p-1 pl-0.5 pt-4' : 'p-8'}`}>
-                {/* Variant tabs */}
-                {variantHtmls.length > 1 && (
-                  <div className="flex items-center gap-2 mb-4 justify-center">
-                    <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-                      {variantHtmls.map((v: any, idx: number) => (
-                        <button
-                          key={idx}
-                          onClick={() => handleVariantSwitch(idx)}
-                          disabled={!v.html}
-                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                            activeVariantIndex === idx
-                              ? "bg-background text-foreground shadow-sm"
-                              : "text-muted-foreground hover:text-foreground"
-                          } ${!v.html ? "opacity-40 cursor-not-allowed" : ""}`}
-                        >
-                          {v.label}
-                        </button>
-                      ))}
-                    </div>
-                    {activeVariantIndex > 0 && variantHtmls[activeVariantIndex]?.html && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs gap-1"
-                        onClick={() => saveVariantAsNewCampaign(activeVariantIndex)}
-                      >
-                        <Copy className="w-3 h-3" />
-                        Save as New Campaign
-                      </Button>
-                    )}
-                  </div>
-                )}
                 <div className={`flex ${showReferenceDialog && selectedReference ? 'justify-start' : 'justify-center'}`}>
                   <div
                     style={{
@@ -2807,7 +2806,7 @@ export default function CampaignEditor() {
                     }}
                   >
                     <iframe
-                      key={`${renderWidth}-${viewportWidth}-${activeVariantIndex}`}
+                      key={`${renderWidth}-${viewportWidth}`}
                       srcDoc={srcdocHtml}
                       sandbox="allow-same-origin allow-scripts allow-forms"
                       className="border-0 block bg-white shadow-2xl"
@@ -2842,6 +2841,7 @@ export default function CampaignEditor() {
                 Generate a campaign to see the preview
               </div>
             )}
+          </div>
           </div>
         </div>
 
