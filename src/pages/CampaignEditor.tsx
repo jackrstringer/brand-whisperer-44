@@ -115,16 +115,68 @@ export default function CampaignEditor() {
   const [activeVariantIndex, setActiveVariantIndex] = useState(0);
   const generationCompletedRef = useRef(false);
 
-  // Restore reference panel state from localStorage
+  // Restore reference from DB campaign record, fallback to localStorage
   useEffect(() => {
     if (!campaignId) return;
-    try {
-      const stored = localStorage.getItem(`ref-panel-${campaignId}`);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.selectedReference) setSelectedReference(parsed.selectedReference);
+    (async () => {
+      // First try to load from the campaign record itself
+      const { data: c } = await supabase
+        .from("campaigns")
+        .select("reference_campaign_id, reference_campaign_ids, reference_campaign_type, reference_strength")
+        .eq("id", campaignId)
+        .single();
+      
+      if (c?.reference_campaign_id && c?.reference_campaign_type) {
+        try {
+          if (c.reference_campaign_type === "library") {
+            const { data: ref } = await supabase
+              .from("reference_campaigns")
+              .select("*")
+              .eq("id", c.reference_campaign_id)
+              .single();
+            if (ref) {
+              setSelectedReference({
+                type: "library",
+                id: ref.id,
+                title: ref.title,
+                thumbnail_url: ref.thumbnail_url,
+                image_urls: ref.image_urls || [],
+                strength: c.reference_strength ?? 50,
+                mode: "style",
+              });
+              return;
+            }
+          } else if (c.reference_campaign_type === "campaign") {
+            const { data: ref } = await supabase
+              .from("campaigns")
+              .select("id, name, html")
+              .eq("id", c.reference_campaign_id)
+              .single();
+            if (ref) {
+              setSelectedReference({
+                type: "campaign",
+                id: ref.id,
+                title: ref.name,
+                thumbnail_url: "",
+                image_urls: [],
+                strength: c.reference_strength ?? 50,
+                mode: "style",
+              });
+              return;
+            }
+          }
+        } catch {}
       }
-    } catch {}
+      
+      // Fallback to localStorage for older campaigns
+      try {
+        const stored = localStorage.getItem(`ref-panel-${campaignId}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed.selectedReference) setSelectedReference(parsed.selectedReference);
+        }
+      } catch {}
+    })();
   }, [campaignId]);
 
   // Check if campaign is already starred
