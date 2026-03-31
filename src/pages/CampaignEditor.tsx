@@ -2807,7 +2807,7 @@ export default function CampaignEditor() {
                     }}
                   >
                     <iframe
-                      key={`${renderWidth}-${viewportWidth}-${activeVariantIndex}`}
+                      key={`${renderWidth}-${viewportWidth}`}
                       srcDoc={srcdocHtml}
                       sandbox="allow-same-origin allow-scripts allow-forms"
                       className="border-0 block bg-white shadow-2xl"
