@@ -450,6 +450,11 @@ export default function CampaignEditor() {
       preview_text: previewText || null,
       send_list_ids: sendListIds.length > 0 ? sendListIds : null,
       send_segment_ids: sendSegmentIds.length > 0 ? sendSegmentIds : null,
+      // Persist reference fields to DB
+      reference_campaign_id: selectedReference?.id || null,
+      reference_campaign_type: selectedReference?.type || null,
+      reference_strength: selectedReference?.strength ?? null,
+      reference_campaign_ids: selectedReference ? [selectedReference.id] : null,
     } as any).eq("id", campaignId);
 
     // Always use generate-campaign-multi for 3 variants
