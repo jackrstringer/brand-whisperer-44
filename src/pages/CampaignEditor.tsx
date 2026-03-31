@@ -586,6 +586,14 @@ export default function CampaignEditor() {
       preview_text: original.preview_text,
       send_list_ids: original.send_list_ids,
       send_segment_ids: original.send_segment_ids,
+      // Preserve variant and reference context
+      variant_htmls: original.variant_htmls,
+      reference_campaign_id: original.reference_campaign_id,
+      reference_campaign_ids: original.reference_campaign_ids,
+      reference_campaign_type: original.reference_campaign_type,
+      reference_strength: original.reference_strength,
+      speed_mode: original.speed_mode,
+      generation_mode: original.generation_mode,
     } as any).select("id").single();
     if (error) {
       toast.error("Failed to save as new campaign");
