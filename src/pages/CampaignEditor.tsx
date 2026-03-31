@@ -180,6 +180,14 @@ export default function CampaignEditor() {
           const variants = (c as any).variant_htmls as any[];
           if (variants.some((v: any) => v.html)) {
             setVariantHtmls(variants);
+            // Set activeVariantIndex to whichever variant matches the current html
+            const matchIdx = variants.findIndex((v: any) => v.html && v.html === c.html);
+            if (matchIdx >= 0) setActiveVariantIndex(matchIdx);
+            else {
+              // Default to first variant with html
+              const firstValid = variants.findIndex((v: any) => v.html);
+              if (firstValid >= 0) setActiveVariantIndex(firstValid);
+            }
           }
         }
       }
