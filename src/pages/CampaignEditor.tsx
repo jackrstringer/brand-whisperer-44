@@ -2520,7 +2520,7 @@ export default function CampaignEditor() {
           {/* View Reference button — only post-generation when a reference was used */}
           {campaign?.html && selectedReference && (
             <button
-              onClick={() => setShowReferenceDialog(true)}
+              onClick={() => setShowReferenceDialog(prev => !prev)}
               className="text-muted-foreground hover:text-foreground transition-colors"
               title="View reference campaign"
             >
