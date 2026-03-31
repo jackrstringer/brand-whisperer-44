@@ -2620,13 +2620,14 @@ export default function CampaignEditor() {
                     key={idx}
                     onClick={() => handleVariantSwitch(idx)}
                     disabled={!v.html}
+                    title={v.status === "error" ? `${v.label} failed to generate` : v.label}
                     className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                       activeVariantIndex === idx
                         ? "bg-background text-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground"
-                    } ${!v.html ? "opacity-40 cursor-not-allowed" : ""}`}
+                    } ${!v.html ? "opacity-40 cursor-not-allowed line-through" : ""}`}
                   >
-                    {v.label}
+                    {v.label}{v.status === "error" ? " ✕" : ""}
                   </button>
                 ))}
               </div>
