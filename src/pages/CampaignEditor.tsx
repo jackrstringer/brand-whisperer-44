@@ -180,6 +180,14 @@ export default function CampaignEditor() {
           const variants = (c as any).variant_htmls as any[];
           if (variants.some((v: any) => v.html)) {
             setVariantHtmls(variants);
+            // Set activeVariantIndex to whichever variant matches the current html
+            const matchIdx = variants.findIndex((v: any) => v.html && v.html === c.html);
+            if (matchIdx >= 0) setActiveVariantIndex(matchIdx);
+            else {
+              // Default to first variant with html
+              const firstValid = variants.findIndex((v: any) => v.html);
+              if (firstValid >= 0) setActiveVariantIndex(firstValid);
+            }
           }
         }
       }
@@ -2620,13 +2628,14 @@ export default function CampaignEditor() {
                     key={idx}
                     onClick={() => handleVariantSwitch(idx)}
                     disabled={!v.html}
+                    title={v.status === "error" ? `${v.label} failed to generate` : v.label}
                     className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                       activeVariantIndex === idx
                         ? "bg-background text-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground"
-                    } ${!v.html ? "opacity-40 cursor-not-allowed" : ""}`}
+                    } ${!v.html ? "opacity-40 cursor-not-allowed line-through" : ""}`}
                   >
-                    {v.label}
+                    {v.label}{v.status === "error" ? " ✕" : ""}
                   </button>
                 ))}
               </div>
