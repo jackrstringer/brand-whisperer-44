@@ -2646,7 +2646,6 @@ export default function CampaignEditor() {
           <div className="flex-1 overflow-hidden flex min-h-0">
           {/* Reference side-by-side (when toggled on post-generation) */}
           {showReferenceDialog && campaign?.html && selectedReference && (
-            <>
               <div
                 ref={refScrollRef}
                 className="h-full overflow-y-auto bg-muted/30 border-r border-border"
