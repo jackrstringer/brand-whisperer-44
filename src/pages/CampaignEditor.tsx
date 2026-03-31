@@ -2610,7 +2610,40 @@ export default function CampaignEditor() {
           />
         )}
         {/* Left Panel — Preview or Inspiration — fixed 65% */}
-        <div className="h-full overflow-hidden flex" style={{ width: imageSwap ? 'calc(65% - 320px)' : '65%', minWidth: 0 }}>
+        <div className="h-full overflow-hidden flex flex-col" style={{ width: imageSwap ? 'calc(65% - 320px)' : '65%', minWidth: 0 }}>
+          {/* Variant tabs — pinned above both panels */}
+          {variantHtmls.length > 1 && campaign?.html && !isGenerating && (
+            <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-card shrink-0 justify-center">
+              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                {variantHtmls.map((v: any, idx: number) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleVariantSwitch(idx)}
+                    disabled={!v.html}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                      activeVariantIndex === idx
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    } ${!v.html ? "opacity-40 cursor-not-allowed" : ""}`}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+              {activeVariantIndex > 0 && variantHtmls[activeVariantIndex]?.html && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => saveVariantAsNewCampaign(activeVariantIndex)}
+                >
+                  <Copy className="w-3 h-3" />
+                  Save as New Campaign
+                </Button>
+              )}
+            </div>
+          )}
+          <div className="flex-1 overflow-hidden flex min-h-0">
           {/* Reference side-by-side (when toggled on post-generation) */}
           {showReferenceDialog && campaign?.html && selectedReference && (
             <>
