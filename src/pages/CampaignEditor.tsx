@@ -765,6 +765,13 @@ export default function CampaignEditor() {
               setAgentState("editing");
               iframeOwnedHtmlRef.current = null; // clear iframe ownership on chat edit
               setCampaign(c => c ? { ...c, html: data.html } : c);
+              // Keep variant_htmls in sync with the active variant
+              setVariantHtmls(prev => {
+                if (prev.length === 0) return prev;
+                const updated = [...prev];
+                updated[activeVariantIndex] = { ...updated[activeVariantIndex], html: data.html };
+                return updated;
+              });
               setCanUndo(true);
               setRedoStack([]);
             }
