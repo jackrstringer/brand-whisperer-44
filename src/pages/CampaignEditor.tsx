@@ -115,16 +115,68 @@ export default function CampaignEditor() {
   const [activeVariantIndex, setActiveVariantIndex] = useState(0);
   const generationCompletedRef = useRef(false);
 
-  // Restore reference panel state from localStorage
+  // Restore reference from DB campaign record, fallback to localStorage
   useEffect(() => {
     if (!campaignId) return;
-    try {
-      const stored = localStorage.getItem(`ref-panel-${campaignId}`);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.selectedReference) setSelectedReference(parsed.selectedReference);
+    (async () => {
+      // First try to load from the campaign record itself
+      const { data: c } = await supabase
+        .from("campaigns")
+        .select("reference_campaign_id, reference_campaign_ids, reference_campaign_type, reference_strength")
+        .eq("id", campaignId)
+        .single();
+      
+      if (c?.reference_campaign_id && c?.reference_campaign_type) {
+        try {
+          if (c.reference_campaign_type === "library") {
+            const { data: ref } = await supabase
+              .from("reference_campaigns")
+              .select("*")
+              .eq("id", c.reference_campaign_id)
+              .single();
+            if (ref) {
+              setSelectedReference({
+                type: "library",
+                id: ref.id,
+                title: ref.title,
+                thumbnail_url: ref.thumbnail_url,
+                image_urls: ref.image_urls || [],
+                strength: c.reference_strength ?? 50,
+                mode: "reference" as const,
+              });
+              return;
+            }
+          } else if (c.reference_campaign_type === "campaign") {
+            const { data: ref } = await supabase
+              .from("campaigns")
+              .select("id, name, html")
+              .eq("id", c.reference_campaign_id)
+              .single();
+            if (ref) {
+              setSelectedReference({
+                type: "campaign",
+                id: ref.id,
+                title: ref.name,
+                thumbnail_url: "",
+                image_urls: [],
+                strength: c.reference_strength ?? 50,
+                mode: "reference" as const,
+              });
+              return;
+            }
+          }
+        } catch {}
       }
-    } catch {}
+      
+      // Fallback to localStorage for older campaigns
+      try {
+        const stored = localStorage.getItem(`ref-panel-${campaignId}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed.selectedReference) setSelectedReference(parsed.selectedReference);
+        }
+      } catch {}
+    })();
   }, [campaignId]);
 
   // Check if campaign is already starred
@@ -398,6 +450,11 @@ export default function CampaignEditor() {
       preview_text: previewText || null,
       send_list_ids: sendListIds.length > 0 ? sendListIds : null,
       send_segment_ids: sendSegmentIds.length > 0 ? sendSegmentIds : null,
+      // Persist reference fields to DB
+      reference_campaign_id: selectedReference?.id || null,
+      reference_campaign_type: selectedReference?.type || null,
+      reference_strength: selectedReference?.strength ?? null,
+      reference_campaign_ids: selectedReference ? [selectedReference.id] : null,
     } as any).eq("id", campaignId);
 
     // Always use generate-campaign-multi for 3 variants
@@ -529,6 +586,14 @@ export default function CampaignEditor() {
       preview_text: original.preview_text,
       send_list_ids: original.send_list_ids,
       send_segment_ids: original.send_segment_ids,
+      // Preserve variant and reference context
+      variant_htmls: original.variant_htmls,
+      reference_campaign_id: original.reference_campaign_id,
+      reference_campaign_ids: original.reference_campaign_ids,
+      reference_campaign_type: original.reference_campaign_type,
+      reference_strength: original.reference_strength,
+      speed_mode: original.speed_mode,
+      generation_mode: original.generation_mode,
     } as any).select("id").single();
     if (error) {
       toast.error("Failed to save as new campaign");
@@ -700,6 +765,13 @@ export default function CampaignEditor() {
               setAgentState("editing");
               iframeOwnedHtmlRef.current = null; // clear iframe ownership on chat edit
               setCampaign(c => c ? { ...c, html: data.html } : c);
+              // Keep variant_htmls in sync with the active variant
+              setVariantHtmls(prev => {
+                if (prev.length === 0) return prev;
+                const updated = [...prev];
+                updated[activeVariantIndex] = { ...updated[activeVariantIndex], html: data.html };
+                return updated;
+              });
               setCanUndo(true);
               setRedoStack([]);
             }
@@ -1361,6 +1433,13 @@ export default function CampaignEditor() {
         // Silently sync campaign.html to match DB without triggering srcdoc recompute
         // (srcdocHtml won't change because displayHtml hasn't changed)
         setCampaign(c => c ? { ...c, html: newHtml } : c);
+        // Sync variant_htmls with active variant
+        setVariantHtmls(prev => {
+          if (prev.length === 0) return prev;
+          const updated = [...prev];
+          updated[activeVariantIndex] = { ...updated[activeVariantIndex], html: newHtml };
+          return updated;
+        });
         iframeOwnedHtmlRef.current = null;
       }, 2000);
     };
@@ -1369,7 +1448,7 @@ export default function CampaignEditor() {
       window.removeEventListener("message", handler);
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
     };
-  }, [campaignId, campaign, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace]);
+  }, [campaignId, campaign, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace, activeVariantIndex]);
 
   // Image swap handler — sends new src to iframe
   const handleImageSwap = useCallback((newUrl: string) => {

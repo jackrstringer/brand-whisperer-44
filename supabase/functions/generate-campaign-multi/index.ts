@@ -39,11 +39,10 @@ Deno.serve(async (req) => {
 
     console.log(`[multi] Starting 3-variant generation for campaign ${campaignId}`);
 
-    // Mark as generating
+    // Mark as generating — do NOT wipe variant_htmls here so old variants persist until new ones are ready
     await supabase.from("campaigns").update({
       status: "generating",
       generation_started_at: new Date().toISOString(),
-      variant_htmls: [],
     }).eq("id", campaignId);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
