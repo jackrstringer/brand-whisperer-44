@@ -142,7 +142,7 @@ export default function CampaignEditor() {
                 thumbnail_url: ref.thumbnail_url,
                 image_urls: ref.image_urls || [],
                 strength: c.reference_strength ?? 50,
-                mode: "style",
+                mode: "reference" as const,
               });
               return;
             }
