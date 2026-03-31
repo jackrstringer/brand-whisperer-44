@@ -1448,7 +1448,7 @@ export default function CampaignEditor() {
       window.removeEventListener("message", handler);
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
     };
-  }, [campaignId, campaign, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace]);
+  }, [campaignId, campaign, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace, activeVariantIndex]);
 
   // Image swap handler — sends new src to iframe
   const handleImageSwap = useCallback((newUrl: string) => {
