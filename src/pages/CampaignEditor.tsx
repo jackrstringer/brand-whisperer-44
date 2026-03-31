@@ -1433,6 +1433,13 @@ export default function CampaignEditor() {
         // Silently sync campaign.html to match DB without triggering srcdoc recompute
         // (srcdocHtml won't change because displayHtml hasn't changed)
         setCampaign(c => c ? { ...c, html: newHtml } : c);
+        // Sync variant_htmls with active variant
+        setVariantHtmls(prev => {
+          if (prev.length === 0) return prev;
+          const updated = [...prev];
+          updated[activeVariantIndex] = { ...updated[activeVariantIndex], html: newHtml };
+          return updated;
+        });
         iframeOwnedHtmlRef.current = null;
       }, 2000);
     };
