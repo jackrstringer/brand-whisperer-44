@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { normalizeGridImages } from "../_shared/normalizeGridImages.ts";
+import { enforceNoStackingLayout } from "../_shared/enforceNoStackingLayout.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,26 +19,6 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-function enforceNoStackingLayout(html: string): string {
-  if (!html) return html;
-  let output = html;
-  const collapseSelectorPattern = /\.(?:[a-z0-9_-]*?(?:grid|col|column|two-col|two_col|product|gift)[a-z0-9_-]*?(?:cell|col|column)?|(?:product-grid-cell|two-col-cell|gift-cell|column-cell|grid-cell))\s*\{[^}]*\}/gi;
-  output = output.replace(collapseSelectorPattern, (rule) => {
-    return rule
-      .replace(/display\s*:\s*block\s*!important;?/gi, "")
-      .replace(/width\s*:\s*100%\s*!important;?/gi, "")
-      .replace(/float\s*:\s*none\s*!important;?/gi, "")
-      .replace(/max-width\s*:\s*100%\s*!important;?/gi, "")
-      .replace(/;\s*;/g, ";");
-  });
-  if (/<head[^>]*>/i.test(output)) {
-    output = output.replace(
-      /(<head[^>]*>)/i,
-      `$1<style>.product-grid-cell,.two-col-cell,.gift-cell,.column-cell,.grid-cell{display:table-cell !important;vertical-align:top !important;}.product-grid-cell,.two-col-cell,.column-cell,.grid-cell{width:auto !important;}</style>`
-    );
-  }
-  return output;
-}
 
 function normalizeHtmlForMatch(s: string): string {
   return s
