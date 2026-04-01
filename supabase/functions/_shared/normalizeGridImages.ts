@@ -51,12 +51,11 @@ export function normalizeGridImages(html: string): string {
     const targetW = widths[0];
     const targetH = heights[0] || widths[0]; // default square if no height
 
-    // Check if all images already have matching dimensions AND no height:auto lurking
+    // Check if all images already have matching dimensions
     const allMatch =
       dimensions.every((d) => d.width === targetW || d.width === null) &&
       dimensions.every((d) => d.height === targetH || d.height === null);
-    const hasHeightAuto = /height\s*:\s*auto/i.test(trFull);
-    if (allMatch && !hasHeightAuto && widths.length === dimensions.length && heights.length === dimensions.length) continue;
+    if (allMatch && widths.length === dimensions.length && heights.length === dimensions.length) continue;
 
     console.log(
       `[normalizeGridImages] Found mismatched grid row: widths=[${widths}] heights=[${heights}] → normalizing to ${targetW}×${targetH}`
@@ -120,8 +119,6 @@ export function normalizeGridImages(html: string): string {
         /height:\s*\d+px/gi,
         `height:${targetH}px`
       );
-      // Replace height:auto with fixed pixel height in grid images
-      normalizedTag = normalizedTag.replace(/height\s*:\s*auto/gi, `height:${targetH}px`);
 
       normalizedTr = normalizedTr.replace(dim.tag, normalizedTag);
     }

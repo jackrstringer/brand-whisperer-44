@@ -39,45 +39,12 @@ Deno.serve(async (req) => {
 
     console.log(`[multi] Starting 3-variant generation for campaign ${campaignId}`);
 
-    // Derive a campaign name from brief/goal immediately
-    let derivedName: string | null = null;
-    const briefText = (body.brief || "").trim();
-    const goalText = (body.goal || "").trim();
-    if (briefText) {
-      derivedName = briefText.split(/\s+/).slice(0, 7).join(" ");
-      if (briefText.split(/\s+/).length > 7) derivedName += "…";
-    } else if (goalText) {
-      const goalLabels: Record<string, string> = {
-        promotional: "Promotional Email",
-        welcome: "Welcome Email",
-        abandoned_cart: "Abandoned Cart Email",
-        newsletter: "Newsletter Email",
-        product_launch: "Product Launch Email",
-        seasonal: "Seasonal Email",
-        winback: "Win-back Email",
-      };
-      derivedName = goalLabels[goalText] || `${goalText.charAt(0).toUpperCase()}${goalText.slice(1)} Email`;
-    }
-
-    // Mark as generating — do NOT wipe variant_htmls here so old variants persist until new ones are ready
-    const updatePayload: Record<string, any> = {
+    // Mark as generating
+    await supabase.from("campaigns").update({
       status: "generating",
       generation_started_at: new Date().toISOString(),
-    };
-
-    // Only update name if it's still the default
-    if (derivedName) {
-      const { data: current } = await supabase
-        .from("campaigns")
-        .select("name")
-        .eq("id", campaignId)
-        .single();
-      if (current?.name === "Untitled Campaign") {
-        updatePayload.name = derivedName;
-      }
-    }
-
-    await supabase.from("campaigns").update(updatePayload).eq("id", campaignId);
+      variant_htmls: [],
+    }).eq("id", campaignId);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

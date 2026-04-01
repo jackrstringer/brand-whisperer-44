@@ -1,38 +1,80 @@
 
 
-## Plan: Fix Timer, Persist Timer Toggle, AI Campaign Naming, and Wait for All Variants
+## Plan: Replace Perfection Mode with Default 3-Variant Generation
 
-### Issues Identified
+### Summary
+Remove Perfection Mode entirely. Instead, every campaign generation produces 3 variants by default (the original + 2 creative variations). Users browse variants with tab buttons above the preview and can save any variant as its own campaign. Also fix the "delayed generation failed" error.
 
-1. **Timer shows 0:00 when returning to a generating campaign**: `CampaignsList` loads campaign data once but doesn't poll for updates. The `GenTimer` component reads `generation_started_at` correctly, but if you navigate away and back, the campaigns list re-fetches — the timer should work. The real issue is that `CampaignsList` doesn't re-fetch while you're on it, so a campaign that started generating while you were in the editor shows stale `status: "draft"` in the list. Need to add polling for active generations.
+### Root Cause of "Generation Failed" Error
+The `generate-campaign-multi` edge function uses `EdgeRuntime.waitUntil()` to run background processing. If a user previously triggered Perfection Mode for a campaign and then regenerated in standard mode, the old background process can still complete later and set `status = "error"` on the campaign — causing the delayed error toast minutes after the campaign appears finished.
 
-2. **Timer toggle resets on navigation**: `showTimers` is local `useState(false)`. Needs to persist in `localStorage`.
+### Architecture
 
-3. **Campaign stays "Untitled Campaign"**: In multi-variant mode, `_isSubGeneration: true` causes `generate-campaign` to return early before the naming logic. The `generate-campaign-multi` function never sets a name. Need to derive a name in the multi function immediately when generation starts.
-
-4. **Variants visible before all are ready**: The frontend polls for `variants_ready` status, but the user can navigate into the campaign while it's still `generating` and see partial results. The real issue is: the campaign editor loads whatever is in the DB when you open it. If the campaign is still `generating`, it should show a generating state, not let you browse partial variants.
+```text
+User clicks "Generate Campaign"
+  │
+  ├─ Frontend fires generate-campaign-multi (always, no toggle)
+  │   └─ Returns 202 immediately
+  │   └─ Background: fires 3 parallel generate-campaign calls
+  │       ├─ Variant 0: Original (no creative seed modification)
+  │       ├─ Variant 1: "More Creative" seed appended
+  │       └─ Variant 2: "More Conservative" seed appended
+  │
+  ├─ Frontend polls campaign.status for "variants_ready"
+  │   └─ When ready: loads variant_htmls, shows variant 0 by default
+  │
+  └─ Preview panel shows tab bar: "Original | Creative | Conservative"
+      └─ Editing applies to whichever variant is active
+      └─ "Save as Campaign" creates a new campaign from variant HTML
+```
 
 ### Changes
 
-**1. `src/pages/CampaignsList.tsx`**
-- Persist `showTimers` in `localStorage` (`campaign-timers-visible`)
-- Add a polling interval (every 5s) that re-fetches campaigns only when any campaign has `status === "generating"` — stops polling when none are generating
-- Add `variants_ready` to `statusColors` map
+**1. `supabase/functions/generate-campaign-multi/index.ts`**
+- Rename creative seeds: Variant 0 = "Original" (NO creative seed — identical to current single generation), Variant 1 = "More Creative", Variant 2 = "More Conservative"
+- Remove `generation_mode: "perfection"` — just use a neutral marker
+- Fix race condition: before setting status to "error" in the background catch, check that the campaign's current status is still "generating" (not already "ready" from a newer generation)
 
-**2. `supabase/functions/generate-campaign-multi/index.ts`**
-- Right after marking `status: "generating"`, derive a campaign name from `brief` / `goal` (same logic as `generate-campaign` lines 820-841) and update the campaign name immediately — no AI call needed, just string extraction
-- This gives the campaign a real name before variants even start
+**2. `src/pages/CampaignEditor.tsx`**
+- Remove all Perfection Mode state and UI: `generationMode`, `showVariantPicker`, the Switch toggle, `generatePerfectionMode()`, `runAggressiveQaLoop()`, `handleVariantSelect()`, `qaProgress`
+- Remove `VariantPicker` import and rendering
+- Change `generateCampaign` to always call `generate-campaign-multi` instead of `generate-campaign`
+- Change polling to look for `variants_ready` instead of `ready`
+- When variants arrive: store them in state, display variant 0 as the active campaign HTML, show variant tabs
+- Add variant state: `activeVariantIndex` (default 0), `variantHtmls` array
+- Add variant tab bar above the preview iframe: 3 labeled tabs (Original, Creative, Conservative)
+- Switching tabs changes displayed HTML and sets the active variant for editing
+- Add "Save as New Campaign" button that clones the current variant into a new campaign record
+- On initial variant selection, update the campaign record with variant 0's HTML and status "ready"
+- Editing (chat) operates on whichever variant HTML is active
+- Fix delayed error: when polling finds "ready" and stops, also clear the timeout. Add a guard so if status changes to "error" but we already found "ready", ignore it.
 
-**3. `src/pages/CampaignEditor.tsx`**
-- When loading a campaign that has `status === "generating"`, set `generating = true` and `genStartTime` from `generation_started_at` so the in-editor timer resumes correctly
-- Start polling automatically for campaigns in `generating` state (reuse existing poll logic)
-- When loading a campaign with `status === "generating"`, do NOT populate `variantHtmls` from partial data — wait until `variants_ready`
+**3. `src/components/campaign/VariantPicker.tsx`**
+- Delete this file entirely (full-screen picker UI no longer needed)
+
+**4. `supabase/functions/aggressive-qa/index.ts`**
+- Delete this file (was only used for Perfection Mode QA loop)
+
+**5. Database considerations**
+- No schema changes needed — `variant_htmls` jsonb column and `generation_mode` column already exist
+- `variant_htmls` continues to store the 3 variant objects
+
+### Variant Tab UI (in preview header)
+- 3 small tabs/pills: "Original", "Creative", "Conservative"
+- Active tab highlighted with primary color
+- Below tabs: a small "Save as New Campaign" button (creates a duplicate campaign from current variant's HTML)
+
+### Delayed Error Fix Details
+- In `generate-campaign-multi/index.ts`: before setting `status: "error"`, read current status first; if it's already "ready" or "draft", skip the update
+- In `CampaignEditor.tsx`: once polling finds "variants_ready" and stops, store a ref `generationCompletedRef.current = true`. The timeout handler checks this ref before showing error.
+- Clear the 5-minute timeout when polling completes
 
 ### Files Modified
 
 | File | Action |
 |------|--------|
-| `src/pages/CampaignsList.tsx` | Persist timer toggle, add polling, add `variants_ready` status color |
-| `supabase/functions/generate-campaign-multi/index.ts` | Add campaign naming logic at generation start |
-| `src/pages/CampaignEditor.tsx` | Resume generating state + timer on load, block partial variant display |
+| `supabase/functions/generate-campaign-multi/index.ts` | Modify — new seeds, remove perfection branding, add status guard |
+| `src/pages/CampaignEditor.tsx` | Modify — remove perfection mode, always use multi, add variant tabs |
+| `src/components/campaign/VariantPicker.tsx` | Delete |
+| `supabase/functions/aggressive-qa/index.ts` | Delete |
 

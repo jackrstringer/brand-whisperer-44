@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,6 @@ const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
   generating: "bg-yellow-500/20 text-yellow-400",
   ready: "bg-primary/20 text-primary",
-  variants_ready: "bg-primary/20 text-primary",
   exported: "bg-blue-500/20 text-blue-400",
   error: "bg-destructive/20 text-destructive",
 };
@@ -57,43 +56,23 @@ export default function CampaignsList() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
-  const [showTimers, setShowTimers] = useState(() => {
-    try { return localStorage.getItem("campaign-timers-visible") === "true"; } catch { return false; }
-  });
-
-  const toggleTimers = useCallback((val: boolean) => {
-    setShowTimers(val);
-    try { localStorage.setItem("campaign-timers-visible", String(val)); } catch {}
-  }, []);
-
-  const fetchCampaigns = useCallback(async () => {
-    if (!brandId) return;
-    const { data: c } = await supabase
-      .from("campaigns")
-      .select("*")
-      .eq("brand_id", brandId)
-      .order("created_at", { ascending: false });
-    setCampaigns((c || []) as Campaign[]);
-  }, [brandId]);
+  const [showTimers, setShowTimers] = useState(false);
 
   useEffect(() => {
     if (!brandId) return;
     const load = async () => {
       const { data: b } = await supabase.from("brands").select("*").eq("id", brandId).single();
       setBrand(b as Brand | null);
-      await fetchCampaigns();
+      const { data: c } = await supabase
+        .from("campaigns")
+        .select("*")
+        .eq("brand_id", brandId)
+        .order("created_at", { ascending: false });
+      setCampaigns((c || []) as Campaign[]);
       setLoading(false);
     };
     load();
-  }, [brandId, fetchCampaigns]);
-
-  // Poll every 5s when any campaign is generating
-  useEffect(() => {
-    const hasGenerating = campaigns.some(c => c.status === "generating");
-    if (!hasGenerating) return;
-    const id = setInterval(fetchCampaigns, 5000);
-    return () => clearInterval(id);
-  }, [campaigns, fetchCampaigns]);
+  }, [brandId]);
 
   const createCampaign = async () => {
     if (!brandId || !user) return;
@@ -128,9 +107,6 @@ export default function CampaignsList() {
       extra_copy: campaign.extra_copy ?? null,
       speed_mode: campaign.speed_mode ?? "normal",
       reference_campaign_ids: campaign.reference_campaign_ids,
-      reference_campaign_id: (campaign as any).reference_campaign_id ?? null,
-      reference_campaign_type: (campaign as any).reference_campaign_type ?? null,
-      reference_strength: (campaign as any).reference_strength ?? null,
       product_ids: Array.isArray(campaign.product_ids) && campaign.product_ids.length > 0 ? campaign.product_ids : null,
       pinned_asset_urls: Array.isArray(campaign.pinned_asset_urls) && campaign.pinned_asset_urls.length > 0 ? campaign.pinned_asset_urls : null,
     };
@@ -163,7 +139,7 @@ export default function CampaignsList() {
         <h1 className="text-2xl font-semibold">{brand?.name || "Brand"}</h1>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => toggleTimers(!showTimers)}
+            onClick={() => setShowTimers(t => !t)}
             className={`p-1.5 rounded transition-colors ${showTimers ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground"}`}
             title="Toggle generation timers"
           >

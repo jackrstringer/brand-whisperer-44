@@ -121,8 +121,7 @@ HEADLINES:
 - Never rely on auto-wrapping — email clients reflow unpredictably
 
 IMAGES:
-- Full-width single images (hero, full-bleed): style="width:100%; height:auto; display:block;"
-- Grid images (any image in a multi-column <tr> or side-by-side layout): NEVER use height:auto. Use a fixed pixel height: style="display:block; width:100%; height:{N}px;" and append ?tr=w-{W},h-{H},fo-auto to the ImageKit URL. Think of a grid cell like a Figma frame — fixed dimensions, image fills and crops to fit, never dictates the frame size.
+- All images must use: style="width:100%; height:auto; display:block;"
 - PADDING CONSISTENCY (critical): Every content image in the email must have the SAME padding treatment. Either ALL images sit inside table cells with equal left/right padding (e.g., 24-40px on each side) OR ALL images are full-bleed. NEVER mix padded and full-bleed images.
 - When using padded images, the image's parent <td> must have explicit left and right padding. The image itself stays width:100% within that padded cell.
 - Images should generally NOT span the full 600px edge-to-edge unless the brand's reference campaigns specifically use full-bleed imagery. Default to padded images with 24-40px side padding.
@@ -205,7 +204,7 @@ Rules:
   6. A CTA button appears in the first fold
   7. Footer is present
   8. The HTML is mobile-responsive (uses max-width, not fixed widths on outer tables)
-  9. IMAGE SLOT PROPORTIONS (CRITICAL): For every <img> in a grid or multi-image section: (a) ALL images must use IDENTICAL width and height attributes AND identical ImageKit transforms. (b) height:auto on ANY grid image is a CRITICAL issue — grid images MUST have a fixed pixel height matching their container. (c) Every ImageKit grid image URL MUST include ?tr=w-{W},h-{H},fo-auto where W and H match the fixed pixel dimensions. If any of these are violated, fix immediately.
+  9. IMAGE SLOT PROPORTIONS (CRITICAL): For every <img> in a grid or multi-image section, verify ALL images use IDENTICAL width and height attributes AND identical ImageKit transforms. If any image in a 2×2 or 2×3 grid has different dimensions than its siblings, normalize them all to the same ?tr=w-X,h-Y,fo-auto transform. This is a CRITICAL issue — fix it immediately.
   10. ASPECT RATIO MATCH: If the reference shows square image slots, every image MUST be cropped square via fo-auto. Portrait images jammed into landscape slots (or vice versa) MUST be fixed with appropriate ?tr=w-X,h-Y,fo-auto transforms. Count image slots in the reference vs the output — they must match. Missing fo-auto transforms on grid images is a CRITICAL issue.
 
 Return ONLY the JSON object. No markdown fences, no explanation, no preamble.`;

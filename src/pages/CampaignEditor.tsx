@@ -115,68 +115,16 @@ export default function CampaignEditor() {
   const [activeVariantIndex, setActiveVariantIndex] = useState(0);
   const generationCompletedRef = useRef(false);
 
-  // Restore reference from DB campaign record, fallback to localStorage
+  // Restore reference panel state from localStorage
   useEffect(() => {
     if (!campaignId) return;
-    (async () => {
-      // First try to load from the campaign record itself
-      const { data: c } = await supabase
-        .from("campaigns")
-        .select("reference_campaign_id, reference_campaign_ids, reference_campaign_type, reference_strength")
-        .eq("id", campaignId)
-        .single();
-      
-      if (c?.reference_campaign_id && c?.reference_campaign_type) {
-        try {
-          if (c.reference_campaign_type === "library") {
-            const { data: ref } = await supabase
-              .from("reference_campaigns")
-              .select("*")
-              .eq("id", c.reference_campaign_id)
-              .single();
-            if (ref) {
-              setSelectedReference({
-                type: "library",
-                id: ref.id,
-                title: ref.title,
-                thumbnail_url: ref.thumbnail_url,
-                image_urls: ref.image_urls || [],
-                strength: c.reference_strength ?? 50,
-                mode: "reference" as const,
-              });
-              return;
-            }
-          } else if (c.reference_campaign_type === "campaign") {
-            const { data: ref } = await supabase
-              .from("campaigns")
-              .select("id, name, html")
-              .eq("id", c.reference_campaign_id)
-              .single();
-            if (ref) {
-              setSelectedReference({
-                type: "campaign",
-                id: ref.id,
-                title: ref.name,
-                thumbnail_url: "",
-                image_urls: [],
-                strength: c.reference_strength ?? 50,
-                mode: "reference" as const,
-              });
-              return;
-            }
-          }
-        } catch {}
+    try {
+      const stored = localStorage.getItem(`ref-panel-${campaignId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.selectedReference) setSelectedReference(parsed.selectedReference);
       }
-      
-      // Fallback to localStorage for older campaigns
-      try {
-        const stored = localStorage.getItem(`ref-panel-${campaignId}`);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (parsed.selectedReference) setSelectedReference(parsed.selectedReference);
-        }
-      } catch {}
-    })();
+    } catch {}
   }, [campaignId]);
 
   // Check if campaign is already starred
@@ -227,29 +175,11 @@ export default function CampaignEditor() {
         // speedMode is always "normal" now
         const history = campaign.html_history;
         setCanUndo(Array.isArray(history) && history.length > 0);
-
-        // If campaign is still generating, resume the generating UI state
-        if (c.status === "generating") {
-          setGenerating(true);
-          generationCompletedRef.current = false;
-          const startedAt = (c as any).generation_started_at;
-          if (startedAt) {
-            setGenStartTime(new Date(startedAt).getTime());
-          } else {
-            setGenStartTime(Date.now());
-          }
-          // Do NOT populate variantHtmls from partial data — wait for variants_ready
-        } else if ((c as any).variant_htmls && Array.isArray((c as any).variant_htmls)) {
-          // Only populate variants if generation is complete (not "generating")
+        // If variants are ready from a previous session, restore them
+        if ((c as any).variant_htmls && Array.isArray((c as any).variant_htmls)) {
           const variants = (c as any).variant_htmls as any[];
           if (variants.some((v: any) => v.html)) {
             setVariantHtmls(variants);
-            const matchIdx = variants.findIndex((v: any) => v.html && v.html === c.html);
-            if (matchIdx >= 0) setActiveVariantIndex(matchIdx);
-            else {
-              const firstValid = variants.findIndex((v: any) => v.html);
-              if (firstValid >= 0) setActiveVariantIndex(firstValid);
-            }
           }
         }
       }
@@ -295,64 +225,6 @@ export default function CampaignEditor() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText]);
-
-  // Auto-poll when we load into a campaign that's already generating (resumed from navigation)
-  useEffect(() => {
-    if (!generating || !campaignId) return;
-    // Skip if generateCampaign set up its own poll (generationCompletedRef tracks that)
-    const pollInterval = setInterval(async () => {
-      const { data } = await supabase
-        .from("campaigns")
-        .select("*")
-        .eq("id", campaignId)
-        .single();
-      if (!data) return;
-
-      if (data.status === "variants_ready" && data.variant_htmls) {
-        clearInterval(pollInterval);
-        generationCompletedRef.current = true;
-        const variants = data.variant_htmls as any[];
-        setVariantHtmls(variants);
-        setCampaign(data as unknown as Campaign);
-        setNameValue(data.name || "");
-        setGenerating(false);
-        const elapsed = genStartTime ? Math.floor((Date.now() - genStartTime) / 1000) : 0;
-        setGenStartTime(null);
-        const successCount = variants.filter((v: any) => v.html).length;
-        setMessages((prev) => [
-          ...prev,
-          { id: crypto.randomUUID(), campaign_id: campaignId, role: "system" as const, content: `${successCount}/3 variants generated in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
-        ]);
-        if (data.html) runVisualQa(data as unknown as Campaign);
-      } else if (data.status === "ready") {
-        clearInterval(pollInterval);
-        generationCompletedRef.current = true;
-        setCampaign(data as unknown as Campaign);
-        setNameValue(data.name || "");
-        setGenerating(false);
-        setGenStartTime(null);
-        if (data.html) runVisualQa(data as unknown as Campaign);
-      } else if (data.status === "error") {
-        clearInterval(pollInterval);
-        setCampaign(data as unknown as Campaign);
-        setGenerating(false);
-        setGenStartTime(null);
-        toast.error("Campaign generation failed.");
-      }
-    }, 4000);
-
-    const timeoutId = setTimeout(() => {
-      clearInterval(pollInterval);
-      setGenerating(false);
-      setGenStartTime(null);
-    }, 300000);
-
-    return () => {
-      clearInterval(pollInterval);
-      clearTimeout(timeoutId);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
 
 
@@ -518,11 +390,6 @@ export default function CampaignEditor() {
       preview_text: previewText || null,
       send_list_ids: sendListIds.length > 0 ? sendListIds : null,
       send_segment_ids: sendSegmentIds.length > 0 ? sendSegmentIds : null,
-      // Persist reference fields to DB
-      reference_campaign_id: selectedReference?.id || null,
-      reference_campaign_type: selectedReference?.type || null,
-      reference_strength: selectedReference?.strength ?? null,
-      reference_campaign_ids: selectedReference ? [selectedReference.id] : null,
     } as any).eq("id", campaignId);
 
     // Always use generate-campaign-multi for 3 variants
@@ -654,14 +521,6 @@ export default function CampaignEditor() {
       preview_text: original.preview_text,
       send_list_ids: original.send_list_ids,
       send_segment_ids: original.send_segment_ids,
-      // Preserve variant and reference context
-      variant_htmls: original.variant_htmls,
-      reference_campaign_id: original.reference_campaign_id,
-      reference_campaign_ids: original.reference_campaign_ids,
-      reference_campaign_type: original.reference_campaign_type,
-      reference_strength: original.reference_strength,
-      speed_mode: original.speed_mode,
-      generation_mode: original.generation_mode,
     } as any).select("id").single();
     if (error) {
       toast.error("Failed to save as new campaign");
@@ -833,13 +692,6 @@ export default function CampaignEditor() {
               setAgentState("editing");
               iframeOwnedHtmlRef.current = null; // clear iframe ownership on chat edit
               setCampaign(c => c ? { ...c, html: data.html } : c);
-              // Keep variant_htmls in sync with the active variant
-              setVariantHtmls(prev => {
-                if (prev.length === 0) return prev;
-                const updated = [...prev];
-                updated[activeVariantIndex] = { ...updated[activeVariantIndex], html: data.html };
-                return updated;
-              });
               setCanUndo(true);
               setRedoStack([]);
             }
@@ -1501,13 +1353,6 @@ export default function CampaignEditor() {
         // Silently sync campaign.html to match DB without triggering srcdoc recompute
         // (srcdocHtml won't change because displayHtml hasn't changed)
         setCampaign(c => c ? { ...c, html: newHtml } : c);
-        // Sync variant_htmls with active variant
-        setVariantHtmls(prev => {
-          if (prev.length === 0) return prev;
-          const updated = [...prev];
-          updated[activeVariantIndex] = { ...updated[activeVariantIndex], html: newHtml };
-          return updated;
-        });
         iframeOwnedHtmlRef.current = null;
       }, 2000);
     };
@@ -1516,7 +1361,7 @@ export default function CampaignEditor() {
       window.removeEventListener("message", handler);
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
     };
-  }, [campaignId, campaign, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace, activeVariantIndex]);
+  }, [campaignId, campaign, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace]);
 
   // Image swap handler — sends new src to iframe
   const handleImageSwap = useCallback((newUrl: string) => {
@@ -2675,7 +2520,7 @@ export default function CampaignEditor() {
           {/* View Reference button — only post-generation when a reference was used */}
           {campaign?.html && selectedReference && (
             <button
-              onClick={() => setShowReferenceDialog(prev => !prev)}
+              onClick={() => setShowReferenceDialog(true)}
               className="text-muted-foreground hover:text-foreground transition-colors"
               title="View reference campaign"
             >
@@ -2765,43 +2610,10 @@ export default function CampaignEditor() {
           />
         )}
         {/* Left Panel — Preview or Inspiration — fixed 65% */}
-        <div className="h-full overflow-hidden flex flex-col" style={{ width: imageSwap ? 'calc(65% - 320px)' : '65%', minWidth: 0 }}>
-          {/* Variant tabs — pinned above both panels */}
-          {variantHtmls.length > 1 && campaign?.html && !isGenerating && (
-            <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-card shrink-0 justify-center">
-              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-                {variantHtmls.map((v: any, idx: number) => (
-                  <button
-                    key={idx}
-                    onClick={() => handleVariantSwitch(idx)}
-                    disabled={!v.html}
-                    title={v.status === "error" ? `${v.label} failed to generate` : v.label}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                      activeVariantIndex === idx
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    } ${!v.html ? "opacity-40 cursor-not-allowed line-through" : ""}`}
-                  >
-                    {v.label}{v.status === "error" ? " ✕" : ""}
-                  </button>
-                ))}
-              </div>
-              {activeVariantIndex > 0 && variantHtmls[activeVariantIndex]?.html && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs gap-1"
-                  onClick={() => saveVariantAsNewCampaign(activeVariantIndex)}
-                >
-                  <Copy className="w-3 h-3" />
-                  Save as New Campaign
-                </Button>
-              )}
-            </div>
-          )}
-          <div className="flex-1 overflow-hidden flex min-h-0">
+        <div className="h-full overflow-hidden flex" style={{ width: imageSwap ? 'calc(65% - 320px)' : '65%', minWidth: 0 }}>
           {/* Reference side-by-side (when toggled on post-generation) */}
           {showReferenceDialog && campaign?.html && selectedReference && (
+            <>
               <div
                 ref={refScrollRef}
                 className="h-full overflow-y-auto bg-muted/30 border-r border-border"
@@ -2833,6 +2645,7 @@ export default function CampaignEditor() {
                   </div>
                 </div>
               </div>
+            </>
           )}
 
           {/* Campaign preview / Inspiration panel */}
@@ -2953,6 +2766,38 @@ export default function CampaignEditor() {
               </div>
             ) : campaign?.html ? (
               <div className={`flex flex-col ${showReferenceDialog && selectedReference ? 'p-1 pl-0.5 pt-4' : 'p-8'}`}>
+                {/* Variant tabs */}
+                {variantHtmls.length > 1 && (
+                  <div className="flex items-center gap-2 mb-4 justify-center">
+                    <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                      {variantHtmls.map((v: any, idx: number) => (
+                        <button
+                          key={idx}
+                          onClick={() => handleVariantSwitch(idx)}
+                          disabled={!v.html}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            activeVariantIndex === idx
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          } ${!v.html ? "opacity-40 cursor-not-allowed" : ""}`}
+                        >
+                          {v.label}
+                        </button>
+                      ))}
+                    </div>
+                    {activeVariantIndex > 0 && variantHtmls[activeVariantIndex]?.html && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => saveVariantAsNewCampaign(activeVariantIndex)}
+                      >
+                        <Copy className="w-3 h-3" />
+                        Save as New Campaign
+                      </Button>
+                    )}
+                  </div>
+                )}
                 <div className={`flex ${showReferenceDialog && selectedReference ? 'justify-start' : 'justify-center'}`}>
                   <div
                     style={{
@@ -2962,7 +2807,7 @@ export default function CampaignEditor() {
                     }}
                   >
                     <iframe
-                      key={`${renderWidth}-${viewportWidth}`}
+                      key={`${renderWidth}-${viewportWidth}-${activeVariantIndex}`}
                       srcDoc={srcdocHtml}
                       sandbox="allow-same-origin allow-scripts allow-forms"
                       className="border-0 block bg-white shadow-2xl"
@@ -2997,7 +2842,6 @@ export default function CampaignEditor() {
                 Generate a campaign to see the preview
               </div>
             )}
-          </div>
           </div>
         </div>
 
