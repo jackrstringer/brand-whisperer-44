@@ -1,64 +1,65 @@
 
+Summary
 
-## Plan: Improve Image Grid Quality in Campaign Generation
+Fix the remaining malformed grid campaigns by making the generation, post-processing, and preview layers agree on true fixed slot dimensions for grid images. The uploaded HTML still shows the exact failure mode: square `width`/`height` attributes, but `style="height:auto"` on non-transformable image URLs, so the browser keeps each image’s natural aspect ratio and leaves white gaps.
 
-### Problem Analysis
+What I found
 
-The current system has a flawed `normalizeGridImages` function that blindly copies the **first image's dimensions** to all other images in a grid row. This causes several issues:
+- The uploaded campaign HTML still has 2-column rows like `width="300" height="300" style="width:100%; max-width:300px; height:auto; display:block;"`, which guarantees uneven rendered heights when the source images are not square.
+- `generate-campaign` still includes a universal rule that every image should use `height:auto`, which conflicts with its later grid-specific guidance.
+- `generate-campaign` imports `rehostHtmlImagesWithImageKit` but does not run it before returning, and the helper currently skips project storage URLs anyway, so most campaign images never become transformable URLs.
+- The preview iframe, reference previews, and visual QA capture all inject global CSS with `img { ... height:auto!important; }`, which overrides the explicit heights the normalizer is trying to enforce.
+- Existing campaigns may also contain legacy helper CSS from older no-stacking logic, so the fix needs to clean already-saved HTML too.
 
-1. **Arbitrary canonical dimensions**: If the first image has wrong/missing dimensions, all images get wrong values
-2. **No awareness of email width or column count**: The function doesn't calculate what dimensions images SHOULD be — it just copies whatever the first image has
-3. **Non-greedy regex fails on nested tables**: Email HTML commonly nests tables inside `<td>` elements, so `<tr>[\s\S]*?</tr>` may match incorrectly
-4. **Runs in 3 places redundantly**: generate-campaign, edit-campaign, and visual-qa all run it, sometimes undoing good AI output
-5. **`enforceNoStackingLayout` strips ALL mobile rules**: It aggressively removes responsive CSS that may be needed, and injects class-based fixes that only work if the AI used those exact class names
+Plan
 
-### Root Causes
+1. Unify final HTML processing
+- Add one shared finalization step used by both `generate-campaign` and `edit-campaign`.
+- In that step: remove legacy injected helper CSS, enforce no-stacking, rehost eligible images, then normalize grid rows.
 
-The normalizer is a blunt instrument — it doesn't understand the layout, just pattern-matches `<tr>` tags. The AI is already instructed to use correct ImageKit transforms, but then the normalizer overwrites them with potentially wrong values derived from the first image.
+2. Make grid normalization geometry-driven
+- Keep the 470px render width, but stop assuming a fixed 10px gutter.
+- Derive slot width from the row’s actual structure: image-cell count, `%` widths, and cell padding/gutters.
+- For true multi-image rows, force matching width/height attributes and matching inline pixel heights on each image so the browser cannot fall back to natural aspect ratio.
+- Normalize related width/max-width styles at the same time, but leave non-grid images alone.
 
-### Changes
+3. Make campaign images actually transformable
+- In `generate-campaign`, run image rehosting before the sub-generation early return and before final persistence.
+- Update the shared image helper so project storage URLs used in campaigns can also be rehosted when needed, not just external URLs.
+- Once hosted, apply matching `?tr=w-X,h-Y,fo-auto` transforms for grid slots.
 
-**1. Rewrite `normalizeGridImages.ts` — smart dimension calculation**
+4. Remove preview overrides that break fixed-height rendering
+- In `CampaignEditor`, `ReferencePanel`, and `visualQaCapture`, remove the global `height:auto!important` image rule and avoid `!important` on image sizing.
+- Keep safe width constraints, but let explicit per-image heights win.
 
-Instead of copying the first image's dimensions, calculate the correct dimensions:
-- Count columns in the row (number of `<td>` with images)
-- Calculate per-column width: `Math.floor((470 - (columns - 1) * gap) / columns)` where gap defaults to 10px
-- For height: if any image in the row has a height, use it to derive the aspect ratio. If none do, default to square (1:1) for grids
-- Only normalize images that are missing dimensions or have clearly wrong ones (e.g., full-width in a 2-column grid)
-- Preserve well-formed AI output — skip rows where all images already have consistent dimensions AND ImageKit transforms
+5. Fix the prompt contradiction
+- Change the universal image rule so `height:auto` applies only to non-grid images.
+- Add a hard requirement that grid/mosaic/two-column images must use explicit slot height in both attributes and inline styles, with matching transforms when available.
 
-**2. Fix the regex to handle nested tables**
+6. Quiet the preview observer warning
+- Update the iframe `ResizeObserver` path so height updates only run when the measured height actually changes and are scheduled through `requestAnimationFrame`, which should remove the current observer-loop warning.
 
-Replace the simple `<tr>[\s\S]*?</tr>` regex with a proper approach that tracks nesting depth, or use a different strategy: find `<td>` siblings within the same parent rather than relying on `<tr>` matching.
+Files to update
 
-**3. Make `enforceNoStackingLayout` less destructive**
+- `supabase/functions/generate-campaign/index.ts`
+- `supabase/functions/edit-campaign/index.ts`
+- `supabase/functions/_shared/normalizeGridImages.ts`
+- `supabase/functions/_shared/imagekit.ts`
+- `src/pages/CampaignEditor.tsx`
+- `src/components/campaign/ReferencePanel.tsx`
+- `src/lib/visualQaCapture.ts`
 
-- Only strip media queries that explicitly target grid/multi-column elements
-- Don't inject class-based styles blindly — the AI rarely uses those exact class names
-- Instead, inject a more targeted rule: `td { display: table-cell !important; }` inside a `min-width:620px` media query to preserve desktop layout without breaking mobile entirely
+Expected result
 
-**4. Stop running normalizer in visual-qa**
+- The exact failure in the uploaded Solawave campaign is fixed: side-by-side image rows render as equal-height tiles without white bands.
+- New generations and later edits use real slot-filling crops instead of mixed natural-height images.
+- Preview, visual QA, and saved campaign HTML all honor the same layout rules.
 
-The visual-qa function should only report issues, not silently "fix" them. Remove the automatic `normalizeGridImages` + `enforceNoStackingLayout` calls from visual-qa. Let the AI's find/replace patches handle issues instead. Keep the normalizer only in `generate-campaign` (after generation, before save) where it serves as a safety net.
+Technical details
 
-**5. Improve generation prompt for grid clarity**
-
-Add explicit instruction in the generation prompt:
-- "For 2-column grids at 470px viewport: each image slot is 220px wide. Set both width='220' and height='220' (or appropriate aspect ratio) on every `<img>` AND its container `<td>`."
-- "Always set explicit `width` and `height` attributes on every grid image. Never rely on CSS-only sizing."
-- "For ImageKit URLs, always include `?tr=w-{W},h-{H},fo-auto` matching the slot dimensions."
-
-### Files Modified
-
-| File | Action |
-|------|--------|
-| `supabase/functions/_shared/normalizeGridImages.ts` | Rewrite — smart width calculation based on column count |
-| `supabase/functions/_shared/enforceNoStackingLayout.ts` | Refine — less destructive, more targeted |
-| `supabase/functions/visual-qa/index.ts` | Remove automatic normalizer calls; report-only |
-| `supabase/functions/generate-campaign/index.ts` | Improve grid prompt instructions |
-| `supabase/functions/edit-campaign/index.ts` | Use shared enforceNoStackingLayout import (already exists locally) |
-
-### Key Design Principle
-
-The normalizer should be a **safety net**, not the primary quality mechanism. The AI prompt is the primary driver. The normalizer only intervenes when images in a grid are clearly inconsistent — and when it does, it calculates correct dimensions from the layout structure rather than copying arbitrary values from the first image.
-
+- The core issue is a pipeline contradiction:
+  1. the normalizer tries to enforce fixed grid dimensions,
+  2. the prompt still tells the model to output `height:auto`,
+  3. the iframe CSS forcibly resets image height back to auto,
+  4. and the URLs are often not transformable in the first place.
+- The fix avoids brittle hardcoding by deriving slot geometry from each row’s real structure, then making generation, editing, preview, and QA all respect that same output.
