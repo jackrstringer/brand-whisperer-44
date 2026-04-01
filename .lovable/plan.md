@@ -1,43 +1,38 @@
 
-Goal
 
-Fix the real persistence bugs causing variants and references to disappear, and make campaign state durable across reloads, saves, and regenerations.
+## Plan: Fix Timer, Persist Timer Toggle, AI Campaign Naming, and Wait for All Variants
 
-What I found
+### Issues Identified
 
-- This is not just a UI misunderstanding. There are two real persistence bugs.
-- `src/pages/CampaignEditor.tsx` restores `selectedReference` only from `localStorage` (`ref-panel-${campaignId}`). That means the eye button/reference preview can disappear on refresh, browser change, or whenever you land on a different campaign ID.
-- `saveVariantAsNewCampaign()` creates a new campaign with only the chosen `html` and a few basic fields. It does not copy `variant_htmls`, `reference_campaign_id`, `reference_campaign_type`, or `reference_strength`, so the new campaign opens looking like the variants/reference “vanished.”
-- `supabase/functions/generate-campaign-multi/index.ts` currently sets `variant_htmls: []` as soon as generation starts. That is an actual wipe of the saved variants on that record before the new run finishes.
-- Current editing/switching writes only `campaign.html` in several places. It does not keep `variant_htmls[activeVariantIndex].html` in sync, so reload/restoration can drift and make variant state look broken.
-- The network activity I checked also matches this: current interactions are patching `html`, not preserving variant/reference context.
+1. **Timer shows 0:00 when returning to a generating campaign**: `CampaignsList` loads campaign data once but doesn't poll for updates. The `GenTimer` component reads `generation_started_at` correctly, but if you navigate away and back, the campaigns list re-fetches — the timer should work. The real issue is that `CampaignsList` doesn't re-fetch while you're on it, so a campaign that started generating while you were in the editor shows stale `status: "draft"` in the list. Need to add polling for active generations.
 
-Implementation plan
+2. **Timer toggle resets on navigation**: `showTimers` is local `useState(false)`. Needs to persist in `localStorage`.
 
-1. Stop wiping variants on regenerate
-- In `supabase/functions/generate-campaign-multi/index.ts`, remove the initial `variant_htmls: []` update.
-- Keep existing variants on the record until the new 3-variant result is ready, then replace them in one final update.
+3. **Campaign stays "Untitled Campaign"**: In multi-variant mode, `_isSubGeneration: true` causes `generate-campaign` to return early before the naming logic. The `generate-campaign-multi` function never sets a name. Need to derive a name in the multi function immediately when generation starts.
 
-2. Persist reference usage on the campaign itself
-- In `src/pages/CampaignEditor.tsx`, when generation starts with a reference, save:
-  - `reference_campaign_id`
-  - `reference_campaign_ids`
-  - `reference_campaign_type`
-  - `reference_strength`
-- Keep localStorage only as a temporary cache, not the source of truth.
+4. **Variants visible before all are ready**: The frontend polls for `variants_ready` status, but the user can navigate into the campaign while it's still `generating` and see partial results. The real issue is: the campaign editor loads whatever is in the DB when you open it. If the campaign is still `generating`, it should show a generating state, not let you browse partial variants.
 
-3. Rebuild the reference on load
-- In `CampaignEditor.tsx`, load reference data from the campaign row first:
-  - if type = `library`, fetch the record from `reference_campaigns`
-  - if type = `campaign`, fetch the source campaign
-- Fall back to localStorage only for older campaigns that predate this fix.
-- This restores the eye button and reference preview reliably.
+### Changes
 
-4. Preserve full context when saving a variant as a new campaign
-- In `saveVariantAsNewCampaign()`, copy:
-  - `variant_htmls`
-  - reference fields
-  - other generation settings already tied to that campaign
-- Set the new campaign’s main `html` to the chosen variant, but keep the full variant set attached so it does not look like the other options were deleted.
+**1. `src/pages/CampaignsList.tsx`**
+- Persist `showTimers` in `localStorage` (`campaign-timers-visible`)
+- Add a polling interval (every 5s) that re-fetches campaigns only when any campaign has `status === "generating"` — stops polling when none are generating
+- Add `variants_ready` to `statusColors` map
 
-5. Keep variant data synced during edits
+**2. `supabase/functions/generate-campaign-multi/index.ts`**
+- Right after marking `status: "generating"`, derive a campaign name from `brief` / `goal` (same logic as `generate-campaign` lines 820-841) and update the campaign name immediately — no AI call needed, just string extraction
+- This gives the campaign a real name before variants even start
+
+**3. `src/pages/CampaignEditor.tsx`**
+- When loading a campaign that has `status === "generating"`, set `generating = true` and `genStartTime` from `generation_started_at` so the in-editor timer resumes correctly
+- Start polling automatically for campaigns in `generating` state (reuse existing poll logic)
+- When loading a campaign with `status === "generating"`, do NOT populate `variantHtmls` from partial data — wait until `variants_ready`
+
+### Files Modified
+
+| File | Action |
+|------|--------|
+| `src/pages/CampaignsList.tsx` | Persist timer toggle, add polling, add `variants_ready` status color |
+| `supabase/functions/generate-campaign-multi/index.ts` | Add campaign naming logic at generation start |
+| `src/pages/CampaignEditor.tsx` | Resume generating state + timer on load, block partial variant display |
+
