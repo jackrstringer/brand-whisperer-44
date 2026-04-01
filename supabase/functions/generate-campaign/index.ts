@@ -798,10 +798,8 @@ RULES:
       throw new Error("Generated HTML was incomplete. Please try again.");
     }
 
-    html = enforceNoStackingLayout(html);
-
-    // Deterministic: normalize grid image dimensions before rehosting
-    html = normalizeGridImages(html);
+    // Unified finalization: clean legacy CSS, enforce no-stacking, normalize grid images, fix inline heights
+    html = finalizeCampaignHtml(html);
 
     // In sub-generation mode, just return the HTML without updating campaign status
     if (_isSubGeneration) {

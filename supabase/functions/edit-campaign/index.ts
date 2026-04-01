@@ -510,8 +510,7 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
           const htmlChanged = finalHtml !== currentHtml;
 
           if (finalHtml && htmlChanged && looksLikeHtml && !tooSmall) {
-            finalHtml = enforceNoStackingLayout(finalHtml);
-            finalHtml = normalizeGridImages(finalHtml);
+            finalHtml = finalizeCampaignHtml(finalHtml);
 
             const history = Array.isArray(campaign.html_history) ? campaign.html_history : [];
             history.push(campaign.html);
