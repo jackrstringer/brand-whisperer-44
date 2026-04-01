@@ -13,6 +13,7 @@ const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
   generating: "bg-yellow-500/20 text-yellow-400",
   ready: "bg-primary/20 text-primary",
+  variants_ready: "bg-primary/20 text-primary",
   exported: "bg-blue-500/20 text-blue-400",
   error: "bg-destructive/20 text-destructive",
 };
