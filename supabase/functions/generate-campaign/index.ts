@@ -120,7 +120,8 @@ HEADLINES:
 - Never rely on auto-wrapping — email clients reflow unpredictably
 
 IMAGES:
-- All images must use: style="width:100%; height:auto; display:block;"
+- Single/hero images must use: style="width:100%; height:auto; display:block;"
+- GRID/MULTI-COLUMN images must use FIXED pixel height matching their width — NEVER height:auto. Example: style="width:100%; max-width:220px; height:220px; display:block; object-fit:cover;"
 - PADDING CONSISTENCY (critical): Every content image in the email must have the SAME padding treatment. Either ALL images sit inside table cells with equal left/right padding (e.g., 24-40px on each side) OR ALL images are full-bleed. NEVER mix padded and full-bleed images.
 - When using padded images, the image's parent <td> must have explicit left and right padding. The image itself stays width:100% within that padded cell.
 - Images should generally NOT span the full 600px edge-to-edge unless the brand's reference campaigns specifically use full-bleed imagery. Default to padded images with 24-40px side padding.
