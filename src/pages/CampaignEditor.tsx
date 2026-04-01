@@ -249,7 +249,18 @@ export default function CampaignEditor() {
     try {
       const doc = iframe.contentDocument;
       if (!doc?.body) return;
-      const observer = new ResizeObserver(() => measureIframeHeight(iframe));
+      let lastHeight = 0;
+      let rafId = 0;
+      const observer = new ResizeObserver(() => {
+        cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          const h = Math.max(doc.body?.scrollHeight ?? 0, doc.documentElement?.scrollHeight ?? 0, 800);
+          if (h !== lastHeight) {
+            lastHeight = h;
+            setIframeContentHeight(h);
+          }
+        });
+      });
       observer.observe(doc.body);
       iframeObserverRef.current = observer;
       // Also re-measure when images inside load
