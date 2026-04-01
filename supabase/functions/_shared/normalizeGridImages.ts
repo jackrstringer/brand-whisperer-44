@@ -120,6 +120,8 @@ export function normalizeGridImages(html: string): string {
         /height:\s*\d+px/gi,
         `height:${targetH}px`
       );
+      // Replace height:auto with fixed pixel height in grid images
+      normalizedTag = normalizedTag.replace(/height\s*:\s*auto/gi, `height:${targetH}px`);
 
       normalizedTr = normalizedTr.replace(dim.tag, normalizedTag);
     }
