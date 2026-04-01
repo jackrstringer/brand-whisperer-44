@@ -1,65 +1,70 @@
 
 Summary
 
-Fix the remaining malformed grid campaigns by making the generation, post-processing, and preview layers agree on true fixed slot dimensions for grid images. The uploaded HTML still shows the exact failure mode: square `width`/`height` attributes, but `style="height:auto"` on non-transformable image URLs, so the browser keeps each image’s natural aspect ratio and leaves white gaps.
+This is not a preview-only issue. The saved campaign HTML is already corrupted before rendering. The regression is coming from the deterministic post-processing layer, not from the model “being creative.”
 
-What I found
+Why this is happening
 
-- The uploaded campaign HTML still has 2-column rows like `width="300" height="300" style="width:100%; max-width:300px; height:auto; display:block;"`, which guarantees uneven rendered heights when the source images are not square.
-- `generate-campaign` still includes a universal rule that every image should use `height:auto`, which conflicts with its later grid-specific guidance.
-- `generate-campaign` imports `rehostHtmlImagesWithImageKit` but does not run it before returning, and the helper currently skips project storage URLs anyway, so most campaign images never become transformable URLs.
-- The preview iframe, reference previews, and visual QA capture all inject global CSS with `img { ... height:auto!important; }`, which overrides the explicit heights the normalizer is trying to enforce.
-- Existing campaigns may also contain legacy helper CSS from older no-stacking logic, so the fix needs to clean already-saved HTML too.
+- `normalizeGridImages.ts` is misidentifying the outer wrapper `<tr>` as one giant multi-image grid row.
+- Inside that wrapper row, it uses flat regex matching for `<td>` and `<img>`, so it counts nested image cells from the entire email as if they were sibling columns.
+- In your uploaded HTML, that produces an effective column count of roughly 13-14, which yields a computed slot width around `34-38px`.
+- The first image inside that giant block is the logo (`width="34" height="100"`), so its aspect ratio becomes the seed for the rest of the images.
+- `finalizeCampaignHtml.ts` then reinforces the bad values by converting `height:auto` into fixed inline `height:100px`, which is why hero images, full-width images, and grids all collapse.
+- The ResizeObserver warning is separate; it is not causing the bad image dimensions.
 
-Plan
+Implementation plan
 
-1. Unify final HTML processing
-- Add one shared finalization step used by both `generate-campaign` and `edit-campaign`.
-- In that step: remove legacy injected helper CSS, enforce no-stacking, rehost eligible images, then normalize grid rows.
+1. Fix row parsing at the source
+- Replace the current regex-based child `<td>` extraction in `supabase/functions/_shared/normalizeGridImages.ts` with a depth-aware parser that only returns direct child cells for a given `<tr>`.
+- Reuse the same row/cell parser in `supabase/functions/_shared/finalizeCampaignHtml.ts` so both normalization and inline-height fixing operate on the exact same definition of a “grid row.”
 
-2. Make grid normalization geometry-driven
-- Keep the 470px render width, but stop assuming a fixed 10px gutter.
-- Derive slot width from the row’s actual structure: image-cell count, `%` widths, and cell padding/gutters.
-- For true multi-image rows, force matching width/height attributes and matching inline pixel heights on each image so the browser cannot fall back to natural aspect ratio.
-- Normalize related width/max-width styles at the same time, but leave non-grid images alone.
+2. Normalize only confirmed grid rows
+- Only apply normalization when a row has true sibling image cells in the same immediate table row.
+- Skip wrapper rows, mixed-content rows, header/footer rows, and any row that contains nested tables rather than direct image columns.
+- Require a sane column count (for example 2-4 direct image cells) before any dimension rewriting happens.
 
-3. Make campaign images actually transformable
-- In `generate-campaign`, run image rehosting before the sub-generation early return and before final persistence.
-- Update the shared image helper so project storage URLs used in campaigns can also be rehosted when needed, not just external URLs.
-- Once hosted, apply matching `?tr=w-X,h-Y,fo-auto` transforms for grid slots.
+3. Stop logo dimensions from seeding other images
+- Explicitly exclude logo-like images and single small images from aspect-ratio seeding.
+- For real grids, derive dimensions from that grid row’s own geometry only.
+- If the row geometry is ambiguous, do nothing instead of inventing dimensions.
 
-4. Remove preview overrides that break fixed-height rendering
-- In `CampaignEditor`, `ReferencePanel`, and `visualQaCapture`, remove the global `height:auto!important` image rule and avoid `!important` on image sizing.
-- Keep safe width constraints, but let explicit per-image heights win.
+4. Scope style rewrites correctly
+- Only rewrite `width`, `height`, `max-width`, and `object-fit` on images inside confirmed multi-image grid rows.
+- Never rewrite standalone hero/full-width/banner images to tiny pixel widths.
+- Preserve logo sizing only on actual logo placements.
 
-5. Fix the prompt contradiction
-- Change the universal image rule so `height:auto` applies only to non-grid images.
-- Add a hard requirement that grid/mosaic/two-column images must use explicit slot height in both attributes and inline styles, with matching transforms when available.
+5. Add hard safety guards
+- Abort normalization if the computed slot width is implausibly small for a content image row.
+- Abort if a candidate row has too many image cells to be a real campaign grid.
+- Abort if a rewrite would shrink a non-logo image below a safe threshold.
 
-6. Quiet the preview observer warning
-- Update the iframe `ResizeObserver` path so height updates only run when the measured height actually changes and are scheduled through `requestAnimationFrame`, which should remove the current observer-loop warning.
+6. Add regression QA for this exact failure
+- In `supabase/functions/generate-campaign/index.ts` and/or `supabase/functions/visual-qa/index.ts`, add a guard that fails or flags output when multiple non-logo images share tiny placeholder-like dimensions such as `34x100` or `38x100`.
+- Add a specific check for hero/full-width images with `max-width` under a reasonable threshold.
 
 Files to update
 
-- `supabase/functions/generate-campaign/index.ts`
-- `supabase/functions/edit-campaign/index.ts`
 - `supabase/functions/_shared/normalizeGridImages.ts`
-- `supabase/functions/_shared/imagekit.ts`
-- `src/pages/CampaignEditor.tsx`
-- `src/components/campaign/ReferencePanel.tsx`
-- `src/lib/visualQaCapture.ts`
+- `supabase/functions/_shared/finalizeCampaignHtml.ts`
+- `supabase/functions/generate-campaign/index.ts`
+- `supabase/functions/visual-qa/index.ts`
 
 Expected result
 
-- The exact failure in the uploaded Solawave campaign is fixed: side-by-side image rows render as equal-height tiles without white bands.
-- New generations and later edits use real slot-filling crops instead of mixed natural-height images.
-- Preview, visual QA, and saved campaign HTML all honor the same layout rules.
+- Logo sizing stays isolated to the logo.
+- Hero and full-width images render full width again.
+- Only real side-by-side grids get normalized.
+- This exact uploaded campaign stops producing the “tiny sliver” image failure.
 
 Technical details
 
-- The core issue is a pipeline contradiction:
-  1. the normalizer tries to enforce fixed grid dimensions,
-  2. the prompt still tells the model to output `height:auto`,
-  3. the iframe CSS forcibly resets image height back to auto,
-  4. and the URLs are often not transformable in the first place.
-- The fix avoids brittle hardcoding by deriving slot geometry from each row’s real structure, then making generation, editing, preview, and QA all respect that same output.
+- The uploaded HTML already contains the bad values on non-logo images:
+  - logo: `width="34" height="100"`
+  - hero/full-width/grid images: also rewritten to `width="34" height="100"`
+- That pattern directly matches the current algorithm:
+  - wrapper row falsely treated as a grid
+  - nested image cells counted as columns
+  - slot width collapses to ~34-38px
+  - first logo image supplies the height ratio
+  - finalizer hardens the damage into inline CSS
+- Prompt changes alone will not solve this until the post-processor is fixed.
