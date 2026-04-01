@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
   generating: "bg-yellow-500/20 text-yellow-400",
   ready: "bg-primary/20 text-primary",
+  variants_ready: "bg-primary/20 text-primary",
   exported: "bg-blue-500/20 text-blue-400",
   error: "bg-destructive/20 text-destructive",
 };
@@ -56,23 +57,43 @@ export default function CampaignsList() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
-  const [showTimers, setShowTimers] = useState(false);
+  const [showTimers, setShowTimers] = useState(() => {
+    try { return localStorage.getItem("campaign-timers-visible") === "true"; } catch { return false; }
+  });
+
+  const toggleTimers = useCallback((val: boolean) => {
+    setShowTimers(val);
+    try { localStorage.setItem("campaign-timers-visible", String(val)); } catch {}
+  }, []);
+
+  const fetchCampaigns = useCallback(async () => {
+    if (!brandId) return;
+    const { data: c } = await supabase
+      .from("campaigns")
+      .select("*")
+      .eq("brand_id", brandId)
+      .order("created_at", { ascending: false });
+    setCampaigns((c || []) as Campaign[]);
+  }, [brandId]);
 
   useEffect(() => {
     if (!brandId) return;
     const load = async () => {
       const { data: b } = await supabase.from("brands").select("*").eq("id", brandId).single();
       setBrand(b as Brand | null);
-      const { data: c } = await supabase
-        .from("campaigns")
-        .select("*")
-        .eq("brand_id", brandId)
-        .order("created_at", { ascending: false });
-      setCampaigns((c || []) as Campaign[]);
+      await fetchCampaigns();
       setLoading(false);
     };
     load();
-  }, [brandId]);
+  }, [brandId, fetchCampaigns]);
+
+  // Poll every 5s when any campaign is generating
+  useEffect(() => {
+    const hasGenerating = campaigns.some(c => c.status === "generating");
+    if (!hasGenerating) return;
+    const id = setInterval(fetchCampaigns, 5000);
+    return () => clearInterval(id);
+  }, [campaigns, fetchCampaigns]);
 
   const createCampaign = async () => {
     if (!brandId || !user) return;
@@ -139,7 +160,7 @@ export default function CampaignsList() {
         <h1 className="text-2xl font-semibold">{brand?.name || "Brand"}</h1>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowTimers(t => !t)}
+            onClick={() => toggleTimers(!showTimers)}
             className={`p-1.5 rounded transition-colors ${showTimers ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground"}`}
             title="Toggle generation timers"
           >
