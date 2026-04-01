@@ -24,8 +24,8 @@ CHECK FOR THESE SPECIFIC ISSUES:
 6. LOGO: Is it properly sized (max ~150px wide), centered, not stretched?
 7. FOOTER: Present and properly separated from content?
 8. COLORS: Do colors look cohesive? No jarring contrasts or unreadable text?
-9. OVERALL COHESION: Does the email look professional and polished? Any elements that feel "off"?
-10. IMAGE FIT: Are images properly proportioned for their containers? Look for: portrait images squeezed into landscape slots, stretched/squished photos, images that clearly don't match the aspect ratio of their container. These are CRITICAL issues. In the fix, append ImageKit transforms (?tr=w-X,h-Y,fo-auto) to ik.imagekit.io URLs to smart-crop them to the correct dimensions.
+9. GRID IMAGE DIMENSIONS: For every multi-column image row, verify all images share identical width and height attributes, have a fixed pixel height in their inline style (never height:auto), and have matching ?tr=w-{W},h-{H},fo-auto on ImageKit URLs. Flag any height:auto on a grid image as critical.
+10. PLACEHOLDER DIMENSIONS: Flag any image with width under 100px or height under 100px that is not a logo or icon. These are placeholder values that will break the layout.
 
 IMPORTANT: You are looking at the email at 470px viewport width. Side-by-side layouts MUST remain side-by-side — they should NOT stack. If you see grids or two-column sections stacking into single columns, that is a CRITICAL issue.
 
