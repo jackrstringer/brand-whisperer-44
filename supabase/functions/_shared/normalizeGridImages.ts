@@ -2,12 +2,11 @@
  * Deterministic post-processor that finds multi-image grid rows and normalizes
  * image dimensions based on the email layout width and column count.
  *
- * Instead of blindly copying the first image's dimensions, it calculates
- * the correct per-slot width from the email viewport (470px) and column count.
+ * Calculates correct per-slot width from the email viewport (470px) and column count.
+ * Derives gutter from actual td padding/styles rather than assuming a fixed 10px.
  */
 
 const EMAIL_WIDTH = 470;
-const DEFAULT_GAP = 10;
 
 interface ParsedImage {
   tag: string;
@@ -33,6 +32,39 @@ function parseImgTag(imgTag: string): ParsedImage {
     hasImageKitTransform,
     isImageKit,
   };
+}
+
+/**
+ * Extract gutter/padding from a <td> tag's inline styles and attributes.
+ * Returns total horizontal padding (left + right) in px.
+ */
+function extractTdHorizontalPadding(tdTag: string): number {
+  // Check for padding in inline style
+  const styleMatch = tdTag.match(/style\s*=\s*"([^"]*)"/i);
+  if (styleMatch) {
+    const style = styleMatch[1];
+
+    // Check padding shorthand: padding: Tpx Rpx Bpx Lpx or padding: Vpx Hpx
+    const paddingShorthand = style.match(/(?:^|;\s*)padding\s*:\s*(\d+)(?:px)?\s+(\d+)(?:px)?(?:\s+(\d+)(?:px)?\s+(\d+)(?:px)?)?/i);
+    if (paddingShorthand) {
+      if (paddingShorthand[4]) {
+        // 4-value: T R B L
+        return parseInt(paddingShorthand[2]) + parseInt(paddingShorthand[4]);
+      } else {
+        // 2-value: V H
+        return parseInt(paddingShorthand[2]) * 2;
+      }
+    }
+
+    // Check individual padding-left/right
+    const pLeft = style.match(/padding-left\s*:\s*(\d+)/i);
+    const pRight = style.match(/padding-right\s*:\s*(\d+)/i);
+    if (pLeft || pRight) {
+      return (pLeft ? parseInt(pLeft[1]) : 0) + (pRight ? parseInt(pRight[1]) : 0);
+    }
+  }
+
+  return 0; // default: no padding
 }
 
 /**
@@ -83,7 +115,6 @@ export function normalizeGridImages(html: string): string {
 
   for (const { full: trFull } of trBlocks) {
     // Find direct <td> children with images (skip nested tables' tds)
-    // Simple approach: find <td> blocks at the top level of this <tr>
     const tdWithImg = [...trFull.matchAll(/<td[^>]*>[\s\S]*?<\/td>/gi)].filter(
       (m) => /<img\b/i.test(m[0])
     );
@@ -97,13 +128,20 @@ export function normalizeGridImages(html: string): string {
 
     const images = imgTags.map((m) => parseImgTag(m[0]));
 
+    // Derive gutter from td padding
+    let totalHorizontalPadding = 0;
+    for (const tdMatch of tdWithImg) {
+      totalHorizontalPadding += extractTdHorizontalPadding(tdMatch[0]);
+    }
+    // If no explicit padding, estimate a small default gap
+    const estimatedGap = totalHorizontalPadding > 0 ? totalHorizontalPadding : (columns - 1) * 10;
+
     // Calculate what the correct slot width SHOULD be
     const calculatedSlotWidth = Math.floor(
-      (EMAIL_WIDTH - (columns - 1) * DEFAULT_GAP) / columns
+      (EMAIL_WIDTH - estimatedGap) / columns
     );
 
     // Determine target dimensions
-    // Use calculated width. For height: check if images have consistent heights
     const existingHeights = images
       .map((img) => img.height)
       .filter((h): h is number => h !== null && h > 0);
@@ -132,20 +170,15 @@ export function normalizeGridImages(html: string): string {
       continue;
     }
 
-    // Determine target height:
-    // 1. If most images have a consistent height, use that
-    // 2. If the first image has a height, derive aspect ratio from it
-    // 3. Default to square (1:1)
+    // Determine target height
     let targetW = calculatedSlotWidth;
     let targetH: number;
 
     if (allHeightsConsistent && existingHeights.length > 0) {
-      // Scale the existing height proportionally if width needs adjusting
       const refWidth = existingWidths[0] || targetW;
       const aspectRatio = existingHeights[0] / refWidth;
       targetH = Math.round(targetW * aspectRatio);
     } else if (existingHeights.length > 0 && existingWidths.length > 0) {
-      // Use first image's aspect ratio
       const aspectRatio = existingHeights[0] / (existingWidths[0] || targetW);
       targetH = Math.round(targetW * aspectRatio);
     } else {
@@ -157,7 +190,7 @@ export function normalizeGridImages(html: string): string {
     targetH = Math.max(100, Math.min(targetH, 600));
 
     console.log(
-      `[normalizeGridImages] Grid row: ${columns} columns → ${targetW}×${targetH}px per slot`
+      `[normalizeGridImages] Grid row: ${columns} columns, gap=${estimatedGap}px → ${targetW}×${targetH}px per slot`
     );
 
     // Normalize all img tags in this row
@@ -220,20 +253,32 @@ export function normalizeGridImages(html: string): string {
         );
       }
 
-      // Update inline style width/height if present
+      // Update inline style width/height if present — use FIXED pixel heights, never auto
       normalizedTag = normalizedTag.replace(
         /width:\s*\d+px/gi,
         `width:${targetW}px`
       );
       normalizedTag = normalizedTag.replace(
+        /max-width:\s*\d+px/gi,
+        `max-width:${targetW}px`
+      );
+      normalizedTag = normalizedTag.replace(
         /height:\s*\d+px/gi,
         `height:${targetH}px`
       );
-      // Replace height:auto with fixed height
+      // Replace height:auto with fixed height — this is THE critical fix
       normalizedTag = normalizedTag.replace(
         /height:\s*auto/gi,
         `height:${targetH}px`
       );
+
+      // Add object-fit:cover if not present for proper fill behavior
+      if (!/object-fit/i.test(normalizedTag) && /style\s*=\s*"/i.test(normalizedTag)) {
+        normalizedTag = normalizedTag.replace(
+          /style\s*=\s*"/i,
+          'style="object-fit:cover; '
+        );
+      }
 
       normalizedTr = normalizedTr.replace(img.tag, normalizedTag);
     }

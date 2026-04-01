@@ -1,8 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { rehostHtmlImagesWithImageKit } from "../_shared/imagekit.ts";
-import { normalizeGridImages } from "../_shared/normalizeGridImages.ts";
-import { enforceNoStackingLayout } from "../_shared/enforceNoStackingLayout.ts";
+import { finalizeCampaignHtml } from "../_shared/finalizeCampaignHtml.ts";
 
 /** Strip any AI commentary and extract only the HTML document */
 function extractHtmlOnly(text: string): string {
@@ -121,7 +120,8 @@ HEADLINES:
 - Never rely on auto-wrapping — email clients reflow unpredictably
 
 IMAGES:
-- All images must use: style="width:100%; height:auto; display:block;"
+- Single/hero images must use: style="width:100%; height:auto; display:block;"
+- GRID/MULTI-COLUMN images must use FIXED pixel height matching their width — NEVER height:auto. Example: style="width:100%; max-width:220px; height:220px; display:block; object-fit:cover;"
 - PADDING CONSISTENCY (critical): Every content image in the email must have the SAME padding treatment. Either ALL images sit inside table cells with equal left/right padding (e.g., 24-40px on each side) OR ALL images are full-bleed. NEVER mix padded and full-bleed images.
 - When using padded images, the image's parent <td> must have explicit left and right padding. The image itself stays width:100% within that padded cell.
 - Images should generally NOT span the full 600px edge-to-edge unless the brand's reference campaigns specifically use full-bleed imagery. Default to padded images with 24-40px side padding.
@@ -798,10 +798,8 @@ RULES:
       throw new Error("Generated HTML was incomplete. Please try again.");
     }
 
-    html = enforceNoStackingLayout(html);
-
-    // Deterministic: normalize grid image dimensions before rehosting
-    html = normalizeGridImages(html);
+    // Unified finalization: clean legacy CSS, enforce no-stacking, normalize grid images, fix inline heights
+    html = finalizeCampaignHtml(html);
 
     // In sub-generation mode, just return the HTML without updating campaign status
     if (_isSubGeneration) {

@@ -1,7 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { normalizeGridImages } from "../_shared/normalizeGridImages.ts";
-import { enforceNoStackingLayout } from "../_shared/enforceNoStackingLayout.ts";
+import { finalizeCampaignHtml } from "../_shared/finalizeCampaignHtml.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -511,8 +510,7 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
           const htmlChanged = finalHtml !== currentHtml;
 
           if (finalHtml && htmlChanged && looksLikeHtml && !tooSmall) {
-            finalHtml = enforceNoStackingLayout(finalHtml);
-            finalHtml = normalizeGridImages(finalHtml);
+            finalHtml = finalizeCampaignHtml(finalHtml);
 
             const history = Array.isArray(campaign.html_history) ? campaign.html_history : [];
             history.push(campaign.html);

@@ -17,7 +17,7 @@ function CampaignIframeThumbnail({ html, title }: { html: string; title?: string
 
   const srcDoc = html.replace(
     /(<head[^>]*>)/i,
-    '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;pointer-events:none;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;}img{max-width:100%!important;height:auto!important;}td{box-sizing:border-box!important;}</style>'
+    '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;pointer-events:none;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;}img{max-width:100%;}td{box-sizing:border-box!important;}</style>'
   );
 
   useEffect(() => {
