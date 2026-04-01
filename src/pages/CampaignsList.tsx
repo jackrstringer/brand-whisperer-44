@@ -160,7 +160,7 @@ export default function CampaignsList() {
         <h1 className="text-2xl font-semibold">{brand?.name || "Brand"}</h1>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowTimers(t => !t)}
+            onClick={() => toggleTimers(!showTimers)}
             className={`p-1.5 rounded transition-colors ${showTimers ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground"}`}
             title="Toggle generation timers"
           >
