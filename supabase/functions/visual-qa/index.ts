@@ -154,62 +154,12 @@ Deno.serve(async (req) => {
 
     console.log(`[visual-qa] Result: score=${qaResult.overall_score}, issues=${qaResult.issues?.length || 0}, passes=${qaResult.passes_visual_qa}`);
 
-    // Always run deterministic fixers: grid normalization + no-stacking enforcement
-    let fixedHtml = normalizeGridImages(html);
-    fixedHtml = enforceNoStackingLayout(fixedHtml);
-    let fixesApplied = fixedHtml !== html ? 1 : 0;
-
-    // For image proportion issues flagged by QA, normalization already handled them.
-    // Only apply find/replace for NON-image issues.
-    if (!qaResult.passes_visual_qa && Array.isArray(qaResult.issues)) {
-      const nonImageIssues = qaResult.issues.filter(
-        (i: any) => !(i.category === 'image' && 
-          (i.description?.includes('dimension') || 
-           i.description?.includes('proportion') ||
-           i.description?.includes('aspect ratio') ||
-           i.description?.includes('grid') ||
-           i.description?.includes('identical')))
-      );
-      for (const issue of nonImageIssues) {
-        if (issue.find && issue.replace && fixedHtml.includes(issue.find)) {
-          fixedHtml = fixedHtml.replace(issue.find, issue.replace);
-          fixesApplied++;
-        }
-      }
-    }
-
-    // If fixes were applied, update the campaign
-    if (fixesApplied > 0 && campaignId) {
-      const supabase = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
-
-      // Push current HTML to history before updating
-      const { data: campaign } = await supabase
-        .from("campaigns")
-        .select("html, html_history")
-        .eq("id", campaignId)
-        .single();
-
-      if (campaign) {
-        const history = Array.isArray(campaign.html_history) ? campaign.html_history : [];
-        history.push(campaign.html);
-
-        await supabase.from("campaigns").update({
-          html: fixedHtml,
-          html_history: history,
-        }).eq("id", campaignId);
-      }
-
-      console.log(`[visual-qa] Applied ${fixesApplied} fixes to campaign ${campaignId}`);
-    }
-
+    // Visual QA is report-only — no automatic fixes applied.
+    // The normalizer runs only during generation as a safety net.
     return new Response(
       JSON.stringify({
         ...qaResult,
-        fixes_applied: fixesApplied,
-        html: fixesApplied > 0 ? fixedHtml : undefined,
+        fixes_applied: 0,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
