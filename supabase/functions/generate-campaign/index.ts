@@ -121,7 +121,8 @@ HEADLINES:
 - Never rely on auto-wrapping — email clients reflow unpredictably
 
 IMAGES:
-- All images must use: style="width:100%; height:auto; display:block;"
+- Full-width single images (hero, full-bleed): style="width:100%; height:auto; display:block;"
+- Grid images (any image in a multi-column <tr> or side-by-side layout): NEVER use height:auto. Use a fixed pixel height: style="display:block; width:100%; height:{N}px;" and append ?tr=w-{W},h-{H},fo-auto to the ImageKit URL. Think of a grid cell like a Figma frame — fixed dimensions, image fills and crops to fit, never dictates the frame size.
 - PADDING CONSISTENCY (critical): Every content image in the email must have the SAME padding treatment. Either ALL images sit inside table cells with equal left/right padding (e.g., 24-40px on each side) OR ALL images are full-bleed. NEVER mix padded and full-bleed images.
 - When using padded images, the image's parent <td> must have explicit left and right padding. The image itself stays width:100% within that padded cell.
 - Images should generally NOT span the full 600px edge-to-edge unless the brand's reference campaigns specifically use full-bleed imagery. Default to padded images with 24-40px side padding.
