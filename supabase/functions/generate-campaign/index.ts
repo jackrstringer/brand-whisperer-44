@@ -206,8 +206,8 @@ Rules:
   6. A CTA button appears in the first fold
   7. Footer is present
   8. The HTML is mobile-responsive (uses max-width, not fixed widths on outer tables)
-  9. IMAGE SLOT PROPORTIONS (CRITICAL): For every <img> in a grid or multi-image section, verify ALL images use IDENTICAL width and height attributes AND identical ImageKit transforms. If any image in a 2×2 or 2×3 grid has different dimensions than its siblings, normalize them all to the same ?tr=w-X,h-Y,fo-auto transform. This is a CRITICAL issue — fix it immediately.
-  10. ASPECT RATIO MATCH: If the reference shows square image slots, every image MUST be cropped square via fo-auto. Portrait images jammed into landscape slots (or vice versa) MUST be fixed with appropriate ?tr=w-X,h-Y,fo-auto transforms. Count image slots in the reference vs the output — they must match. Missing fo-auto transforms on grid images is a CRITICAL issue.
+  9. GRID IMAGE DIMENSIONS: For every multi-column image row, verify all images share identical width and height attributes, have a fixed pixel height in their inline style (never height:auto), and have matching ?tr=w-{W},h-{H},fo-auto on ImageKit URLs. Flag any height:auto on a grid image as critical.
+  10. PLACEHOLDER DIMENSIONS: Flag any image with width under 100px or height under 100px that is not a logo or icon. These are placeholder values that will break the layout.
 
 Return ONLY the JSON object. No markdown fences, no explanation, no preamble.`;
 
