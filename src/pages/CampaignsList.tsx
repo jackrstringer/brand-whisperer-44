@@ -57,7 +57,9 @@ export default function CampaignsList() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
-  const [showTimers, setShowTimers] = useState(false);
+  const [showTimers, setShowTimers] = useState(() => {
+    try { return localStorage.getItem("campaign-timers-visible") === "true"; } catch { return false; }
+  });
 
   useEffect(() => {
     if (!brandId) return;
