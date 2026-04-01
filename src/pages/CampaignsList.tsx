@@ -128,6 +128,9 @@ export default function CampaignsList() {
       extra_copy: campaign.extra_copy ?? null,
       speed_mode: campaign.speed_mode ?? "normal",
       reference_campaign_ids: campaign.reference_campaign_ids,
+      reference_campaign_id: (campaign as any).reference_campaign_id ?? null,
+      reference_campaign_type: (campaign as any).reference_campaign_type ?? null,
+      reference_strength: (campaign as any).reference_strength ?? null,
       product_ids: Array.isArray(campaign.product_ids) && campaign.product_ids.length > 0 ? campaign.product_ids : null,
       pinned_asset_urls: Array.isArray(campaign.pinned_asset_urls) && campaign.pinned_asset_urls.length > 0 ? campaign.pinned_asset_urls : null,
     };
