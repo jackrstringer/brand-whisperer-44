@@ -296,6 +296,64 @@ export default function CampaignEditor() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingText]);
 
+  // Auto-poll when we load into a campaign that's already generating (resumed from navigation)
+  useEffect(() => {
+    if (!generating || !campaignId) return;
+    // Skip if generateCampaign set up its own poll (generationCompletedRef tracks that)
+    const pollInterval = setInterval(async () => {
+      const { data } = await supabase
+        .from("campaigns")
+        .select("*")
+        .eq("id", campaignId)
+        .single();
+      if (!data) return;
+
+      if (data.status === "variants_ready" && data.variant_htmls) {
+        clearInterval(pollInterval);
+        generationCompletedRef.current = true;
+        const variants = data.variant_htmls as any[];
+        setVariantHtmls(variants);
+        setCampaign(data as unknown as Campaign);
+        setNameValue(data.name || "");
+        setGenerating(false);
+        const elapsed = genStartTime ? Math.floor((Date.now() - genStartTime) / 1000) : 0;
+        setGenStartTime(null);
+        const successCount = variants.filter((v: any) => v.html).length;
+        setMessages((prev) => [
+          ...prev,
+          { id: crypto.randomUUID(), campaign_id: campaignId, role: "system" as const, content: `${successCount}/3 variants generated in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
+        ]);
+        if (data.html) runVisualQa(data as unknown as Campaign);
+      } else if (data.status === "ready") {
+        clearInterval(pollInterval);
+        generationCompletedRef.current = true;
+        setCampaign(data as unknown as Campaign);
+        setNameValue(data.name || "");
+        setGenerating(false);
+        setGenStartTime(null);
+        if (data.html) runVisualQa(data as unknown as Campaign);
+      } else if (data.status === "error") {
+        clearInterval(pollInterval);
+        setCampaign(data as unknown as Campaign);
+        setGenerating(false);
+        setGenStartTime(null);
+        toast.error("Campaign generation failed.");
+      }
+    }, 4000);
+
+    const timeoutId = setTimeout(() => {
+      clearInterval(pollInterval);
+      setGenerating(false);
+      setGenStartTime(null);
+    }, 300000);
+
+    return () => {
+      clearInterval(pollInterval);
+      clearTimeout(timeoutId);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
 
   const measureIframeHeight = useCallback((iframe: HTMLIFrameElement | null) => {
