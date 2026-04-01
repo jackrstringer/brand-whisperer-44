@@ -227,16 +227,26 @@ export default function CampaignEditor() {
         // speedMode is always "normal" now
         const history = campaign.html_history;
         setCanUndo(Array.isArray(history) && history.length > 0);
-        // If variants are ready from a previous session, restore them
-        if ((c as any).variant_htmls && Array.isArray((c as any).variant_htmls)) {
+
+        // If campaign is still generating, resume the generating UI state
+        if (c.status === "generating") {
+          setGenerating(true);
+          generationCompletedRef.current = false;
+          const startedAt = (c as any).generation_started_at;
+          if (startedAt) {
+            setGenStartTime(new Date(startedAt).getTime());
+          } else {
+            setGenStartTime(Date.now());
+          }
+          // Do NOT populate variantHtmls from partial data — wait for variants_ready
+        } else if ((c as any).variant_htmls && Array.isArray((c as any).variant_htmls)) {
+          // Only populate variants if generation is complete (not "generating")
           const variants = (c as any).variant_htmls as any[];
           if (variants.some((v: any) => v.html)) {
             setVariantHtmls(variants);
-            // Set activeVariantIndex to whichever variant matches the current html
             const matchIdx = variants.findIndex((v: any) => v.html && v.html === c.html);
             if (matchIdx >= 0) setActiveVariantIndex(matchIdx);
             else {
-              // Default to first variant with html
               const firstValid = variants.findIndex((v: any) => v.html);
               if (firstValid >= 0) setActiveVariantIndex(firstValid);
             }
