@@ -1,34 +1,28 @@
 /**
- * Deterministic post-processor: strips mobile-collapse rules and injects
- * table-cell styling so multi-column layouts never stack vertically.
+ * Targeted post-processor: prevents multi-column layouts from stacking
+ * vertically by injecting a focused CSS rule for table cells.
+ *
+ * Unlike the previous version, this does NOT:
+ * - Strip ALL mobile-responsive media queries
+ * - Inject class-based styles that depend on specific AI-generated class names
+ *
+ * Instead it injects a single targeted rule that forces table cells to
+ * remain side-by-side, which is the desired behavior for email grids.
  */
 export function enforceNoStackingLayout(html: string): string {
   if (!html) return html;
 
   let output = html;
 
-  // Remove common mobile-collapse rules that force side-by-side layouts into a single column
-  const collapseSelectorPattern =
-    /\.(?:[a-z0-9_-]*?(?:grid|col|column|two-col|two_col|product|gift)[a-z0-9_-]*?(?:cell|col|column)?|(?:product-grid-cell|two-col-cell|gift-cell|column-cell|grid-cell))\s*\{[^}]*\}/gi;
-  output = output.replace(collapseSelectorPattern, (rule) => {
-    return rule
-      .replace(/display\s*:\s*block\s*!important;?/gi, "")
-      .replace(/width\s*:\s*100%\s*!important;?/gi, "")
-      .replace(/float\s*:\s*none\s*!important;?/gi, "")
-      .replace(/max-width\s*:\s*100%\s*!important;?/gi, "")
-      .replace(/;\s*;/g, ";");
-  });
-
-  // Also strip any @media rules that force display:block or width:100% on td elements
-  // This catches generic stacking rules the AI might add
+  // Only strip media query rules that explicitly force td to display:block
+  // (the most common mobile-stacking pattern in email HTML)
   output = output.replace(
-    /@media[^{]*\{([^}]*\{[^}]*\})*[^}]*\}/gi,
+    /@media[^{]*\{([\s\S]*?)\}\s*\}/gi,
     (mediaBlock) => {
-      // Remove rules inside media queries that force stacking on table cells
       return mediaBlock.replace(
         /([^{}]*)\{([^}]*)\}/g,
         (rule, selector, body) => {
-          // If rule targets td or table cells and forces stacking, strip those properties
+          // If rule targets td elements and forces stacking, strip those properties
           if (/\btd\b/i.test(selector)) {
             const cleaned = body
               .replace(/display\s*:\s*block\s*!important;?/gi, "")
@@ -45,12 +39,14 @@ export function enforceNoStackingLayout(html: string): string {
     }
   );
 
-  // Force common multi-column classes to remain side-by-side at all breakpoints
+  // Inject a targeted rule that keeps table cells side-by-side
+  // Uses !important on display to override any remaining mobile rules
   if (/<head[^>]*>/i.test(output)) {
-    output = output.replace(
-      /(<head[^>]*>)/i,
-      `$1<style>.product-grid-cell,.two-col-cell,.gift-cell,.column-cell,.grid-cell{display:table-cell !important;vertical-align:top !important;}.product-grid-cell,.two-col-cell,.column-cell,.grid-cell{width:auto !important;}</style>`
-    );
+    const noStackStyle = `<style>
+/* Prevent grid stacking */
+table td[width] { display: table-cell !important; vertical-align: top !important; }
+</style>`;
+    output = output.replace(/(<head[^>]*>)/i, `$1${noStackStyle}`);
   }
 
   return output;
