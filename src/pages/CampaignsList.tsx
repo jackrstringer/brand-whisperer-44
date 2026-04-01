@@ -61,21 +61,39 @@ export default function CampaignsList() {
     try { return localStorage.getItem("campaign-timers-visible") === "true"; } catch { return false; }
   });
 
+  const toggleTimers = useCallback((val: boolean) => {
+    setShowTimers(val);
+    try { localStorage.setItem("campaign-timers-visible", String(val)); } catch {}
+  }, []);
+
+  const fetchCampaigns = useCallback(async () => {
+    if (!brandId) return;
+    const { data: c } = await supabase
+      .from("campaigns")
+      .select("*")
+      .eq("brand_id", brandId)
+      .order("created_at", { ascending: false });
+    setCampaigns((c || []) as Campaign[]);
+  }, [brandId]);
+
   useEffect(() => {
     if (!brandId) return;
     const load = async () => {
       const { data: b } = await supabase.from("brands").select("*").eq("id", brandId).single();
       setBrand(b as Brand | null);
-      const { data: c } = await supabase
-        .from("campaigns")
-        .select("*")
-        .eq("brand_id", brandId)
-        .order("created_at", { ascending: false });
-      setCampaigns((c || []) as Campaign[]);
+      await fetchCampaigns();
       setLoading(false);
     };
     load();
-  }, [brandId]);
+  }, [brandId, fetchCampaigns]);
+
+  // Poll every 5s when any campaign is generating
+  useEffect(() => {
+    const hasGenerating = campaigns.some(c => c.status === "generating");
+    if (!hasGenerating) return;
+    const id = setInterval(fetchCampaigns, 5000);
+    return () => clearInterval(id);
+  }, [campaigns, fetchCampaigns]);
 
   const createCampaign = async () => {
     if (!brandId || !user) return;
