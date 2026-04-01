@@ -11,10 +11,10 @@ export async function captureEmailScreenshots(
   html: string,
 ): Promise<{ slices: string[]; totalHeight: number }> {
   return new Promise((resolve, reject) => {
-    // Inject styles that match the preview exactly (same as CampaignEditor srcdocHtml)
+    // Inject styles that match the preview — no height:auto!important so grid heights are respected
     const preparedHtml = html.replace(
       /(<head[^>]*>)/i,
-      '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%!important;height:auto!important;}td{box-sizing:border-box!important;}</style>'
+      '$1<meta name="viewport" content="width=device-width, initial-scale=1"><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;}td{box-sizing:border-box!important;}</style>'
     );
 
     const iframe = document.createElement("iframe");
