@@ -2809,8 +2809,149 @@ export default function CampaignEditor() {
               </div>
             ) : campaign?.html ? (
               <div className={`flex flex-col ${showReferenceDialog && selectedReference ? 'p-1 pl-0.5 pt-4' : 'p-8'}`}>
+                <div className={`flex ${showReferenceDialog && selectedReference ? 'justify-start' : 'justify-center'}`}>
+                  <div
+                    style={{
+                      width: renderedWidth,
+                      height: renderedHeight,
+                      position: 'relative',
+                    }}
+                  >
+                    <iframe
+                      key={`${renderWidth}-${viewportWidth}-${activeVariantIndex}`}
+                      srcDoc={srcdocHtml}
+                      sandbox="allow-same-origin allow-scripts allow-forms"
+                      className="border-0 block bg-white shadow-2xl"
+                      style={{
+                        width: renderWidth,
+                        height: iframeContentHeight,
+                        transform: `scale(${zoomScale})`,
+                        transformOrigin: "top left",
+                      }}
+                      title="Email Preview"
+                      onLoad={(e) => {
+                        const iframe = e.currentTarget;
+                        measureIframeHeight(iframe);
+                        setupIframeObserver(iframe);
+                        window.setTimeout(() => measureIframeHeight(iframe), 300);
+                        window.setTimeout(() => measureIframeHeight(iframe), 1000);
+                        window.setTimeout(() => measureIframeHeight(iframe), 3000);
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : brandId && campaignId ? (
+              <ReferencePanel
+                brandId={brandId}
+                campaignId={campaignId}
+                selectedReference={selectedReference}
+                onSelectReference={setSelectedReference}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+                Generate a campaign to see the preview
+              </div>
+            )}
+          </div>
+        </div>
 
-                {/* Reference images for this campaign */}
+        {/* Divider */}
+        <div className="w-px bg-border shrink-0" />
+
+        {/* Right Panel — fixed 35% */}
+        <div className="h-full overflow-hidden" style={{ width: '35%', minWidth: 0 }}>
+          <div className="h-full flex flex-col overflow-hidden">
+            {isDraft && !isGenerating ? (
+              <div className="p-6 space-y-5 overflow-y-auto flex-1">
+                {/* Reference indicator */}
+                {selectedReference && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-xs">
+                    <span className="text-primary font-medium">Reference:</span>
+                    <span className="truncate">{selectedReference.title}</span>
+                    <Badge className="text-[9px] ml-auto bg-primary/20 text-primary">{selectedReference.mode === "dupe" ? "Dupe" : "Reference"}</Badge>
+                  </div>
+                )}
+                <div>
+                  <h2 className="text-sm font-medium mb-4">Campaign Brief</h2>
+                </div>
+                {/* Import from ClickUp */}
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Link2 className="w-3 h-3" /> Import from ClickUp (optional)
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={clickupUrl}
+                      onChange={(e) => setClickupUrl(e.target.value)}
+                      placeholder="Paste ClickUp task URL..."
+                      className="bg-card border-border text-sm"
+                      onKeyDown={(e) => e.key === "Enter" && importFromClickUp()}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={importFromClickUp}
+                      disabled={!clickupUrl.trim() || clickupLoading}
+                      className="shrink-0"
+                    >
+                      {clickupLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Import"}
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">What's this campaign about?</label>
+                  <Textarea
+                    value={brief}
+                    onChange={(e) => setBrief(e.target.value)}
+                    placeholder="Describe the campaign..."
+                    className="bg-card border-border min-h-[100px]"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Campaign goal</label>
+                  <Select value={goal} onValueChange={setGoal}>
+                    <SelectTrigger className="bg-card border-border">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="promotional">Promotional</SelectItem>
+                      <SelectItem value="educational">Educational</SelectItem>
+                      <SelectItem value="re-engagement">Re-engagement</SelectItem>
+                      <SelectItem value="seasonal">Seasonal</SelectItem>
+                      <SelectItem value="welcome">Welcome</SelectItem>
+                      <SelectItem value="social_proof">Social Proof</SelectItem>
+                      <SelectItem value="highlight">Highlight</SelectItem>
+                      <SelectItem value="product_launch">Product Launch</SelectItem>
+                      <SelectItem value="abandoned_cart">Abandoned Cart</SelectItem>
+                      <SelectItem value="win_back">Win-back</SelectItem>
+                      <SelectItem value="newsletter">Newsletter</SelectItem>
+                      <SelectItem value="announcement">Announcement</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-muted-foreground">Any specific copy to include? (optional)</label>
+                  <Textarea
+                    value={extraCopy}
+                    onChange={(e) => setExtraCopy(e.target.value)}
+                    placeholder="Paste specific copy here..."
+                    className="bg-card border-border"
+                  />
+                </div>
+                {brandId && (
+                  <ProductSelector
+                    brandId={brandId}
+                    selectedProductIds={selectedProductIds}
+                    pinnedAssetUrls={pinnedAssetUrls}
+                    onSelectionChange={(ids, pinned) => {
+                      setSelectedProductIds(ids);
+                      setPinnedAssetUrls(pinned);
+                    }}
+                    onShopifyProductsChange={setSelectedShopifyProducts}
+                  />
+                )}
+
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">Reference images (optional)</label>
                   <div
