@@ -491,16 +491,19 @@ You MUST feature these products prominently in the campaign. Use at least one im
       // Use slices if available, otherwise fall back to original image_urls
       const urlsToFetch = sliceImageUrls.length > 0 ? sliceImageUrls : reference.image_urls.slice(0, 10);
 
-      for (const url of urlsToFetch) {
+      for (const originalUrl of urlsToFetch) {
         try {
-          const imgResp = await fetch(capImageDimensions(url));
+          const safeUrl = capImageDimensions(originalUrl);
+          const imgResp = await fetch(safeUrl);
           if (!imgResp.ok) continue;
           const contentType = imgResp.headers.get("content-type") || "image/jpeg";
           const mediaType = contentType.split(";")[0].trim();
           const buf = await imgResp.arrayBuffer();
           if (buf.byteLength > 4_500_000) continue;
-          const b64 = arrayBufferToBase64(buf);
-          referenceImageBlocks.push({ type: "image", source: { type: "base64", media_type: mediaType, data: b64 } });
+          referenceImageBlocks.push({
+            type: "image",
+            source: { type: "base64", media_type: mediaType, data: arrayBufferToBase64(buf) },
+          });
         } catch {}
       }
 
