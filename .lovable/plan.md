@@ -1,40 +1,46 @@
 
 
-## Fix: Hero text elements not becoming editable / no floating toolbar
+## Fix: CTA buttons rendering full-width ("fat and big")
 
-### Problem
-The text editing initialization (injected iframe script, ~line 1462) makes elements `contentEditable` only if they match `h1,h2,h3,h4,h5,h6,p,span,a,li,button,label` **and** pass two filters:
-1. `el.querySelector('img,table,div')` — searches the **entire subtree** for block elements
-2. `Array.from(el.children).some(...)` — checks direct children for block tags
+### Root cause
 
-Hero headings and body text in email HTML often contain nested `<span>`, `<br>`, or even decorative `<div>` wrappers deep inside. The `querySelector` subtree search is overly aggressive — a single nested `<div>` anywhere in the tree disqualifies the entire element from editing. This means those elements never get `contentEditable = 'true'`, so focusing them does nothing and the floating toolbar never appears.
+The generated button HTML uses this pattern:
+```html
+<td align="center" style="padding:...">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0">  <!-- NO width constraint -->
+    <tr>
+      <td style="background-color:#30332F;border-radius:25px;">
+        <a href="#" style="display:inline-block;padding:15px 40px;...">shop best-sellers</a>
+      </td>
+    </tr>
+  </table>
+</td>
+```
+
+The inner `<table>` wrapping the CTA has no width constraint. In HTML, tables default to expanding to fill their container, making the colored `<td>` background stretch to full width — producing the "fat" button appearance. The generation prompt already says "NEVER width:100%" and "auto width" for buttons, but the AI isn't emitting a `width:auto` style on the wrapper table.
+
+Secondary issue: The prompt specifies `1.5px solid border` on buttons matching the brand's `button_border` color, but the generated HTML has no border at all.
 
 ### Changes
 
-**File: `src/pages/CampaignEditor.tsx`** (~line 1462-1465)
+**1. `supabase/functions/generate-campaign/index.ts`** — Strengthen button prompt
 
-**Relax the block-child check to only inspect direct children instead of the full subtree.**
+In the BUTTONS section (~line 139-144), add an explicit structural requirement:
 
-Replace:
-```js
-if(el.querySelector('img,table,div')) return;
-var hasBlock = Array.from(el.children).some(function(c){ return blocks.indexOf(c.tagName)>=0; });
-if(hasBlock) return;
+```
+BUTTONS:
+...
+- Structure: The wrapper <table> around the CTA <td> MUST have style="margin:0 auto;" (no width attribute). This prevents the table from stretching to 100%.
+- The <a> inside the button <td> MUST use display:inline-block with horizontal padding. Never set width:100% on the <a> or the wrapper table.
 ```
 
-With:
-```js
-var hasBlock = Array.from(el.children).some(function(c){ return blocks.indexOf(c.tagName)>=0; });
-if(hasBlock) return;
-```
+**2. `supabase/functions/edit-campaign/index.ts`** — Mirror the same button rule (if it has a BUTTONS section)
 
-This removes the deep subtree search (`querySelector`) and keeps only the direct-children check, which is sufficient to prevent making complex structural elements editable while still allowing hero headings that may have deeply nested inline markup.
+**3. `supabase/functions/_shared/finalizeCampaignHtml.ts`** — Add a defensive post-processing step
 
-### Why this works
-- The direct-children check (`el.children`) already prevents making elements with `<table>`, `<div>`, `<img>` etc. as **immediate** children editable
-- The removed `querySelector` was redundant but far more aggressive — it would disqualify an `<h1>` if any descendant at any depth was a `<div>`, even a harmless styling wrapper
-- Hero text typically has inline children (`<span>`, `<strong>`, `<em>`, `<br>`) with no direct block children, so it will now correctly become editable
+Add a `fixButtonTableWidth` step that finds the common CTA pattern (a `<table>` containing a single `<tr>` with a single `<td>` that has a background-color and contains an `<a>` tag) and ensures the wrapper `<table>` does not expand to full width by injecting `style="margin:0 auto;"` if missing. This catches any generated HTML where the AI omits the constraint.
 
-### One-line fix
-Single deletion in the injected script block inside `CampaignEditor.tsx`.
+### What this fixes
+- Buttons will shrink-wrap to their text content + padding instead of stretching full-width
+- The fix is both preventive (prompt) and defensive (post-processing)
 
