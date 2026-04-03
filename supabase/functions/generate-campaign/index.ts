@@ -164,6 +164,20 @@ IMAGES:
 - Images should generally NOT span the full 600px edge-to-edge unless the brand's reference campaigns specifically use full-bleed imagery. Default to padded images with 24-40px side padding.
 - LOGO HANDLING: Images categorized as 'logo' must be displayed at max-width:150px (or similar reasonable size), centered, with padding above and below. NEVER stretch a logo to full width. NEVER crop a logo. If a dark-mode-safe variant exists, use it.
 
+GRID LAYOUT — REQUIRED STRUCTURE:
+- Multi-column image grids MUST use direct <td> siblings inside a single <tr>. Never use display:inline-block tables side by side.
+- Correct 2-column example:
+  <tr>
+    <td width="295" valign="top" style="padding:0 2px 0 0;">
+      <img src="..." width="295" height="295" style="display:block;width:100%;height:295px;">
+    </td>
+    <td width="295" valign="top" style="padding:0 0 0 2px;">
+      <img src="..." width="295" height="295" style="display:block;width:100%;height:295px;">
+    </td>
+  </tr>
+- Never use: <table align="left" style="display:inline-block"> as a column technique. This stacks vertically at any viewport narrower than the combined column widths.
+- Never add mobile-grid-col or any CSS class that sets display:block on grid columns. The email renders at 470px — mobile stacking rules will fire and destroy the layout.
+
 CONTRAST CARDS:
 - Never full-width color blocks cutting the email in half
 - Always: outer padding + inner card with border-radius
