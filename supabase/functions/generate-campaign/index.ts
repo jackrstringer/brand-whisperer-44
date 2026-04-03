@@ -30,6 +30,29 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+/**
+ * Cap image dimensions to stay under Anthropic's 2000px per-dimension limit
+ * for many-image requests. For ImageKit URLs, append a resize transform.
+ * For other URLs, return as-is (caller should handle failures).
+ */
+function capImageDimensions(url: string, maxDim = 1800): string {
+  if (/ik\.imagekit\.io/i.test(url)) {
+    // If URL already has a tr= param, append dimension cap
+    if (/[?&]tr=/i.test(url)) {
+      return url.replace(/([?&]tr=[^&]*)/i, `$1,c-at_max,w-${maxDim},h-${maxDim}`);
+    }
+    // Append new transform
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}tr=c-at_max,w-${maxDim},h-${maxDim}`;
+  }
+  // For Supabase storage or other URLs, try adding width param if supported
+  if (/supabase\.co.*storage/i.test(url)) {
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}width=${maxDim}`;
+  }
+  return url;
+}
+
 // enforceNoStackingLayout is now imported from _shared/enforceNoStackingLayout.ts
 
 /** Anthropic API call with AbortController timeout */
