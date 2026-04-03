@@ -482,7 +482,7 @@ You MUST feature these products prominently in the campaign. Use at least one im
 
       for (const url of urlsToFetch) {
         try {
-          const imgResp = await fetch(url);
+          const imgResp = await fetch(capImageDimensions(url));
           if (!imgResp.ok) continue;
           const contentType = imgResp.headers.get("content-type") || "image/jpeg";
           const mediaType = contentType.split(";")[0].trim();
