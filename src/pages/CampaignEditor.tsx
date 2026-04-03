@@ -11,7 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, Send, Undo2, Redo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, RotateCcw, Link2, Loader2, Copy } from "lucide-react";
+import { ArrowLeft, Download, Send, Undo2, Redo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, RotateCcw, Link2, Loader2, Copy, SlidersHorizontal } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -149,9 +150,21 @@ export default function CampaignEditor() {
   const pendingHtmlRef = useRef<string | null>(null);
   const prevHtmlForPreviewRef = useRef<string>("");
 
-  const [renderWidth, setRenderWidth] = useState(470);
-  const [viewportWidth, setViewportWidth] = useState(470);
-  const [screenZoom, setScreenZoom] = useState(100);
+  const VIEW_SETTINGS_KEY = 'campaign-editor-view-settings';
+  const [renderWidth, setRenderWidth] = useState(() => {
+    try { const s = localStorage.getItem(VIEW_SETTINGS_KEY); return s ? JSON.parse(s).renderWidth ?? 470 : 470; } catch { return 470; }
+  });
+  const [viewportWidth, setViewportWidth] = useState(() => {
+    try { const s = localStorage.getItem(VIEW_SETTINGS_KEY); return s ? JSON.parse(s).viewportWidth ?? 470 : 470; } catch { return 470; }
+  });
+  const [screenZoom, setScreenZoom] = useState(() => {
+    try { const s = localStorage.getItem(VIEW_SETTINGS_KEY); return s ? JSON.parse(s).screenZoom ?? 100 : 100; } catch { return 100; }
+  });
+
+  // Persist view settings
+  useEffect(() => {
+    try { localStorage.setItem(VIEW_SETTINGS_KEY, JSON.stringify({ renderWidth, viewportWidth, screenZoom })); } catch {}
+  }, [renderWidth, viewportWidth, screenZoom]);
   const [iframeContentHeight, setIframeContentHeight] = useState(800);
   const [previewFallbackUrls, setPreviewFallbackUrls] = useState<string[]>([]);
 
@@ -2480,7 +2493,7 @@ export default function CampaignEditor() {
     <>
     <div className="h-screen bg-background flex flex-col overflow-hidden">
       {/* Top Bar */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0 relative">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <button onClick={() => navigate(`/brands/${brandId}`)} className="text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-4 h-4" />
@@ -2538,39 +2551,40 @@ export default function CampaignEditor() {
               <Eye className="w-4 h-4" />
             </button>
           )}
-        </div>
-        {/* Variant tabs — centered in top bar */}
-        {variantHtmls.length > 1 && campaign?.html && (
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2">
-            <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-              {variantHtmls.map((v: any, idx: number) => (
-                <button
-                  key={idx}
-                  onClick={() => handleVariantSwitch(idx)}
-                  disabled={!v.html}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                    activeVariantIndex === idx
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  } ${!v.html ? "opacity-40 cursor-not-allowed" : ""}`}
+          {/* Variant tabs — left-aligned after icons */}
+          {variantHtmls.length > 1 && campaign?.html && (
+            <>
+              <span className="mx-1 h-5 w-px bg-border" />
+              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                {variantHtmls.map((v: any, idx: number) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleVariantSwitch(idx)}
+                    disabled={!v.html}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                      activeVariantIndex === idx
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    } ${!v.html ? "opacity-40 cursor-not-allowed" : ""}`}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+              {activeVariantIndex > 0 && variantHtmls[activeVariantIndex]?.html && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => saveVariantAsNewCampaign(activeVariantIndex)}
                 >
-                  {v.label}
-                </button>
-              ))}
-            </div>
-            {activeVariantIndex > 0 && variantHtmls[activeVariantIndex]?.html && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs gap-1"
-                onClick={() => saveVariantAsNewCampaign(activeVariantIndex)}
-              >
-                <Copy className="w-3 h-3" />
-                Save as New Campaign
-              </Button>
-            )}
-          </div>
-        )}
+                  <Copy className="w-3 h-3" />
+                  Save as New
+                </Button>
+              )}
+            </>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {campaign?.html && (
             <div className="flex items-center gap-1 mr-1">
@@ -2582,43 +2596,56 @@ export default function CampaignEditor() {
               </Button>
             </div>
           )}
-          <div className="flex items-center gap-3 px-3 py-1.5 rounded border border-border bg-card text-xs">
-            <label className="flex items-center gap-1.5">
-              <span className="text-muted-foreground">Render:</span>
-              <input
-                type="number"
-                value={renderWidth}
-                onChange={(e) => setRenderWidth(Math.max(200, Math.min(1200, Number(e.target.value) || 431)))}
-                className="w-14 bg-transparent border-b border-border text-foreground text-center tabular-nums outline-none focus:border-primary"
-                step={10}
-              />
-              <span className="text-muted-foreground">px</span>
-            </label>
-            <span className="text-border">|</span>
-            <label className="flex items-center gap-1.5">
-              <span className="text-muted-foreground">Viewport:</span>
-              <input
-                type="number"
-                value={viewportWidth}
-                onChange={(e) => setViewportWidth(Math.max(200, Math.min(1200, Number(e.target.value) || 431)))}
-                className="w-14 bg-transparent border-b border-border text-foreground text-center tabular-nums outline-none focus:border-primary"
-                step={10}
-              />
-              <span className="text-muted-foreground">px</span>
-            </label>
-            <span className="text-border">|</span>
-            <label className="flex items-center gap-1.5">
-              <span className="text-muted-foreground">Zoom:</span>
-              <input
-                type="number"
-                value={screenZoom}
-                onChange={(e) => setScreenZoom(Math.max(25, Math.min(300, Number(e.target.value) || 100)))}
-                className="w-12 bg-transparent border-b border-border text-foreground text-center tabular-nums outline-none focus:border-primary"
-                step={5}
-              />
-              <span className="text-muted-foreground">%</span>
-            </label>
-          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="icon" className="h-7 w-7" title="View settings">
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56 p-3" align="end">
+              <div className="space-y-3 text-xs">
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Render</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={renderWidth}
+                      onChange={(e) => setRenderWidth(Math.max(200, Math.min(1200, Number(e.target.value) || 470)))}
+                      className="w-14 bg-transparent border-b border-border text-foreground text-center tabular-nums outline-none focus:border-primary"
+                      step={10}
+                    />
+                    <span className="text-muted-foreground">px</span>
+                  </div>
+                </label>
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Viewport</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={viewportWidth}
+                      onChange={(e) => setViewportWidth(Math.max(200, Math.min(1200, Number(e.target.value) || 470)))}
+                      className="w-14 bg-transparent border-b border-border text-foreground text-center tabular-nums outline-none focus:border-primary"
+                      step={10}
+                    />
+                    <span className="text-muted-foreground">px</span>
+                  </div>
+                </label>
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Zoom</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={screenZoom}
+                      onChange={(e) => setScreenZoom(Math.max(25, Math.min(300, Number(e.target.value) || 100)))}
+                      className="w-12 bg-transparent border-b border-border text-foreground text-center tabular-nums outline-none focus:border-primary"
+                      step={5}
+                    />
+                    <span className="text-muted-foreground">%</span>
+                  </div>
+                </label>
+              </div>
+            </PopoverContent>
+          </Popover>
 
           {campaign?.html && (
             <>
