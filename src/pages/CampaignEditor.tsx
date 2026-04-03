@@ -2539,6 +2539,38 @@ export default function CampaignEditor() {
             </button>
           )}
         </div>
+        {/* Variant tabs — centered in top bar */}
+        {variantHtmls.length > 1 && campaign?.html && (
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+              {variantHtmls.map((v: any, idx: number) => (
+                <button
+                  key={idx}
+                  onClick={() => handleVariantSwitch(idx)}
+                  disabled={!v.html}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                    activeVariantIndex === idx
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  } ${!v.html ? "opacity-40 cursor-not-allowed" : ""}`}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+            {activeVariantIndex > 0 && variantHtmls[activeVariantIndex]?.html && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={() => saveVariantAsNewCampaign(activeVariantIndex)}
+              >
+                <Copy className="w-3 h-3" />
+                Save as New Campaign
+              </Button>
+            )}
+          </div>
+        )}
         <div className="flex items-center gap-2">
           {campaign?.html && (
             <div className="flex items-center gap-1 mr-1">
