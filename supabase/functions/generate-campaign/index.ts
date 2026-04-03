@@ -142,6 +142,13 @@ BUTTONS:
 - Padding: minimum 16px vertical, 32px horizontal
 - Width: auto with horizontal padding. NEVER width:100%. Buttons must not stretch to fill the container.
 - Text: short enough to fit one line on 375px mobile
+- STRUCTURE (critical): The wrapper <table> around the CTA <td> MUST have style="margin:0 auto;" and NO width attribute. This prevents the table from stretching to 100%. Example:
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+    <tr><td style="background-color:...;border-radius:...;border:1.5px solid ...;">
+      <a href="..." style="display:inline-block;padding:16px 40px;...">CTA text</a>
+    </td></tr>
+  </table>
+- The <a> inside the button <td> MUST use display:inline-block. Never set width:100% on the <a> or the wrapper table.
 
 FIRST FOLD CTA (mandatory):
 - Every email MUST have a CTA button visible within the first ~600px of vertical content (the "first fold")
