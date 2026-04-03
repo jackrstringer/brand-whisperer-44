@@ -150,9 +150,21 @@ export default function CampaignEditor() {
   const pendingHtmlRef = useRef<string | null>(null);
   const prevHtmlForPreviewRef = useRef<string>("");
 
-  const [renderWidth, setRenderWidth] = useState(470);
-  const [viewportWidth, setViewportWidth] = useState(470);
-  const [screenZoom, setScreenZoom] = useState(100);
+  const VIEW_SETTINGS_KEY = 'campaign-editor-view-settings';
+  const [renderWidth, setRenderWidth] = useState(() => {
+    try { const s = localStorage.getItem(VIEW_SETTINGS_KEY); return s ? JSON.parse(s).renderWidth ?? 470 : 470; } catch { return 470; }
+  });
+  const [viewportWidth, setViewportWidth] = useState(() => {
+    try { const s = localStorage.getItem(VIEW_SETTINGS_KEY); return s ? JSON.parse(s).viewportWidth ?? 470 : 470; } catch { return 470; }
+  });
+  const [screenZoom, setScreenZoom] = useState(() => {
+    try { const s = localStorage.getItem(VIEW_SETTINGS_KEY); return s ? JSON.parse(s).screenZoom ?? 100 : 100; } catch { return 100; }
+  });
+
+  // Persist view settings
+  useEffect(() => {
+    try { localStorage.setItem(VIEW_SETTINGS_KEY, JSON.stringify({ renderWidth, viewportWidth, screenZoom })); } catch {}
+  }, [renderWidth, viewportWidth, screenZoom]);
   const [iframeContentHeight, setIframeContentHeight] = useState(800);
   const [previewFallbackUrls, setPreviewFallbackUrls] = useState<string[]>([]);
 
