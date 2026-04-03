@@ -217,6 +217,21 @@ Technical requirements — apply these always:
                   u+.body .gmail-blend-difference{background:#000;mix-blend-mode:difference;}
 - No emoji anywhere — use inline SVG for all icons
 - Footer required: brand name, unsubscribe link (#unsubscribe), address
+
+GRID LAYOUT — REQUIRED STRUCTURE:
+- Multi-column image grids MUST use direct <td> siblings inside a single <tr>. Never use display:inline-block tables side by side.
+- Correct 2-column example:
+  <tr>
+    <td width="295" valign="top" style="padding:0 2px 0 0;">
+      <img src="..." width="295" height="295" style="display:block;width:100%;height:295px;">
+    </td>
+    <td width="295" valign="top" style="padding:0 0 0 2px;">
+      <img src="..." width="295" height="295" style="display:block;width:100%;height:295px;">
+    </td>
+  </tr>
+- Never use: <table align="left" style="display:inline-block"> as a column technique.
+- Never add mobile-grid-col or any CSS class that sets display:block on grid columns.
+
 - Return only complete HTML, no commentary, no markdown fences.`;
 
 const QA_SYSTEM_PROMPT = `You are an email QA auditor. You will receive a generated HTML email and brand rules.
