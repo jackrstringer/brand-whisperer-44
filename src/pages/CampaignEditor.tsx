@@ -2551,39 +2551,40 @@ export default function CampaignEditor() {
               <Eye className="w-4 h-4" />
             </button>
           )}
-        </div>
-        {/* Variant tabs — centered in top bar */}
-        {variantHtmls.length > 1 && campaign?.html && (
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2">
-            <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-              {variantHtmls.map((v: any, idx: number) => (
-                <button
-                  key={idx}
-                  onClick={() => handleVariantSwitch(idx)}
-                  disabled={!v.html}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                    activeVariantIndex === idx
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  } ${!v.html ? "opacity-40 cursor-not-allowed" : ""}`}
+          {/* Variant tabs — left-aligned after icons */}
+          {variantHtmls.length > 1 && campaign?.html && (
+            <>
+              <span className="mx-1 h-5 w-px bg-border" />
+              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                {variantHtmls.map((v: any, idx: number) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleVariantSwitch(idx)}
+                    disabled={!v.html}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                      activeVariantIndex === idx
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    } ${!v.html ? "opacity-40 cursor-not-allowed" : ""}`}
+                  >
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+              {activeVariantIndex > 0 && variantHtmls[activeVariantIndex]?.html && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => saveVariantAsNewCampaign(activeVariantIndex)}
                 >
-                  {v.label}
-                </button>
-              ))}
-            </div>
-            {activeVariantIndex > 0 && variantHtmls[activeVariantIndex]?.html && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs gap-1"
-                onClick={() => saveVariantAsNewCampaign(activeVariantIndex)}
-              >
-                <Copy className="w-3 h-3" />
-                Save as New Campaign
-              </Button>
-            )}
-          </div>
-        )}
+                  <Copy className="w-3 h-3" />
+                  Save as New
+                </Button>
+              )}
+            </>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {campaign?.html && (
             <div className="flex items-center gap-1 mr-1">
@@ -2595,43 +2596,56 @@ export default function CampaignEditor() {
               </Button>
             </div>
           )}
-          <div className="flex items-center gap-3 px-3 py-1.5 rounded border border-border bg-card text-xs">
-            <label className="flex items-center gap-1.5">
-              <span className="text-muted-foreground">Render:</span>
-              <input
-                type="number"
-                value={renderWidth}
-                onChange={(e) => setRenderWidth(Math.max(200, Math.min(1200, Number(e.target.value) || 431)))}
-                className="w-14 bg-transparent border-b border-border text-foreground text-center tabular-nums outline-none focus:border-primary"
-                step={10}
-              />
-              <span className="text-muted-foreground">px</span>
-            </label>
-            <span className="text-border">|</span>
-            <label className="flex items-center gap-1.5">
-              <span className="text-muted-foreground">Viewport:</span>
-              <input
-                type="number"
-                value={viewportWidth}
-                onChange={(e) => setViewportWidth(Math.max(200, Math.min(1200, Number(e.target.value) || 431)))}
-                className="w-14 bg-transparent border-b border-border text-foreground text-center tabular-nums outline-none focus:border-primary"
-                step={10}
-              />
-              <span className="text-muted-foreground">px</span>
-            </label>
-            <span className="text-border">|</span>
-            <label className="flex items-center gap-1.5">
-              <span className="text-muted-foreground">Zoom:</span>
-              <input
-                type="number"
-                value={screenZoom}
-                onChange={(e) => setScreenZoom(Math.max(25, Math.min(300, Number(e.target.value) || 100)))}
-                className="w-12 bg-transparent border-b border-border text-foreground text-center tabular-nums outline-none focus:border-primary"
-                step={5}
-              />
-              <span className="text-muted-foreground">%</span>
-            </label>
-          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="icon" className="h-7 w-7" title="View settings">
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56 p-3" align="end">
+              <div className="space-y-3 text-xs">
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Render</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={renderWidth}
+                      onChange={(e) => setRenderWidth(Math.max(200, Math.min(1200, Number(e.target.value) || 470)))}
+                      className="w-14 bg-transparent border-b border-border text-foreground text-center tabular-nums outline-none focus:border-primary"
+                      step={10}
+                    />
+                    <span className="text-muted-foreground">px</span>
+                  </div>
+                </label>
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Viewport</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={viewportWidth}
+                      onChange={(e) => setViewportWidth(Math.max(200, Math.min(1200, Number(e.target.value) || 470)))}
+                      className="w-14 bg-transparent border-b border-border text-foreground text-center tabular-nums outline-none focus:border-primary"
+                      step={10}
+                    />
+                    <span className="text-muted-foreground">px</span>
+                  </div>
+                </label>
+                <label className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">Zoom</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={screenZoom}
+                      onChange={(e) => setScreenZoom(Math.max(25, Math.min(300, Number(e.target.value) || 100)))}
+                      className="w-12 bg-transparent border-b border-border text-foreground text-center tabular-nums outline-none focus:border-primary"
+                      step={5}
+                    />
+                    <span className="text-muted-foreground">%</span>
+                  </div>
+                </label>
+              </div>
+            </PopoverContent>
+          </Popover>
 
           {campaign?.html && (
             <>
