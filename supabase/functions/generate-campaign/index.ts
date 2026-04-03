@@ -164,6 +164,20 @@ IMAGES:
 - Images should generally NOT span the full 600px edge-to-edge unless the brand's reference campaigns specifically use full-bleed imagery. Default to padded images with 24-40px side padding.
 - LOGO HANDLING: Images categorized as 'logo' must be displayed at max-width:150px (or similar reasonable size), centered, with padding above and below. NEVER stretch a logo to full width. NEVER crop a logo. If a dark-mode-safe variant exists, use it.
 
+GRID LAYOUT — REQUIRED STRUCTURE:
+- Multi-column image grids MUST use direct <td> siblings inside a single <tr>. Never use display:inline-block tables side by side.
+- Correct 2-column example:
+  <tr>
+    <td width="295" valign="top" style="padding:0 2px 0 0;">
+      <img src="..." width="295" height="295" style="display:block;width:100%;height:295px;">
+    </td>
+    <td width="295" valign="top" style="padding:0 0 0 2px;">
+      <img src="..." width="295" height="295" style="display:block;width:100%;height:295px;">
+    </td>
+  </tr>
+- Never use: <table align="left" style="display:inline-block"> as a column technique. This stacks vertically at any viewport narrower than the combined column widths.
+- Never add mobile-grid-col or any CSS class that sets display:block on grid columns. The email renders at 470px — mobile stacking rules will fire and destroy the layout.
+
 CONTRAST CARDS:
 - Never full-width color blocks cutting the email in half
 - Always: outer padding + inner card with border-radius
@@ -203,6 +217,21 @@ Technical requirements — apply these always:
                   u+.body .gmail-blend-difference{background:#000;mix-blend-mode:difference;}
 - No emoji anywhere — use inline SVG for all icons
 - Footer required: brand name, unsubscribe link (#unsubscribe), address
+
+GRID LAYOUT — REQUIRED STRUCTURE:
+- Multi-column image grids MUST use direct <td> siblings inside a single <tr>. Never use display:inline-block tables side by side.
+- Correct 2-column example:
+  <tr>
+    <td width="295" valign="top" style="padding:0 2px 0 0;">
+      <img src="..." width="295" height="295" style="display:block;width:100%;height:295px;">
+    </td>
+    <td width="295" valign="top" style="padding:0 0 0 2px;">
+      <img src="..." width="295" height="295" style="display:block;width:100%;height:295px;">
+    </td>
+  </tr>
+- Never use: <table align="left" style="display:inline-block"> as a column technique.
+- Never add mobile-grid-col or any CSS class that sets display:block on grid columns.
+
 - Return only complete HTML, no commentary, no markdown fences.`;
 
 const QA_SYSTEM_PROMPT = `You are an email QA auditor. You will receive a generated HTML email and brand rules.
@@ -242,6 +271,7 @@ Rules:
   8. The HTML is mobile-responsive (uses max-width, not fixed widths on outer tables)
   9. GRID IMAGE DIMENSIONS: For every multi-column image row, verify all images share identical width and height attributes, have a fixed pixel height in their inline style (never height:auto), and have matching ?tr=w-{W},h-{H},fo-auto on ImageKit URLs. Flag any height:auto on a grid image as critical.
   10. PLACEHOLDER DIMENSIONS: Flag any image with width under 100px or height under 100px that is not a logo or icon. These are placeholder values that will break the layout.
+  11. GRID STRUCTURE: Flag any multi-column grid that uses display:inline-block tables instead of direct <td> siblings inside a single <tr>. Flag any CSS class (e.g. mobile-grid-col) that sets display:block on grid columns.
 
 Return ONLY the JSON object. No markdown fences, no explanation, no preamble.`;
 
