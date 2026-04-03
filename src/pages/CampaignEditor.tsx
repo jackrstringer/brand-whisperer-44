@@ -2480,7 +2480,7 @@ export default function CampaignEditor() {
     <>
     <div className="h-screen bg-background flex flex-col overflow-hidden">
       {/* Top Bar */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0 relative">
         <div className="flex items-center gap-3 min-w-0">
           <button onClick={() => navigate(`/brands/${brandId}`)} className="text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-4 h-4" />
@@ -2539,6 +2539,38 @@ export default function CampaignEditor() {
             </button>
           )}
         </div>
+        {/* Variant tabs — centered in top bar */}
+        {variantHtmls.length > 1 && campaign?.html && (
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+              {variantHtmls.map((v: any, idx: number) => (
+                <button
+                  key={idx}
+                  onClick={() => handleVariantSwitch(idx)}
+                  disabled={!v.html}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                    activeVariantIndex === idx
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  } ${!v.html ? "opacity-40 cursor-not-allowed" : ""}`}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+            {activeVariantIndex > 0 && variantHtmls[activeVariantIndex]?.html && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={() => saveVariantAsNewCampaign(activeVariantIndex)}
+              >
+                <Copy className="w-3 h-3" />
+                Save as New Campaign
+              </Button>
+            )}
+          </div>
+        )}
         <div className="flex items-center gap-2">
           {campaign?.html && (
             <div className="flex items-center gap-1 mr-1">
@@ -2777,38 +2809,6 @@ export default function CampaignEditor() {
               </div>
             ) : campaign?.html ? (
               <div className={`flex flex-col ${showReferenceDialog && selectedReference ? 'p-1 pl-0.5 pt-4' : 'p-8'}`}>
-                {/* Variant tabs */}
-                {variantHtmls.length > 1 && (
-                  <div className="flex items-center gap-2 mb-4 justify-center">
-                    <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-                      {variantHtmls.map((v: any, idx: number) => (
-                        <button
-                          key={idx}
-                          onClick={() => handleVariantSwitch(idx)}
-                          disabled={!v.html}
-                          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                            activeVariantIndex === idx
-                              ? "bg-background text-foreground shadow-sm"
-                              : "text-muted-foreground hover:text-foreground"
-                          } ${!v.html ? "opacity-40 cursor-not-allowed" : ""}`}
-                        >
-                          {v.label}
-                        </button>
-                      ))}
-                    </div>
-                    {activeVariantIndex > 0 && variantHtmls[activeVariantIndex]?.html && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs gap-1"
-                        onClick={() => saveVariantAsNewCampaign(activeVariantIndex)}
-                      >
-                        <Copy className="w-3 h-3" />
-                        Save as New Campaign
-                      </Button>
-                    )}
-                  </div>
-                )}
                 <div className={`flex ${showReferenceDialog && selectedReference ? 'justify-start' : 'justify-center'}`}>
                   <div
                     style={{
@@ -2952,8 +2952,6 @@ export default function CampaignEditor() {
                   />
                 )}
 
-
-                {/* Reference images for this campaign */}
                 <div className="space-y-2">
                   <label className="text-xs text-muted-foreground">Reference images (optional)</label>
                   <div
