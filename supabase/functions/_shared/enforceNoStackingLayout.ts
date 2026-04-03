@@ -39,6 +39,18 @@ export function enforceNoStackingLayout(html: string): string {
     }
   );
 
+  // Strip display:inline-block from table elements used as grid columns
+  // (align="left" + display:inline-block is a common but broken pattern)
+  output = output.replace(
+    /<table\b([^>]*)\balign\s*=\s*["']?left["']?([^>]*)>/gi,
+    (match, before, after) => {
+      if (/display\s*:\s*inline-block/i.test(match)) {
+        return match.replace(/display\s*:\s*inline-block\s*;?/gi, "");
+      }
+      return match;
+    }
+  );
+
   // Inject a targeted rule that keeps table cells side-by-side
   // Uses !important on display to override any remaining mobile rules
   if (/<head[^>]*>/i.test(output)) {
