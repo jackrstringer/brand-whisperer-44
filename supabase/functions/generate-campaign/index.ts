@@ -326,7 +326,7 @@ Deno.serve(async (req) => {
 
     const imagePromises = selectedReferenceUrls.map(async (url: string) => {
       try {
-        const imgResp = await fetch(url);
+        const imgResp = await fetch(capImageDimensions(url));
         if (!imgResp.ok) return null;
         const contentType = imgResp.headers.get("content-type") || "image/jpeg";
         const mediaType = contentType.split(";")[0].trim();
