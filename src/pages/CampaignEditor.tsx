@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, Send, Undo2, Redo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, RotateCcw, Link2, Loader2, Copy, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, Download, Send, Undo2, Redo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, EyeOff, RotateCcw, Link2, Loader2, Copy, SlidersHorizontal } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -2544,11 +2544,11 @@ export default function CampaignEditor() {
           {/* View Reference button — only post-generation when a reference was used */}
           {campaign?.html && selectedReference && (
             <button
-              onClick={() => setShowReferenceDialog(true)}
+              onClick={() => setShowReferenceDialog((prev) => !prev)}
               className="text-muted-foreground hover:text-foreground transition-colors"
-              title="View reference campaign"
+              title={showReferenceDialog ? "Hide reference campaign" : "View reference campaign"}
             >
-              <Eye className="w-4 h-4" />
+              {showReferenceDialog ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           )}
           {/* Variant tabs — left-aligned after icons */}
