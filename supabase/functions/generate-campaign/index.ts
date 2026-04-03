@@ -31,26 +31,37 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 /**
- * Cap image dimensions to stay under Anthropic's 2000px per-dimension limit
- * for many-image requests. For ImageKit URLs, append a resize transform.
- * For other URLs, return as-is (caller should handle failures).
+ * Build a safe vision-model URL that caps each dimension under Anthropic's
+ * 2000px limit. For ImageKit URLs we preserve existing transforms while forcing
+ * at_max bounds. Non-ImageKit URLs are returned unchanged.
  */
 function capImageDimensions(url: string, maxDim = 1800): string {
-  if (/ik\.imagekit\.io/i.test(url)) {
-    // If URL already has a tr= param, append dimension cap
-    if (/[?&]tr=/i.test(url)) {
-      return url.replace(/([?&]tr=[^&]*)/i, `$1,c-at_max,w-${maxDim},h-${maxDim}`);
-    }
-    // Append new transform
-    const separator = url.includes('?') ? '&' : '?';
-    return `${url}${separator}tr=c-at_max,w-${maxDim},h-${maxDim}`;
+  if (!/^https:\/\/ik\.imagekit\.io\//i.test(url)) return url;
+
+  const pathStyleMatch = url.match(/\/tr:([^/]+)\//i);
+  if (pathStyleMatch) {
+    const existing = pathStyleMatch[1]
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .filter((part) => !/^(w|h|c)-/i.test(part));
+    const next = [...existing, `c-at_max`, `w-${maxDim}`, `h-${maxDim}`].join(',');
+    return url.replace(/\/tr:[^/]+\//i, `/tr:${next}/`);
   }
-  // For Supabase storage or other URLs, try adding width param if supported
-  if (/supabase\.co.*storage/i.test(url)) {
-    const separator = url.includes('?') ? '&' : '?';
-    return `${url}${separator}width=${maxDim}`;
+
+  const queryStyleMatch = url.match(/([?&]tr=)([^&]+)/i);
+  if (queryStyleMatch) {
+    const existing = queryStyleMatch[2]
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .filter((part) => !/^(w|h|c)-/i.test(part));
+    const next = [...existing, `c-at_max`, `w-${maxDim}`, `h-${maxDim}`].join(',');
+    return url.replace(/([?&]tr=)[^&]+/i, `$1${next}`);
   }
-  return url;
+
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}tr=c-at_max,w-${maxDim},h-${maxDim}`;
 }
 
 // enforceNoStackingLayout is now imported from _shared/enforceNoStackingLayout.ts
