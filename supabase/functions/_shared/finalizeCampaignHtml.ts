@@ -78,6 +78,35 @@ function fixGridImageInlineHeights(html: string): string {
   return result;
 }
 
+/**
+ * Find CTA button wrapper tables (single-row, single-cell with background-color and an <a>)
+ * and ensure they shrink-wrap via margin:0 auto instead of stretching full-width.
+ */
+function fixButtonTableWidth(html: string): string {
+  // Match <table ...> <tr> <td style="...background-color..."> ... <a ...>...</a> ... </td> </tr> </table>
+  // where the table has only one tr and one td (the CTA pattern).
+  return html.replace(
+    /<table\b([^>]*)>\s*<tr>\s*<td\b([^>]*background-color[^>]*)>[\s\S]*?<a\b[^>]*>[\s\S]*?<\/a>[\s\S]*?<\/td>\s*<\/tr>\s*<\/table>/gi,
+    (match, tableAttrs) => {
+      // Skip if the table already has margin:0 auto or width:auto
+      if (/margin\s*:\s*0\s*auto/i.test(tableAttrs)) return match;
+      
+      // Inject margin:0 auto on the wrapper table
+      if (/style\s*=/i.test(tableAttrs)) {
+        return match.replace(
+          /(<table\b[^>]*style\s*=\s*["'])/i,
+          '$1margin:0 auto; '
+        );
+      } else {
+        return match.replace(
+          /(<table\b)/i,
+          '$1 style="margin:0 auto;"'
+        );
+      }
+    }
+  );
+}
+
 export function finalizeCampaignHtml(html: string): string {
   if (!html) return html;
 
@@ -94,6 +123,9 @@ export function finalizeCampaignHtml(html: string): string {
 
   // Step 4: Fix inline height:auto that contradicts height attributes on grid images only
   result = fixGridImageInlineHeights(result);
+
+  // Step 5: Fix CTA button wrapper tables stretching full-width
+  result = fixButtonTableWidth(result);
 
   return result;
 }
