@@ -1460,7 +1460,7 @@ export default function CampaignEditor() {
   /* --- TEXT EDITING --- */
   var blocks = ['TABLE','TR','TD','TH','DIV','UL','OL','IMG'];
   document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label').forEach(function(el){
-    if(el.querySelector('img,table,div')) return;
+    
     var hasBlock = Array.from(el.children).some(function(c){ return blocks.indexOf(c.tagName)>=0; });
     if(hasBlock) return;
     if(!el.textContent.trim()) return;
