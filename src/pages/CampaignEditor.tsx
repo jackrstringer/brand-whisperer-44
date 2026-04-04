@@ -1184,6 +1184,8 @@ export default function CampaignEditor() {
   const inlineEditTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Track iframe-owned HTML to avoid reloading iframe on every keystroke
   const iframeOwnedHtmlRef = useRef<string | null>(null);
+  // Previous srcdocHtml to avoid reloading iframe during undo/redo
+  const prevSrcdocRef = useRef<string>("");
 
   // Background edit: sends instruction to AI silently (no chat message)
   const sendBackgroundEdit = useCallback(async (instruction: string, onComplete?: () => void) => {
