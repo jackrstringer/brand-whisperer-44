@@ -1,63 +1,35 @@
 
 
-## Adopt Figma-Style Interaction State Machine
+## Figma-Style Hover Highlighting + Instant Undo/Redo
 
-### Context
+### 1. Figma-style hover highlight (dashed blue border)
 
-The current editor uses separate `onMouseDown`/`onMouseMove`/`onMouseUp` handlers with ad-hoc state (`dragSelect` object, `selectedElementContext`, etc.). The iframe handles its own click-to-select logic independently. This creates edge cases: accidental drags on click, no hover highlighting, and disconnected interaction flows.
+The current hover style is a solid green outline: `outline: 1px solid rgba(200,241,53,0.3)`. The user's screenshots show Figma uses a **blue dashed border** on hover.
 
-The Figma-style state machine can be adopted **without touching any AI backend code**. All changes are in the interaction layer — the same `CampaignEditor.tsx` file and the injected iframe script.
+**Change in the injected CSS** (~line 1497 in `CampaignEditor.tsx`):
 
-### What changes
+Replace the `.el-hover` style:
+- From: `outline:1px solid rgba(200,241,53,0.3)!important;outline-offset:1px;`
+- To: `outline:1px dashed rgba(59,130,246,0.7)!important;outline-offset:0px;` (blue dashed, tighter fit)
 
-**1. Add an interaction state machine to the parent component**
+And the `.el-hover.el-selected` combo style:
+- From: `outline:2px solid rgba(200,241,53,0.6)!important;outline-offset:2px;`
+- To: `outline:2px solid rgba(59,130,246,0.8)!important;outline-offset:1px;` (solid blue when both hovered+selected, like Figma)
 
-Replace the current `dragSelect` state and scattered mouse handlers with a single `interactionState` ref that tracks: `IDLE`, `PRESSED`, `DRAGGING` (element move — future), and `MARQUEE` (drag-to-select).
+The selection highlight (`.el-selected`) stays green to differentiate click-selected from hover.
 
-- `IDLE`: hover → send `hoverHighlight` message to iframe for subtle outline on element under cursor. Click detection deferred until `pointerup`.
-- `PRESSED`: pointer is down, target recorded. If movement exceeds 4px threshold → transition to `MARQUEE` (or `DRAGGING` in future). If released without exceeding → it was a click, forward to iframe as selection.
-- `MARQUEE`: the current drag-select behavior, but driven by the state machine. Live preview highlighting continues as-is. On release → finalize selection, return to `IDLE`.
+### 2. Instant undo/redo (remove all latency sources)
 
-Use `pointerdown`/`pointermove`/`pointerup` instead of mouse events, and call `setPointerCapture()` to prevent stuck-drag bugs when the cursor leaves the editor area.
+Current undo/redo is already "optimistic" (updates local state first, then persists to database). Two remaining lag sources:
 
-**2. Add hover highlighting inside the iframe**
+**a) Remove `toast.success()` calls from undo/redo** (~lines 1126, 1141). Toast notifications create visual overhead and a perceived delay. Figma doesn't show toasts on undo/redo.
 
-New message type `hoverHighlight` sent from parent during `IDLE` state. The iframe script applies a subtle `outline: 1px solid rgba(200,241,53,0.3)` on the element under the cursor (`.el-hover` class). Hover highlight is suppressed when:
-- The element is already `.el-selected`
-- The state is not `IDLE` (no hover during drag/marquee)
+**b) Fire-and-forget the database update.** The current code `await`s the Supabase update. Change to fire-and-forget (no `await`) since the optimistic state is already applied. If the DB write fails silently, the next save will catch up.
 
-**3. Add `e.preventDefault()` on pointerdown + `user-select: none` during drag**
+**c) Remove the `iframeOwnedHtmlRef.current = null` reset in handleUndo** that can cause a brief flash. Instead, after setting the campaign state, immediately post the new HTML to the iframe so the preview updates in the same frame.
 
-This is already partially done but will be consolidated. During `MARQUEE` and `DRAGGING` states, `document.body.style.userSelect = 'none'` is set and restored on completion.
+**d) Post the restored HTML directly to the iframe** via `postMessage({ type: 'loadHtml', html })` right after the optimistic state update, so the iframe doesn't wait for a React re-render cycle to pick up the new `srcdocHtml`.
 
-**4. Escape key deselects all**
-
-Forward `clearSelection` to iframe on Escape press (partially exists, will be consolidated into the keyboard handler).
-
-### What stays the same
-
-- All iframe-internal logic (text editing, contentEditable, floating toolbar, section drag-reorder via SortableJS, image swap, delete button, syncHtml)
-- All AI backend communication (generate-campaign, edit-campaign, etc.)
-- The postMessage protocol between parent and iframe
-- The visual styling (green accent color, dark theme)
-
-### Technical approach
-
-All changes in `src/pages/CampaignEditor.tsx`:
-
-**Parent side:**
-- Replace `dragSelect` state with `interactionStateRef = useRef<InteractionState>({ type: 'IDLE' })` (ref to avoid re-render on every pointermove)
-- Replace `onMouseDown`/`onMouseMove`/`onMouseUp` on the preview panel with `onPointerDown`/`onPointerMove`/`onPointerUp`/`onPointerCancel`
-- Add `setPointerCapture` in pointerdown, `releasePointerCapture` in pointerup
-- Throttle pointermove with `requestAnimationFrame` during MARQUEE to avoid excessive postMessage calls
-- Keep a small `forceUpdate` counter state to trigger re-render only for the marquee overlay rectangle
-
-**Iframe side:**
-- Add `.el-hover` CSS class (thin subtle outline, different from `.el-selected`)
-- Handle new `hoverHighlight` message: apply/remove `.el-hover` on the element at the given coordinates using `document.elementFromPoint()`
-- Handle new `hoverClear` message: remove all `.el-hover`
-
-### Scope boundaries
-
-This plan does **not** include drag-to-reorder elements (the `DRAGGING` state for moving blocks). That's a larger feature that can be layered on top of this state machine later. This plan focuses on making click, marquee-select, hover, and deselect feel Figma-smooth.
+### Files changed
+- `src/pages/CampaignEditor.tsx` — CSS tweaks for hover style, streamlined undo/redo handlers
 
