@@ -123,6 +123,31 @@ export default function CampaignEditor() {
   const [activeVariantIndex, setActiveVariantIndex] = useState(0);
   const generationCompletedRef = useRef(false);
 
+  const getMatchingVariantIndex = useCallback((variants: any[], html: string | null | undefined) => {
+    if (!Array.isArray(variants) || variants.length === 0 || !html) return 0;
+    const matchedIndex = variants.findIndex((variant) => variant?.html === html);
+    return matchedIndex >= 0 ? matchedIndex : 0;
+  }, []);
+
+  const syncActiveVariantHtml = useCallback((nextHtml: string) => {
+    if (!Array.isArray(variantHtmls) || variantHtmls.length === 0) return variantHtmls;
+    if (activeVariantIndex < 0 || activeVariantIndex >= variantHtmls.length) return variantHtmls;
+
+    const activeVariant = variantHtmls[activeVariantIndex];
+    if (!activeVariant || activeVariant.html === nextHtml) return variantHtmls;
+
+    const nextVariants = variantHtmls.map((variant, index) =>
+      index === activeVariantIndex ? { ...variant, html: nextHtml } : variant
+    );
+    setVariantHtmls(nextVariants);
+    return nextVariants;
+  }, [activeVariantIndex, variantHtmls]);
+
+  const persistVariantHtmls = useCallback((nextVariants: any[]) => {
+    if (!campaignId || nextVariants === variantHtmls) return;
+    void supabase.from("campaigns").update({ variant_htmls: nextVariants } as any).eq("id", campaignId);
+  }, [campaignId, variantHtmls]);
+
   // Restore reference panel state from localStorage
   useEffect(() => {
     if (!campaignId) return;
