@@ -3035,6 +3035,7 @@ export default function CampaignEditor() {
                 if ((e.target as HTMLElement).tagName !== 'IFRAME') {
                   if (iframe?.contentWindow) {
                     try { iframe.contentWindow.postMessage({ type: 'clearSelection' }, '*'); } catch {}
+                    try { iframe.contentWindow.postMessage({ type: 'exitEditMode' }, '*'); } catch {}
                   }
                   setSelectedElementContext(null);
                 }
