@@ -2429,17 +2429,17 @@ export default function CampaignEditor() {
     if(e.target.closest && e.target.closest('.ftb-cpanel')) return;
     if(e.target.closest && e.target.closest('.el-delete-btn')) return;
 
+    /* Clear hover on any click */
+    document.querySelectorAll('.el-hover').forEach(function(h){ h.classList.remove('el-hover'); });
+
     var el = e.target;
-    // Walk up to find a meaningful element, but stop at generic wrappers
     var found = null;
     while(el && el !== document.body && el !== document.documentElement){
       if(el.tagName && /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL|TD|TH|IMG)$/i.test(el.tagName)){
         found = el;
         break;
       }
-      // For DIV/TABLE/TR, only select if it has direct text content or is a leaf
       if(el.tagName && /^(DIV|TABLE|TR|SECTION)$/i.test(el.tagName)){
-        // Only select if this is a reasonably specific element (not a huge wrapper)
         var childEls = el.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img');
         if(childEls.length <= 2){ found = el; break; }
       }
