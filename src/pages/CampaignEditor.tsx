@@ -2481,14 +2481,23 @@ export default function CampaignEditor() {
   /* Parent handles the drag overlay — iframe just responds to regionSelect messages */
   function handleRegionSelect(rect, isPreview){
     document.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
-    var elements = [];
+    document.querySelectorAll('.el-hover').forEach(function(el){ el.classList.remove('el-hover'); });
+    var candidates = [];
     document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img,td,div').forEach(function(el){
       var r = el.getBoundingClientRect();
       if(r.width < 1 || r.height < 1) return;
       if(r.right > rect.left && r.left < rect.right && r.bottom > rect.top && r.top < rect.bottom){
-        elements.push({ tagName: el.tagName, text: (el.textContent || '').trim().slice(0, 100) });
-        el.classList.add('el-selected');
+        candidates.push(el);
       }
+    });
+    /* Deduplicate: if a parent and its child are both candidates, keep only the child (leaf-first) */
+    var filtered = candidates.filter(function(el){
+      return !candidates.some(function(other){ return other !== el && el.contains(other); });
+    });
+    var elements = [];
+    filtered.forEach(function(el){
+      elements.push({ tagName: el.tagName, text: (el.textContent || '').trim().slice(0, 100) });
+      el.classList.add('el-selected');
     });
     if(!isPreview && elements.length > 0){
       window.parent.postMessage({ type: 'regionSelected', elements: elements }, '*');
