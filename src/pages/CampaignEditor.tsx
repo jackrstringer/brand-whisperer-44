@@ -2404,68 +2404,7 @@ export default function CampaignEditor() {
     if(rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 8) + 'px';
   });
 
-  /* --- SECTION DETECTION --- */
-  var sections = [];
-  var walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_COMMENT, null, false);
-  var node;
-  while(node = walker.nextNode()){
-    var val = node.nodeValue.trim();
-    var match = val.match(/^SECTION:\\s*(.+)/i);
-    if(match){
-      var name = match[1].trim();
-      var el = node.nextElementSibling;
-      if(el) sections.push({ name: name, el: el, comment: node });
-    }
-  }
-
-  if(sections.length > 0){
-    var container = sections[0].el.parentElement;
-    sections.forEach(function(sec){
-      var el = sec.el;
-      el.style.position = 'relative';
-      el.classList.add('section-wrap');
-      el.setAttribute('data-section-name', sec.name);
-
-      var bar = document.createElement('div');
-      bar.className = 'section-handle-bar section-drag-handle';
-      bar.innerHTML = '<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:14px;cursor:grab;">⠿</span><span>' + sec.name + '</span></div><div style="display:flex;gap:2px;"><button class="sec-dup" title="Duplicate">⧉</button><button class="sec-del" title="Delete">✕</button></div>';
-      el.insertBefore(bar, el.firstChild);
-
-      bar.querySelector('.sec-dup').addEventListener('click', function(e){
-        e.stopPropagation();
-        window.parent.postMessage({ type: 'sectionDuplicated', sectionName: sec.name }, '*');
-      });
-      bar.querySelector('.sec-del').addEventListener('click', function(e){
-        e.stopPropagation();
-        el.remove();
-        syncHtml();
-        window.parent.postMessage({ type: 'sectionDeleted', sectionName: sec.name }, '*');
-      });
-    });
-
-    /* --- SORTABLEJS --- */
-    if(container && typeof Sortable !== 'undefined'){
-      Sortable.create(container, {
-        handle: '.section-drag-handle',
-        animation: 150,
-        ghostClass: 'section-drag-ghost',
-        onEnd: function(evt){
-          var newOrder = [];
-          container.querySelectorAll('[data-section-name]').forEach(function(el){
-            newOrder.push(el.dataset.sectionName);
-          });
-          syncHtml();
-          window.parent.postMessage({
-            type: 'sectionReordered',
-            newOrder: newOrder,
-            movedSection: evt.item.dataset.sectionName,
-            fromIndex: evt.oldIndex,
-            toIndex: evt.newIndex
-          }, '*');
-        }
-      });
-    }
-  }
+  /* Section detection now handled by reinit() */
 
   /* --- CLICK-TO-SELECT ELEMENT --- */
   /* selectedEl, elDeleteBtn declared at top of IIFE */
