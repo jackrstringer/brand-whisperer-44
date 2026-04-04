@@ -1,25 +1,25 @@
 
 
-## Figma-Style Text Hover Underline + Click-Outside Deselection
+## Revised Plan: Click-Outside Deselection
 
-### 1. Solid blue underline on text hover (like Figma)
+### Clarification
 
-The uploaded screenshot shows Figma applies a **solid blue underline** to text passages on hover — not a dashed border around a bounding box. 
+You want clicking **anywhere** that isn't inside the campaign iframe to deselect — whether that's the grey area, the sidebar, the chat panel, or anywhere else on the page. That's exactly what the document-level listener (lines 1435-1452) already does.
 
-**Change**: Update the `.el-hover` CSS in the injected iframe styles and the `hoverHighlight` handler:
+### What to do
 
-- Replace the current `outline: 1px dashed rgba(59,130,246,0.7)` with `text-decoration: underline; text-decoration-color: rgba(59,130,246,0.8); text-underline-offset: 2px;` for text elements (H1-H6, P, SPAN, A, LI, LABEL, BUTTON)
-- For non-text elements (IMG, TD, DIV), keep a subtle blue outline since underline doesn't make sense
-- Split `.el-hover` into `.el-hover-text` (underline) and `.el-hover-block` (outline), applied based on element type in the `hoverHighlight` message handler
+**Keep the existing code as-is.** The previous plan proposed removing the document-level `handleOutsideClick` listener — that was wrong. The current implementation already:
 
-### 2. Click anywhere outside campaign frame deselects everything
+- Listens for `pointerdown` on the entire document
+- Checks if the click is inside the preview panel — if not, fires `clearSelection` + `exitEditMode` to the iframe and clears `selectedElementContext`
+- The grey-area handler (line 3035) catches clicks inside the preview panel but outside the iframe
 
-Currently, clicking the grey area outside the iframe **does** trigger deselection — but only when the click is on the preview panel itself (not the IFRAME tag). Two gaps exist:
+Together these two handlers cover every "not inside the campaign" scenario. **No code changes needed** — just don't proceed with the removal that was previously planned.
 
-**a) Clicks on the sidebar/chat panel don't deselect.** Add a `pointerdown` listener on the parent document that fires `clearSelection` to the iframe and clears `selectedElementContext` whenever the click target is outside the preview panel.
+### Also add: `exitEditMode` to the grey-area handler
 
-**b) Clicking outside while actively editing text inside the iframe doesn't exit edit mode.** Add a `blur` trigger: when the parent detects a click outside the iframe, send a new `exitEditMode` message to the iframe that blurs any `contentEditable` focus and clears selection.
+One small addition: the grey-area click handler (line 3035-3040) currently sends `clearSelection` but not `exitEditMode`. Add `exitEditMode` there too for consistency, so clicking the grey area also exits text editing mode.
 
 ### Files changed
-- `src/pages/CampaignEditor.tsx` — hover CSS update, hoverHighlight handler split, document-level click-outside listener
+- `src/pages/CampaignEditor.tsx` — add one `exitEditMode` postMessage to the grey-area click handler (~line 3038)
 
