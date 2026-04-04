@@ -1,46 +1,30 @@
 
 
-## Fix: CTA buttons rendering full-width ("fat and big")
+## Two Fixes: Redesign Delete Button + Fix Drag-Select Into Campaign
 
-### Root cause
+### 1. Redesign the delete button
 
-The generated button HTML uses this pattern:
-```html
-<td align="center" style="padding:...">
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0">  <!-- NO width constraint -->
-    <tr>
-      <td style="background-color:#30332F;border-radius:25px;">
-        <a href="#" style="display:inline-block;padding:15px 40px;...">shop best-sellers</a>
-      </td>
-    </tr>
-  </table>
-</td>
-```
+The current red circle with "✕" is too prominent. Replace it with a subtle, dark pill-style button that matches the editor's dark theme:
 
-The inner `<table>` wrapping the CTA has no width constraint. In HTML, tables default to expanding to fill their container, making the colored `<td>` background stretch to full width — producing the "fat" button appearance. The generation prompt already says "NEVER width:100%" and "auto width" for buttons, but the AI isn't emitting a `width:auto` style on the wrapper table.
+- Small dark rounded button (e.g. `background: rgba(0,0,0,0.7); backdrop-filter: blur(6px)`) with a thin border
+- Use a minimal trash-can SVG icon instead of the text "✕"
+- Appears on hover/selection at the top-right, slightly smaller (18×18px)
+- Fades in with a short transition instead of popping in
 
-Secondary issue: The prompt specifies `1.5px solid border` on buttons matching the brand's `button_border` color, but the generated HTML has no border at all.
+**File**: `src/pages/CampaignEditor.tsx`
+- Update the `.el-delete-btn` CSS class in the injected `<style>` block
+- Replace `innerHTML = '✕'` with a small inline SVG trash icon
 
-### Changes
+### 2. Fix drag-select not crossing into the iframe
 
-**1. `supabase/functions/generate-campaign/index.ts`** — Strengthen button prompt
+**Problem**: When dragging starts outside the iframe and enters it, the iframe captures all mouse events, so the parent's `onMouseMove`/`onMouseUp` never fire.
 
-In the BUTTONS section (~line 139-144), add an explicit structural requirement:
+**Fix**: When a drag-select becomes active (`dragSelect.active === true`), set `pointer-events: none` on the iframe element. This makes the iframe transparent to mouse events, allowing the parent panel to track the drag rectangle across the entire area including over the campaign preview. Remove `pointer-events: none` when drag ends (mouseUp/mouseLeave).
 
-```
-BUTTONS:
-...
-- Structure: The wrapper <table> around the CTA <td> MUST have style="margin:0 auto;" (no width attribute). This prevents the table from stretching to 100%.
-- The <a> inside the button <td> MUST use display:inline-block with horizontal padding. Never set width:100% on the <a> or the wrapper table.
-```
+**File**: `src/pages/CampaignEditor.tsx`
+- In the `onMouseMove` handler (~line 2814), when `active` becomes true, also set `iframe.style.pointerEvents = 'none'`
+- In `onMouseUp` and `onMouseLeave`, restore `iframe.style.pointerEvents = ''`
 
-**2. `supabase/functions/edit-campaign/index.ts`** — Mirror the same button rule (if it has a BUTTONS section)
-
-**3. `supabase/functions/_shared/finalizeCampaignHtml.ts`** — Add a defensive post-processing step
-
-Add a `fixButtonTableWidth` step that finds the common CTA pattern (a `<table>` containing a single `<tr>` with a single `<td>` that has a background-color and contains an `<a>` tag) and ensures the wrapper `<table>` does not expand to full width by injecting `style="margin:0 auto;"` if missing. This catches any generated HTML where the AI omits the constraint.
-
-### What this fixes
-- Buttons will shrink-wrap to their text content + padding instead of stretching full-width
-- The fix is both preventive (prompt) and defensive (post-processing)
+### Summary
+Two targeted changes in one file — a cosmetic update to the delete button and a one-liner fix for drag-select traversal.
 
