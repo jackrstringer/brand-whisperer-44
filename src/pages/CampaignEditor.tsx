@@ -1398,22 +1398,30 @@ export default function CampaignEditor() {
     };
   }, [campaignId, campaign, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace]);
 
-  // Parent-level Delete/Backspace key → forward to iframe to delete selected elements
+  // Parent-level keyboard shortcuts → forward to iframe
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
       const tag = (document.activeElement as HTMLElement)?.tagName || '';
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if ((document.activeElement as HTMLElement)?.isContentEditable) return;
-      if (!selectedElementContext) return;
-      e.preventDefault();
-      const iframe = previewPanelRef.current?.querySelector('iframe');
-      if (iframe) {
-        try {
-          (iframe as HTMLIFrameElement).contentWindow?.postMessage({ type: 'deleteSelected' }, '*');
-        } catch {}
+
+      if (e.key === 'Escape') {
+        const iframe = previewPanelRef.current?.querySelector('iframe');
+        if (iframe) {
+          try { (iframe as HTMLIFrameElement).contentWindow?.postMessage({ type: 'clearSelection' }, '*'); } catch {}
+        }
+        setSelectedElementContext(null);
+        return;
       }
-      setSelectedElementContext(null);
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElementContext) {
+        e.preventDefault();
+        const iframe = previewPanelRef.current?.querySelector('iframe');
+        if (iframe) {
+          try { (iframe as HTMLIFrameElement).contentWindow?.postMessage({ type: 'deleteSelected' }, '*'); } catch {}
+        }
+        setSelectedElementContext(null);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
