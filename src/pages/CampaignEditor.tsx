@@ -2358,7 +2358,25 @@ export default function CampaignEditor() {
   function deleteAllSelected(){
     var els = document.querySelectorAll('.el-selected');
     if(els.length === 0) return;
+    /* Collect unique parent containers before removing */
+    var parents = [];
+    els.forEach(function(el){
+      var p = el.parentElement;
+      if(p && p !== document.body && p !== document.documentElement && parents.indexOf(p) === -1) parents.push(p);
+    });
     els.forEach(function(el){ el.remove(); });
+    /* Walk up and remove containers left empty after deletion */
+    parents.forEach(function cleanup(p){
+      if(!p || p === document.body || p === document.documentElement) return;
+      /* Check if container is now visually empty (no meaningful content left) */
+      var remaining = p.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img,td');
+      var hasText = (p.textContent || '').trim().length > 0;
+      if(remaining.length === 0 && !hasText){
+        var grandparent = p.parentElement;
+        p.remove();
+        cleanup(grandparent);
+      }
+    });
     removeDeleteBtn();
     selectedEl = null;
     window.parent.postMessage({ type: 'elementDeselected' }, '*');
