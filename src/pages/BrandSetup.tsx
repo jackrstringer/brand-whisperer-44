@@ -429,7 +429,15 @@ export default function BrandSetup() {
             }
             await Promise.all(uploadPromises);
             if (assetInserts.length > 0) {
-              await supabase.from("brand_assets").insert(assetInserts);
+              const { data: insertedAssets } = await supabase.from("brand_assets").insert(assetInserts).select("id, url");
+              // Fire-and-forget: composition analysis for each asset
+              if (insertedAssets) {
+                for (const asset of insertedAssets) {
+                  supabase.functions.invoke("analyze-asset-composition", {
+                    body: { imageUrl: (asset as any).url, assetId: (asset as any).id },
+                  }).catch(() => {});
+                }
+              }
             }
             console.log(`Background asset upload complete: ${assetInserts.length} assets`);
           } catch (err) {

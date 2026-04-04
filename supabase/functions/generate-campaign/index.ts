@@ -406,10 +406,10 @@ Deno.serve(async (req) => {
     // Fetch ALL brand assets with AI-generated descriptions
     const { data: brandAssets } = await supabase
       .from("brand_assets")
-      .select("url, category, filename, description, dominant_colors, ai_category")
+      .select("url, category, filename, description, dominant_colors, ai_category, composition_data")
       .eq("brand_id", brandId);
 
-    const hostedAssetEntries: { url: string; category: string; description?: string; dominant_colors?: string[]; ai_category?: string }[] = (brandAssets || [])
+    const hostedAssetEntries: { url: string; category: string; description?: string; dominant_colors?: string[]; ai_category?: string; composition_data?: any }[] = (brandAssets || [])
       .filter((a: any) => typeof a.url === "string" && a.url.trim().length > 0)
       .slice(0, 15);
 
@@ -425,6 +425,28 @@ Deno.serve(async (req) => {
       parts.push(entry.url);
       if (entry.description) parts.push(`  Description: ${entry.description}`);
       if (entry.dominant_colors?.length) parts.push(`  Colors: ${entry.dominant_colors.join(", ")}`);
+      // Inject composition analysis data for text overlay guidance
+      if (entry.composition_data) {
+        const cd = entry.composition_data;
+        if (cd.avoid_regions?.length > 0) {
+          const regionDescs = cd.avoid_regions.map((r: any) => {
+            const b = r.normalized_bbox;
+            const posDesc = `${Math.round(b.left * 100)}%-${Math.round(b.right * 100)}% horizontal, ${Math.round(b.top * 100)}%-${Math.round(b.bottom * 100)}% vertical`;
+            return `${r.label} (${posDesc}, confidence: ${r.confidence})`;
+          });
+          parts.push(`  ⚠ DO NOT place text over: ${regionDescs.join("; ")}`);
+        }
+        if (cd.safe_text_zones?.length > 0) {
+          const zoneDescs = cd.safe_text_zones
+            .sort((a: any, b: any) => (b.confidence || 0) - (a.confidence || 0))
+            .slice(0, 3)
+            .map((z: any) => `${z.region} (use ${z.text_color} text, confidence: ${z.confidence})`);
+          parts.push(`  ✓ Safe text overlay zones: ${zoneDescs.join("; ")}`);
+        }
+        if (cd.has_safe_overlay_zone === false) {
+          parts.push(`  ❌ NO safe overlay zone — put text in a SEPARATE ROW below this image, not on top`);
+        }
+      }
       return parts.join("\n");
     });
 
