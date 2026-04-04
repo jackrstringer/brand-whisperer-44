@@ -109,7 +109,14 @@ export default function CampaignEditor() {
   const refScrollRef = useRef<HTMLDivElement>(null);
   const [syncingScroll, setSyncingScroll] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [dragSelect, setDragSelect] = useState<{ startX: number; startY: number; x: number; y: number; active: boolean } | null>(null);
+  // Figma-style interaction state machine
+  type InteractionState =
+    | { type: 'IDLE' }
+    | { type: 'PRESSED'; originX: number; originY: number; pointerId: number }
+    | { type: 'MARQUEE'; startX: number; startY: number; x: number; y: number; pointerId: number };
+  const interactionRef = useRef<InteractionState>({ type: 'IDLE' });
+  const [marqueeRect, setMarqueeRect] = useState<{ startX: number; startY: number; x: number; y: number } | null>(null);
+  const marqueeRafRef = useRef<number | null>(null);
    const [imageSwap, setImageSwap] = useState<{ src: string; category: string } | null>(null);
   const imageSwapAssetsRef = useRef<string[]>([]);
   const [variantHtmls, setVariantHtmls] = useState<any[]>([]);
