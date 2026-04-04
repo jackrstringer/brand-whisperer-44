@@ -2393,22 +2393,27 @@ export default function CampaignEditor() {
 
   /* --- DRAG-TO-SELECT (desktop-style, no shift needed) --- */
   /* Parent handles the drag overlay — iframe just responds to regionSelect messages */
+  function handleRegionSelect(rect, isPreview){
+    document.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
+    var elements = [];
+    document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img,td,div').forEach(function(el){
+      var r = el.getBoundingClientRect();
+      if(r.width < 1 || r.height < 1) return;
+      if(r.right > rect.left && r.left < rect.right && r.bottom > rect.top && r.top < rect.bottom){
+        elements.push({ tagName: el.tagName, text: (el.textContent || '').trim().slice(0, 100) });
+        el.classList.add('el-selected');
+      }
+    });
+    if(!isPreview && elements.length > 0){
+      window.parent.postMessage({ type: 'regionSelected', elements: elements }, '*');
+    }
+  }
   window.addEventListener('message', function(e){
     if(e.data && e.data.type === 'regionSelectQuery'){
-      var rect = e.data.rect; // in iframe viewport coords
-      document.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
-      var elements = [];
-      document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img,td,div').forEach(function(el){
-        var r = el.getBoundingClientRect();
-        if(r.width < 1 || r.height < 1) return;
-        if(r.right > rect.left && r.left < rect.right && r.bottom > rect.top && r.top < rect.bottom){
-          elements.push({ tagName: el.tagName, text: (el.textContent || '').trim().slice(0, 100) });
-          el.classList.add('el-selected');
-        }
-      });
-      if(elements.length > 0){
-        window.parent.postMessage({ type: 'regionSelected', elements: elements }, '*');
-      }
+      handleRegionSelect(e.data.rect, false);
+    }
+    if(e.data && e.data.type === 'regionSelectPreview'){
+      handleRegionSelect(e.data.rect, true);
     }
     if(e.data && e.data.type === 'clearSelection'){
       clearElSelection();
@@ -2821,6 +2826,30 @@ export default function CampaignEditor() {
                 if (iframe) (iframe as HTMLIFrameElement).style.pointerEvents = 'none';
               } else if (dragSelect.active) {
                 setDragSelect({ ...dragSelect, x, y });
+                // Live preview: highlight elements under the drag rect
+                const iframe = previewPanelRef.current?.querySelector('iframe');
+                if (iframe) {
+                  const iframeRect = iframe.getBoundingClientRect();
+                  const panelRect2 = previewPanelRef.current!.getBoundingClientRect();
+                  const iframePanelLeft = iframeRect.left - panelRect2.left;
+                  const iframePanelTop = iframeRect.top - panelRect2.top + (previewPanelRef.current?.scrollTop || 0);
+                  const scale = zoomScale;
+                  const left = Math.min(dragSelect.startX, x);
+                  const top2 = Math.min(dragSelect.startY, y);
+                  const right = Math.max(dragSelect.startX, x);
+                  const bottom = Math.max(dragSelect.startY, y);
+                  try {
+                    (iframe as HTMLIFrameElement).contentWindow?.postMessage({
+                      type: 'regionSelectPreview',
+                      rect: {
+                        left: (left - iframePanelLeft) / scale,
+                        top: (top2 - iframePanelTop) / scale,
+                        right: (right - iframePanelLeft) / scale,
+                        bottom: (bottom - iframePanelTop) / scale,
+                      }
+                    }, '*');
+                  } catch (err) {}
+                }
               }
             }}
             onMouseUp={(e) => {
