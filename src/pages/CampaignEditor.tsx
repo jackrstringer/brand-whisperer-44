@@ -1550,6 +1550,7 @@ export default function CampaignEditor() {
       clone.querySelectorAll('.ftb').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('.ftb-cpanel').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
+      clone.querySelectorAll('.el-hover').forEach(function(el){ el.classList.remove('el-hover'); });
       clone.querySelectorAll('.region-select-overlay').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('.img-swap-arrow,.img-swap-cats').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('.img-selected').forEach(function(el){ el.classList.remove('img-selected'); });
