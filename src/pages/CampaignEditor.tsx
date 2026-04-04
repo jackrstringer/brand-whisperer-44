@@ -2334,6 +2334,36 @@ export default function CampaignEditor() {
     window.parent.postMessage({ type: 'elementDeselected' }, '*');
   }
 
+  function deleteAllSelected(){
+    var els = document.querySelectorAll('.el-selected');
+    if(els.length === 0) return;
+    els.forEach(function(el){ el.remove(); });
+    removeDeleteBtn();
+    selectedEl = null;
+    window.parent.postMessage({ type: 'elementDeselected' }, '*');
+    syncHtml();
+  }
+
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Delete' || e.key === 'Backspace'){
+      // Don't intercept if user is editing text
+      var tag = (document.activeElement || {}).tagName || '';
+      if(tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if(document.activeElement && document.activeElement.isContentEditable) return;
+      var selected = document.querySelectorAll('.el-selected');
+      if(selected.length > 0){
+        e.preventDefault();
+        deleteAllSelected();
+      }
+    }
+  });
+
+  window.addEventListener('message', function(e){
+    if(e.data && e.data.type === 'deleteSelected'){
+      deleteAllSelected();
+    }
+  });
+
   document.addEventListener('click', function(e){
     if(ftbEl && ftbEl.contains(e.target)) return;
     if(ftbColorPanel && ftbColorPanel.contains(e.target)) return;
