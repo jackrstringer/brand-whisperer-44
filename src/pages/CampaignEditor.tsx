@@ -109,7 +109,14 @@ export default function CampaignEditor() {
   const refScrollRef = useRef<HTMLDivElement>(null);
   const [syncingScroll, setSyncingScroll] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [dragSelect, setDragSelect] = useState<{ startX: number; startY: number; x: number; y: number; active: boolean } | null>(null);
+  // Figma-style interaction state machine
+  type InteractionState =
+    | { type: 'IDLE' }
+    | { type: 'PRESSED'; originX: number; originY: number; pointerId: number }
+    | { type: 'MARQUEE'; startX: number; startY: number; x: number; y: number; pointerId: number };
+  const interactionRef = useRef<InteractionState>({ type: 'IDLE' });
+  const [marqueeRect, setMarqueeRect] = useState<{ startX: number; startY: number; x: number; y: number } | null>(null);
+  const marqueeRafRef = useRef<number | null>(null);
    const [imageSwap, setImageSwap] = useState<{ src: string; category: string } | null>(null);
   const imageSwapAssetsRef = useRef<string[]>([]);
   const [variantHtmls, setVariantHtmls] = useState<any[]>([]);
@@ -1391,22 +1398,30 @@ export default function CampaignEditor() {
     };
   }, [campaignId, campaign, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace]);
 
-  // Parent-level Delete/Backspace key → forward to iframe to delete selected elements
+  // Parent-level keyboard shortcuts → forward to iframe
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
       const tag = (document.activeElement as HTMLElement)?.tagName || '';
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if ((document.activeElement as HTMLElement)?.isContentEditable) return;
-      if (!selectedElementContext) return;
-      e.preventDefault();
-      const iframe = previewPanelRef.current?.querySelector('iframe');
-      if (iframe) {
-        try {
-          (iframe as HTMLIFrameElement).contentWindow?.postMessage({ type: 'deleteSelected' }, '*');
-        } catch {}
+
+      if (e.key === 'Escape') {
+        const iframe = previewPanelRef.current?.querySelector('iframe');
+        if (iframe) {
+          try { (iframe as HTMLIFrameElement).contentWindow?.postMessage({ type: 'clearSelection' }, '*'); } catch {}
+        }
+        setSelectedElementContext(null);
+        return;
       }
-      setSelectedElementContext(null);
+
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedElementContext) {
+        e.preventDefault();
+        const iframe = previewPanelRef.current?.querySelector('iframe');
+        if (iframe) {
+          try { (iframe as HTMLIFrameElement).contentWindow?.postMessage({ type: 'deleteSelected' }, '*'); } catch {}
+        }
+        setSelectedElementContext(null);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -1477,7 +1492,7 @@ export default function CampaignEditor() {
   const srcdocHtml = htmlForPreview
     ? htmlForPreview.replace(
         /(<head[^>]*>)/i,
-        `$1<meta name="viewport" content="width=device-width, initial-scale=1"><script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"><\/script><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}h1,h2,h3,h4,h5,h6,p,span,a,li,label{text-wrap:balance;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;}td{box-sizing:border-box!important;}[contenteditable]:hover{outline:1px dashed rgba(128,128,128,0.4);outline-offset:2px;cursor:text;}[contenteditable]:focus{outline:2px solid rgba(99,102,241,0.5);outline-offset:2px;background:rgba(99,102,241,0.04);}.section-drag-ghost{opacity:0.4;}.section-drag-handle{cursor:grab;}.section-drag-handle:active{cursor:grabbing;}.section-handle-bar{position:absolute;top:0;left:0;right:0;height:32px;z-index:9999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:space-between;padding:0 8px;opacity:0;transition:opacity 0.15s;pointer-events:none;}.section-wrap:hover .section-handle-bar{opacity:1;pointer-events:auto;}.section-handle-bar span{color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;opacity:0.8;}.section-handle-bar button{background:none;border:none;color:#fff;cursor:pointer;padding:4px;opacity:0.7;font-size:14px;}.section-handle-bar button:hover{opacity:1;}.ftb{position:fixed;z-index:99998;background:rgba(18,18,20,0.97);backdrop-filter:blur(16px) saturate(1.4);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:4px 6px;display:flex;align-items:center;gap:2px;box-shadow:0 8px 32px rgba(0,0,0,0.6),0 0 0 1px rgba(255,255,255,0.04) inset;animation:ftb-in 0.18s cubic-bezier(0.16,1,0.3,1);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;}@keyframes ftb-in{from{opacity:0;transform:translateY(6px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}.ftb-btn{background:none;border:none;color:rgba(255,255,255,0.55);width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all 0.12s;padding:0;}.ftb-btn:hover{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.9);}.ftb-btn.active{background:rgba(99,102,241,0.2);color:#a5b4fc;}.ftb-sep{width:1px;height:18px;background:rgba(255,255,255,0.08);margin:0 4px;flex-shrink:0;}.ftb-tag{font-size:9px;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.08em;padding:2px 8px;white-space:nowrap;font-weight:600;}.ftb-select{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.75);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:11px;padding:3px 6px;cursor:pointer;outline:none;height:28px;font-weight:500;transition:all 0.12s;-webkit-appearance:none;appearance:none;}.ftb-select:hover{border-color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.1);}.ftb-select:focus{border-color:rgba(99,102,241,0.5);}.ftb-swatch{width:24px;height:24px;border-radius:6px;border:2px solid rgba(255,255,255,0.15);cursor:pointer;position:relative;transition:all 0.12s;}.ftb-swatch:hover{border-color:rgba(255,255,255,0.4);transform:scale(1.1);}.ftb-cpanel{position:absolute;top:calc(100% + 8px);background:rgba(18,18,20,0.98);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px;box-shadow:0 12px 40px rgba(0,0,0,0.6);min-width:200px;animation:ftb-in 0.12s cubic-bezier(0.16,1,0.3,1);}.ftb-cpanel-label{font-size:9px;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.08em;margin:6px 0 4px;font-weight:600;}.ftb-cpanel-label:first-child{margin-top:0;}.ftb-cpanel-row{display:flex;flex-wrap:wrap;gap:4px;}.ftb-cpanel-swatch{width:26px;height:26px;border-radius:5px;border:2px solid transparent;cursor:pointer;transition:all 0.12s;position:relative;}.ftb-cpanel-swatch:hover{border-color:rgba(255,255,255,0.4);transform:scale(1.12);}.ftb-cpanel-swatch.active{border-color:#818cf8;box-shadow:0 0 0 2px rgba(129,140,248,0.3);}.ftb-cpanel-swatch.active::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.5);}.ftb-hex-row{display:flex;gap:4px;margin-top:8px;align-items:center;}.ftb-hex-input{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:rgba(255,255,255,0.8);font-size:11px;padding:4px 6px;width:72px;outline:none;font-family:monospace;}.ftb-hex-input:focus{border-color:rgba(99,102,241,0.5);}.ftb-hex-native{width:28px;height:28px;border:none;padding:0;background:none;cursor:pointer;border-radius:4px;}.ftb-ideate{background:transparent;color:#c8f135;border:1.5px solid transparent;border-radius:7px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;transition:all 0.15s;position:relative;background-image:linear-gradient(rgba(18,18,20,0.97),rgba(18,18,20,0.97)),linear-gradient(135deg,#c8f135,#a5b4fc,#c8f135);background-origin:border-box;background-clip:padding-box,border-box;}.ftb-ideate:hover{background-image:linear-gradient(rgba(200,241,53,0.08),rgba(200,241,53,0.08)),linear-gradient(135deg,#c8f135,#a5b4fc,#c8f135);color:#d4f55a;box-shadow:0 0 16px rgba(200,241,53,0.2);}</style>`
+        `$1<meta name="viewport" content="width=device-width, initial-scale=1"><script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"><\/script><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}h1,h2,h3,h4,h5,h6,p,span,a,li,label{text-wrap:balance;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;}td{box-sizing:border-box!important;}[contenteditable]:hover{outline:1px dashed rgba(128,128,128,0.4);outline-offset:2px;cursor:text;}[contenteditable]:focus{outline:2px solid rgba(99,102,241,0.5);outline-offset:2px;background:rgba(99,102,241,0.04);}.el-hover{outline:1px solid rgba(200,241,53,0.3)!important;outline-offset:1px;}.el-hover.el-selected{outline:2px solid rgba(200,241,53,0.6)!important;outline-offset:2px;}.section-drag-ghost{opacity:0.4;}.section-drag-handle{cursor:grab;}.section-drag-handle:active{cursor:grabbing;}.section-handle-bar{position:absolute;top:0;left:0;right:0;height:32px;z-index:9999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:space-between;padding:0 8px;opacity:0;transition:opacity 0.15s;pointer-events:none;}.section-wrap:hover .section-handle-bar{opacity:1;pointer-events:auto;}.section-handle-bar span{color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;opacity:0.8;}.section-handle-bar button{background:none;border:none;color:#fff;cursor:pointer;padding:4px;opacity:0.7;font-size:14px;}.section-handle-bar button:hover{opacity:1;}.ftb{position:fixed;z-index:99998;background:rgba(18,18,20,0.97);backdrop-filter:blur(16px) saturate(1.4);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:4px 6px;display:flex;align-items:center;gap:2px;box-shadow:0 8px 32px rgba(0,0,0,0.6),0 0 0 1px rgba(255,255,255,0.04) inset;animation:ftb-in 0.18s cubic-bezier(0.16,1,0.3,1);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;}@keyframes ftb-in{from{opacity:0;transform:translateY(6px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}.ftb-btn{background:none;border:none;color:rgba(255,255,255,0.55);width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all 0.12s;padding:0;}.ftb-btn:hover{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.9);}.ftb-btn.active{background:rgba(99,102,241,0.2);color:#a5b4fc;}.ftb-sep{width:1px;height:18px;background:rgba(255,255,255,0.08);margin:0 4px;flex-shrink:0;}.ftb-tag{font-size:9px;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.08em;padding:2px 8px;white-space:nowrap;font-weight:600;}.ftb-select{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.75);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:11px;padding:3px 6px;cursor:pointer;outline:none;height:28px;font-weight:500;transition:all 0.12s;-webkit-appearance:none;appearance:none;}.ftb-select:hover{border-color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.1);}.ftb-select:focus{border-color:rgba(99,102,241,0.5);}.ftb-swatch{width:24px;height:24px;border-radius:6px;border:2px solid rgba(255,255,255,0.15);cursor:pointer;position:relative;transition:all 0.12s;}.ftb-swatch:hover{border-color:rgba(255,255,255,0.4);transform:scale(1.1);}.ftb-cpanel{position:absolute;top:calc(100% + 8px);background:rgba(18,18,20,0.98);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px;box-shadow:0 12px 40px rgba(0,0,0,0.6);min-width:200px;animation:ftb-in 0.12s cubic-bezier(0.16,1,0.3,1);}.ftb-cpanel-label{font-size:9px;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.08em;margin:6px 0 4px;font-weight:600;}.ftb-cpanel-label:first-child{margin-top:0;}.ftb-cpanel-row{display:flex;flex-wrap:wrap;gap:4px;}.ftb-cpanel-swatch{width:26px;height:26px;border-radius:5px;border:2px solid transparent;cursor:pointer;transition:all 0.12s;position:relative;}.ftb-cpanel-swatch:hover{border-color:rgba(255,255,255,0.4);transform:scale(1.12);}.ftb-cpanel-swatch.active{border-color:#818cf8;box-shadow:0 0 0 2px rgba(129,140,248,0.3);}.ftb-cpanel-swatch.active::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.5);}.ftb-hex-row{display:flex;gap:4px;margin-top:8px;align-items:center;}.ftb-hex-input{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:rgba(255,255,255,0.8);font-size:11px;padding:4px 6px;width:72px;outline:none;font-family:monospace;}.ftb-hex-input:focus{border-color:rgba(99,102,241,0.5);}.ftb-hex-native{width:28px;height:28px;border:none;padding:0;background:none;cursor:pointer;border-radius:4px;}.ftb-ideate{background:transparent;color:#c8f135;border:1.5px solid transparent;border-radius:7px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;transition:all 0.15s;position:relative;background-image:linear-gradient(rgba(18,18,20,0.97),rgba(18,18,20,0.97)),linear-gradient(135deg,#c8f135,#a5b4fc,#c8f135);background-origin:border-box;background-clip:padding-box,border-box;}.ftb-ideate:hover{background-image:linear-gradient(rgba(200,241,53,0.08),rgba(200,241,53,0.08)),linear-gradient(135deg,#c8f135,#a5b4fc,#c8f135);color:#d4f55a;box-shadow:0 0 16px rgba(200,241,53,0.2);}</style>`
       ).replace(
         /<\/body>/i,
         `<style>.el-selected{outline:2px solid rgba(200,241,53,0.6)!important;outline-offset:2px;position:relative;}.el-delete-btn{position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:6px;background:rgba(0,0,0,0.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.7);font-size:10px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:99998;box-shadow:0 2px 8px rgba(0,0,0,0.4);transition:all 0.15s;padding:0;opacity:0;animation:delBtnIn 0.15s ease forwards;}@keyframes delBtnIn{to{opacity:1;}}.el-delete-btn:hover{background:rgba(0,0,0,0.9);border-color:rgba(255,255,255,0.3);color:#fff;transform:scale(1.1);}.region-select-overlay{position:fixed;border:1.5px dashed rgba(200,241,53,0.5);background:rgba(200,241,53,0.05);pointer-events:none;z-index:99997;}.ftb-pad-btn{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.6);border-radius:5px;font-size:11px;width:26px;height:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.12s;padding:0;}.ftb-pad-btn:hover{background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.9);}.img-swap-arrow{position:absolute;top:50%;transform:translateY(-50%);width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.15);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all 0.15s;z-index:10;opacity:0;pointer-events:none;}.img-swap-arrow:hover{background:rgba(0,0,0,0.9);border-color:rgba(255,255,255,0.3);}.img-swap-arrow.left{left:6px;}.img-swap-arrow.right{right:6px;}.img-swap-cats{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:2px;z-index:10;opacity:0;pointer-events:none;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);border-radius:14px;padding:3px 4px;border:1px solid rgba(255,255,255,0.08);}.img-swap-cat{font-size:9px;color:rgba(255,255,255,0.5);background:none;border:none;cursor:pointer;padding:2px 8px;border-radius:10px;transition:all 0.12s;white-space:nowrap;font-weight:500;}.img-swap-cat:hover{color:rgba(255,255,255,0.8);}.img-swap-cat.active{background:rgba(200,241,53,0.2);color:#c8f135;}.img-swap-lib{font-size:9px;color:#c8f135;background:none;border:none;cursor:pointer;padding:2px 8px;border-radius:10px;transition:all 0.12s;white-space:nowrap;font-weight:600;border-left:1px solid rgba(255,255,255,0.1);margin-left:2px;}.img-swap-lib:hover{color:#d4f55a;}.img-selected .img-swap-arrow,.img-selected .img-swap-cats{opacity:1;pointer-events:auto;}</style><script>
@@ -1543,6 +1558,7 @@ export default function CampaignEditor() {
       clone.querySelectorAll('.ftb').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('.ftb-cpanel').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
+      clone.querySelectorAll('.el-hover').forEach(function(el){ el.classList.remove('el-hover'); });
       clone.querySelectorAll('.region-select-overlay').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('.img-swap-arrow,.img-swap-cats').forEach(function(el){ el.remove(); });
       clone.querySelectorAll('.img-selected').forEach(function(el){ el.classList.remove('img-selected'); });
@@ -2487,6 +2503,24 @@ export default function CampaignEditor() {
     if(e.data && e.data.type === 'clearSelection'){
       clearElSelection();
     }
+    if(e.data && e.data.type === 'hoverHighlight'){
+      document.querySelectorAll('.el-hover').forEach(function(el){ el.classList.remove('el-hover'); });
+      var hEl = document.elementFromPoint(e.data.x, e.data.y);
+      if(hEl){
+        while(hEl && hEl !== document.body && hEl !== document.documentElement){
+          if(hEl.tagName && /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL|TD|TH|IMG|DIV)$/i.test(hEl.tagName)){
+            if(!hEl.classList.contains('el-selected') && !hEl.classList.contains('ftb') && !hEl.classList.contains('section-handle-bar')){
+              hEl.classList.add('el-hover');
+            }
+            break;
+          }
+          hEl = hEl.parentElement;
+        }
+      }
+    }
+    if(e.data && e.data.type === 'hoverClear'){
+      document.querySelectorAll('.el-hover').forEach(function(el){ el.classList.remove('el-hover'); });
+    }
     if(e.data && e.data.type === 'swapImageSrc'){
       var newSrc = e.data.newSrc;
       if(imgSwapTarget && newSrc){
@@ -2854,7 +2888,7 @@ export default function CampaignEditor() {
               width: showReferenceDialog && campaign?.html && selectedReference ? '50%' : '100%',
               scrollbarWidth: 'none',
               msOverflowStyle: 'none' as any,
-              cursor: dragSelect?.active ? 'crosshair' : undefined,
+              cursor: marqueeRect ? 'crosshair' : undefined,
             }}
             onScroll={(e) => {
               if (!showReferenceDialog || syncingScroll) return;
@@ -2867,118 +2901,150 @@ export default function CampaignEditor() {
               }
               requestAnimationFrame(() => setSyncingScroll(false));
             }}
-            onMouseDown={(e) => {
-              // Only start drag select on left button, not on interactive elements
+            onPointerDown={(e) => {
               if (e.button !== 0) return;
               const tag = (e.target as HTMLElement).tagName;
-              if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-              // Don't start if clicking inside the iframe (iframe handles its own clicks)
-              if ((e.target as HTMLElement).tagName === 'IFRAME') return;
+              if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'IFRAME') return;
               const panelRect = previewPanelRef.current?.getBoundingClientRect();
               if (!panelRect) return;
               const x = e.clientX - panelRect.left;
               const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
-              setDragSelect({ startX: x, startY: y, x, y, active: false });
-              e.preventDefault(); // prevent native text selection
+              e.currentTarget.setPointerCapture(e.pointerId);
+              interactionRef.current = { type: 'PRESSED', originX: x, originY: y, pointerId: e.pointerId };
+              e.preventDefault();
             }}
-            onMouseMove={(e) => {
-              if (!dragSelect) return;
+            onPointerMove={(e) => {
+              const state = interactionRef.current;
               const panelRect = previewPanelRef.current?.getBoundingClientRect();
               if (!panelRect) return;
               const x = e.clientX - panelRect.left;
               const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
-              const dx = Math.abs(x - dragSelect.startX);
-              const dy = Math.abs(y - dragSelect.startY);
-              if (!dragSelect.active && (dx > 8 || dy > 8)) {
-                setDragSelect({ ...dragSelect, x, y, active: true });
-                const iframe = previewPanelRef.current?.querySelector('iframe');
-                if (iframe) (iframe as HTMLIFrameElement).style.pointerEvents = 'none';
-              } else if (dragSelect.active) {
-                setDragSelect({ ...dragSelect, x, y });
-                // Live preview: highlight elements under the drag rect
-                const iframe = previewPanelRef.current?.querySelector('iframe');
-                if (iframe) {
+
+              if (state.type === 'IDLE') {
+                // Hover highlighting
+                const iframe = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+                if (iframe?.contentWindow) {
                   const iframeRect = iframe.getBoundingClientRect();
-                  const panelRect2 = previewPanelRef.current!.getBoundingClientRect();
-                  const iframePanelLeft = iframeRect.left - panelRect2.left;
-                  const iframePanelTop = iframeRect.top - panelRect2.top + (previewPanelRef.current?.scrollTop || 0);
                   const scale = zoomScale;
-                  const left = Math.min(dragSelect.startX, x);
-                  const top2 = Math.min(dragSelect.startY, y);
-                  const right = Math.max(dragSelect.startX, x);
-                  const bottom = Math.max(dragSelect.startY, y);
-                  try {
-                    (iframe as HTMLIFrameElement).contentWindow?.postMessage({
-                      type: 'regionSelectPreview',
-                      rect: {
-                        left: (left - iframePanelLeft) / scale,
-                        top: (top2 - iframePanelTop) / scale,
-                        right: (right - iframePanelLeft) / scale,
-                        bottom: (bottom - iframePanelTop) / scale,
-                      }
-                    }, '*');
-                  } catch (err) {}
-                }
-              }
-            }}
-            onMouseUp={(e) => {
-              if (!dragSelect || !dragSelect.active) {
-                setDragSelect(null);
-                // Click on grey area outside iframe → deselect all elements
-                if ((e.target as HTMLElement).tagName !== 'IFRAME') {
-                  const iframe = previewPanelRef.current?.querySelector('iframe');
-                  if (iframe) {
-                    try {
-                      (iframe as HTMLIFrameElement).contentWindow?.postMessage({ type: 'clearSelection' }, '*');
-                    } catch (err) {}
-                  }
-                  setSelectedElementContext(null);
+                  const iframeX = (e.clientX - iframeRect.left) / scale;
+                  const iframeY = (e.clientY - iframeRect.top) / scale;
+                  try { iframe.contentWindow.postMessage({ type: 'hoverHighlight', x: iframeX, y: iframeY }, '*'); } catch {}
                 }
                 return;
               }
-              // Calculate the drag rect relative to the iframe
-              const panelRect = previewPanelRef.current?.getBoundingClientRect();
-              if (!panelRect) { setDragSelect(null); return; }
-              // Find the iframe element
-              const iframe = previewPanelRef.current?.querySelector('iframe');
-              if (!iframe) { setDragSelect(null); return; }
-              const iframeRect = iframe.getBoundingClientRect();
-              const iframePanelLeft = iframeRect.left - panelRect.left;
-              const iframePanelTop = iframeRect.top - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
-              const scale = zoomScale;
-              // Convert drag rect from panel coords to iframe content coords
-              const left = Math.min(dragSelect.startX, dragSelect.x);
-              const top = Math.min(dragSelect.startY, dragSelect.y);
-              const right = Math.max(dragSelect.startX, dragSelect.x);
-              const bottom = Math.max(dragSelect.startY, dragSelect.y);
-              const iframeRect2 = {
-                left: (left - iframePanelLeft) / scale,
-                top: (top - iframePanelTop) / scale,
-                right: (right - iframePanelLeft) / scale,
-                bottom: (bottom - iframePanelTop) / scale,
-              };
-              // Send to iframe for element detection
-              try {
-                iframe.contentWindow?.postMessage({ type: 'regionSelectQuery', rect: iframeRect2 }, '*');
-              } catch (err) {}
-              const iframeEl = previewPanelRef.current?.querySelector('iframe');
-              if (iframeEl) (iframeEl as HTMLIFrameElement).style.pointerEvents = '';
-              setDragSelect(null);
-            }}
-            onMouseLeave={() => {
-              if (dragSelect) {
-                const iframeEl = previewPanelRef.current?.querySelector('iframe');
-                if (iframeEl) (iframeEl as HTMLIFrameElement).style.pointerEvents = '';
+
+              if (state.type === 'PRESSED') {
+                const dx = Math.abs(x - state.originX);
+                const dy = Math.abs(y - state.originY);
+                if (dx > 4 || dy > 4) {
+                  // Transition to MARQUEE
+                  const iframe = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+                  if (iframe) iframe.style.pointerEvents = 'none';
+                  // Clear hover
+                  if (iframe?.contentWindow) { try { iframe.contentWindow.postMessage({ type: 'hoverClear' }, '*'); } catch {} }
+                  document.body.style.userSelect = 'none';
+                  interactionRef.current = { type: 'MARQUEE', startX: state.originX, startY: state.originY, x, y, pointerId: state.pointerId };
+                  setMarqueeRect({ startX: state.originX, startY: state.originY, x, y });
+                }
+                return;
               }
-              if (dragSelect && !dragSelect.active) setDragSelect(null);
+
+              if (state.type === 'MARQUEE') {
+                interactionRef.current = { ...state, x, y };
+                // Throttle updates with rAF
+                if (!marqueeRafRef.current) {
+                  marqueeRafRef.current = requestAnimationFrame(() => {
+                    marqueeRafRef.current = null;
+                    const s = interactionRef.current;
+                    if (s.type !== 'MARQUEE') return;
+                    setMarqueeRect({ startX: s.startX, startY: s.startY, x: s.x, y: s.y });
+                    // Send preview to iframe
+                    const iframe2 = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+                    if (iframe2?.contentWindow) {
+                      const iframeRect = iframe2.getBoundingClientRect();
+                      const panelRect2 = previewPanelRef.current!.getBoundingClientRect();
+                      const iframePanelLeft = iframeRect.left - panelRect2.left;
+                      const iframePanelTop = iframeRect.top - panelRect2.top + (previewPanelRef.current?.scrollTop || 0);
+                      const scale = zoomScale;
+                      const left = Math.min(s.startX, s.x);
+                      const top2 = Math.min(s.startY, s.y);
+                      const right = Math.max(s.startX, s.x);
+                      const bottom = Math.max(s.startY, s.y);
+                      try {
+                        iframe2.contentWindow.postMessage({
+                          type: 'regionSelectPreview',
+                          rect: {
+                            left: (left - iframePanelLeft) / scale,
+                            top: (top2 - iframePanelTop) / scale,
+                            right: (right - iframePanelLeft) / scale,
+                            bottom: (bottom - iframePanelTop) / scale,
+                          }
+                        }, '*');
+                      } catch {}
+                    }
+                  });
+                }
+              }
+            }}
+            onPointerUp={(e) => {
+              const state = interactionRef.current;
+              const iframe = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+
+              if (state.type === 'PRESSED') {
+                // This was a click (didn't exceed drag threshold)
+                // Click on grey area outside iframe → deselect all
+                if ((e.target as HTMLElement).tagName !== 'IFRAME') {
+                  if (iframe?.contentWindow) {
+                    try { iframe.contentWindow.postMessage({ type: 'clearSelection' }, '*'); } catch {}
+                  }
+                  setSelectedElementContext(null);
+                }
+              }
+
+              if (state.type === 'MARQUEE') {
+                // Finalize selection
+                const panelRect = previewPanelRef.current?.getBoundingClientRect();
+                if (panelRect && iframe) {
+                  const iframeRect = iframe.getBoundingClientRect();
+                  const iframePanelLeft = iframeRect.left - panelRect.left;
+                  const iframePanelTop = iframeRect.top - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+                  const scale = zoomScale;
+                  const left = Math.min(state.startX, state.x);
+                  const top = Math.min(state.startY, state.y);
+                  const right = Math.max(state.startX, state.x);
+                  const bottom = Math.max(state.startY, state.y);
+                  try {
+                    iframe.contentWindow?.postMessage({ type: 'regionSelectQuery', rect: {
+                      left: (left - iframePanelLeft) / scale,
+                      top: (top - iframePanelTop) / scale,
+                      right: (right - iframePanelLeft) / scale,
+                      bottom: (bottom - iframePanelTop) / scale,
+                    }}, '*');
+                  } catch {}
+                }
+                if (iframe) iframe.style.pointerEvents = '';
+                document.body.style.userSelect = '';
+                setMarqueeRect(null);
+              }
+
+              // Release pointer capture
+              try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+              interactionRef.current = { type: 'IDLE' };
+            }}
+            onPointerCancel={(e) => {
+              const iframe = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+              if (iframe) iframe.style.pointerEvents = '';
+              document.body.style.userSelect = '';
+              setMarqueeRect(null);
+              interactionRef.current = { type: 'IDLE' };
             }}
           >
             {/* Drag selection overlay */}
-            {dragSelect?.active && (() => {
-              const left = Math.min(dragSelect.startX, dragSelect.x);
-              const top = Math.min(dragSelect.startY, dragSelect.y);
-              const w = Math.abs(dragSelect.x - dragSelect.startX);
-              const h = Math.abs(dragSelect.y - dragSelect.startY);
+            {marqueeRect && (() => {
+              const left = Math.min(marqueeRect.startX, marqueeRect.x);
+              const top = Math.min(marqueeRect.startY, marqueeRect.y);
+              const w = Math.abs(marqueeRect.x - marqueeRect.startX);
+              const h = Math.abs(marqueeRect.y - marqueeRect.startY);
               return (
                 <div
                   style={{
