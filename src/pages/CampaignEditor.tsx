@@ -2646,7 +2646,7 @@ export default function CampaignEditor() {
   });
 
   /* --- IMAGE SWAP TOOLBAR --- */
-
+  var imgSwapCategory = 'all';
   function removeImgSwapUI(){
     document.querySelectorAll('.img-selected').forEach(function(el){ el.classList.remove('img-selected'); });
     document.querySelectorAll('.img-swap-arrow,.img-swap-cats').forEach(function(el){ el.remove(); });
