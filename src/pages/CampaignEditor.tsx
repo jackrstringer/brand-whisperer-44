@@ -2967,6 +2967,7 @@ export default function CampaignEditor() {
             }}
             onPointerDown={(e) => {
               if (e.button !== 0) return;
+              if (!campaign?.html) return; // ReferencePanel is showing — don't capture
               const tag = (e.target as HTMLElement).tagName;
               if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'IFRAME') return;
               const panelRect = previewPanelRef.current?.getBoundingClientRect();
