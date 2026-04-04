@@ -1678,7 +1678,7 @@ export default function CampaignEditor() {
       sel.addRange(range);
     }
   });
-  var timer = null;
+  /* timer declared at top of IIFE */
   function syncHtml(){
     clearTimeout(timer);
     timer = setTimeout(function(){
