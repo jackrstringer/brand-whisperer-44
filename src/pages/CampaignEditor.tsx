@@ -2805,6 +2805,7 @@ export default function CampaignEditor() {
               const x = e.clientX - panelRect.left;
               const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
               setDragSelect({ startX: x, startY: y, x, y, active: false });
+              e.preventDefault(); // prevent native text selection
             }}
             onMouseMove={(e) => {
               if (!dragSelect) return;
