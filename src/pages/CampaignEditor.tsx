@@ -2519,13 +2519,14 @@ export default function CampaignEditor() {
       clearElSelection();
     }
     if(e.data && e.data.type === 'hoverHighlight'){
-      document.querySelectorAll('.el-hover').forEach(function(el){ el.classList.remove('el-hover'); });
+      document.querySelectorAll('.el-hover,.el-hover-text,.el-hover-block').forEach(function(el){ el.classList.remove('el-hover','el-hover-text','el-hover-block'); });
       var hEl = document.elementFromPoint(e.data.x, e.data.y);
       if(hEl){
         while(hEl && hEl !== document.body && hEl !== document.documentElement){
           if(hEl.tagName && /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL|TD|TH|IMG|DIV)$/i.test(hEl.tagName)){
             if(!hEl.classList.contains('el-selected') && !hEl.classList.contains('ftb') && !hEl.classList.contains('section-handle-bar')){
-              hEl.classList.add('el-hover');
+              var isText = /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL)$/i.test(hEl.tagName);
+              hEl.classList.add(isText ? 'el-hover-text' : 'el-hover-block');
             }
             break;
           }
