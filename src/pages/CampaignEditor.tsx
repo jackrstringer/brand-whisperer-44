@@ -123,6 +123,31 @@ export default function CampaignEditor() {
   const [activeVariantIndex, setActiveVariantIndex] = useState(0);
   const generationCompletedRef = useRef(false);
 
+  const getMatchingVariantIndex = useCallback((variants: any[], html: string | null | undefined) => {
+    if (!Array.isArray(variants) || variants.length === 0 || !html) return 0;
+    const matchedIndex = variants.findIndex((variant) => variant?.html === html);
+    return matchedIndex >= 0 ? matchedIndex : 0;
+  }, []);
+
+  const syncActiveVariantHtml = useCallback((nextHtml: string) => {
+    if (!Array.isArray(variantHtmls) || variantHtmls.length === 0) return variantHtmls;
+    if (activeVariantIndex < 0 || activeVariantIndex >= variantHtmls.length) return variantHtmls;
+
+    const activeVariant = variantHtmls[activeVariantIndex];
+    if (!activeVariant || activeVariant.html === nextHtml) return variantHtmls;
+
+    const nextVariants = variantHtmls.map((variant, index) =>
+      index === activeVariantIndex ? { ...variant, html: nextHtml } : variant
+    );
+    setVariantHtmls(nextVariants);
+    return nextVariants;
+  }, [activeVariantIndex, variantHtmls]);
+
+  const persistVariantHtmls = useCallback((nextVariants: any[]) => {
+    if (!campaignId || nextVariants === variantHtmls) return;
+    void supabase.from("campaigns").update({ variant_htmls: nextVariants } as any).eq("id", campaignId);
+  }, [campaignId, variantHtmls]);
+
   // Restore reference panel state from localStorage
   useEffect(() => {
     if (!campaignId) return;
@@ -200,6 +225,7 @@ export default function CampaignEditor() {
           const variants = (c as any).variant_htmls as any[];
           if (variants.some((v: any) => v.html)) {
             setVariantHtmls(variants);
+            setActiveVariantIndex(getMatchingVariantIndex(variants, campaign.html));
           }
         }
       }
@@ -240,7 +266,7 @@ export default function CampaignEditor() {
       setLoading(false);
     };
     load();
-  }, [brandId, campaignId]);
+  }, [brandId, campaignId, getMatchingVariantIndex]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -471,6 +497,7 @@ export default function CampaignEditor() {
         generationCompletedRef.current = true;
         const variants = data.variant_htmls as any[];
         setVariantHtmls(variants);
+        setActiveVariantIndex(getMatchingVariantIndex(variants, data.html));
         setCampaign(data as Campaign);
         setGenerating(false);
         const elapsed = genStartTime ? Math.floor((Date.now() - genStartTime) / 1000) : 0;
@@ -526,12 +553,20 @@ export default function CampaignEditor() {
   };
 
   const handleVariantSwitch = useCallback(async (index: number) => {
-    if (!campaignId || !variantHtmls[index]?.html) return;
+    if (!campaignId || !campaign?.html) return;
+    const currentHtml = iframeOwnedHtmlRef.current || campaign.html;
+    const syncedVariants = syncActiveVariantHtml(currentHtml);
+    const nextVariant = syncedVariants[index];
+    if (!nextVariant?.html) return;
     setActiveVariantIndex(index);
     iframeOwnedHtmlRef.current = null;
-    await supabase.from("campaigns").update({ html: variantHtmls[index].html, status: "ready" }).eq("id", campaignId);
-    setCampaign(c => c ? { ...c, html: variantHtmls[index].html, status: "ready" } : c);
-  }, [campaignId, variantHtmls]);
+    await supabase.from("campaigns").update({
+      html: nextVariant.html,
+      status: "ready",
+      ...(syncedVariants !== variantHtmls ? { variant_htmls: syncedVariants } : {}),
+    } as any).eq("id", campaignId);
+    setCampaign(c => c ? { ...c, html: nextVariant.html, status: "ready" } : c);
+  }, [campaign?.html, campaignId, syncActiveVariantHtml, variantHtmls]);
 
   const saveVariantAsNewCampaign = useCallback(async (index: number) => {
     if (!brandId || !campaignId || !variantHtmls[index]?.html) return;
@@ -726,6 +761,8 @@ export default function CampaignEditor() {
             if (eventType === "html_patch") {
               setAgentState("editing");
               iframeOwnedHtmlRef.current = null; // clear iframe ownership on chat edit
+              const nextVariants = syncActiveVariantHtml(data.html);
+              persistVariantHtmls(nextVariants);
               setCampaign(c => c ? { ...c, html: data.html } : c);
               setCanUndo(true);
               setRedoStack([]);
@@ -856,6 +893,8 @@ export default function CampaignEditor() {
         // JSON fallback (shouldn't happen but handle gracefully)
         const data = await response.json();
         if (data?.error) throw new Error(data.error);
+        const nextVariants = syncActiveVariantHtml(data.html);
+        persistVariantHtmls(nextVariants);
         setCampaign(c => c ? { ...c, html: data.html } : c);
         setCanUndo(true);
         setRedoStack([]);
