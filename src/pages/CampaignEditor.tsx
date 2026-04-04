@@ -2307,7 +2307,7 @@ export default function CampaignEditor() {
     removeDeleteBtn();
     var btn = document.createElement('button');
     btn.className = 'el-delete-btn';
-    btn.innerHTML = '✕';
+    btn.innerHTML = '<svg width="10" height="10" viewBox="0 0 12 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 3.5h10M4.5 6v4M7.5 6v4M2 3.5l.5 7.5a1 1 0 001 1h5a1 1 0 001-1L10 3.5M4 3.5V2a1 1 0 011-1h2a1 1 0 011 1v1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     btn.title = 'Delete element';
     btn.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
     btn.addEventListener('click', function(ev){
