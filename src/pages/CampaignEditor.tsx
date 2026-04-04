@@ -2826,6 +2826,30 @@ export default function CampaignEditor() {
                 if (iframe) (iframe as HTMLIFrameElement).style.pointerEvents = 'none';
               } else if (dragSelect.active) {
                 setDragSelect({ ...dragSelect, x, y });
+                // Live preview: highlight elements under the drag rect
+                const iframe = previewPanelRef.current?.querySelector('iframe');
+                if (iframe) {
+                  const iframeRect = iframe.getBoundingClientRect();
+                  const panelRect2 = previewPanelRef.current!.getBoundingClientRect();
+                  const iframePanelLeft = iframeRect.left - panelRect2.left;
+                  const iframePanelTop = iframeRect.top - panelRect2.top + (previewPanelRef.current?.scrollTop || 0);
+                  const scale = zoomScale;
+                  const left = Math.min(dragSelect.startX, x);
+                  const top2 = Math.min(dragSelect.startY, y);
+                  const right = Math.max(dragSelect.startX, x);
+                  const bottom = Math.max(dragSelect.startY, y);
+                  try {
+                    (iframe as HTMLIFrameElement).contentWindow?.postMessage({
+                      type: 'regionSelectPreview',
+                      rect: {
+                        left: (left - iframePanelLeft) / scale,
+                        top: (top2 - iframePanelTop) / scale,
+                        right: (right - iframePanelLeft) / scale,
+                        bottom: (bottom - iframePanelTop) / scale,
+                      }
+                    }, '*');
+                  } catch (err) {}
+                }
               }
             }}
             onMouseUp={(e) => {
