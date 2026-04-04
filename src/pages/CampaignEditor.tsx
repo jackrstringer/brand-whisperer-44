@@ -2323,8 +2323,7 @@ export default function CampaignEditor() {
   });
 
   /* --- RIGHT-CLICK CONTEXT MENU --- */
-  var ctxMenu = null;
-  var ctxTarget = null;
+  /* ctxMenu, ctxTarget declared at top of IIFE */
   function removeCtxMenu(){ if(ctxMenu){ ctxMenu.remove(); ctxMenu = null; } ctxTarget = null; }
   document.addEventListener('click', removeCtxMenu);
   document.addEventListener('scroll', removeCtxMenu, true);
