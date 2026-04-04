@@ -2822,6 +2822,16 @@ export default function CampaignEditor() {
             onMouseUp={(e) => {
               if (!dragSelect || !dragSelect.active) {
                 setDragSelect(null);
+                // Click on grey area outside iframe → deselect all elements
+                if ((e.target as HTMLElement).tagName !== 'IFRAME') {
+                  const iframe = previewPanelRef.current?.querySelector('iframe');
+                  if (iframe) {
+                    try {
+                      (iframe as HTMLIFrameElement).contentWindow?.postMessage({ type: 'clearSelection' }, '*');
+                    } catch (err) {}
+                  }
+                  setSelectedElementContext(null);
+                }
                 return;
               }
               // Calculate the drag rect relative to the iframe
