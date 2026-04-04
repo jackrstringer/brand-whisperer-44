@@ -2849,9 +2849,15 @@ export default function CampaignEditor() {
               try {
                 iframe.contentWindow?.postMessage({ type: 'regionSelectQuery', rect: iframeRect2 }, '*');
               } catch (err) {}
+              const iframeEl = previewPanelRef.current?.querySelector('iframe');
+              if (iframeEl) (iframeEl as HTMLIFrameElement).style.pointerEvents = '';
               setDragSelect(null);
             }}
             onMouseLeave={() => {
+              if (dragSelect) {
+                const iframeEl = previewPanelRef.current?.querySelector('iframe');
+                if (iframeEl) (iframeEl as HTMLIFrameElement).style.pointerEvents = '';
+              }
               if (dragSelect && !dragSelect.active) setDragSelect(null);
             }}
           >
