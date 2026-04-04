@@ -2645,7 +2645,7 @@ export default function CampaignEditor() {
   });
 
   /* --- IMAGE SWAP TOOLBAR --- */
-  var imgSwapTarget = null;
+  /* imgSwapTarget declared at top of IIFE */
   var imgAssetList = [];
   var imgAssetIndex = 0;
   var imgSwapCategory = 'all';
