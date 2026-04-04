@@ -2528,6 +2528,7 @@ export default function CampaignEditor() {
   var origClearEl = clearElSelection;
   clearElSelection = function(){
     removeImgSwapUI();
+    removeDeleteBtn();
     document.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
     selectedEl = null;
     window.parent.postMessage({ type: 'elementDeselected' }, '*');
