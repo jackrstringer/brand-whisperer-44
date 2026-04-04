@@ -1752,11 +1752,7 @@ export default function CampaignEditor() {
   }
 
   /* --- FLOATING TOOLBAR --- */
-  var ftbEl = null;
-  var ftbTarget = null;
-  var ftbBlurTimer = null;
-  var ftbColorPanel = null;
-  var recentColors = [];
+  /* ftbEl, ftbTarget, ftbBlurTimer, ftbColorPanel, recentColors declared at top of IIFE */
 
   function removeFtb(){
     if(ftbEl){ ftbEl.remove(); ftbEl = null; }
