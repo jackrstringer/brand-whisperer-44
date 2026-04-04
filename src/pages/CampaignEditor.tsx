@@ -2535,7 +2535,7 @@ export default function CampaignEditor() {
       }
     }
     if(e.data && e.data.type === 'hoverClear'){
-      document.querySelectorAll('.el-hover').forEach(function(el){ el.classList.remove('el-hover'); });
+      document.querySelectorAll('.el-hover,.el-hover-text,.el-hover-block').forEach(function(el){ el.classList.remove('el-hover','el-hover-text','el-hover-block'); });
     }
     if(e.data && e.data.type === 'swapImageSrc'){
       var newSrc = e.data.newSrc;
