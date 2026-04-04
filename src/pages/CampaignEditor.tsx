@@ -2537,6 +2537,10 @@ export default function CampaignEditor() {
     if(e.data && e.data.type === 'clearSelection'){
       clearElSelection();
     }
+    if(e.data && e.data.type === 'exitEditMode'){
+      if(document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      var sel = window.getSelection(); if(sel) sel.removeAllRanges();
+    }
     if(e.data && e.data.type === 'hoverHighlight'){
       document.querySelectorAll('.el-hover,.el-hover-text,.el-hover-block').forEach(function(el){ el.classList.remove('el-hover','el-hover-text','el-hover-block'); });
       var hEl = document.elementFromPoint(e.data.x, e.data.y);
