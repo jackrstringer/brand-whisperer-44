@@ -117,7 +117,7 @@ export default function ImageSwapPanel({ brandId, currentSrc, currentCategory, o
   }, [currentCategory]);
 
   return (
-    <div className="h-full flex flex-col bg-background border-r border-border" style={{ width: 320 }}>
+    <div data-image-swap-panel className="h-full flex flex-col bg-background border-r border-border" style={{ width: 320 }}>
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-border shrink-0">
         <div className="flex items-center gap-2">
