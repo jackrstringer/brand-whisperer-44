@@ -1,22 +1,25 @@
 
 
-## Fix Undo/Redo Lag — Add Missing `loadHtml` Handler in Iframe
+## Revised Plan: Click-Outside Deselection
 
-### Root Cause
+### Clarification
 
-The undo/redo handlers post `{ type: 'loadHtml', html }` to the iframe, but **there is no handler for `loadHtml` inside the iframe script**. The iframe never receives and applies the HTML. Instead, the update only happens when React re-renders with a new `srcdocHtml` via the `srcDoc` prop — which triggers a **full iframe document reload** (browsers treat any `srcDoc` change as a navigation). This causes the visible lag/flash.
+You want clicking **anywhere** that isn't inside the campaign iframe to deselect — whether that's the grey area, the sidebar, the chat panel, or anywhere else on the page. That's exactly what the document-level listener (lines 1435-1452) already does.
 
-### Fix
+### What to do
 
-**a) Add a `loadHtml` message handler inside the iframe's injected script** (~line 2530 area, alongside the other `window.addEventListener('message', ...)` handlers). When received, it replaces `document.documentElement.innerHTML` with the new HTML, then re-runs the initialization logic (making elements contentEditable, re-attaching section wrappers, etc.).
+**Keep the existing code as-is.** The previous plan proposed removing the document-level `handleOutsideClick` listener — that was wrong. The current implementation already:
 
-**b) Prevent React from also reloading the iframe via `srcDoc`.** The undo/redo handlers already set `iframeOwnedHtmlRef.current`, but `setCampaign` still updates `campaign.html` which flows into `displayHtml` → `htmlForPreview` → `srcdocHtml`. Since React sees a new `srcDoc` string, the browser reloads the iframe — undoing the fast `loadHtml` update and causing the flash. Fix: gate the `srcdocHtml` computation so that when `iframeOwnedHtmlRef.current` is set, use the **previous** srcdoc value (skip the update), letting the iframe's internal `loadHtml` handler be the sole update path.
+- Listens for `pointerdown` on the entire document
+- Checks if the click is inside the preview panel — if not, fires `clearSelection` + `exitEditMode` to the iframe and clears `selectedElementContext`
+- The grey-area handler (line 3035) catches clicks inside the preview panel but outside the iframe
 
-**c) The `loadHtml` handler needs to re-initialize the interactive features** (contentEditable, section wrappers, hover listeners) after replacing the DOM. Extract the initialization code into a named function (e.g., `reinit()`) that can be called both on initial load and after `loadHtml`.
+Together these two handlers cover every "not inside the campaign" scenario. **No code changes needed** — just don't proceed with the removal that was previously planned.
+
+### Also add: `exitEditMode` to the grey-area handler
+
+One small addition: the grey-area click handler (line 3035-3040) currently sends `clearSelection` but not `exitEditMode`. Add `exitEditMode` there too for consistency, so clicking the grey area also exits text editing mode.
 
 ### Files changed
-- `src/pages/CampaignEditor.tsx`:
-  - Add `loadHtml` message handler in the iframe's injected script
-  - Extract element initialization into a reusable `reinit()` function
-  - Gate `srcdocHtml` to skip updates when `iframeOwnedHtmlRef.current` is set
+- `src/pages/CampaignEditor.tsx` — add one `exitEditMode` postMessage to the grey-area click handler (~line 3038)
 
