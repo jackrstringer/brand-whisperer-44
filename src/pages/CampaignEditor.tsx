@@ -2297,8 +2297,39 @@ export default function CampaignEditor() {
 
   /* --- CLICK-TO-SELECT ELEMENT --- */
   var selectedEl = null;
+  var elDeleteBtn = null;
+
+  function removeDeleteBtn(){
+    if(elDeleteBtn){ elDeleteBtn.remove(); elDeleteBtn = null; }
+  }
+
+  function showDeleteBtn(el){
+    removeDeleteBtn();
+    var btn = document.createElement('button');
+    btn.className = 'el-delete-btn';
+    btn.innerHTML = '✕';
+    btn.title = 'Delete element';
+    btn.addEventListener('mousedown', function(ev){ ev.preventDefault(); ev.stopPropagation(); });
+    btn.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      if(selectedEl){
+        selectedEl.remove();
+        removeDeleteBtn();
+        selectedEl = null;
+        window.parent.postMessage({ type: 'elementDeselected' }, '*');
+        syncHtml();
+      }
+    });
+    // Ensure parent can hold absolute positioning
+    var pos = window.getComputedStyle(el).position;
+    if(pos === 'static') el.style.position = 'relative';
+    el.appendChild(btn);
+    elDeleteBtn = btn;
+  }
+
   function clearElSelection(){
     document.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
+    removeDeleteBtn();
     selectedEl = null;
     window.parent.postMessage({ type: 'elementDeselected' }, '*');
   }
@@ -2308,6 +2339,7 @@ export default function CampaignEditor() {
     if(ftbColorPanel && ftbColorPanel.contains(e.target)) return;
     if(ctxMenu && ctxMenu.contains(e.target)) return;
     if(e.target.closest && e.target.closest('.ftb-cpanel')) return;
+    if(e.target.closest && e.target.closest('.el-delete-btn')) return;
 
     var el = e.target;
     // Walk up to find a meaningful element, but stop at generic wrappers
@@ -2331,8 +2363,10 @@ export default function CampaignEditor() {
     }
 
     if(selectedEl && selectedEl !== found) selectedEl.classList.remove('el-selected');
+    removeDeleteBtn();
     selectedEl = found;
     found.classList.add('el-selected');
+    showDeleteBtn(found);
 
     var text = found.textContent ? found.textContent.trim().slice(0, 300) : '';
     var outerHTML = found.outerHTML ? found.outerHTML.slice(0, 1000) : '';
@@ -2342,6 +2376,18 @@ export default function CampaignEditor() {
   document.addEventListener('keydown', function(e){
     if(e.key === 'Escape' && selectedEl && !ftbEl){
       clearElSelection();
+    }
+    // Delete/Backspace removes selected element (unless actively editing text)
+    if((e.key === 'Delete' || e.key === 'Backspace') && selectedEl && !ftbEl){
+      // Don't delete if user is editing text inside a contentEditable element
+      var active = document.activeElement;
+      if(active && (active.isContentEditable || active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+      e.preventDefault();
+      selectedEl.remove();
+      removeDeleteBtn();
+      selectedEl = null;
+      window.parent.postMessage({ type: 'elementDeselected' }, '*');
+      syncHtml();
     }
   });
 
