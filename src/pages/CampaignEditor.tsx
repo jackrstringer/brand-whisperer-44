@@ -2737,19 +2737,9 @@ export default function CampaignEditor() {
     parent.appendChild(cats);
   }
 
-  // Attach click handler to all images
-  document.querySelectorAll('img').forEach(function(img){
-    img.style.cursor = 'pointer';
-    img.addEventListener('click', function(ev){
-      ev.stopPropagation();
-      if(imgSwapTarget === img) return; // already selected
-      showImgSwapUI(img);
-      window.parent.postMessage({ type: 'imageSelectedForSwap', src: img.src, category: guessCategory(img.src) }, '*');
-    });
-  });
+  /* Image click handlers now attached by reinit() */
 
   // Clear image swap on clicking non-image areas
-  var origClearEl = clearElSelection;
   clearElSelection = function(){
     removeImgSwapUI();
     removeDeleteBtn();
@@ -2758,6 +2748,9 @@ export default function CampaignEditor() {
     window.parent.postMessage({ type: 'elementDeselected' }, '*');
     window.parent.postMessage({ type: 'imageSwapPanelClose' }, '*');
   };
+
+  /* --- RUN INITIAL INIT --- */
+  reinit();
 })();
 <\/script></body>`
       )
