@@ -406,10 +406,10 @@ Deno.serve(async (req) => {
     // Fetch ALL brand assets with AI-generated descriptions
     const { data: brandAssets } = await supabase
       .from("brand_assets")
-      .select("url, category, filename, description, dominant_colors, ai_category")
+      .select("url, category, filename, description, dominant_colors, ai_category, composition_data")
       .eq("brand_id", brandId);
 
-    const hostedAssetEntries: { url: string; category: string; description?: string; dominant_colors?: string[]; ai_category?: string }[] = (brandAssets || [])
+    const hostedAssetEntries: { url: string; category: string; description?: string; dominant_colors?: string[]; ai_category?: string; composition_data?: any }[] = (brandAssets || [])
       .filter((a: any) => typeof a.url === "string" && a.url.trim().length > 0)
       .slice(0, 15);
 
