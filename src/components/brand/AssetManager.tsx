@@ -62,6 +62,13 @@ export default function AssetManager({ brandId, assets, setAssets }: AssetManage
         description, dominant_colors, ai_category,
       } as any).select("*").single();
 
+      // Fire-and-forget: composition analysis for text overlay intelligence
+      if (inserted) {
+        supabase.functions.invoke("analyze-asset-composition", {
+          body: { imageUrl: publicUrl, assetId: (inserted as any).id },
+        }).catch(() => {});
+      }
+
       return inserted ? { ...inserted } as BrandAsset : null;
     });
 
