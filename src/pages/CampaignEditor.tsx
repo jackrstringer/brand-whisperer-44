@@ -2393,22 +2393,27 @@ export default function CampaignEditor() {
 
   /* --- DRAG-TO-SELECT (desktop-style, no shift needed) --- */
   /* Parent handles the drag overlay — iframe just responds to regionSelect messages */
+  function handleRegionSelect(rect, isPreview){
+    document.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
+    var elements = [];
+    document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img,td,div').forEach(function(el){
+      var r = el.getBoundingClientRect();
+      if(r.width < 1 || r.height < 1) return;
+      if(r.right > rect.left && r.left < rect.right && r.bottom > rect.top && r.top < rect.bottom){
+        elements.push({ tagName: el.tagName, text: (el.textContent || '').trim().slice(0, 100) });
+        el.classList.add('el-selected');
+      }
+    });
+    if(!isPreview && elements.length > 0){
+      window.parent.postMessage({ type: 'regionSelected', elements: elements }, '*');
+    }
+  }
   window.addEventListener('message', function(e){
     if(e.data && e.data.type === 'regionSelectQuery'){
-      var rect = e.data.rect; // in iframe viewport coords
-      document.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
-      var elements = [];
-      document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img,td,div').forEach(function(el){
-        var r = el.getBoundingClientRect();
-        if(r.width < 1 || r.height < 1) return;
-        if(r.right > rect.left && r.left < rect.right && r.bottom > rect.top && r.top < rect.bottom){
-          elements.push({ tagName: el.tagName, text: (el.textContent || '').trim().slice(0, 100) });
-          el.classList.add('el-selected');
-        }
-      });
-      if(elements.length > 0){
-        window.parent.postMessage({ type: 'regionSelected', elements: elements }, '*');
-      }
+      handleRegionSelect(e.data.rect, false);
+    }
+    if(e.data && e.data.type === 'regionSelectPreview'){
+      handleRegionSelect(e.data.rect, true);
     }
     if(e.data && e.data.type === 'clearSelection'){
       clearElSelection();
