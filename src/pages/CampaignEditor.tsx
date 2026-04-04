@@ -3550,7 +3550,7 @@ export default function CampaignEditor() {
                         color: 'rgba(255,255,255,0.7)',
                       }}
                     >
-                      <span style={{ color: 'rgba(200,241,53,0.8)' }}>
+                      <span style={{ color: 'rgba(59,130,246,0.8)' }}>
                         {selectedElementContext.isRegion ? '⬚' : '◎'}
                       </span>
                       <span className="truncate max-w-[200px]">
