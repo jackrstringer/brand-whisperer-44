@@ -1438,6 +1438,9 @@ export default function CampaignEditor() {
       const panel = previewPanelRef.current;
       if (!panel) return;
       if (panel.contains(e.target as Node)) return;
+      // Don't deselect when clicking inside the image swap panel
+      const target = e.target as HTMLElement;
+      if (target.closest('[data-image-swap-panel]')) return;
       const iframe = panel.querySelector('iframe') as HTMLIFrameElement | null;
       if (iframe?.contentWindow) {
         try {
