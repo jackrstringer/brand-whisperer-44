@@ -2372,25 +2372,26 @@ export default function CampaignEditor() {
   }
 
   function deleteAllSelected(){
-    var els = document.querySelectorAll('.el-selected');
+    var els = Array.from(document.querySelectorAll('.el-selected'));
     if(els.length === 0) return;
+    /* Filter: only delete elements that don't contain other selected elements (leaf-first) */
+    var toDelete = els.filter(function(el){
+      return !els.some(function(other){ return other !== el && el.contains(other); });
+    });
     /* Collect unique parent containers before removing */
     var parents = [];
-    els.forEach(function(el){
+    toDelete.forEach(function(el){
       var p = el.parentElement;
       if(p && p !== document.body && p !== document.documentElement && parents.indexOf(p) === -1) parents.push(p);
     });
-    els.forEach(function(el){ el.remove(); });
-    /* Walk up and remove containers left empty after deletion */
-    parents.forEach(function cleanup(p){
-      if(!p || p === document.body || p === document.documentElement) return;
-      /* Check if container is now visually empty (no meaningful content left) */
+    toDelete.forEach(function(el){ el.remove(); });
+    /* Walk up ONE level only — remove direct parent if it's now empty, but don't recurse aggressively */
+    parents.forEach(function(p){
+      if(!p || p === document.body || p === document.documentElement || !p.parentElement) return;
       var remaining = p.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img,td');
       var hasText = (p.textContent || '').trim().length > 0;
       if(remaining.length === 0 && !hasText){
-        var grandparent = p.parentElement;
         p.remove();
-        cleanup(grandparent);
       }
     });
     removeDeleteBtn();
