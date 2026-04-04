@@ -1184,6 +1184,7 @@ export default function CampaignEditor() {
   const inlineEditTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Track iframe-owned HTML to avoid reloading iframe on every keystroke
   const iframeOwnedHtmlRef = useRef<string | null>(null);
+  const prevSrcdocRef = useRef<string>("");
 
   // Background edit: sends instruction to AI silently (no chat message)
   const sendBackgroundEdit = useCallback(async (instruction: string, onComplete?: () => void) => {
@@ -1513,7 +1514,7 @@ export default function CampaignEditor() {
     : "";
 
 
-  const srcdocHtml = htmlForPreview
+  const computedSrcdocHtml = htmlForPreview
     ? htmlForPreview.replace(
         /(<head[^>]*>)/i,
         `$1<meta name="viewport" content="width=device-width, initial-scale=1"><script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"><\/script><style>html,body{margin:0;padding:0;scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none;}h1,h2,h3,h4,h5,h6,p,span,a,li,label{text-wrap:balance;}table{max-width:100%!important;width:100%!important;box-sizing:border-box!important;}img{max-width:100%;}td{box-sizing:border-box!important;}[contenteditable]:hover{outline:none!important;cursor:text;}[contenteditable]:focus{outline:2px solid rgba(99,102,241,0.5);outline-offset:2px;background:rgba(99,102,241,0.04);}.el-hover-text{text-decoration:underline!important;text-decoration-color:rgba(59,130,246,0.8)!important;text-underline-offset:2px!important;text-decoration-thickness:1.5px!important;outline:none!important;}.el-hover-text *{text-decoration:underline!important;text-decoration-color:rgba(59,130,246,0.8)!important;text-underline-offset:2px!important;text-decoration-thickness:1.5px!important;}.el-hover-block{outline:1px dashed rgba(59,130,246,0.7)!important;outline-offset:0px;}.el-hover-text.el-selected,.el-hover-block.el-selected{outline:2px solid rgba(59,130,246,0.8)!important;outline-offset:1px;}.section-drag-ghost{opacity:0.4;}.section-drag-handle{cursor:grab;}.section-drag-handle:active{cursor:grabbing;}.section-handle-bar{position:absolute;top:0;left:0;right:0;height:32px;z-index:9999;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:space-between;padding:0 8px;opacity:0;transition:opacity 0.15s;pointer-events:none;}.section-wrap:hover .section-handle-bar{opacity:1;pointer-events:auto;}.section-handle-bar span{color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:0.05em;opacity:0.8;}.section-handle-bar button{background:none;border:none;color:#fff;cursor:pointer;padding:4px;opacity:0.7;font-size:14px;}.section-handle-bar button:hover{opacity:1;}.ftb{position:fixed;z-index:99998;background:rgba(18,18,20,0.97);backdrop-filter:blur(16px) saturate(1.4);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:4px 6px;display:flex;align-items:center;gap:2px;box-shadow:0 8px 32px rgba(0,0,0,0.6),0 0 0 1px rgba(255,255,255,0.04) inset;animation:ftb-in 0.18s cubic-bezier(0.16,1,0.3,1);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;}@keyframes ftb-in{from{opacity:0;transform:translateY(6px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}.ftb-btn{background:none;border:none;color:rgba(255,255,255,0.55);width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:all 0.12s;padding:0;}.ftb-btn:hover{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.9);}.ftb-btn.active{background:rgba(99,102,241,0.2);color:#a5b4fc;}.ftb-sep{width:1px;height:18px;background:rgba(255,255,255,0.08);margin:0 4px;flex-shrink:0;}.ftb-tag{font-size:9px;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.08em;padding:2px 8px;white-space:nowrap;font-weight:600;}.ftb-select{background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.75);border:1px solid rgba(255,255,255,0.1);border-radius:6px;font-size:11px;padding:3px 6px;cursor:pointer;outline:none;height:28px;font-weight:500;transition:all 0.12s;-webkit-appearance:none;appearance:none;}.ftb-select:hover{border-color:rgba(255,255,255,0.25);background:rgba(255,255,255,0.1);}.ftb-select:focus{border-color:rgba(99,102,241,0.5);}.ftb-swatch{width:24px;height:24px;border-radius:6px;border:2px solid rgba(255,255,255,0.15);cursor:pointer;position:relative;transition:all 0.12s;}.ftb-swatch:hover{border-color:rgba(255,255,255,0.4);transform:scale(1.1);}.ftb-cpanel{position:absolute;top:calc(100% + 8px);background:rgba(18,18,20,0.98);backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px;box-shadow:0 12px 40px rgba(0,0,0,0.6);min-width:200px;animation:ftb-in 0.12s cubic-bezier(0.16,1,0.3,1);}.ftb-cpanel-label{font-size:9px;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.08em;margin:6px 0 4px;font-weight:600;}.ftb-cpanel-label:first-child{margin-top:0;}.ftb-cpanel-row{display:flex;flex-wrap:wrap;gap:4px;}.ftb-cpanel-swatch{width:26px;height:26px;border-radius:5px;border:2px solid transparent;cursor:pointer;transition:all 0.12s;position:relative;}.ftb-cpanel-swatch:hover{border-color:rgba(255,255,255,0.4);transform:scale(1.12);}.ftb-cpanel-swatch.active{border-color:#818cf8;box-shadow:0 0 0 2px rgba(129,140,248,0.3);}.ftb-cpanel-swatch.active::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.5);}.ftb-hex-row{display:flex;gap:4px;margin-top:8px;align-items:center;}.ftb-hex-input{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:rgba(255,255,255,0.8);font-size:11px;padding:4px 6px;width:72px;outline:none;font-family:monospace;}.ftb-hex-input:focus{border-color:rgba(99,102,241,0.5);}.ftb-hex-native{width:28px;height:28px;border:none;padding:0;background:none;cursor:pointer;border-radius:4px;}.ftb-ideate{background:transparent;color:#c8f135;border:1.5px solid transparent;border-radius:7px;padding:4px 12px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;transition:all 0.15s;position:relative;background-image:linear-gradient(rgba(18,18,20,0.97),rgba(18,18,20,0.97)),linear-gradient(135deg,#c8f135,#a5b4fc,#c8f135);background-origin:border-box;background-clip:padding-box,border-box;}.ftb-ideate:hover{background-image:linear-gradient(rgba(200,241,53,0.08),rgba(200,241,53,0.08)),linear-gradient(135deg,#c8f135,#a5b4fc,#c8f135);color:#d4f55a;box-shadow:0 0 16px rgba(200,241,53,0.2);}</style>`
@@ -1521,16 +1522,132 @@ export default function CampaignEditor() {
         /<\/body>/i,
         `<style>.el-selected{outline:2px solid rgba(59,130,246,0.6)!important;outline-offset:2px;position:relative;}.el-delete-btn{position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:6px;background:rgba(0,0,0,0.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.7);font-size:10px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:99998;box-shadow:0 2px 8px rgba(0,0,0,0.4);transition:all 0.15s;padding:0;opacity:0;animation:delBtnIn 0.15s ease forwards;}@keyframes delBtnIn{to{opacity:1;}}.el-delete-btn:hover{background:rgba(0,0,0,0.9);border-color:rgba(255,255,255,0.3);color:#fff;transform:scale(1.1);}.region-select-overlay{position:fixed;border:1.5px dashed rgba(59,130,246,0.5);background:rgba(59,130,246,0.05);pointer-events:none;z-index:99997;}.ftb-pad-btn{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:rgba(255,255,255,0.6);border-radius:5px;font-size:11px;width:26px;height:26px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.12s;padding:0;}.ftb-pad-btn:hover{background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.9);}.img-swap-arrow{position:absolute;top:50%;transform:translateY(-50%);width:28px;height:28px;border-radius:50%;background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.15);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all 0.15s;z-index:10;opacity:0;pointer-events:none;}.img-swap-arrow:hover{background:rgba(0,0,0,0.9);border-color:rgba(255,255,255,0.3);}.img-swap-arrow.left{left:6px;}.img-swap-arrow.right{right:6px;}.img-swap-cats{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);display:flex;gap:2px;z-index:10;opacity:0;pointer-events:none;background:rgba(0,0,0,0.75);backdrop-filter:blur(8px);border-radius:14px;padding:3px 4px;border:1px solid rgba(255,255,255,0.08);}.img-swap-cat{font-size:9px;color:rgba(255,255,255,0.5);background:none;border:none;cursor:pointer;padding:2px 8px;border-radius:10px;transition:all 0.12s;white-space:nowrap;font-weight:500;}.img-swap-cat:hover{color:rgba(255,255,255,0.8);}.img-swap-cat.active{background:rgba(59,130,246,0.2);color:#3b82f6;}.img-swap-lib{font-size:9px;color:#3b82f6;background:none;border:none;cursor:pointer;padding:2px 8px;border-radius:10px;transition:all 0.12s;white-space:nowrap;font-weight:600;border-left:1px solid rgba(255,255,255,0.1);margin-left:2px;}.img-swap-lib:hover{color:#60a5fa;}.img-selected .img-swap-arrow,.img-selected .img-swap-cats{opacity:1;pointer-events:auto;}</style><script>
 (function(){
-  /* --- TEXT EDITING --- */
-  var blocks = ['TABLE','TR','TD','TH','DIV','UL','OL','IMG'];
-  document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label').forEach(function(el){
-    
-    var hasBlock = Array.from(el.children).some(function(c){ return blocks.indexOf(c.tagName)>=0; });
-    if(hasBlock) return;
-    if(!el.textContent.trim()) return;
-    el.contentEditable = 'true';
-    el.style.cursor = 'text';
+  /* --- FORWARD DECLARATIONS for reinit cleanup --- */
+  var selectedEl = null;
+  var lastHoverEl = null;
+  var imgSwapTarget = null;
+  var elDeleteBtn = null;
+  var ftbEl = null;
+  var ftbTarget = null;
+  var ftbBlurTimer = null;
+  var ftbColorPanel = null;
+  var recentColors = [];
+  var ctxMenu = null;
+  var ctxTarget = null;
+  var savedRange = null;
+  var timer = null;
+
+  /* --- REINIT: sets up contentEditable, sections, image handlers --- */
+  function reinit(){
+    /* Clean up previous interactive state */
+    if(ftbEl){ ftbEl.remove(); ftbEl = null; }
+    if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; }
+    ftbTarget = null; savedRange = null;
+    if(ctxMenu){ ctxMenu.remove(); ctxMenu = null; } ctxTarget = null;
+    document.querySelectorAll('.img-selected').forEach(function(el){ el.classList.remove('img-selected'); });
+    document.querySelectorAll('.img-swap-arrow,.img-swap-cats').forEach(function(el){ el.remove(); });
+    if(elDeleteBtn){ elDeleteBtn.remove(); elDeleteBtn = null; }
+    document.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
+    selectedEl = null;
+    lastHoverEl = null;
+    imgSwapTarget = null;
+
+    /* --- TEXT EDITING: make elements contentEditable --- */
+    var blocks = ['TABLE','TR','TD','TH','DIV','UL','OL','IMG'];
+    document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label').forEach(function(el){
+      var hasBlock = Array.from(el.children).some(function(c){ return blocks.indexOf(c.tagName)>=0; });
+      if(hasBlock) return;
+      if(!el.textContent.trim()) return;
+      el.contentEditable = 'true';
+      el.style.cursor = 'text';
+    });
+
+    /* --- SECTION DETECTION --- */
+    var sections = [];
+    var walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_COMMENT, null, false);
+    var node;
+    while(node = walker.nextNode()){
+      var val = node.nodeValue.trim();
+      var match = val.match(/^SECTION:\\s*(.+)/i);
+      if(match){
+        var name = match[1].trim();
+        var el = node.nextElementSibling;
+        if(el) sections.push({ name: name, el: el, comment: node });
+      }
+    }
+    if(sections.length > 0){
+      var container = sections[0].el.parentElement;
+      sections.forEach(function(sec){
+        var el = sec.el;
+        el.style.position = 'relative';
+        el.classList.add('section-wrap');
+        el.setAttribute('data-section-name', sec.name);
+        var bar = document.createElement('div');
+        bar.className = 'section-handle-bar section-drag-handle';
+        bar.innerHTML = '<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:14px;cursor:grab;">⠿</span><span>' + sec.name + '</span></div><div style="display:flex;gap:2px;"><button class="sec-dup" title="Duplicate">⧉</button><button class="sec-del" title="Delete">✕</button></div>';
+        el.insertBefore(bar, el.firstChild);
+        bar.querySelector('.sec-dup').addEventListener('click', function(e){
+          e.stopPropagation();
+          window.parent.postMessage({ type: 'sectionDuplicated', sectionName: sec.name }, '*');
+        });
+        bar.querySelector('.sec-del').addEventListener('click', function(e){
+          e.stopPropagation();
+          el.remove();
+          syncHtml();
+          window.parent.postMessage({ type: 'sectionDeleted', sectionName: sec.name }, '*');
+        });
+      });
+      if(container && typeof Sortable !== 'undefined'){
+        Sortable.create(container, {
+          handle: '.section-drag-handle',
+          animation: 150,
+          ghostClass: 'section-drag-ghost',
+          onEnd: function(evt){
+            var newOrder = [];
+            container.querySelectorAll('[data-section-name]').forEach(function(el){
+              newOrder.push(el.dataset.sectionName);
+            });
+            syncHtml();
+            window.parent.postMessage({
+              type: 'sectionReordered',
+              newOrder: newOrder,
+              movedSection: evt.item.dataset.sectionName,
+              fromIndex: evt.oldIndex,
+              toIndex: evt.newIndex
+            }, '*');
+          }
+        });
+      }
+    }
+
+    /* --- IMAGE CLICK HANDLERS --- */
+    document.querySelectorAll('img').forEach(function(img){
+      img.style.cursor = 'pointer';
+      img.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        if(imgSwapTarget === img) return;
+        showImgSwapUI(img);
+        window.parent.postMessage({ type: 'imageSelectedForSwap', src: img.src, category: guessCategory(img.src) }, '*');
+      });
+    });
+  }
+
+  /* --- loadHtml handler: replaces body content and re-inits --- */
+  window.addEventListener('message', function(e){
+    if(e.data && e.data.type === 'loadHtml'){
+      var newHtml = e.data.html;
+      /* Extract body content from the full HTML */
+      var bodyMatch = newHtml.match(/<body[^>]*>([\\s\\S]*)<\\/body>/i);
+      if(bodyMatch){
+        document.body.innerHTML = bodyMatch[1];
+      } else {
+        document.body.innerHTML = newHtml;
+      }
+      reinit();
+    }
   });
+
+  /* --- TEXT EDITING (event listeners — registered once) --- */
   document.addEventListener('paste', function(e){
     if(!e.target.isContentEditable) return;
     e.preventDefault();
@@ -1562,7 +1679,7 @@ export default function CampaignEditor() {
       sel.addRange(range);
     }
   });
-  var timer = null;
+  /* timer declared at top of IIFE */
   function syncHtml(){
     clearTimeout(timer);
     timer = setTimeout(function(){
@@ -1602,7 +1719,7 @@ export default function CampaignEditor() {
   document.addEventListener('input', syncHtml);
 
   /* --- SELECTION PERSISTENCE --- */
-  var savedRange = null;
+  /* savedRange declared at top of IIFE */
   document.addEventListener('selectionchange', function(){
     var sel = window.getSelection();
     if(sel && sel.rangeCount > 0){
@@ -1636,11 +1753,7 @@ export default function CampaignEditor() {
   }
 
   /* --- FLOATING TOOLBAR --- */
-  var ftbEl = null;
-  var ftbTarget = null;
-  var ftbBlurTimer = null;
-  var ftbColorPanel = null;
-  var recentColors = [];
+  /* ftbEl, ftbTarget, ftbBlurTimer, ftbColorPanel, recentColors declared at top of IIFE */
 
   function removeFtb(){
     if(ftbEl){ ftbEl.remove(); ftbEl = null; }
@@ -2211,8 +2324,7 @@ export default function CampaignEditor() {
   });
 
   /* --- RIGHT-CLICK CONTEXT MENU --- */
-  var ctxMenu = null;
-  var ctxTarget = null;
+  /* ctxMenu, ctxTarget declared at top of IIFE */
   function removeCtxMenu(){ if(ctxMenu){ ctxMenu.remove(); ctxMenu = null; } ctxTarget = null; }
   document.addEventListener('click', removeCtxMenu);
   document.addEventListener('scroll', removeCtxMenu, true);
@@ -2293,72 +2405,10 @@ export default function CampaignEditor() {
     if(rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 8) + 'px';
   });
 
-  /* --- SECTION DETECTION --- */
-  var sections = [];
-  var walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_COMMENT, null, false);
-  var node;
-  while(node = walker.nextNode()){
-    var val = node.nodeValue.trim();
-    var match = val.match(/^SECTION:\\s*(.+)/i);
-    if(match){
-      var name = match[1].trim();
-      var el = node.nextElementSibling;
-      if(el) sections.push({ name: name, el: el, comment: node });
-    }
-  }
-
-  if(sections.length > 0){
-    var container = sections[0].el.parentElement;
-    sections.forEach(function(sec){
-      var el = sec.el;
-      el.style.position = 'relative';
-      el.classList.add('section-wrap');
-      el.setAttribute('data-section-name', sec.name);
-
-      var bar = document.createElement('div');
-      bar.className = 'section-handle-bar section-drag-handle';
-      bar.innerHTML = '<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:14px;cursor:grab;">⠿</span><span>' + sec.name + '</span></div><div style="display:flex;gap:2px;"><button class="sec-dup" title="Duplicate">⧉</button><button class="sec-del" title="Delete">✕</button></div>';
-      el.insertBefore(bar, el.firstChild);
-
-      bar.querySelector('.sec-dup').addEventListener('click', function(e){
-        e.stopPropagation();
-        window.parent.postMessage({ type: 'sectionDuplicated', sectionName: sec.name }, '*');
-      });
-      bar.querySelector('.sec-del').addEventListener('click', function(e){
-        e.stopPropagation();
-        el.remove();
-        syncHtml();
-        window.parent.postMessage({ type: 'sectionDeleted', sectionName: sec.name }, '*');
-      });
-    });
-
-    /* --- SORTABLEJS --- */
-    if(container && typeof Sortable !== 'undefined'){
-      Sortable.create(container, {
-        handle: '.section-drag-handle',
-        animation: 150,
-        ghostClass: 'section-drag-ghost',
-        onEnd: function(evt){
-          var newOrder = [];
-          container.querySelectorAll('[data-section-name]').forEach(function(el){
-            newOrder.push(el.dataset.sectionName);
-          });
-          syncHtml();
-          window.parent.postMessage({
-            type: 'sectionReordered',
-            newOrder: newOrder,
-            movedSection: evt.item.dataset.sectionName,
-            fromIndex: evt.oldIndex,
-            toIndex: evt.newIndex
-          }, '*');
-        }
-      });
-    }
-  }
+  /* Section detection now handled by reinit() */
 
   /* --- CLICK-TO-SELECT ELEMENT --- */
-  var selectedEl = null;
-  var elDeleteBtn = null;
+  /* selectedEl, elDeleteBtn declared at top of IIFE */
 
   function removeDeleteBtn(){
     if(elDeleteBtn){ elDeleteBtn.remove(); elDeleteBtn = null; }
@@ -2596,11 +2646,7 @@ export default function CampaignEditor() {
   });
 
   /* --- IMAGE SWAP TOOLBAR --- */
-  var imgSwapTarget = null;
-  var imgAssetList = [];
-  var imgAssetIndex = 0;
   var imgSwapCategory = 'all';
-
   function removeImgSwapUI(){
     document.querySelectorAll('.img-selected').forEach(function(el){ el.classList.remove('img-selected'); });
     document.querySelectorAll('.img-swap-arrow,.img-swap-cats').forEach(function(el){ el.remove(); });
@@ -2688,19 +2734,9 @@ export default function CampaignEditor() {
     parent.appendChild(cats);
   }
 
-  // Attach click handler to all images
-  document.querySelectorAll('img').forEach(function(img){
-    img.style.cursor = 'pointer';
-    img.addEventListener('click', function(ev){
-      ev.stopPropagation();
-      if(imgSwapTarget === img) return; // already selected
-      showImgSwapUI(img);
-      window.parent.postMessage({ type: 'imageSelectedForSwap', src: img.src, category: guessCategory(img.src) }, '*');
-    });
-  });
+  /* Image click handlers now attached by reinit() */
 
   // Clear image swap on clicking non-image areas
-  var origClearEl = clearElSelection;
   clearElSelection = function(){
     removeImgSwapUI();
     removeDeleteBtn();
@@ -2709,10 +2745,17 @@ export default function CampaignEditor() {
     window.parent.postMessage({ type: 'elementDeselected' }, '*');
     window.parent.postMessage({ type: 'imageSwapPanelClose' }, '*');
   };
+
+  /* Run initial init */
+  reinit();
 })();
 <\/script></body>`
       )
     : "";
+
+  // Gate: skip srcdocHtml update when iframe owns HTML (undo/redo)
+  const srcdocHtml = iframeOwnedHtmlRef.current ? prevSrcdocRef.current : computedSrcdocHtml;
+  if (!iframeOwnedHtmlRef.current && computedSrcdocHtml) prevSrcdocRef.current = computedSrcdocHtml;
 
 
   return (
