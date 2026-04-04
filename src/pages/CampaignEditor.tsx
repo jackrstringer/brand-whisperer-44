@@ -2861,7 +2861,7 @@ export default function CampaignEditor() {
               width: showReferenceDialog && campaign?.html && selectedReference ? '50%' : '100%',
               scrollbarWidth: 'none',
               msOverflowStyle: 'none' as any,
-              cursor: dragSelect?.active ? 'crosshair' : undefined,
+              cursor: marqueeRect ? 'crosshair' : undefined,
             }}
             onScroll={(e) => {
               if (!showReferenceDialog || syncingScroll) return;
@@ -2874,118 +2874,150 @@ export default function CampaignEditor() {
               }
               requestAnimationFrame(() => setSyncingScroll(false));
             }}
-            onMouseDown={(e) => {
-              // Only start drag select on left button, not on interactive elements
+            onPointerDown={(e) => {
               if (e.button !== 0) return;
               const tag = (e.target as HTMLElement).tagName;
-              if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-              // Don't start if clicking inside the iframe (iframe handles its own clicks)
-              if ((e.target as HTMLElement).tagName === 'IFRAME') return;
+              if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'IFRAME') return;
               const panelRect = previewPanelRef.current?.getBoundingClientRect();
               if (!panelRect) return;
               const x = e.clientX - panelRect.left;
               const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
-              setDragSelect({ startX: x, startY: y, x, y, active: false });
-              e.preventDefault(); // prevent native text selection
+              e.currentTarget.setPointerCapture(e.pointerId);
+              interactionRef.current = { type: 'PRESSED', originX: x, originY: y, pointerId: e.pointerId };
+              e.preventDefault();
             }}
-            onMouseMove={(e) => {
-              if (!dragSelect) return;
+            onPointerMove={(e) => {
+              const state = interactionRef.current;
               const panelRect = previewPanelRef.current?.getBoundingClientRect();
               if (!panelRect) return;
               const x = e.clientX - panelRect.left;
               const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
-              const dx = Math.abs(x - dragSelect.startX);
-              const dy = Math.abs(y - dragSelect.startY);
-              if (!dragSelect.active && (dx > 8 || dy > 8)) {
-                setDragSelect({ ...dragSelect, x, y, active: true });
-                const iframe = previewPanelRef.current?.querySelector('iframe');
-                if (iframe) (iframe as HTMLIFrameElement).style.pointerEvents = 'none';
-              } else if (dragSelect.active) {
-                setDragSelect({ ...dragSelect, x, y });
-                // Live preview: highlight elements under the drag rect
-                const iframe = previewPanelRef.current?.querySelector('iframe');
-                if (iframe) {
+
+              if (state.type === 'IDLE') {
+                // Hover highlighting
+                const iframe = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+                if (iframe?.contentWindow) {
                   const iframeRect = iframe.getBoundingClientRect();
-                  const panelRect2 = previewPanelRef.current!.getBoundingClientRect();
-                  const iframePanelLeft = iframeRect.left - panelRect2.left;
-                  const iframePanelTop = iframeRect.top - panelRect2.top + (previewPanelRef.current?.scrollTop || 0);
                   const scale = zoomScale;
-                  const left = Math.min(dragSelect.startX, x);
-                  const top2 = Math.min(dragSelect.startY, y);
-                  const right = Math.max(dragSelect.startX, x);
-                  const bottom = Math.max(dragSelect.startY, y);
-                  try {
-                    (iframe as HTMLIFrameElement).contentWindow?.postMessage({
-                      type: 'regionSelectPreview',
-                      rect: {
-                        left: (left - iframePanelLeft) / scale,
-                        top: (top2 - iframePanelTop) / scale,
-                        right: (right - iframePanelLeft) / scale,
-                        bottom: (bottom - iframePanelTop) / scale,
-                      }
-                    }, '*');
-                  } catch (err) {}
-                }
-              }
-            }}
-            onMouseUp={(e) => {
-              if (!dragSelect || !dragSelect.active) {
-                setDragSelect(null);
-                // Click on grey area outside iframe → deselect all elements
-                if ((e.target as HTMLElement).tagName !== 'IFRAME') {
-                  const iframe = previewPanelRef.current?.querySelector('iframe');
-                  if (iframe) {
-                    try {
-                      (iframe as HTMLIFrameElement).contentWindow?.postMessage({ type: 'clearSelection' }, '*');
-                    } catch (err) {}
-                  }
-                  setSelectedElementContext(null);
+                  const iframeX = (e.clientX - iframeRect.left) / scale;
+                  const iframeY = (e.clientY - iframeRect.top) / scale;
+                  try { iframe.contentWindow.postMessage({ type: 'hoverHighlight', x: iframeX, y: iframeY }, '*'); } catch {}
                 }
                 return;
               }
-              // Calculate the drag rect relative to the iframe
-              const panelRect = previewPanelRef.current?.getBoundingClientRect();
-              if (!panelRect) { setDragSelect(null); return; }
-              // Find the iframe element
-              const iframe = previewPanelRef.current?.querySelector('iframe');
-              if (!iframe) { setDragSelect(null); return; }
-              const iframeRect = iframe.getBoundingClientRect();
-              const iframePanelLeft = iframeRect.left - panelRect.left;
-              const iframePanelTop = iframeRect.top - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
-              const scale = zoomScale;
-              // Convert drag rect from panel coords to iframe content coords
-              const left = Math.min(dragSelect.startX, dragSelect.x);
-              const top = Math.min(dragSelect.startY, dragSelect.y);
-              const right = Math.max(dragSelect.startX, dragSelect.x);
-              const bottom = Math.max(dragSelect.startY, dragSelect.y);
-              const iframeRect2 = {
-                left: (left - iframePanelLeft) / scale,
-                top: (top - iframePanelTop) / scale,
-                right: (right - iframePanelLeft) / scale,
-                bottom: (bottom - iframePanelTop) / scale,
-              };
-              // Send to iframe for element detection
-              try {
-                iframe.contentWindow?.postMessage({ type: 'regionSelectQuery', rect: iframeRect2 }, '*');
-              } catch (err) {}
-              const iframeEl = previewPanelRef.current?.querySelector('iframe');
-              if (iframeEl) (iframeEl as HTMLIFrameElement).style.pointerEvents = '';
-              setDragSelect(null);
-            }}
-            onMouseLeave={() => {
-              if (dragSelect) {
-                const iframeEl = previewPanelRef.current?.querySelector('iframe');
-                if (iframeEl) (iframeEl as HTMLIFrameElement).style.pointerEvents = '';
+
+              if (state.type === 'PRESSED') {
+                const dx = Math.abs(x - state.originX);
+                const dy = Math.abs(y - state.originY);
+                if (dx > 4 || dy > 4) {
+                  // Transition to MARQUEE
+                  const iframe = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+                  if (iframe) iframe.style.pointerEvents = 'none';
+                  // Clear hover
+                  if (iframe?.contentWindow) { try { iframe.contentWindow.postMessage({ type: 'hoverClear' }, '*'); } catch {} }
+                  document.body.style.userSelect = 'none';
+                  interactionRef.current = { type: 'MARQUEE', startX: state.originX, startY: state.originY, x, y, pointerId: state.pointerId };
+                  setMarqueeRect({ startX: state.originX, startY: state.originY, x, y });
+                }
+                return;
               }
-              if (dragSelect && !dragSelect.active) setDragSelect(null);
+
+              if (state.type === 'MARQUEE') {
+                interactionRef.current = { ...state, x, y };
+                // Throttle updates with rAF
+                if (!marqueeRafRef.current) {
+                  marqueeRafRef.current = requestAnimationFrame(() => {
+                    marqueeRafRef.current = null;
+                    const s = interactionRef.current;
+                    if (s.type !== 'MARQUEE') return;
+                    setMarqueeRect({ startX: s.startX, startY: s.startY, x: s.x, y: s.y });
+                    // Send preview to iframe
+                    const iframe2 = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+                    if (iframe2?.contentWindow) {
+                      const iframeRect = iframe2.getBoundingClientRect();
+                      const panelRect2 = previewPanelRef.current!.getBoundingClientRect();
+                      const iframePanelLeft = iframeRect.left - panelRect2.left;
+                      const iframePanelTop = iframeRect.top - panelRect2.top + (previewPanelRef.current?.scrollTop || 0);
+                      const scale = zoomScale;
+                      const left = Math.min(s.startX, s.x);
+                      const top2 = Math.min(s.startY, s.y);
+                      const right = Math.max(s.startX, s.x);
+                      const bottom = Math.max(s.startY, s.y);
+                      try {
+                        iframe2.contentWindow.postMessage({
+                          type: 'regionSelectPreview',
+                          rect: {
+                            left: (left - iframePanelLeft) / scale,
+                            top: (top2 - iframePanelTop) / scale,
+                            right: (right - iframePanelLeft) / scale,
+                            bottom: (bottom - iframePanelTop) / scale,
+                          }
+                        }, '*');
+                      } catch {}
+                    }
+                  });
+                }
+              }
+            }}
+            onPointerUp={(e) => {
+              const state = interactionRef.current;
+              const iframe = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+
+              if (state.type === 'PRESSED') {
+                // This was a click (didn't exceed drag threshold)
+                // Click on grey area outside iframe → deselect all
+                if ((e.target as HTMLElement).tagName !== 'IFRAME') {
+                  if (iframe?.contentWindow) {
+                    try { iframe.contentWindow.postMessage({ type: 'clearSelection' }, '*'); } catch {}
+                  }
+                  setSelectedElementContext(null);
+                }
+              }
+
+              if (state.type === 'MARQUEE') {
+                // Finalize selection
+                const panelRect = previewPanelRef.current?.getBoundingClientRect();
+                if (panelRect && iframe) {
+                  const iframeRect = iframe.getBoundingClientRect();
+                  const iframePanelLeft = iframeRect.left - panelRect.left;
+                  const iframePanelTop = iframeRect.top - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+                  const scale = zoomScale;
+                  const left = Math.min(state.startX, state.x);
+                  const top = Math.min(state.startY, state.y);
+                  const right = Math.max(state.startX, state.x);
+                  const bottom = Math.max(state.startY, state.y);
+                  try {
+                    iframe.contentWindow?.postMessage({ type: 'regionSelectQuery', rect: {
+                      left: (left - iframePanelLeft) / scale,
+                      top: (top - iframePanelTop) / scale,
+                      right: (right - iframePanelLeft) / scale,
+                      bottom: (bottom - iframePanelTop) / scale,
+                    }}, '*');
+                  } catch {}
+                }
+                if (iframe) iframe.style.pointerEvents = '';
+                document.body.style.userSelect = '';
+                setMarqueeRect(null);
+              }
+
+              // Release pointer capture
+              try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+              interactionRef.current = { type: 'IDLE' };
+            }}
+            onPointerCancel={(e) => {
+              const iframe = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+              if (iframe) iframe.style.pointerEvents = '';
+              document.body.style.userSelect = '';
+              setMarqueeRect(null);
+              interactionRef.current = { type: 'IDLE' };
             }}
           >
             {/* Drag selection overlay */}
-            {dragSelect?.active && (() => {
-              const left = Math.min(dragSelect.startX, dragSelect.x);
-              const top = Math.min(dragSelect.startY, dragSelect.y);
-              const w = Math.abs(dragSelect.x - dragSelect.startX);
-              const h = Math.abs(dragSelect.y - dragSelect.startY);
+            {marqueeRect && (() => {
+              const left = Math.min(marqueeRect.startX, marqueeRect.x);
+              const top = Math.min(marqueeRect.startY, marqueeRect.y);
+              const w = Math.abs(marqueeRect.x - marqueeRect.startX);
+              const h = Math.abs(marqueeRect.y - marqueeRect.startY);
               return (
                 <div
                   style={{
