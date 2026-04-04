@@ -2813,6 +2813,8 @@ export default function CampaignEditor() {
               const dy = Math.abs(y - dragSelect.startY);
               if (!dragSelect.active && (dx > 8 || dy > 8)) {
                 setDragSelect({ ...dragSelect, x, y, active: true });
+                const iframe = previewPanelRef.current?.querySelector('iframe');
+                if (iframe) (iframe as HTMLIFrameElement).style.pointerEvents = 'none';
               } else if (dragSelect.active) {
                 setDragSelect({ ...dragSelect, x, y });
               }
