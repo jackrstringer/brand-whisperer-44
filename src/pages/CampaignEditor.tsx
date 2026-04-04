@@ -2494,6 +2494,24 @@ export default function CampaignEditor() {
     if(e.data && e.data.type === 'clearSelection'){
       clearElSelection();
     }
+    if(e.data && e.data.type === 'hoverHighlight'){
+      document.querySelectorAll('.el-hover').forEach(function(el){ el.classList.remove('el-hover'); });
+      var hEl = document.elementFromPoint(e.data.x, e.data.y);
+      if(hEl){
+        while(hEl && hEl !== document.body && hEl !== document.documentElement){
+          if(hEl.tagName && /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL|TD|TH|IMG|DIV)$/i.test(hEl.tagName)){
+            if(!hEl.classList.contains('el-selected') && !hEl.classList.contains('ftb') && !hEl.classList.contains('section-handle-bar')){
+              hEl.classList.add('el-hover');
+            }
+            break;
+          }
+          hEl = hEl.parentElement;
+        }
+      }
+    }
+    if(e.data && e.data.type === 'hoverClear'){
+      document.querySelectorAll('.el-hover').forEach(function(el){ el.classList.remove('el-hover'); });
+    }
     if(e.data && e.data.type === 'swapImageSrc'){
       var newSrc = e.data.newSrc;
       if(imgSwapTarget && newSrc){
