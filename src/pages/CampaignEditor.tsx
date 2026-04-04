@@ -1115,15 +1115,16 @@ export default function CampaignEditor() {
     const history = campaign.html_history;
     if (!Array.isArray(history) || history.length === 0) return;
     const currentHtml = iframeOwnedHtmlRef.current || campaign.html || "";
-    iframeOwnedHtmlRef.current = null; // flush iframe ownership
+    iframeOwnedHtmlRef.current = null;
     const previousHtml = history[history.length - 1];
     const newHistory = history.slice(0, -1);
-    await supabase.from("campaigns").update({ html: previousHtml, html_history: newHistory }).eq("id", campaignId);
+    // Optimistic: update UI immediately, then persist
     setCampaign((c) => c ? { ...c, html: previousHtml as string, html_history: newHistory } : c);
     setCanUndo(newHistory.length > 0);
     setActiveVersionIndex(null);
     setRedoStack(prev => [...prev, currentHtml]);
     toast.success("Undo successful");
+    await supabase.from("campaigns").update({ html: previousHtml, html_history: newHistory }).eq("id", campaignId);
   }, [campaign, campaignId]);
 
   const handleRedo = useCallback(async () => {
@@ -1132,12 +1133,13 @@ export default function CampaignEditor() {
     const newRedoStack = redoStack.slice(0, -1);
     const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
     history.push(campaign.html || "");
-    await supabase.from("campaigns").update({ html: redoHtml, html_history: history }).eq("id", campaignId);
+    // Optimistic: update UI immediately, then persist
     setCampaign((c) => c ? { ...c, html: redoHtml, html_history: history } : c);
     setCanUndo(true);
     setRedoStack(newRedoStack);
     setActiveVersionIndex(null);
     toast.success("Redo successful");
+    await supabase.from("campaigns").update({ html: redoHtml, html_history: history }).eq("id", campaignId);
   }, [campaign, campaignId, redoStack]);
 
   // Keyboard shortcuts: Cmd/Ctrl+Z for undo, Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y for redo
