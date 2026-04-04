@@ -1718,7 +1718,7 @@ export default function CampaignEditor() {
   document.addEventListener('input', syncHtml);
 
   /* --- SELECTION PERSISTENCE --- */
-  var savedRange = null;
+  /* savedRange declared at top of IIFE */
   document.addEventListener('selectionchange', function(){
     var sel = window.getSelection();
     if(sel && sel.rangeCount > 0){
