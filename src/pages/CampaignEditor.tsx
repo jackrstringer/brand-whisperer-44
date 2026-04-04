@@ -2468,8 +2468,7 @@ export default function CampaignEditor() {
   }
 
   /* --- CLICK-TO-SELECT ELEMENT --- */
-  var selectedEl = null;
-  var elDeleteBtn = null;
+  /* selectedEl, elDeleteBtn declared at top of IIFE */
 
   function removeDeleteBtn(){
     if(elDeleteBtn){ elDeleteBtn.remove(); elDeleteBtn = null; }
