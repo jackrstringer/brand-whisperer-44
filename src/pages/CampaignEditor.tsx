@@ -2410,6 +2410,9 @@ export default function CampaignEditor() {
         window.parent.postMessage({ type: 'regionSelected', elements: elements }, '*');
       }
     }
+    if(e.data && e.data.type === 'clearSelection'){
+      clearElSelection();
+    }
     if(e.data && e.data.type === 'swapImageSrc'){
       var newSrc = e.data.newSrc;
       if(imgSwapTarget && newSrc){
