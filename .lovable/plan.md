@@ -1,35 +1,25 @@
 
 
-## Figma-Style Hover Highlighting + Instant Undo/Redo
+## Figma-Style Text Hover Underline + Click-Outside Deselection
 
-### 1. Figma-style hover highlight (dashed blue border)
+### 1. Solid blue underline on text hover (like Figma)
 
-The current hover style is a solid green outline: `outline: 1px solid rgba(200,241,53,0.3)`. The user's screenshots show Figma uses a **blue dashed border** on hover.
+The uploaded screenshot shows Figma applies a **solid blue underline** to text passages on hover — not a dashed border around a bounding box. 
 
-**Change in the injected CSS** (~line 1497 in `CampaignEditor.tsx`):
+**Change**: Update the `.el-hover` CSS in the injected iframe styles and the `hoverHighlight` handler:
 
-Replace the `.el-hover` style:
-- From: `outline:1px solid rgba(200,241,53,0.3)!important;outline-offset:1px;`
-- To: `outline:1px dashed rgba(59,130,246,0.7)!important;outline-offset:0px;` (blue dashed, tighter fit)
+- Replace the current `outline: 1px dashed rgba(59,130,246,0.7)` with `text-decoration: underline; text-decoration-color: rgba(59,130,246,0.8); text-underline-offset: 2px;` for text elements (H1-H6, P, SPAN, A, LI, LABEL, BUTTON)
+- For non-text elements (IMG, TD, DIV), keep a subtle blue outline since underline doesn't make sense
+- Split `.el-hover` into `.el-hover-text` (underline) and `.el-hover-block` (outline), applied based on element type in the `hoverHighlight` message handler
 
-And the `.el-hover.el-selected` combo style:
-- From: `outline:2px solid rgba(200,241,53,0.6)!important;outline-offset:2px;`
-- To: `outline:2px solid rgba(59,130,246,0.8)!important;outline-offset:1px;` (solid blue when both hovered+selected, like Figma)
+### 2. Click anywhere outside campaign frame deselects everything
 
-The selection highlight (`.el-selected`) stays green to differentiate click-selected from hover.
+Currently, clicking the grey area outside the iframe **does** trigger deselection — but only when the click is on the preview panel itself (not the IFRAME tag). Two gaps exist:
 
-### 2. Instant undo/redo (remove all latency sources)
+**a) Clicks on the sidebar/chat panel don't deselect.** Add a `pointerdown` listener on the parent document that fires `clearSelection` to the iframe and clears `selectedElementContext` whenever the click target is outside the preview panel.
 
-Current undo/redo is already "optimistic" (updates local state first, then persists to database). Two remaining lag sources:
-
-**a) Remove `toast.success()` calls from undo/redo** (~lines 1126, 1141). Toast notifications create visual overhead and a perceived delay. Figma doesn't show toasts on undo/redo.
-
-**b) Fire-and-forget the database update.** The current code `await`s the Supabase update. Change to fire-and-forget (no `await`) since the optimistic state is already applied. If the DB write fails silently, the next save will catch up.
-
-**c) Remove the `iframeOwnedHtmlRef.current = null` reset in handleUndo** that can cause a brief flash. Instead, after setting the campaign state, immediately post the new HTML to the iframe so the preview updates in the same frame.
-
-**d) Post the restored HTML directly to the iframe** via `postMessage({ type: 'loadHtml', html })` right after the optimistic state update, so the iframe doesn't wait for a React re-render cycle to pick up the new `srcdocHtml`.
+**b) Clicking outside while actively editing text inside the iframe doesn't exit edit mode.** Add a `blur` trigger: when the parent detects a click outside the iframe, send a new `exitEditMode` message to the iframe that blurs any `contentEditable` focus and clears selection.
 
 ### Files changed
-- `src/pages/CampaignEditor.tsx` — CSS tweaks for hover style, streamlined undo/redo handlers
+- `src/pages/CampaignEditor.tsx` — hover CSS update, hoverHighlight handler split, document-level click-outside listener
 
