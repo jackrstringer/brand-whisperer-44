@@ -2570,6 +2570,31 @@ export default function CampaignEditor() {
     }
   });
 
+  /* --- NATIVE HOVER INSIDE IFRAME --- */
+  var TEXT_TAGS = /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL)$/i;
+  var HOVER_TAGS = /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL|TD|TH|IMG|DIV)$/i;
+  var lastHoverEl = null;
+  document.addEventListener('mousemove', function(e){
+    var hEl = document.elementFromPoint(e.clientX, e.clientY);
+    // Walk up to find a hoverable element
+    while(hEl && hEl !== document.body && hEl !== document.documentElement){
+      if(hEl.tagName && HOVER_TAGS.test(hEl.tagName)){
+        if(!hEl.classList.contains('el-selected') && !hEl.classList.contains('ftb') && !hEl.classList.contains('section-handle-bar')) break;
+      }
+      hEl = hEl.parentElement;
+    }
+    if(!hEl || hEl === document.body || hEl === document.documentElement) hEl = null;
+    if(hEl === lastHoverEl) return;
+    if(lastHoverEl){ lastHoverEl.classList.remove('el-hover-text','el-hover-block'); }
+    lastHoverEl = hEl;
+    if(hEl){
+      hEl.classList.add(TEXT_TAGS.test(hEl.tagName) ? 'el-hover-text' : 'el-hover-block');
+    }
+  });
+  document.addEventListener('mouseleave', function(){
+    if(lastHoverEl){ lastHoverEl.classList.remove('el-hover-text','el-hover-block'); lastHoverEl = null; }
+  });
+
   /* --- IMAGE SWAP TOOLBAR --- */
   var imgSwapTarget = null;
   var imgAssetList = [];
