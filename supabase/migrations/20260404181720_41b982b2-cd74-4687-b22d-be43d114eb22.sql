@@ -1,0 +1,1 @@
+ALTER TABLE public.brand_assets ADD COLUMN composition_data jsonb DEFAULT NULL;

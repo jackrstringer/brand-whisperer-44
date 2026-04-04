@@ -19,6 +19,7 @@ export type Database = {
           ai_category: string | null
           brand_id: string
           category: string
+          composition_data: Json | null
           created_at: string
           description: string | null
           dominant_colors: string[] | null
@@ -30,6 +31,7 @@ export type Database = {
           ai_category?: string | null
           brand_id: string
           category: string
+          composition_data?: Json | null
           created_at?: string
           description?: string | null
           dominant_colors?: string[] | null
@@ -41,6 +43,7 @@ export type Database = {
           ai_category?: string | null
           brand_id?: string
           category?: string
+          composition_data?: Json | null
           created_at?: string
           description?: string | null
           dominant_colors?: string[] | null
