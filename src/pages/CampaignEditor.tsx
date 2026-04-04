@@ -1432,6 +1432,25 @@ export default function CampaignEditor() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedElementContext]);
 
+  // Click anywhere outside the preview panel → deselect + exit edit mode
+  useEffect(() => {
+    const handleOutsideClick = (e: PointerEvent) => {
+      const panel = previewPanelRef.current;
+      if (!panel) return;
+      if (panel.contains(e.target as Node)) return;
+      const iframe = panel.querySelector('iframe') as HTMLIFrameElement | null;
+      if (iframe?.contentWindow) {
+        try {
+          iframe.contentWindow.postMessage({ type: 'clearSelection' }, '*');
+          iframe.contentWindow.postMessage({ type: 'exitEditMode' }, '*');
+        } catch {}
+      }
+      setSelectedElementContext(null);
+    };
+    document.addEventListener('pointerdown', handleOutsideClick);
+    return () => document.removeEventListener('pointerdown', handleOutsideClick);
+  }, []);
+
   // Image swap handler — sends new src to iframe
   const handleImageSwap = useCallback((newUrl: string) => {
     const iframe = previewPanelRef.current?.querySelector('iframe');
