@@ -18,16 +18,150 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+const HTML_ENTITY_MAP: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+};
 
-function normalizeHtmlForMatch(s: string): string {
-  return s
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/\s+/g, " ")
-    .trim();
+type NormalizedRange = { start: number; end: number };
+
+function canonicalizeChar(char: string): string {
+  switch (char) {
+    case "\u2018":
+    case "\u2019":
+      return "'";
+    case "\u201C":
+    case "\u201D":
+      return '"';
+    case "\u00A0":
+      return " ";
+    default:
+      return char;
+  }
+}
+
+function decodeHtmlEntity(entity: string): string {
+  const value = entity.slice(1, -1);
+  if (!value) return entity;
+
+  if (value.startsWith("#")) {
+    const isHex = value[1]?.toLowerCase() === "x";
+    const rawCodePoint = value.slice(isHex ? 2 : 1);
+    const codePoint = Number.parseInt(rawCodePoint, isHex ? 16 : 10);
+    if (Number.isFinite(codePoint)) {
+      try {
+        return String.fromCodePoint(codePoint);
+      } catch {
+        return entity;
+      }
+    }
+    return entity;
+  }
+
+  return HTML_ENTITY_MAP[value.toLowerCase()] ?? entity;
+}
+
+function readNormalizedToken(source: string, start: number): { text: string; end: number } {
+  const entityMatch = source.slice(start).match(/^&(?:#x?[0-9a-fA-F]+|[a-zA-Z]+);/);
+  if (entityMatch) {
+    const raw = entityMatch[0];
+    return {
+      text: decodeHtmlEntity(raw),
+      end: start + raw.length,
+    };
+  }
+
+  return {
+    text: source[start],
+    end: start + 1,
+  };
+}
+
+function buildNormalizedIndex(source: string, caseInsensitive = false): { normalized: string; map: NormalizedRange[] } {
+  let normalized = "";
+  const map: NormalizedRange[] = [];
+  let i = 0;
+
+  while (i < source.length) {
+    const tokenStart = i;
+    const token = readNormalizedToken(source, i);
+    i = token.end;
+
+    const chars = [...token.text].map(canonicalizeChar);
+    if (chars.length > 0 && chars.every((char) => /\s/.test(char))) {
+      let whitespaceEnd = token.end;
+
+      while (i < source.length) {
+        const nextStart = i;
+        const nextToken = readNormalizedToken(source, i);
+        const nextChars = [...nextToken.text].map(canonicalizeChar);
+        if (nextChars.length === 0 || !nextChars.every((char) => /\s/.test(char))) {
+          i = nextStart;
+          break;
+        }
+        whitespaceEnd = nextToken.end;
+        i = nextToken.end;
+      }
+
+      if (!normalized.endsWith(" ")) {
+        normalized += " ";
+        map.push({ start: tokenStart, end: whitespaceEnd });
+      } else if (map.length > 0) {
+        map[map.length - 1].end = whitespaceEnd;
+      }
+      continue;
+    }
+
+    for (const rawChar of chars) {
+      const normalizedChar = caseInsensitive ? rawChar.toLowerCase() : rawChar;
+      normalized += normalizedChar;
+      map.push({ start: tokenStart, end: token.end });
+    }
+  }
+
+  let start = 0;
+  while (start < normalized.length && normalized[start] === " ") start += 1;
+
+  let end = normalized.length;
+  while (end > start && normalized[end - 1] === " ") end -= 1;
+
+  return {
+    normalized: normalized.slice(start, end),
+    map: map.slice(start, end),
+  };
+}
+
+function replaceByNormalizedMatch(source: string, find: string, replace: string, caseInsensitive = false): string | null {
+  const haystack = buildNormalizedIndex(source, caseInsensitive);
+  const needle = buildNormalizedIndex(find, caseInsensitive).normalized;
+  if (!needle) return null;
+
+  const matchIndex = haystack.normalized.indexOf(needle);
+  if (matchIndex === -1) return null;
+
+  const start = haystack.map[matchIndex]?.start;
+  const end = haystack.map[matchIndex + needle.length - 1]?.end;
+  if (typeof start !== "number" || typeof end !== "number" || end <= start) return null;
+
+  const next = `${source.slice(0, start)}${replace}${source.slice(end)}`;
+  return next !== source ? next : null;
+}
+
+function applyWhitespaceFlexiblePatch(source: string, find: string, replace: string, flags = ""): string | null {
+  const escapedFind = find.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const wsFlexible = escapedFind.replace(/\s+/g, "\\s*");
+
+  try {
+    const regex = new RegExp(wsFlexible, flags);
+    const next = source.replace(regex, replace);
+    return next !== source ? next : null;
+  } catch {
+    return null;
+  }
 }
 
 function applyPatches(html: string, patches: Array<{ find: string; replace: string }>): { html: string; applied: number; changed: boolean } {
@@ -35,33 +169,21 @@ function applyPatches(html: string, patches: Array<{ find: string; replace: stri
   let applied = 0;
   for (const patch of patches) {
     if (!patch.find || typeof patch.find !== "string") continue;
+    let next: string | null = null;
+
     if (result.includes(patch.find)) {
-      const before = result;
-      result = result.replace(patch.find, patch.replace);
-      if (result !== before) applied++;
-    } else {
-      const normalizedFind = normalizeHtmlForMatch(patch.find);
-      const normalizedResult = normalizeHtmlForMatch(result);
-      const idx = normalizedResult.indexOf(normalizedFind);
-      if (idx !== -1) {
-        const escapedFind = patch.find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const wsFlexible = escapedFind.replace(/\s+/g, '\\s*');
-        try {
-          const regex = new RegExp(wsFlexible, "g");
-          const before = result;
-          result = result.replace(regex, patch.replace);
-          if (result !== before) applied++;
-        } catch { /* skip bad regex */ }
-      } else {
-        const escapedFind = patch.find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const wsFlexible = escapedFind.replace(/\s+/g, '\\s*');
-        try {
-          const regex = new RegExp(wsFlexible, "i");
-          const before = result;
-          result = result.replace(regex, patch.replace);
-          if (result !== before) applied++;
-        } catch { /* skip */ }
-      }
+      const replaced = result.replace(patch.find, patch.replace);
+      next = replaced !== result ? replaced : null;
+    }
+
+    next ||= applyWhitespaceFlexiblePatch(result, patch.find, patch.replace);
+    next ||= replaceByNormalizedMatch(result, patch.find, patch.replace);
+    next ||= applyWhitespaceFlexiblePatch(result, patch.find, patch.replace, "i");
+    next ||= replaceByNormalizedMatch(result, patch.find, patch.replace, true);
+
+    if (next) {
+      result = next;
+      applied += 1;
     }
   }
   return { html: result, applied, changed: result !== html };
