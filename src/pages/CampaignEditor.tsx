@@ -1115,15 +1115,16 @@ export default function CampaignEditor() {
     const history = campaign.html_history;
     if (!Array.isArray(history) || history.length === 0) return;
     const currentHtml = iframeOwnedHtmlRef.current || campaign.html || "";
-    iframeOwnedHtmlRef.current = null; // flush iframe ownership
+    iframeOwnedHtmlRef.current = null;
     const previousHtml = history[history.length - 1];
     const newHistory = history.slice(0, -1);
-    await supabase.from("campaigns").update({ html: previousHtml, html_history: newHistory }).eq("id", campaignId);
+    // Optimistic: update UI immediately, then persist
     setCampaign((c) => c ? { ...c, html: previousHtml as string, html_history: newHistory } : c);
     setCanUndo(newHistory.length > 0);
     setActiveVersionIndex(null);
     setRedoStack(prev => [...prev, currentHtml]);
     toast.success("Undo successful");
+    await supabase.from("campaigns").update({ html: previousHtml, html_history: newHistory }).eq("id", campaignId);
   }, [campaign, campaignId]);
 
   const handleRedo = useCallback(async () => {
@@ -1132,12 +1133,13 @@ export default function CampaignEditor() {
     const newRedoStack = redoStack.slice(0, -1);
     const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
     history.push(campaign.html || "");
-    await supabase.from("campaigns").update({ html: redoHtml, html_history: history }).eq("id", campaignId);
+    // Optimistic: update UI immediately, then persist
     setCampaign((c) => c ? { ...c, html: redoHtml, html_history: history } : c);
     setCanUndo(true);
     setRedoStack(newRedoStack);
     setActiveVersionIndex(null);
     toast.success("Redo successful");
+    await supabase.from("campaigns").update({ html: redoHtml, html_history: history }).eq("id", campaignId);
   }, [campaign, campaignId, redoStack]);
 
   // Keyboard shortcuts: Cmd/Ctrl+Z for undo, Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y for redo
@@ -2372,25 +2374,26 @@ export default function CampaignEditor() {
   }
 
   function deleteAllSelected(){
-    var els = document.querySelectorAll('.el-selected');
+    var els = Array.from(document.querySelectorAll('.el-selected'));
     if(els.length === 0) return;
+    /* Filter: only delete elements that don't contain other selected elements (leaf-first) */
+    var toDelete = els.filter(function(el){
+      return !els.some(function(other){ return other !== el && el.contains(other); });
+    });
     /* Collect unique parent containers before removing */
     var parents = [];
-    els.forEach(function(el){
+    toDelete.forEach(function(el){
       var p = el.parentElement;
       if(p && p !== document.body && p !== document.documentElement && parents.indexOf(p) === -1) parents.push(p);
     });
-    els.forEach(function(el){ el.remove(); });
-    /* Walk up and remove containers left empty after deletion */
-    parents.forEach(function cleanup(p){
-      if(!p || p === document.body || p === document.documentElement) return;
-      /* Check if container is now visually empty (no meaningful content left) */
+    toDelete.forEach(function(el){ el.remove(); });
+    /* Walk up ONE level only — remove direct parent if it's now empty, but don't recurse aggressively */
+    parents.forEach(function(p){
+      if(!p || p === document.body || p === document.documentElement || !p.parentElement) return;
       var remaining = p.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img,td');
       var hasText = (p.textContent || '').trim().length > 0;
       if(remaining.length === 0 && !hasText){
-        var grandparent = p.parentElement;
         p.remove();
-        cleanup(grandparent);
       }
     });
     removeDeleteBtn();
@@ -2426,17 +2429,17 @@ export default function CampaignEditor() {
     if(e.target.closest && e.target.closest('.ftb-cpanel')) return;
     if(e.target.closest && e.target.closest('.el-delete-btn')) return;
 
+    /* Clear hover on any click */
+    document.querySelectorAll('.el-hover').forEach(function(h){ h.classList.remove('el-hover'); });
+
     var el = e.target;
-    // Walk up to find a meaningful element, but stop at generic wrappers
     var found = null;
     while(el && el !== document.body && el !== document.documentElement){
       if(el.tagName && /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL|TD|TH|IMG)$/i.test(el.tagName)){
         found = el;
         break;
       }
-      // For DIV/TABLE/TR, only select if it has direct text content or is a leaf
       if(el.tagName && /^(DIV|TABLE|TR|SECTION)$/i.test(el.tagName)){
-        // Only select if this is a reasonably specific element (not a huge wrapper)
         var childEls = el.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img');
         if(childEls.length <= 2){ found = el; break; }
       }
@@ -2480,14 +2483,23 @@ export default function CampaignEditor() {
   /* Parent handles the drag overlay — iframe just responds to regionSelect messages */
   function handleRegionSelect(rect, isPreview){
     document.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
-    var elements = [];
+    document.querySelectorAll('.el-hover').forEach(function(el){ el.classList.remove('el-hover'); });
+    var candidates = [];
     document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img,td,div').forEach(function(el){
       var r = el.getBoundingClientRect();
       if(r.width < 1 || r.height < 1) return;
       if(r.right > rect.left && r.left < rect.right && r.bottom > rect.top && r.top < rect.bottom){
-        elements.push({ tagName: el.tagName, text: (el.textContent || '').trim().slice(0, 100) });
-        el.classList.add('el-selected');
+        candidates.push(el);
       }
+    });
+    /* Deduplicate: if a parent and its child are both candidates, keep only the child (leaf-first) */
+    var filtered = candidates.filter(function(el){
+      return !candidates.some(function(other){ return other !== el && el.contains(other); });
+    });
+    var elements = [];
+    filtered.forEach(function(el){
+      elements.push({ tagName: el.tagName, text: (el.textContent || '').trim().slice(0, 100) });
+      el.classList.add('el-selected');
     });
     if(!isPreview && elements.length > 0){
       window.parent.postMessage({ type: 'regionSelected', elements: elements }, '*');
