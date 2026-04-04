@@ -60,6 +60,11 @@ export default function BrandSettings() {
       }
       setAssets((brandAssets || []) as BrandAsset[]);
       setLoading(false);
+
+      // Fire-and-forget: reprocess any assets missing composition_data
+      supabase.functions.invoke("reprocess-asset-compositions", {
+        body: { brandId },
+      }).catch(() => {});
     };
     load();
   }, [brandId]);
