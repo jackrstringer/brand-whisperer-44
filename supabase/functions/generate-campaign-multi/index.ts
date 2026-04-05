@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { generateCampaignCore } from "../_shared/generateCampaignCore.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -10,7 +11,7 @@ const corsHeaders = {
 const VARIANT_SEEDS = [
   {
     label: "Original",
-    seed: "", // No modification — identical to standard generation
+    seed: "",
   },
   {
     label: "Creative",
@@ -46,17 +47,13 @@ Deno.serve(async (req) => {
       variant_htmls: [],
     }).eq("id", campaignId);
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
     // Use EdgeRuntime.waitUntil to process in the background
     (globalThis as any).EdgeRuntime.waitUntil(
       (async () => {
         try {
           const generationPromises = VARIANT_SEEDS.map(async (direction, index) => {
-            const variantBody = {
+            const variantParams = {
               ...body,
-              // Only append seed if non-empty (Original has no seed)
               designNotes: direction.seed
                 ? [body.designNotes || "", direction.seed].filter(Boolean).join("\n\n")
                 : body.designNotes || "",
@@ -66,23 +63,8 @@ Deno.serve(async (req) => {
 
             try {
               console.log(`[multi] Starting variant ${index}: ${direction.label}`);
-              const resp = await fetch(`${supabaseUrl}/functions/v1/generate-campaign`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "Authorization": `Bearer ${serviceKey}`,
-                  "apikey": serviceKey,
-                },
-                body: JSON.stringify(variantBody),
-              });
-
-              if (!resp.ok) {
-                const errText = await resp.text();
-                console.error(`[multi] Variant ${index} failed: ${resp.status} ${errText}`);
-                return { index, label: direction.label, html: null, error: errText };
-              }
-
-              const result = await resp.json();
+              // Direct call — no HTTP hop, no gateway timeout
+              const result = await generateCampaignCore(variantParams, supabase);
               console.log(`[multi] Variant ${index} (${direction.label}) complete, html length: ${result.html?.length || 0}`);
               return { index, label: direction.label, html: result.html, error: null };
             } catch (err: any) {
@@ -115,7 +97,6 @@ Deno.serve(async (req) => {
             return;
           }
 
-          // If at least variant 0 (Original) succeeded, also set the main html
           const originalHtml = variantHtmls[0]?.html || variantHtmls.find(v => v.html)?.html || null;
 
           await supabase.from("campaigns").update({
@@ -126,7 +107,6 @@ Deno.serve(async (req) => {
         } catch (err: any) {
           console.error("[multi] Background processing error:", err);
 
-          // STATUS GUARD: don't overwrite if already moved past generating
           const { data: latest } = await supabase
             .from("campaigns")
             .select("status")
