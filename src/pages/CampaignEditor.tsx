@@ -2969,7 +2969,7 @@ export default function CampaignEditor() {
         {/* Left Panel — Preview or Inspiration — fixed 65% */}
         <div className="h-full overflow-hidden flex" style={{ width: imageSwap ? 'calc(65% - 320px)' : '65%', minWidth: 0 }}>
           {/* Reference side-by-side (when toggled on post-generation) */}
-          {showReferenceDialog && campaign?.html && selectedReferences[0] && (
+          {showReferenceDialog && campaign?.html && selectedReferences.length > 0 && (
             <>
               <div
                 ref={refScrollRef}
