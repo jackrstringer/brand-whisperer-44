@@ -3017,7 +3017,7 @@ export default function CampaignEditor() {
             ref={previewPanelRef}
             className="h-full min-w-0 bg-card overflow-y-auto scrollbar-hide relative"
             style={{
-              width: showReferenceDialog && campaign?.html && selectedReferences[0] ? '50%' : '100%',
+              width: showReferenceDialog && campaign?.html && selectedReferences.length > 0 ? '50%' : '100%',
               scrollbarWidth: 'none',
               msOverflowStyle: 'none' as any,
               cursor: marqueeRect ? 'crosshair' : undefined,
