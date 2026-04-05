@@ -3256,10 +3256,10 @@ export default function CampaignEditor() {
             {isDraft && !isGenerating ? (
               <div className="p-6 space-y-5 overflow-y-auto flex-1">
                 {/* Reference indicator */}
-                {selectedReferences[0] && (
+                {selectedReferences.length > 0 && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-xs">
-                    <span className="text-primary font-medium">Reference:</span>
-                    <span className="truncate">{selectedReferences[0].title}</span>
+                    <span className="text-primary font-medium">{selectedReferences.length > 1 ? "References:" : "Reference:"}</span>
+                    <span className="truncate">{selectedReferences.map((r) => r.title).join(", ")}</span>
                     <Badge className="text-[9px] ml-auto bg-primary/20 text-primary">{selectedReferences[0].mode === "dupe" ? "Dupe" : "Reference"}</Badge>
                   </div>
                 )}
