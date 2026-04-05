@@ -455,8 +455,8 @@ export default function CampaignEditor() {
 
     // Persist all draft preferences to campaign record
     await supabase.from("campaigns").update({
-      brief,
-      goal,
+      brief: effectiveBrief,
+      goal: effectiveGoal,
       extra_copy: extraCopy || null,
       speed_mode: speedMode,
       product_ids: selectedProductIds.length > 0 ? selectedProductIds : null,
