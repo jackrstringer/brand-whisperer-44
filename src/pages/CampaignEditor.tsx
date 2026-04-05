@@ -155,7 +155,8 @@ export default function CampaignEditor() {
       const stored = localStorage.getItem(`ref-panel-${campaignId}`);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed.selectedReference) setSelectedReference(parsed.selectedReference);
+        if (parsed.selectedReferences) setSelectedReferences(parsed.selectedReferences);
+        else if (parsed.selectedReference) setSelectedReferences([parsed.selectedReference]);
       }
     } catch {}
   }, [campaignId]);
