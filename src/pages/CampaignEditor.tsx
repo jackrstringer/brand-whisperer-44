@@ -478,7 +478,7 @@ export default function CampaignEditor() {
           "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
         },
         body: JSON.stringify({
-          brandId, campaignId, brief, goal, copy: extraCopy || undefined, speedMode,
+          brandId, campaignId, brief: effectiveBrief, goal: effectiveGoal, copy: extraCopy || undefined, speedMode,
           productIds: selectedProductIds.length > 0 ? selectedProductIds : undefined,
           pinnedAssetUrls: allPinned.length > 0 ? allPinned : undefined,
           matchProductColors: matchProductColors || undefined,
