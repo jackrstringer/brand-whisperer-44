@@ -3397,7 +3397,7 @@ export default function CampaignEditor() {
                 <div className="space-y-3">
                   <Button
                     onClick={generateCampaign}
-                    disabled={!brief.trim() || generating}
+                    disabled={generating}
                     className="w-full bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all"
                   >
                     {generating ? "Generating 3 Variants..." : "Generate Campaign"}
