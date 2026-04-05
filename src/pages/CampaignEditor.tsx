@@ -2990,15 +2990,22 @@ export default function CampaignEditor() {
                 <div className="flex justify-end p-1 pr-0.5 pt-4">
                   <div style={{ width: renderedWidth }}>
                     
-                    {selectedReferences[0].image_urls?.length ? (
-                      selectedReferences[0].image_urls.map((url, i) => (
-                        <img key={i} src={url} alt="" className="w-full h-auto block" loading="lazy" />
-                      ))
-                    ) : selectedReferences[0].thumbnail_url ? (
-                      <img src={selectedReferences[0].thumbnail_url} alt="" className="w-full h-auto block" />
-                    ) : (
-                      <p className="text-sm text-muted-foreground text-center py-12">No reference preview</p>
-                    )}
+                    {selectedReferences.map((ref, ri) => (
+                      <div key={ref.id}>
+                        {selectedReferences.length > 1 && (
+                          <div className="text-[10px] text-muted-foreground font-medium py-1 px-2 bg-muted/50">Variant {ri + 1}: {ref.title}</div>
+                        )}
+                        {ref.image_urls?.length ? (
+                          ref.image_urls.map((url, i) => (
+                            <img key={i} src={url} alt="" className="w-full h-auto block" loading="lazy" />
+                          ))
+                        ) : ref.thumbnail_url ? (
+                          <img src={ref.thumbnail_url} alt="" className="w-full h-auto block" />
+                        ) : (
+                          <p className="text-sm text-muted-foreground text-center py-12">No reference preview</p>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
