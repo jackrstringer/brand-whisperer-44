@@ -3236,8 +3236,8 @@ export default function CampaignEditor() {
               <ReferencePanel
                 brandId={brandId}
                 campaignId={campaignId}
-                selectedReferences[0]={selectedReferences[0]}
-                onSelectReference={setSelectedReference}
+                selectedReferences={selectedReferences}
+                onSelectReferences={setSelectedReferences}
               />
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
