@@ -156,7 +156,7 @@ export default function CampaignEditor() {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (parsed.selectedReferences) setSelectedReferences(parsed.selectedReferences);
-        else if (parsed.selectedReferences[0]) setSelectedReferences([parsed.selectedReferences[0]]);
+        else if (parsed.selectedReference) setSelectedReferences([parsed.selectedReference]);
       }
     } catch {}
   }, [campaignId]);
