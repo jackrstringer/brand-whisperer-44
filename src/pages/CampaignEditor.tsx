@@ -416,7 +416,25 @@ export default function CampaignEditor() {
   }, [campaignId]);
 
   const generateCampaign = async () => {
-    if (!brandId || !campaignId || !brief.trim()) return;
+    if (!brandId || !campaignId) return;
+
+    // If no brief provided, pick a random campaign idea
+    const RANDOM_BRIEFS = [
+      { brief: "Create a brand highlight email showcasing what makes this brand unique", goal: "highlight" },
+      { brief: "Design a promotional email featuring our best products", goal: "promotional" },
+      { brief: "Build a welcome email for new subscribers", goal: "welcome" },
+      { brief: "Create an engaging newsletter with brand updates", goal: "newsletter" },
+      { brief: "Design a seasonal campaign with current product highlights", goal: "seasonal" },
+      { brief: "Create a social proof email featuring customer favorites", goal: "social_proof" },
+      { brief: "Design a product launch announcement email", goal: "product_launch" },
+      { brief: "Build a re-engagement email to win back inactive subscribers", goal: "re-engagement" },
+    ];
+    const effectiveBrief = brief.trim() || (() => {
+      const pick = RANDOM_BRIEFS[Math.floor(Math.random() * RANDOM_BRIEFS.length)];
+      if (!goal) setGoal(pick.goal);
+      return pick.brief;
+    })();
+    const effectiveGoal = goal || "highlight";
     setGenerating(true);
     setGenStartTime(Date.now());
     setGenElapsed(0);
