@@ -3206,8 +3206,8 @@ export default function CampaignEditor() {
                 <Skeleton className="h-10 w-1/3" />
               </div>
             ) : campaign?.html ? (
-              <div className={`flex flex-col ${showReferenceDialog && selectedReferences[0] ? 'p-1 pl-0.5 pt-4' : 'p-8'}`}>
-                <div className={`flex ${showReferenceDialog && selectedReferences[0] ? 'justify-start' : 'justify-center'}`}>
+              <div className={`flex flex-col ${showReferenceDialog && selectedReferences.length > 0 ? 'p-1 pl-0.5 pt-4' : 'p-8'}`}>
+                <div className={`flex ${showReferenceDialog && selectedReferences.length > 0 ? 'justify-start' : 'justify-center'}`}>
                   <div
                     style={{
                       width: renderedWidth,
