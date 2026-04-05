@@ -35,10 +35,16 @@ Deno.serve(async (req) => {
     );
 
     const body = await req.json();
-    const { brandId, campaignId } = body;
+    const { brandId, campaignId, references } = body;
     if (!brandId || !campaignId) throw new Error("brandId and campaignId required");
 
-    console.log(`[multi] Starting 3-variant generation for campaign ${campaignId}`);
+    // Determine variant strategy:
+    // - If multiple references provided (2-3), each variant uses a different reference
+    // - If 0-1 references, use creative direction seeds for variety
+    const multiRefMode = Array.isArray(references) && references.length > 1;
+    const variantCount = multiRefMode ? references.length : 3;
+
+    console.log(`[multi] Starting ${variantCount}-variant generation for campaign ${campaignId} (${multiRefMode ? `${references.length} references` : "creative seeds"})`);
 
     // Mark as generating
     await supabase.from("campaigns").update({
@@ -51,26 +57,51 @@ Deno.serve(async (req) => {
     (globalThis as any).EdgeRuntime.waitUntil(
       (async () => {
         try {
-          const generationPromises = VARIANT_SEEDS.map(async (direction, index) => {
-            const variantParams = {
-              ...body,
-              designNotes: direction.seed
-                ? [body.designNotes || "", direction.seed].filter(Boolean).join("\n\n")
-                : body.designNotes || "",
-              _isSubGeneration: true,
-              _variantIndex: index,
-            };
+          const generationPromises = Array.from({ length: variantCount }, (_, index) => {
+            let variantParams: any;
+            let label: string;
 
-            try {
-              console.log(`[multi] Starting variant ${index}: ${direction.label}`);
-              // Direct call — no HTTP hop, no gateway timeout
-              const result = await generateCampaignCore(variantParams, supabase);
-              console.log(`[multi] Variant ${index} (${direction.label}) complete, html length: ${result.html?.length || 0}`);
-              return { index, label: direction.label, html: result.html, error: null };
-            } catch (err: any) {
-              console.error(`[multi] Variant ${index} error:`, err);
-              return { index, label: direction.label, html: null, error: err.message };
+            if (multiRefMode) {
+              // Multi-reference mode: each variant gets its own reference
+              const ref = references[index];
+              label = ref.title || `Reference ${index + 1}`;
+              variantParams = {
+                ...body,
+                // Override the single reference for this variant
+                reference: ref,
+                references: undefined, // Don't pass array to core
+                _isSubGeneration: true,
+                _variantIndex: index,
+              };
+            } else {
+              // Creative direction mode: same reference (if any), different seeds
+              const direction = VARIANT_SEEDS[index];
+              label = direction.label;
+              // If single reference was passed in references array, use it
+              const singleRef = Array.isArray(references) && references.length === 1 ? references[0] : body.reference;
+              variantParams = {
+                ...body,
+                reference: singleRef || undefined,
+                references: undefined,
+                designNotes: direction.seed
+                  ? [body.designNotes || "", direction.seed].filter(Boolean).join("\n\n")
+                  : body.designNotes || "",
+                _isSubGeneration: true,
+                _variantIndex: index,
+              };
             }
+
+            return (async () => {
+              try {
+                console.log(`[multi] Starting variant ${index}: ${label}`);
+                const result = await generateCampaignCore(variantParams, supabase);
+                console.log(`[multi] Variant ${index} (${label}) complete, html length: ${result.html?.length || 0}`);
+                return { index, label, html: result.html, error: null };
+              } catch (err: any) {
+                console.error(`[multi] Variant ${index} error:`, err);
+                return { index, label, html: null, error: err.message };
+              }
+            })();
           });
 
           const results = await Promise.all(generationPromises);
@@ -83,7 +114,7 @@ Deno.serve(async (req) => {
           }));
 
           const successCount = variantHtmls.filter((v) => v.html).length;
-          console.log(`[multi] ${successCount}/3 variants generated successfully`);
+          console.log(`[multi] ${successCount}/${variantCount} variants generated successfully`);
 
           // STATUS GUARD: only update if campaign is still in "generating" state
           const { data: latest } = await supabase
