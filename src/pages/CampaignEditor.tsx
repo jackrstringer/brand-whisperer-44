@@ -416,7 +416,25 @@ export default function CampaignEditor() {
   }, [campaignId]);
 
   const generateCampaign = async () => {
-    if (!brandId || !campaignId || !brief.trim()) return;
+    if (!brandId || !campaignId) return;
+
+    // If no brief provided, pick a random campaign idea
+    const RANDOM_BRIEFS = [
+      { brief: "Create a brand highlight email showcasing what makes this brand unique", goal: "highlight" },
+      { brief: "Design a promotional email featuring our best products", goal: "promotional" },
+      { brief: "Build a welcome email for new subscribers", goal: "welcome" },
+      { brief: "Create an engaging newsletter with brand updates", goal: "newsletter" },
+      { brief: "Design a seasonal campaign with current product highlights", goal: "seasonal" },
+      { brief: "Create a social proof email featuring customer favorites", goal: "social_proof" },
+      { brief: "Design a product launch announcement email", goal: "product_launch" },
+      { brief: "Build a re-engagement email to win back inactive subscribers", goal: "re-engagement" },
+    ];
+    const effectiveBrief = brief.trim() || (() => {
+      const pick = RANDOM_BRIEFS[Math.floor(Math.random() * RANDOM_BRIEFS.length)];
+      if (!goal) setGoal(pick.goal);
+      return pick.brief;
+    })();
+    const effectiveGoal = goal || "highlight";
     setGenerating(true);
     setGenStartTime(Date.now());
     setGenElapsed(0);
@@ -437,8 +455,8 @@ export default function CampaignEditor() {
 
     // Persist all draft preferences to campaign record
     await supabase.from("campaigns").update({
-      brief,
-      goal,
+      brief: effectiveBrief,
+      goal: effectiveGoal,
       extra_copy: extraCopy || null,
       speed_mode: speedMode,
       product_ids: selectedProductIds.length > 0 ? selectedProductIds : null,
@@ -460,7 +478,7 @@ export default function CampaignEditor() {
           "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
         },
         body: JSON.stringify({
-          brandId, campaignId, brief, goal, copy: extraCopy || undefined, speedMode,
+          brandId, campaignId, brief: effectiveBrief, goal: effectiveGoal, copy: extraCopy || undefined, speedMode,
           productIds: selectedProductIds.length > 0 ? selectedProductIds : undefined,
           pinnedAssetUrls: allPinned.length > 0 ? allPinned : undefined,
           matchProductColors: matchProductColors || undefined,
@@ -3379,7 +3397,7 @@ export default function CampaignEditor() {
                 <div className="space-y-3">
                   <Button
                     onClick={generateCampaign}
-                    disabled={!brief.trim() || generating}
+                    disabled={generating}
                     className="w-full bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all"
                   >
                     {generating ? "Generating 3 Variants..." : "Generate Campaign"}
