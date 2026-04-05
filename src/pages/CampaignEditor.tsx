@@ -485,13 +485,13 @@ export default function CampaignEditor() {
           matchProductColors: matchProductColors || undefined,
           designNotes: designNotes.trim() || undefined,
           shopifyProducts: selectedShopifyProducts.length > 0 ? selectedShopifyProducts : undefined,
-          reference: selectedReferences[0] ? {
-            type: selectedReferences[0].type,
-            id: selectedReferences[0].id,
-            image_urls: selectedReferences[0].image_urls,
-            strength: selectedReferences[0].strength,
-            mode: selectedReferences[0].mode,
-          } : undefined,
+          references: selectedReferences.length > 0 ? selectedReferences.map((r) => ({
+            type: r.type,
+            id: r.id,
+            image_urls: r.image_urls,
+            strength: r.strength,
+            mode: r.mode,
+          })) : undefined,
         }),
       });
       if (!resp.ok && resp.status !== 202) throw new Error(`Generation failed: ${resp.status}`);
