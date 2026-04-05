@@ -3415,10 +3415,10 @@ export default function CampaignEditor() {
             ) : (
               <div className="flex flex-col flex-1 overflow-hidden">
                 {/* Reference indicator in chat mode */}
-                {selectedReferences[0] && (
+                {selectedReferences.length > 0 && (
                   <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-primary/5 text-xs">
-                    <span className="text-muted-foreground">Generating with reference:</span>
-                    <span className="font-medium truncate">{selectedReferences[0].title}</span>
+                    <span className="text-muted-foreground">Generating with {selectedReferences.length > 1 ? `${selectedReferences.length} references` : "reference"}:</span>
+                    <span className="font-medium truncate">{selectedReferences.map((r) => r.title).join(", ")}</span>
                     <span className="text-muted-foreground">({selectedReferences[0].mode === "dupe" ? "Dupe" : "Reference"})</span>
                   </div>
                 )}
