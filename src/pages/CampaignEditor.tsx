@@ -2829,7 +2829,7 @@ export default function CampaignEditor() {
             </button>
           )}
           {/* View Reference button — only post-generation when a reference was used */}
-          {campaign?.html && selectedReferences[0] && (
+          {campaign?.html && selectedReferences.length > 0 && (
             <button
               onClick={() => setShowReferenceDialog((prev) => !prev)}
               className="text-muted-foreground hover:text-foreground transition-colors"
