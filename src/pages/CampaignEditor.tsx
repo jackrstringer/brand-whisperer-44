@@ -60,7 +60,7 @@ export default function CampaignEditor() {
   const { user } = useAuth();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null); // temporary hover preview
-  const [selectedReference, setSelectedReference] = useState<SelectedReference | null>(null);
+  const [selectedReferences, setSelectedReferences] = useState<SelectedReference[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">("desktop"); // kept for key
@@ -155,7 +155,8 @@ export default function CampaignEditor() {
       const stored = localStorage.getItem(`ref-panel-${campaignId}`);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed.selectedReference) setSelectedReference(parsed.selectedReference);
+        if (parsed.selectedReferences) setSelectedReferences(parsed.selectedReferences);
+        else if (parsed.selectedReference) setSelectedReferences([parsed.selectedReference]);
       }
     } catch {}
   }, [campaignId]);
@@ -484,13 +485,13 @@ export default function CampaignEditor() {
           matchProductColors: matchProductColors || undefined,
           designNotes: designNotes.trim() || undefined,
           shopifyProducts: selectedShopifyProducts.length > 0 ? selectedShopifyProducts : undefined,
-          reference: selectedReference ? {
-            type: selectedReference.type,
-            id: selectedReference.id,
-            image_urls: selectedReference.image_urls,
-            strength: selectedReference.strength,
-            mode: selectedReference.mode,
-          } : undefined,
+          references: selectedReferences.length > 0 ? selectedReferences.map((r) => ({
+            type: r.type,
+            id: r.id,
+            image_urls: r.image_urls,
+            strength: r.strength,
+            mode: r.mode,
+          })) : undefined,
         }),
       });
       if (!resp.ok && resp.status !== 202) throw new Error(`Generation failed: ${resp.status}`);
@@ -713,13 +714,13 @@ export default function CampaignEditor() {
             message: userMsg,
             currentHtml: iframeOwnedHtmlRef.current || campaign.html,
             ...(attachedImageUrls.length > 0 ? { attachedImageUrls } : {}),
-            ...(selectedReference ? {
+            ...(selectedReferences[0] ? {
               reference: {
-                type: selectedReference.type,
-                id: selectedReference.id,
-                image_urls: selectedReference.image_urls,
-                strength: selectedReference.strength,
-                mode: selectedReference.mode,
+                type: selectedReferences[0].type,
+                id: selectedReferences[0].id,
+                image_urls: selectedReferences[0].image_urls,
+                strength: selectedReferences[0].strength,
+                mode: selectedReferences[0].mode,
               },
             } : {}),
           }),
@@ -2828,7 +2829,7 @@ export default function CampaignEditor() {
             </button>
           )}
           {/* View Reference button — only post-generation when a reference was used */}
-          {campaign?.html && selectedReference && (
+          {campaign?.html && selectedReferences.length > 0 && (
             <button
               onClick={() => setShowReferenceDialog((prev) => !prev)}
               className="text-muted-foreground hover:text-foreground transition-colors"
@@ -2968,7 +2969,7 @@ export default function CampaignEditor() {
         {/* Left Panel — Preview or Inspiration — fixed 65% */}
         <div className="h-full overflow-hidden flex" style={{ width: imageSwap ? 'calc(65% - 320px)' : '65%', minWidth: 0 }}>
           {/* Reference side-by-side (when toggled on post-generation) */}
-          {showReferenceDialog && campaign?.html && selectedReference && (
+          {showReferenceDialog && campaign?.html && selectedReferences.length > 0 && (
             <>
               <div
                 ref={refScrollRef}
@@ -2989,15 +2990,22 @@ export default function CampaignEditor() {
                 <div className="flex justify-end p-1 pr-0.5 pt-4">
                   <div style={{ width: renderedWidth }}>
                     
-                    {selectedReference.image_urls?.length ? (
-                      selectedReference.image_urls.map((url, i) => (
-                        <img key={i} src={url} alt="" className="w-full h-auto block" loading="lazy" />
-                      ))
-                    ) : selectedReference.thumbnail_url ? (
-                      <img src={selectedReference.thumbnail_url} alt="" className="w-full h-auto block" />
-                    ) : (
-                      <p className="text-sm text-muted-foreground text-center py-12">No reference preview</p>
-                    )}
+                    {selectedReferences.map((ref, ri) => (
+                      <div key={ref.id}>
+                        {selectedReferences.length > 1 && (
+                          <div className="text-[10px] text-muted-foreground font-medium py-1 px-2 bg-muted/50">Variant {ri + 1}: {ref.title}</div>
+                        )}
+                        {ref.image_urls?.length ? (
+                          ref.image_urls.map((url, i) => (
+                            <img key={i} src={url} alt="" className="w-full h-auto block" loading="lazy" />
+                          ))
+                        ) : ref.thumbnail_url ? (
+                          <img src={ref.thumbnail_url} alt="" className="w-full h-auto block" />
+                        ) : (
+                          <p className="text-sm text-muted-foreground text-center py-12">No reference preview</p>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -3009,7 +3017,7 @@ export default function CampaignEditor() {
             ref={previewPanelRef}
             className="h-full min-w-0 bg-card overflow-y-auto scrollbar-hide relative"
             style={{
-              width: showReferenceDialog && campaign?.html && selectedReference ? '50%' : '100%',
+              width: showReferenceDialog && campaign?.html && selectedReferences.length > 0 ? '50%' : '100%',
               scrollbarWidth: 'none',
               msOverflowStyle: 'none' as any,
               cursor: marqueeRect ? 'crosshair' : undefined,
@@ -3198,8 +3206,8 @@ export default function CampaignEditor() {
                 <Skeleton className="h-10 w-1/3" />
               </div>
             ) : campaign?.html ? (
-              <div className={`flex flex-col ${showReferenceDialog && selectedReference ? 'p-1 pl-0.5 pt-4' : 'p-8'}`}>
-                <div className={`flex ${showReferenceDialog && selectedReference ? 'justify-start' : 'justify-center'}`}>
+              <div className={`flex flex-col ${showReferenceDialog && selectedReferences.length > 0 ? 'p-1 pl-0.5 pt-4' : 'p-8'}`}>
+                <div className={`flex ${showReferenceDialog && selectedReferences.length > 0 ? 'justify-start' : 'justify-center'}`}>
                   <div
                     style={{
                       width: renderedWidth,
@@ -3235,8 +3243,8 @@ export default function CampaignEditor() {
               <ReferencePanel
                 brandId={brandId}
                 campaignId={campaignId}
-                selectedReference={selectedReference}
-                onSelectReference={setSelectedReference}
+                selectedReferences={selectedReferences}
+                onSelectReferences={setSelectedReferences}
               />
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
@@ -3255,11 +3263,11 @@ export default function CampaignEditor() {
             {isDraft && !isGenerating ? (
               <div className="p-6 space-y-5 overflow-y-auto flex-1">
                 {/* Reference indicator */}
-                {selectedReference && (
+                {selectedReferences.length > 0 && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-xs">
-                    <span className="text-primary font-medium">Reference:</span>
-                    <span className="truncate">{selectedReference.title}</span>
-                    <Badge className="text-[9px] ml-auto bg-primary/20 text-primary">{selectedReference.mode === "dupe" ? "Dupe" : "Reference"}</Badge>
+                    <span className="text-primary font-medium">{selectedReferences.length > 1 ? "References:" : "Reference:"}</span>
+                    <span className="truncate">{selectedReferences.map((r) => r.title).join(", ")}</span>
+                    <Badge className="text-[9px] ml-auto bg-primary/20 text-primary">{selectedReferences[0].mode === "dupe" ? "Dupe" : "Reference"}</Badge>
                   </div>
                 )}
                 <div>
@@ -3407,11 +3415,11 @@ export default function CampaignEditor() {
             ) : (
               <div className="flex flex-col flex-1 overflow-hidden">
                 {/* Reference indicator in chat mode */}
-                {selectedReference && (
+                {selectedReferences.length > 0 && (
                   <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-primary/5 text-xs">
-                    <span className="text-muted-foreground">Generating with reference:</span>
-                    <span className="font-medium truncate">{selectedReference.title}</span>
-                    <span className="text-muted-foreground">({selectedReference.mode === "dupe" ? "Dupe" : "Reference"})</span>
+                    <span className="text-muted-foreground">Generating with {selectedReferences.length > 1 ? `${selectedReferences.length} references` : "reference"}:</span>
+                    <span className="font-medium truncate">{selectedReferences.map((r) => r.title).join(", ")}</span>
+                    <span className="text-muted-foreground">({selectedReferences[0].mode === "dupe" ? "Dupe" : "Reference"})</span>
                   </div>
                 )}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">

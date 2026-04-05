@@ -112,11 +112,13 @@ export interface SelectedReference {
   mode: ReferenceMode;
 }
 
+const MAX_REFERENCES = 3;
+
 interface ReferencePanelProps {
   brandId: string;
   campaignId: string;
-  selectedReference: SelectedReference | null;
-  onSelectReference: (ref: SelectedReference | null) => void;
+  selectedReferences: SelectedReference[];
+  onSelectReferences: (refs: SelectedReference[]) => void;
 }
 
 const MODE_CONFIG: Record<ReferenceMode, { label: string; strength: number; description: string }> = {
@@ -129,8 +131,8 @@ type TabValue = "library" | "mine" | "saved";
 export default function ReferencePanel({
   brandId,
   campaignId,
-  selectedReference,
-  onSelectReference,
+  selectedReferences,
+  onSelectReferences,
 }: ReferencePanelProps) {
   const { user } = useAuth();
   const [tab, setTab] = useState<TabValue>("library");
@@ -139,7 +141,7 @@ export default function ReferencePanel({
   const [savedRefs, setSavedRefs] = useState<SavedReference[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [categories, setCategories] = useState<string[]>([]);
-  const [zoomLevel, setZoomLevel] = useState(57); // 0=8cols, 100=1col, default 4 cols
+  const [zoomLevel, setZoomLevel] = useState(57);
 
   useEffect(() => {
     supabase
@@ -203,28 +205,30 @@ export default function ReferencePanel({
     [user, savedRefs]
   );
 
-  const handleUseAsReference = useCallback(
+  const handleToggleReference = useCallback(
     (type: "library" | "campaign", id: string, title: string, thumbnailUrl: string, imageUrls: string[]) => {
-      if (selectedReference?.id === id) {
-        onSelectReference(null);
+      const existingIdx = selectedReferences.findIndex((r) => r.id === id);
+      if (existingIdx >= 0) {
+        // Deselect
+        onSelectReferences(selectedReferences.filter((_, i) => i !== existingIdx));
         return;
       }
-      const storageKey = `ref-panel-${campaignId}`;
-      const stored = localStorage.getItem(storageKey);
-      let mode: ReferenceMode = "reference";
-      if (stored) {
-        try { mode = JSON.parse(stored).selectedReference?.mode || "reference"; } catch {}
+      if (selectedReferences.length >= MAX_REFERENCES) {
+        toast.error(`Maximum ${MAX_REFERENCES} references allowed`);
+        return;
       }
+      // Get mode from first selected ref, or default
+      const mode: ReferenceMode = selectedReferences[0]?.mode || "reference";
       const cfg = MODE_CONFIG[mode];
-      onSelectReference({ type, id, title, thumbnail_url: thumbnailUrl, image_urls: imageUrls, strength: cfg.strength, mode });
+      onSelectReferences([...selectedReferences, { type, id, title, thumbnail_url: thumbnailUrl, image_urls: imageUrls, strength: cfg.strength, mode }]);
     },
-    [selectedReference, onSelectReference, campaignId]
+    [selectedReferences, onSelectReferences]
   );
 
   useEffect(() => {
     const storageKey = `ref-panel-${campaignId}`;
-    localStorage.setItem(storageKey, JSON.stringify({ selectedReference }));
-  }, [selectedReference, campaignId]);
+    localStorage.setItem(storageKey, JSON.stringify({ selectedReferences }));
+  }, [selectedReferences, campaignId]);
 
   const filteredLibrary = categoryFilter === "all"
     ? libraryItems
@@ -247,9 +251,9 @@ export default function ReferencePanel({
   };
 
   const gridData = getGridItems();
-
-  // Zoom: 0 = 8 cols (zoomed out), 100 = 1 col (zoomed in)
   const cols = Math.max(1, Math.min(8, Math.round(8 - (zoomLevel / 100) * 7)));
+
+  const selectedIds = new Set(selectedReferences.map((r) => r.id));
 
   return (
     <div className="h-full flex flex-col">
@@ -306,7 +310,7 @@ export default function ReferencePanel({
         </div>
       )}
 
-      {/* Grid — responsive masonry using container width */}
+      {/* Grid */}
       <ScrollArea className="flex-1">
         <MasonryGrid cols={cols}>
           {gridData.flatMap(({ items, type }) =>
@@ -314,14 +318,15 @@ export default function ReferencePanel({
               const id = item.id;
               const imageUrl = item.thumbnail_url || (item.image_urls?.[0]) || "";
               const hasHtml = !!item.html;
-              const isSelected = selectedReference?.id === id;
+              const isSelected = selectedIds.has(id);
+              const selectionIndex = selectedReferences.findIndex((r) => r.id === id);
               const saved = isSavedRef(item._source === "Mine" ? "campaign" : item._source === "Library" ? "library" : type, id);
               const refType: "library" | "campaign" = item._source === "Mine" ? "campaign" : item._source === "Library" ? "library" : type;
 
               return (
                 <div
                   key={id}
-                  onClick={() => handleUseAsReference(refType, id, item.title || item.name || "", imageUrl, item.image_urls || [])}
+                  onClick={() => handleToggleReference(refType, id, item.title || item.name || "", imageUrl, item.image_urls || [])}
                   className={`relative group rounded-lg overflow-hidden cursor-pointer border-2 transition-all min-w-0 w-full ${
                     isSelected ? "border-primary ring-2 ring-primary/20" : "border-transparent hover:border-border"
                   }`}
@@ -344,6 +349,13 @@ export default function ReferencePanel({
                     </div>
                   )}
 
+                  {/* Selection number badge */}
+                  {isSelected && (
+                    <div className="absolute top-2 left-2 z-10 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px] font-bold">
+                      {selectionIndex + 1}
+                    </div>
+                  )}
+
                   {/* Hover overlay — heart only */}
                   <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                     <button
@@ -354,7 +366,7 @@ export default function ReferencePanel({
                     </button>
                   </div>
 
-                  {/* Selected indicator */}
+                  {/* Selected overlay */}
                   {isSelected && (
                     <div className="absolute inset-0 bg-primary/10 pointer-events-none z-[5]" />
                   )}
@@ -370,27 +382,38 @@ export default function ReferencePanel({
         </MasonryGrid>
       </ScrollArea>
 
-      {/* Sticky strength slider when reference selected */}
-      {selectedReference && (
+      {/* Sticky footer when references selected */}
+      {selectedReferences.length > 0 && (
         <div className="shrink-0 border-t border-border p-4 space-y-3 bg-muted/30">
-          <div className="flex items-center gap-2">
-            {selectedReference.thumbnail_url && (
-              <img src={selectedReference.thumbnail_url} className="w-10 h-10 rounded object-cover shrink-0" alt="" />
-            )}
-            <span className="text-xs font-medium truncate flex-1">{selectedReference.title}</span>
-            <button onClick={() => onSelectReference(null)} className="text-muted-foreground hover:text-foreground shrink-0">
-              <X className="w-3.5 h-3.5" />
-            </button>
+          <div className="space-y-2">
+            {selectedReferences.map((ref, i) => (
+              <div key={ref.id} className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px] font-bold shrink-0">{i + 1}</span>
+                {ref.thumbnail_url && (
+                  <img src={ref.thumbnail_url} className="w-8 h-8 rounded object-cover shrink-0" alt="" />
+                )}
+                <span className="text-xs font-medium truncate flex-1">{ref.title}</span>
+                <button onClick={() => onSelectReferences(selectedReferences.filter((_, idx) => idx !== i))} className="text-muted-foreground hover:text-foreground shrink-0">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
           </div>
+          {selectedReferences.length <= 1 && (
+            <p className="text-[9px] text-muted-foreground">Select up to 3 references — each will generate a unique variant</p>
+          )}
+          {selectedReferences.length > 1 && (
+            <p className="text-[9px] text-muted-foreground">Each reference will be used for a separate variant ({selectedReferences.length}/3)</p>
+          )}
           <div className="space-y-1.5">
             <span className="text-[10px] text-muted-foreground">Reference mode</span>
             <div className="flex gap-1">
               {(Object.entries(MODE_CONFIG) as [ReferenceMode, typeof MODE_CONFIG["reference"]][]).map(([key, cfg]) => (
                 <button
                   key={key}
-                  onClick={() => onSelectReference({ ...selectedReference, mode: key, strength: cfg.strength })}
+                  onClick={() => onSelectReferences(selectedReferences.map((r) => ({ ...r, mode: key, strength: cfg.strength })))}
                   className={`flex-1 text-[11px] py-1.5 px-2 rounded-md border transition-colors font-medium ${
-                    selectedReference.mode === key
+                    selectedReferences[0]?.mode === key
                       ? "bg-primary text-primary-foreground border-primary"
                       : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
                   }`}
@@ -400,7 +423,7 @@ export default function ReferencePanel({
               ))}
             </div>
             <p className="text-[9px] text-muted-foreground italic">
-              {MODE_CONFIG[selectedReference.mode]?.description || ""}
+              {MODE_CONFIG[selectedReferences[0]?.mode]?.description || ""}
             </p>
           </div>
         </div>
