@@ -229,6 +229,33 @@ export default function CampaignEditor() {
             setActiveVariantIndex(getMatchingVariantIndex(variants, campaign.html));
           }
         }
+        // Restore references from DB if localStorage doesn't have them
+        const refIds = Array.isArray(campaign.reference_campaign_ids) ? campaign.reference_campaign_ids : [];
+        if (refIds.length > 0) {
+          try {
+            const stored = localStorage.getItem(`ref-panel-${campaignId}`);
+            const parsed = stored ? JSON.parse(stored) : null;
+            const hasLocalRefs = parsed?.selectedReferences?.length > 0;
+            if (!hasLocalRefs) {
+              const { data: refData } = await supabase.from("reference_campaigns").select("*").in("id", refIds);
+              if (refData && refData.length > 0) {
+                const restored: SelectedReference[] = refIds
+                  .map((rid: string) => refData.find((r: any) => r.id === rid))
+                  .filter(Boolean)
+                  .map((r: any) => ({
+                    type: "library" as const,
+                    id: r.id,
+                    title: r.title,
+                    thumbnail_url: r.thumbnail_url,
+                    image_urls: r.image_urls || [],
+                    strength: 7,
+                    mode: "reference" as const,
+                  }));
+                if (restored.length > 0) setSelectedReferences(restored);
+              }
+            }
+          } catch {}
+        }
       }
       const { data: msgs } = await supabase
         .from("chat_messages")
