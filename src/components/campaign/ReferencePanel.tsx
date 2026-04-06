@@ -226,6 +226,7 @@ export default function ReferencePanel({
   );
 
   useEffect(() => {
+    if (selectedReferences.length === 0) return;
     const storageKey = `ref-panel-${campaignId}`;
     localStorage.setItem(storageKey, JSON.stringify({ selectedReferences }));
   }, [selectedReferences, campaignId]);
