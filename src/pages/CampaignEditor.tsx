@@ -229,6 +229,33 @@ export default function CampaignEditor() {
             setActiveVariantIndex(getMatchingVariantIndex(variants, campaign.html));
           }
         }
+        // Restore references from DB if localStorage doesn't have them
+        const refIds = Array.isArray(campaign.reference_campaign_ids) ? campaign.reference_campaign_ids : [];
+        if (refIds.length > 0) {
+          try {
+            const stored = localStorage.getItem(`ref-panel-${campaignId}`);
+            const parsed = stored ? JSON.parse(stored) : null;
+            const hasLocalRefs = parsed?.selectedReferences?.length > 0;
+            if (!hasLocalRefs) {
+              const { data: refData } = await supabase.from("reference_campaigns").select("*").in("id", refIds);
+              if (refData && refData.length > 0) {
+                const restored: SelectedReference[] = refIds
+                  .map((rid: string) => refData.find((r: any) => r.id === rid))
+                  .filter(Boolean)
+                  .map((r: any) => ({
+                    type: "library" as const,
+                    id: r.id,
+                    title: r.title,
+                    thumbnail_url: r.thumbnail_url,
+                    image_urls: r.image_urls || [],
+                    strength: 7,
+                    mode: "reference" as const,
+                  }));
+                if (restored.length > 0) setSelectedReferences(restored);
+              }
+            }
+          } catch {}
+        }
       }
       const { data: msgs } = await supabase
         .from("chat_messages")
@@ -466,6 +493,7 @@ export default function CampaignEditor() {
       preview_text: previewText || null,
       send_list_ids: sendListIds.length > 0 ? sendListIds : null,
       send_segment_ids: sendSegmentIds.length > 0 ? sendSegmentIds : null,
+      reference_campaign_ids: selectedReferences.length > 0 ? selectedReferences.map(r => r.id) : null,
     } as any).eq("id", campaignId);
 
     // Always use generate-campaign-multi for 3 variants
@@ -2969,48 +2997,50 @@ export default function CampaignEditor() {
         {/* Left Panel — Preview or Inspiration — fixed 65% */}
         <div className="h-full overflow-hidden flex" style={{ width: imageSwap ? 'calc(65% - 320px)' : '65%', minWidth: 0 }}>
           {/* Reference side-by-side (when toggled on post-generation) */}
-          {showReferenceDialog && campaign?.html && selectedReferences.length > 0 && (
-            <>
-              <div
-                ref={refScrollRef}
-                className="h-full overflow-y-auto bg-muted/30 border-r border-border"
-                style={{ width: '50%', scrollbarWidth: 'none', msOverflowStyle: 'none' as any }}
-                onScroll={(e) => {
-                  if (syncingScroll) return;
-                  setSyncingScroll(true);
-                  const el = e.currentTarget;
-                  const panel = previewPanelRef.current;
-                  if (panel) {
-                    const ratio = el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight);
-                    panel.scrollTop = ratio * (panel.scrollHeight - panel.clientHeight);
-                  }
-                  requestAnimationFrame(() => setSyncingScroll(false));
-                }}
-              >
-                <div className="flex justify-end p-1 pr-0.5 pt-4">
-                  <div style={{ width: renderedWidth }}>
-                    
-                    {selectedReferences.map((ref, ri) => (
-                      <div key={ref.id}>
-                        {selectedReferences.length > 1 && (
-                          <div className="text-[10px] text-muted-foreground font-medium py-1 px-2 bg-muted/50">Variant {ri + 1}: {ref.title}</div>
-                        )}
-                        {ref.image_urls?.length ? (
-                          ref.image_urls.map((url, i) => (
-                            <img key={i} src={url} alt="" className="w-full h-auto block" loading="lazy" />
-                          ))
-                        ) : ref.thumbnail_url ? (
-                          <img src={ref.thumbnail_url} alt="" className="w-full h-auto block" />
-                        ) : (
-                          <p className="text-sm text-muted-foreground text-center py-12">No reference preview</p>
-                        )}
-                      </div>
-                    ))}
+          {showReferenceDialog && campaign?.html && selectedReferences.length > 0 && (() => {
+            // In multi-ref mode, show only the reference matching the active variant
+            const refsToShow = selectedReferences.length > 1 && activeVariantIndex < selectedReferences.length
+              ? [selectedReferences[activeVariantIndex]]
+              : selectedReferences;
+            return (
+              <>
+                <div
+                  ref={refScrollRef}
+                  className="h-full overflow-y-auto bg-muted/30 border-r border-border"
+                  style={{ width: '50%', scrollbarWidth: 'none', msOverflowStyle: 'none' as any }}
+                  onScroll={(e) => {
+                    if (syncingScroll) return;
+                    setSyncingScroll(true);
+                    const el = e.currentTarget;
+                    const panel = previewPanelRef.current;
+                    if (panel) {
+                      const ratio = el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight);
+                      panel.scrollTop = ratio * (panel.scrollHeight - panel.clientHeight);
+                    }
+                    requestAnimationFrame(() => setSyncingScroll(false));
+                  }}
+                >
+                  <div className="flex justify-end p-1 pr-0.5 pt-4">
+                    <div style={{ width: renderedWidth }}>
+                      {refsToShow.map((ref) => (
+                        <div key={ref.id}>
+                          {ref.image_urls?.length ? (
+                            ref.image_urls.map((url, i) => (
+                              <img key={i} src={url} alt="" className="w-full h-auto block" loading="lazy" />
+                            ))
+                          ) : ref.thumbnail_url ? (
+                            <img src={ref.thumbnail_url} alt="" className="w-full h-auto block" />
+                          ) : (
+                            <p className="text-sm text-muted-foreground text-center py-12">No reference preview</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </>
-          )}
+              </>
+            );
+          })()}
 
           {/* Campaign preview / Inspiration panel */}
           <div
