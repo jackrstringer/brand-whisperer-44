@@ -466,6 +466,7 @@ export default function CampaignEditor() {
       preview_text: previewText || null,
       send_list_ids: sendListIds.length > 0 ? sendListIds : null,
       send_segment_ids: sendSegmentIds.length > 0 ? sendSegmentIds : null,
+      reference_campaign_ids: selectedReferences.length > 0 ? selectedReferences.map(r => r.id) : null,
     } as any).eq("id", campaignId);
 
     // Always use generate-campaign-multi for 3 variants
