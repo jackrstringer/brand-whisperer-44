@@ -1224,6 +1224,8 @@ export default function CampaignEditor() {
     setActiveVersionIndex(null);
     iframeOwnedHtmlRef.current = redoHtml as string;
     iframeRef.current?.contentWindow?.postMessage({ type: 'loadHtml', html: redoHtml }, '*');
+    setTimeout(() => measureIframeHeight(iframeRef.current), 100);
+    setTimeout(() => measureIframeHeight(iframeRef.current), 500);
     // Fire-and-forget persist
     supabase.from("campaigns").update({ html: redoHtml, html_history: history }).eq("id", campaignId);
   }, [campaign, campaignId, redoStack]);
