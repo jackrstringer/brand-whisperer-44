@@ -235,7 +235,7 @@ export default function BrandIntelligenceWizard({ brandId, brandName, domain, ex
         await supabase.from("brands").update({ website_url: confirmedDomain }).eq("id", brandId);
 
         const { data, error } = await supabase.functions.invoke("research-brand", {
-          body: { brand_id: brandId, brand_name: brandName, domain: confirmedDomain || brandName },
+          body: { brand_id: brandId, brand_name: brandName, domain: confirmedDomain },
         });
         if (cancelled) return;
         clearInterval(progressInterval);
