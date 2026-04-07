@@ -1751,16 +1751,16 @@ export default function CampaignEditor() {
     const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
     const realPrompt = `[Swap request on email design]${elCtx}\n\nAutomatically swap this specific element with a better alternative. If it's text, replace it with new copy. If it's an image, swap it with a different image from the brand assets. Make the change directly without asking. IMPORTANT: Only modify the targeted element described above — do not change surrounding elements.`;
 
+    let screenshotFile: File | undefined;
     if (screenshot) {
       const blob = await fetch(screenshot).then(r => r.blob());
-      const file = new File([blob], `swap-context-${Date.now()}.jpg`, { type: 'image/jpeg' });
-      setChatAttachments([file]);
+      screenshotFile = new File([blob], `swap-context-${Date.now()}.jpg`, { type: 'image/jpeg' });
     }
 
-    setChatInput(realPrompt);
     ideatePayloadRef.current = {
       realPrompt,
       displayText: "🔄 Swap element",
+      attachments: screenshotFile ? [screenshotFile] : undefined,
     };
 
     setTimeout(() => {
