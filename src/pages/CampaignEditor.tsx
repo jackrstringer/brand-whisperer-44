@@ -125,6 +125,13 @@ export default function CampaignEditor() {
   const [activeVariantIndex, setActiveVariantIndex] = useState(0);
   const generationCompletedRef = useRef(false);
 
+  // Comment mode state
+  const [commentMode, setCommentMode] = useState(false);
+  const [comments, setComments] = useState<CommentPin[]>([]);
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+  const commentDragRef = useRef<{ startX: number; startY: number } | null>(null);
+  const pendingCommentIdRef = useRef<string | null>(null);
+
   const getMatchingVariantIndex = useCallback((variants: any[], html: string | null | undefined) => {
     if (!Array.isArray(variants) || variants.length === 0 || !html) return 0;
     const matchedIndex = variants.findIndex((variant) => variant?.html === html);
