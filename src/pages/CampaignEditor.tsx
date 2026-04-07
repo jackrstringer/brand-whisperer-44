@@ -3275,6 +3275,29 @@ export default function CampaignEditor() {
               e.preventDefault();
             }}
             onPointerMove={(e) => {
+              // Comment mode drag tracking
+              if (commentMode && commentDragRef.current) {
+                const panelRect = previewPanelRef.current?.getBoundingClientRect();
+                if (!panelRect) return;
+                const x = e.clientX - panelRect.left;
+                const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+                const dx = Math.abs(x - commentDragRef.current.startX);
+                const dy = Math.abs(y - commentDragRef.current.startY);
+                if (dx > 4 || dy > 4) {
+                  commentDragRef.current.isDragging = true;
+                }
+                commentDragRef.current.currentX = x;
+                commentDragRef.current.currentY = y;
+                if (commentDragRef.current.isDragging) {
+                  const rx = Math.min(commentDragRef.current.startX, x);
+                  const ry = Math.min(commentDragRef.current.startY, y);
+                  const rw = Math.abs(x - commentDragRef.current.startX);
+                  const rh = Math.abs(y - commentDragRef.current.startY);
+                  setCommentDragRect({ x: rx, y: ry, w: rw, h: rh });
+                }
+                return;
+              }
+
               const state = interactionRef.current;
               const panelRect = previewPanelRef.current?.getBoundingClientRect();
               if (!panelRect) return;
