@@ -1740,31 +1740,16 @@ export default function CampaignEditor() {
     const thread = commentThreads.find(t => t.id === threadId);
     if (!thread) return;
 
-    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const swapComment: ThreadComment = {
-      id: crypto.randomUUID(),
-      author: commentCurrentUser,
-      body: "🔄 Auto-swap element",
-      time: now,
-    };
-    setCommentThreads(prev => prev.map(t =>
-      t.id === threadId ? { ...t, comments: [swapComment], isTemporary: false } : t
-    ));
+    // Remove thread immediately — no pin left behind
+    setCommentThreads(prev => prev.filter(t => t.id !== threadId));
     setComposerThreadId(null);
-    setActiveThreadId(threadId);
-    pendingCommentIdRef.current = threadId;
+    setActiveThreadId(null);
 
     const pin = thread.pin;
     const [screenshot, elementInfo] = await Promise.all([
       captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH),
       queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH),
     ]);
-
-    if (elementInfo) {
-      setCommentThreads(prev => prev.map(t =>
-        t.id === threadId ? { ...t, pin: { ...t.pin, elementInfo } } : t
-      ));
-    }
 
     const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
     const realPrompt = `[Swap request on email design]${elCtx}\n\nAutomatically swap this specific element with a better alternative. If it's text, replace it with new copy. If it's an image, swap it with a different image from the brand assets. Make the change directly without asking. IMPORTANT: Only modify the targeted element described above — do not change surrounding elements.`;
