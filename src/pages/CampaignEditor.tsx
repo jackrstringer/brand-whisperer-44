@@ -17,6 +17,22 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 
+/** Strip verbose AI context from user messages so users never see raw HTML/element metadata */
+function cleanUserMessage(content: string): string | null {
+  // Fully silent messages — hide entirely
+  if (/^\[Visual comment on email design\]/.test(content) && !/\n\n/.test(content.trim())) return null;
+  // Extract just the human part after the context block
+  const parts = content.split(/\n\n/);
+  const humanParts = parts.filter(p =>
+    !p.startsWith("[Visual comment") &&
+    !p.startsWith("[Targeting ") &&
+    !p.startsWith("Element HTML:") &&
+    !/^<\w+\s/.test(p.trim())
+  );
+  const cleaned = humanParts.join("\n\n").trim();
+  if (!cleaned) return null;
+  return cleaned;
+}
 
 import type { Campaign, ChatMessage, VariantOption } from "@/lib/types";
 import VariantCards from "@/components/brand/VariantCards";
@@ -4001,10 +4017,12 @@ export default function CampaignEditor() {
                           </div>
                         );
                       }
+                      const cleaned = cleanUserMessage(msg.content);
+                      if (!cleaned) return null;
                       return (
                         <div key={msg.id} className="flex justify-end">
                           <div className="max-w-[80%] rounded-lg px-3 py-2 text-sm bg-background text-foreground">
-                            {msg.content}
+                            {cleaned}
                           </div>
                         </div>
                       );
