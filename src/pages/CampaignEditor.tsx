@@ -1917,8 +1917,11 @@ export default function CampaignEditor() {
       queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH),
     ]);
 
-    const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
-    const realPrompt = `[Swap request on email design]${elCtx}\n\nAutomatically swap this specific element with a better alternative. If it's text, replace it with new copy. If it's an image, swap it with a different image from the brand assets. Make the change directly without asking. IMPORTANT: Only modify the targeted element described above — do not change surrounding elements.`;
+    const elResult = elementInfo ? buildElementContext({ ...pin, elementInfo }) : { context: '', isGroup: false };
+    const isGroupSwap = elResult.isGroup;
+    const realPrompt = isGroupSwap
+      ? `[Swap request on email design]${elResult.context}\n\nAutomatically swap all these elements with better alternatives as a cohesive group. Make the changes directly.${(elResult as any).groupInstruction || ''}`
+      : `[Swap request on email design]${elResult.context}\n\nAutomatically swap this specific element with a better alternative. If it's text, replace it with new copy. If it's an image, swap it with a different image from the brand assets. Make the change directly without asking. IMPORTANT: Only modify the targeted element described above — do not change surrounding elements.`;
 
     let screenshotFile: File | undefined;
     if (screenshot) {
