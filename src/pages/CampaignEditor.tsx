@@ -1576,7 +1576,98 @@ export default function CampaignEditor() {
     setImageSwap(prev => prev ? { ...prev, src: newUrl } : null);
   }, []);
 
-  if (loading) {
+  // Comment mode: capture screenshot of area around a point or drag region
+  const captureCommentScreenshot = useCallback(async (
+    centerX: number, centerY: number, regionWidth?: number, regionHeight?: number
+  ): Promise<string | undefined> => {
+    const iframe = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+    if (!iframe?.contentDocument?.body) return undefined;
+    try {
+      const scale = zoomScale;
+      const iframeRect = iframe.getBoundingClientRect();
+      const panelRect = previewPanelRef.current!.getBoundingClientRect();
+      const iframePanelLeft = iframeRect.left - panelRect.left;
+      const iframePanelTop = iframeRect.top - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+
+      // Convert panel coords to iframe content coords
+      const captureW = regionWidth ? regionWidth / scale + 100 : 500;
+      const captureH = regionHeight ? regionHeight / scale + 100 : 500;
+      const iX = (centerX - iframePanelLeft) / scale - captureW / 2;
+      const iY = (centerY - iframePanelTop) / scale - captureH / 2;
+
+      const clampedX = Math.max(0, iX);
+      const clampedY = Math.max(0, iY);
+
+      const canvas = await html2canvas(iframe.contentDocument.body, {
+        x: clampedX,
+        y: clampedY,
+        width: captureW,
+        height: captureH,
+        scale: 1,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+      });
+      return canvas.toDataURL("image/jpeg", 0.85);
+    } catch (err) {
+      console.error("Comment screenshot failed:", err);
+      return undefined;
+    }
+  }, [zoomScale]);
+
+  // Comment mode: submit a comment → send to AI as chat message
+  const handleCommentSubmit = useCallback(async (pinId: string, text: string) => {
+    const pin = comments.find(c => c.id === pinId);
+    if (!pin) return;
+
+    // Mark as pending
+    setComments(prev => prev.map(c => c.id === pinId ? { ...c, status: "pending" as const } : c));
+    pendingCommentIdRef.current = pinId;
+
+    // Convert screenshot to a File if available
+    const attachedFiles: File[] = [];
+    if (pin.screenshot) {
+      try {
+        const resp = await fetch(pin.screenshot);
+        const blob = await resp.blob();
+        attachedFiles.push(new File([blob], `comment-${pinId}.jpg`, { type: "image/jpeg" }));
+      } catch {}
+    }
+
+    // Build message with visual context
+    const commentMsg = `[Visual comment at position (${Math.round(pin.x)}, ${Math.round(pin.y)})${pin.width ? ` — region ${Math.round(pin.width)}×${Math.round(pin.height || 0)}px` : ""}]\n\n${text}`;
+
+    // Set chat state to send
+    setChatInput(commentMsg);
+    setChatAttachments(attachedFiles);
+    if (attachedFiles.length > 0) {
+      setChatAttachmentPreviews(attachedFiles.map(f => URL.createObjectURL(f)));
+    }
+
+    // Trigger send after state updates
+    setTimeout(() => {
+      const sendBtn = document.querySelector('[data-send-btn]') as HTMLButtonElement | null;
+      sendBtn?.click();
+    }, 100);
+  }, [comments]);
+
+  // Track AI replies and associate with comment pins
+  useEffect(() => {
+    const pendingId = pendingCommentIdRef.current;
+    if (!pendingId) return;
+    const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
+    if (!lastAssistantMsg) return;
+    // Check if this reply arrived after the comment was submitted
+    const pin = comments.find(c => c.id === pendingId && c.status === 'pending');
+    if (!pin) return;
+    setComments(prev => prev.map(c =>
+      c.id === pendingId ? { ...c, aiReply: lastAssistantMsg.content, status: "resolved" as const } : c
+    ));
+    pendingCommentIdRef.current = null;
+  }, [messages, comments]);
+
+
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
   }
 
