@@ -1716,16 +1716,16 @@ export default function CampaignEditor() {
     const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
     const realPrompt = `[Visual comment on email design]${elCtx}\n\n${body}`;
 
+    let screenshotFile: File | undefined;
     if (screenshot) {
       const blob = await fetch(screenshot).then(r => r.blob());
-      const file = new File([blob], `comment-context-${Date.now()}.jpg`, { type: 'image/jpeg' });
-      setChatAttachments([file]);
+      screenshotFile = new File([blob], `comment-context-${Date.now()}.jpg`, { type: 'image/jpeg' });
     }
 
-    setChatInput(realPrompt);
     ideatePayloadRef.current = {
       realPrompt,
       displayText: `💬 ${body}`,
+      attachments: screenshotFile ? [screenshotFile] : undefined,
     };
 
     setTimeout(() => {
