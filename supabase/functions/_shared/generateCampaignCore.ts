@@ -633,7 +633,8 @@ Do NOT add sections that don't exist in the reference. Do NOT remove sections th
       userContent.push(...imageBlocks);
     }
 
-    brandValuesText = `\nFrom analyzing these campaigns, here are the specific rules to follow precisely:\n${profile.system_prompt}`;
+    brandValuesText += `\nFrom analyzing these campaigns, here are the specific rules to follow precisely:\n${profile.system_prompt}`;
+    if (brandIntelBlock) brandValuesText += brandIntelBlock;
     brandValuesText += `\n\n=== BRAND DESIGN VALUES (use these EXACTLY) ===`;
     brandValuesText += `\nCard/container border-radius: ${brandValues.card_radius}px — apply to ALL cards, contrast sections, and containers`;
     brandValuesText += `\nButton border-radius: ${brandValues.button_radius}px`;
