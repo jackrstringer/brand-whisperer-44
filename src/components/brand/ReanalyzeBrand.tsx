@@ -50,7 +50,7 @@ interface ReanalyzeBrandProps {
   websiteUrl?: string;
 }
 
-export default function ReanalyzeBrand({ brandId, brandName, industry }: ReanalyzeBrandProps) {
+export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUrl }: ReanalyzeBrandProps) {
   const { user } = useAuth();
   const [phase, setPhase] = useState<Phase>("idle");
   const [progressValue, setProgressValue] = useState(0);
