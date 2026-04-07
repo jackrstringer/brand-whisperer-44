@@ -792,6 +792,7 @@ export default function CampaignEditor() {
           body: JSON.stringify({
             campaignId,
             message: userMsg,
+            displayMessage: displayContent,
             currentHtml: iframeOwnedHtmlRef.current || campaign.html,
             ...(attachedImageUrls.length > 0 ? { attachedImageUrls } : {}),
             ...(selectedReferences[0] ? {
