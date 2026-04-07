@@ -257,7 +257,27 @@ export default function CampaignEditor() {
     const load = async () => {
       const { data: c } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
       if (c) {
-        const campaign = c as unknown as Campaign;
+        let campaign = c as unknown as Campaign;
+        
+        // Check for a newer localStorage draft
+        const dk = `campaign-draft-${campaignId}`;
+        try {
+          const draftRaw = localStorage.getItem(dk);
+          if (draftRaw) {
+            const draft = JSON.parse(draftRaw);
+            const dbUpdated = new Date(campaign.updated_at).getTime();
+            if (draft.ts && draft.html && draft.ts > dbUpdated) {
+              // Draft is newer — restore it
+              campaign = { ...campaign, html: draft.html, html_history: draft.history || campaign.html_history };
+              // Persist draft to DB in background so it's durable
+              supabase.from("campaigns").update({ html: draft.html, html_history: draft.history || campaign.html_history }).eq("id", campaignId);
+              localStorage.removeItem(dk);
+            } else {
+              localStorage.removeItem(dk);
+            }
+          }
+        } catch { /* ignore draft parse errors */ }
+
         setCampaign(campaign);
         setNameValue(campaign.name);
         setBrief(campaign.brief ?? "");
@@ -1390,17 +1410,97 @@ export default function CampaignEditor() {
   const pendingSaveRef = useRef<{ html: string; history: any[]; campaignId: string; variantHtmls?: any[] } | null>(null);
   // Stable HTML ref to prevent iframe reload during inline edits
   const lastStableHtmlRef = useRef<string | null>(null);
+  // Track in-flight save promise to await before navigation
+  const inflightSaveRef = useRef<Promise<any> | null>(null);
+  // Snapshot resolve callback for iframe handshake
+  const snapshotResolveRef = useRef<((html: string) => void) | null>(null);
+
+  // localStorage draft key
+  const draftKey = campaignId ? `campaign-draft-${campaignId}` : null;
+
+  // Write localStorage draft
+  const writeDraft = useCallback((html: string, history: any[], vhtmls?: any[]) => {
+    if (!draftKey) return;
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({ html, history, variantHtmls: vhtmls, ts: Date.now() }));
+    } catch {}
+  }, [draftKey]);
+
+  // Request iframe to immediately emit its current DOM
+  const requestIframeSnapshot = useCallback((): Promise<string | null> => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow) return Promise.resolve(iframeOwnedHtmlRef.current);
+    return new Promise((resolve) => {
+      snapshotResolveRef.current = resolve;
+      iframe.contentWindow!.postMessage({ type: 'flushEditorSnapshot' }, '*');
+      // Timeout fallback — don't hang forever
+      setTimeout(() => {
+        if (snapshotResolveRef.current) {
+          snapshotResolveRef.current = null;
+          resolve(iframeOwnedHtmlRef.current);
+        }
+      }, 300);
+    });
+  }, []);
+
+  // Flush latest manual state: request snapshot from iframe → persist to DB
+  const flushLatestManualState = useCallback(async () => {
+    // 1. Request fresh snapshot from iframe
+    const snapshotHtml = await requestIframeSnapshot();
+
+    // 2. Cancel any pending debounced save
+    if (inlineEditTimerRef.current) { clearTimeout(inlineEditTimerRef.current); inlineEditTimerRef.current = null; }
+
+    // Determine what to save: snapshot > pendingSave > current state
+    const htmlToSave = snapshotHtml || pendingSaveRef.current?.html || iframeOwnedHtmlRef.current;
+    if (!htmlToSave || !campaignId) {
+      // Nothing to flush — but still await any in-flight save
+      if (inflightSaveRef.current) await inflightSaveRef.current;
+      return;
+    }
+
+    const historyToSave = pendingSaveRef.current?.history || (Array.isArray(campaign?.html_history) ? campaign.html_history : []);
+    const variantsToSave = pendingSaveRef.current?.variantHtmls;
+    pendingSaveRef.current = null;
+
+    const payload: any = { html: htmlToSave, html_history: historyToSave };
+    if (variantsToSave) payload.variant_htmls = variantsToSave;
+
+    // 3. Persist and wait
+    await supabase.from("campaigns").update(payload).eq("id", campaignId);
+
+    // 4. Clear draft from localStorage after successful DB save
+    if (draftKey) { try { localStorage.removeItem(draftKey); } catch {} }
+  }, [campaignId, campaign?.html_history, requestIframeSnapshot, draftKey]);
 
   // Flush pending saves on page unload or component unmount
   useEffect(() => {
     const flushPendingSave = () => {
+      // Try to grab snapshot synchronously from iframe if possible
+      const iframe = iframeRef.current;
+      if (iframe?.contentWindow) {
+        try { iframe.contentWindow.postMessage({ type: 'flushEditorSnapshot' }, '*'); } catch {}
+      }
       if (pendingSaveRef.current) {
         const { html: h, history: hist, campaignId: cid, variantHtmls: vh } = pendingSaveRef.current;
         pendingSaveRef.current = null;
         if (inlineEditTimerRef.current) { clearTimeout(inlineEditTimerRef.current); inlineEditTimerRef.current = null; }
         const payload: any = { html: h, html_history: hist };
         if (vh) payload.variant_htmls = vh;
-        supabase.from("campaigns").update(payload).eq("id", cid);
+        // Use sendBeacon for reliability on unload
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/campaigns?id=eq.${cid}`;
+        const headers = {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Prefer': 'return=minimal',
+        };
+        try {
+          navigator.sendBeacon(url, new Blob([JSON.stringify(payload)], { type: 'application/json' }));
+        } catch {
+          // Fallback — fire-and-forget
+          supabase.from("campaigns").update(payload).eq("id", cid);
+        }
       }
     };
     window.addEventListener('beforeunload', flushPendingSave);
@@ -1615,6 +1715,12 @@ export default function CampaignEditor() {
       const currentHtml = iframeOwnedHtmlRef.current || campaign.html || "";
       if (newHtml === currentHtml) return;
 
+      // Resolve any pending snapshot request
+      if (snapshotResolveRef.current) {
+        snapshotResolveRef.current(newHtml);
+        snapshotResolveRef.current = null;
+      }
+
       // Track iframe's live HTML WITHOUT updating campaign state (prevents iframe reload)
       iframeOwnedHtmlRef.current = newHtml;
 
@@ -1637,6 +1743,9 @@ export default function CampaignEditor() {
       setCanUndo(true);
       setRedoStack([]); // clear redo on new edit
 
+      // Write localStorage draft immediately (zero-loss fallback)
+      writeDraft(newHtml, history, nextVariantHtmls);
+
       // Debounced DB save — persist both html, history, and variant_htmls
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
       const savePayload: any = { html: newHtml, html_history: history };
@@ -1645,7 +1754,8 @@ export default function CampaignEditor() {
       inlineEditTimerRef.current = setTimeout(async () => {
         pendingSaveRef.current = null;
         await supabase.from("campaigns").update(savePayload).eq("id", campaignId);
-        iframeOwnedHtmlRef.current = null;
+        // Do NOT clear iframeOwnedHtmlRef here — it must stay until the iframe reloads new HTML
+        if (draftKey) { try { localStorage.removeItem(draftKey); } catch {} }
       }, 400);
     };
     window.addEventListener("message", handler);
@@ -1661,7 +1771,7 @@ export default function CampaignEditor() {
         supabase.from("campaigns").update(payload).eq("id", cid);
       }
     };
-  }, [campaignId, campaign, variantHtmls, activeVariantIndex, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace]);
+  }, [campaignId, campaign, variantHtmls, activeVariantIndex, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace, writeDraft, draftKey]);
 
   // Ideate/Swap for selected elements (single or multi)
   const triggerSelectedElementIdeate = useCallback(() => {
@@ -3102,6 +3212,10 @@ export default function CampaignEditor() {
     }
   }
   window.addEventListener('message', function(e){
+    if(e.data && e.data.type === 'flushEditorSnapshot'){
+      emitHtmlNow();
+      return;
+    }
     if(e.data && e.data.type === 'regionSelectQuery'){
       handleRegionSelect(e.data.rect, false);
     }
@@ -3329,16 +3443,8 @@ export default function CampaignEditor() {
       {/* Top Bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={() => {
-            // Flush any pending saves before navigating away
-            if (pendingSaveRef.current) {
-              const { html: h, history: hist, campaignId: cid, variantHtmls: vh } = pendingSaveRef.current;
-              pendingSaveRef.current = null;
-              if (inlineEditTimerRef.current) { clearTimeout(inlineEditTimerRef.current); inlineEditTimerRef.current = null; }
-              const payload: any = { html: h, html_history: hist };
-              if (vh) payload.variant_htmls = vh;
-              supabase.from("campaigns").update(payload).eq("id", cid);
-            }
+          <button onClick={async () => {
+            await flushLatestManualState();
             navigate(`/brands/${brandId}`);
           }} className="text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-4 h-4" />
@@ -3511,15 +3617,8 @@ export default function CampaignEditor() {
               </Button>
               <Button
                 size="sm"
-                onClick={() => {
-                  if (pendingSaveRef.current) {
-                    const { html: h, history: hist, campaignId: cid, variantHtmls: vh } = pendingSaveRef.current;
-                    pendingSaveRef.current = null;
-                    if (inlineEditTimerRef.current) { clearTimeout(inlineEditTimerRef.current); inlineEditTimerRef.current = null; }
-                    const payload: any = { html: h, html_history: hist };
-                    if (vh) payload.variant_htmls = vh;
-                    supabase.from("campaigns").update(payload).eq("id", cid);
-                  }
+                onClick={async () => {
+                  await flushLatestManualState();
                   navigate(`/brands/${brandId}/campaigns/${campaignId}/qa`);
                 }}
                 className="active:scale-[0.98] transition-all"
