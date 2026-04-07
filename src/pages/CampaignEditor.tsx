@@ -1539,14 +1539,10 @@ export default function CampaignEditor() {
       }
 
       if (e.key === 'Escape') {
-        // Escape priority chain: composer → thread popover → exit comment mode
+        // Escape priority chain: composer → exit comment mode
         if (composerThreadId) {
           setCommentThreads(prev => prev.filter(t => t.id !== composerThreadId));
           setComposerThreadId(null);
-          return;
-        }
-        if (activeThreadId) {
-          setActiveThreadId(null);
           return;
         }
         if (commentMode) {
