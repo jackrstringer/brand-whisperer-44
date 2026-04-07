@@ -372,6 +372,12 @@ ${brandValues.accent_color ? `- Default accent: ${brandValues.accent_color}` : "
 ${brandValues.text_color ? `- Default text color: ${brandValues.text_color}` : ""}
 - User requests OVERRIDE all defaults.
 ${extraRules}
+${assetCatalog}
+
+IMAGE RULES:
+- When adding or swapping images, ONLY use URLs from the AVAILABLE BRAND IMAGES list above.
+- NEVER use image URLs from reference campaigns, screenshots, or any URL not in the brand image catalog.
+- If no brand images are available and the user asks to add an image, tell them to upload images to their asset library first.
 
 OUTPUT FORMAT — use these EXACT tags:
 <reply>
