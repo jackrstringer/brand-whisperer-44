@@ -621,7 +621,19 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
                       body: JSON.stringify({
                         model: "claude-sonnet-4-6",
                         max_tokens: 16384,
-                        system: `You are a surgical HTML email editor. Apply the user's requested edit and return the COMPLETE modified HTML wrapped in <email_html> tags. Also include a brief <reply> tag describing what you changed.\n\nFormat:\n<reply>What changed</reply>\n<email_html>...full modified HTML...</email_html>`,
+                        system: `You are a surgical HTML email editor. Apply ONLY the user's specific requested edit and return the COMPLETE modified HTML wrapped in <email_html> tags. Also include a brief <reply> tag describing what you changed.
+
+CRITICAL STRUCTURE RULES:
+- DO NOT change the layout structure. If a section is stacked vertically (image on top, text below), keep it that way.
+- DO NOT convert single-column layouts to multi-column or side-by-side layouts unless explicitly asked.
+- DO NOT rearrange, reorder, or restructure sections.
+- DO NOT add or remove sections unless explicitly asked.
+- ONLY modify the specific thing the user requested (spacing, colors, text, etc.).
+- The output HTML must be structurally identical to the input, with only the requested change applied.
+
+Format:
+<reply>What changed</reply>
+<email_html>...full modified HTML...</email_html>`,
                         messages: anthropicMessages,
                       }),
                     });
