@@ -3524,6 +3524,7 @@ export default function CampaignEditor() {
                 onCancelComposer={(id) => {
                   setCommentThreads(prev => prev.filter(t => t.id !== id));
                   setComposerThreadId(null);
+                  setActiveThreadId(null);
                 }}
               />
             )}
