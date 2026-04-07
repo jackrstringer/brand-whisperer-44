@@ -1028,8 +1028,9 @@ export default function CampaignEditor() {
     const msg = messages.find(m => m.id === messageId);
     if (!msg?.variant_data) return;
 
-    const findTarget = findLiveTarget(msg.variant_data, html);
-    if (!findTarget) {
+    const isGrouped = variant.items && variant.items.length > 0;
+    const findTarget = isGrouped ? null : findLiveTarget(msg.variant_data, html);
+    if (!isGrouped && !findTarget) {
       toast.error("Could not find the text to replace — it may have already changed.");
       return;
     }
