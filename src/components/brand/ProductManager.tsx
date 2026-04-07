@@ -242,7 +242,7 @@ export default function ProductManager({ brandId }: ProductManagerProps) {
   };
 
   const handleSaveAssetDetails = async (id: string, updates: Record<string, any>) => {
-    await supabase.from("product_assets").update(updates).eq("id", id);
+    await supabase.from("product_assets").update(updates as any).eq("id", id);
     setAssets(prev => {
       const next = { ...prev };
       for (const pid of Object.keys(next)) {
