@@ -127,10 +127,16 @@ export default function CampaignEditor() {
 
   // Comment mode state
   const [commentMode, setCommentMode] = useState(false);
-  const [comments, setComments] = useState<CommentPin[]>([]);
-  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+  const [commentThreads, setCommentThreads] = useState<CommentThread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [composerThreadId, setComposerThreadId] = useState<string | null>(null);
   const commentDragRef = useRef<{ startX: number; startY: number } | null>(null);
   const pendingCommentIdRef = useRef<string | null>(null);
+  const commentCurrentUser: CommentAuthor = {
+    name: user?.email?.split("@")[0] || "You",
+    initials: (user?.email?.[0] || "Y").toUpperCase(),
+    bgColor: "#6366F1",
+  };
 
   const getMatchingVariantIndex = useCallback((variants: any[], html: string | null | undefined) => {
     if (!Array.isArray(variants) || variants.length === 0 || !html) return 0;
