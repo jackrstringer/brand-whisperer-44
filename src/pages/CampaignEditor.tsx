@@ -3511,7 +3511,17 @@ export default function CampaignEditor() {
               </Button>
               <Button
                 size="sm"
-                onClick={() => navigate(`/brands/${brandId}/campaigns/${campaignId}/qa`)}
+                onClick={() => {
+                  if (pendingSaveRef.current) {
+                    const { html: h, history: hist, campaignId: cid, variantHtmls: vh } = pendingSaveRef.current;
+                    pendingSaveRef.current = null;
+                    if (inlineEditTimerRef.current) { clearTimeout(inlineEditTimerRef.current); inlineEditTimerRef.current = null; }
+                    const payload: any = { html: h, html_history: hist };
+                    if (vh) payload.variant_htmls = vh;
+                    supabase.from("campaigns").update(payload).eq("id", cid);
+                  }
+                  navigate(`/brands/${brandId}/campaigns/${campaignId}/qa`);
+                }}
                 className="active:scale-[0.98] transition-all"
               >
                 <ClipboardCheck className="w-3 h-3 mr-1" /> Review & Send
