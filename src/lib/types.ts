@@ -33,12 +33,21 @@ export interface Campaign {
   updated_at: string;
 }
 
+export interface VariantGroupItem {
+  find: string;
+  replace: string;
+  label: string;
+  preview: string;
+}
+
 export interface VariantOption {
   label: string;
   preview: string;
   find: string;
   replace: string;
   apply_all?: boolean;
+  /** Grouped variant: multiple find/replace pairs treated as one atomic change */
+  items?: VariantGroupItem[];
 }
 
 export interface VariantData {
