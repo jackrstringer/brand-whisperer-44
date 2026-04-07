@@ -48,15 +48,6 @@ interface SurveyData {
   target_demographic: string;
   top_objection: string;
   repeat_purchase_drivers: string;
-  send_frequency: string;
-  best_campaign_types: string[];
-  worst_campaign_types: string;
-  blackout_periods: string;
-  primary_email_goal: string;
-  brand_voice_words: string[];
-  language_to_avoid: string;
-  north_star_brand: string;
-  anything_else: string;
 }
 
 const CATALOG_OPTIONS = [
