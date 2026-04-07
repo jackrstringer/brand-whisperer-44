@@ -3245,7 +3245,10 @@ export default function CampaignEditor() {
               if (e.button !== 0) return;
               if (!campaign?.html) return;
               const tag = (e.target as HTMLElement).tagName;
-              if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'IFRAME') return;
+              if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+              // Don't intercept clicks on comment overlay elements
+              if ((e.target as HTMLElement).closest?.('[data-comment-overlay]')) return;
+              if (tag === 'IFRAME' && !commentMode) return;
               const panelRect = previewPanelRef.current?.getBoundingClientRect();
               if (!panelRect) return;
               const x = e.clientX - panelRect.left;
