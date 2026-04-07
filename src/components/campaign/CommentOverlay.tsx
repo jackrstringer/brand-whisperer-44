@@ -127,7 +127,7 @@ function ComposerPopover({
         </button>
         <button
           onClick={onIdeate}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(200,241,53,0.12)"; e.currentTarget.style.borderColor = "rgba(200,241,53,0.3)"; e.currentTarget.style.color = "#c8f135"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(219,39,119,0.12)"; e.currentTarget.style.borderColor = "rgba(219,39,119,0.3)"; e.currentTarget.style.color = "#db2777"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "rgba(255,255,255,0.5)"; }}
           style={actionBtnStyle}
           title="Ideate — generate options for this area"
