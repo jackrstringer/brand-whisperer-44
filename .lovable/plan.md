@@ -1,82 +1,101 @@
 
+Goal: fix two linked issues so the chat never re-exposes hidden AI prompts after reload, and multi-element ideate/swap truly behaves as a grouped edit instead of collapsing to headline-only options.
 
-## Plan: Precise Element Targeting for Comments + Clean Chat Display
+What I found
+- The refresh bug is real: the UI shows a clean local bubble, but the backend still saves the raw hidden prompt into `chat_messages.content`. On reload, the page restores that raw content.
+- The current cleanup fallback is too narrow. It only strips a few prefixes, so prompts like `[Ideate request on ...]`, `Primary element HTML:`, and grouped region payloads can still leak through.
+- Grouped ideate is only half-implemented:
+  - `triggerSelectedElementIdeate` tries to ask for grouped `items`, but
+  - `handleCommentIdeate` / `handleCommentSwap` still say “this specific element” even for regions,
+  - and the `edit-campaign` system prompt only documents flat variants, so the model is being steered back toward single-field output.
+- Group apply/preview is not truly atomic yet. It currently replaces whatever item matches and silently skips misses, which breaks the “treat this as one cohesive group” behavior.
 
-### Problem
-1. **Imprecise targeting**: The screenshot-only approach (400px square) gives the AI too much visual context without specifying which exact element the user clicked on. A CTA click captures surrounding images too, causing the AI to swap the wrong thing.
-2. **Ugly chat messages**: Comment prompts like `[Visual comment at position (234, 567)]...` appear raw in chat instead of using the clean ideate-style hidden prompt pattern.
+Implementation plan
 
-### Solution
+1. Make hidden prompts refresh-proof
+- Keep using clean chat bubbles in the UI, but persist both values:
+  - visible display text
+  - hidden raw prompt
+- Use the existing `tool_calls` JSON field on user chat rows for the hidden prompt metadata, so no schema change is needed.
+- Update the send flow so:
+  - AI still receives the raw prompt
+  - chat history stores clean visible text in `content`
+  - raw prompt is stored in metadata for internal reuse only
+- Update message restore logic so user messages can rehydrate a `hidden_content` value from metadata.
 
-#### Part 1: Element-Level Precision via postMessage
+2. Close the leak for old and edge-case messages
+- Strengthen `cleanUserMessage` so legacy rows never show raw targeting/HTML blocks, even if they were already saved before the fix.
+- Cover all hidden-prompt prefixes, including ideate/swap/comment region payloads and `Primary element HTML`.
+- For legacy saved messages, render a safe fallback label instead of raw internals when needed.
 
-Instead of relying solely on screenshot coordinates, query the iframe for the actual HTML element(s) at the click/drag location. This gives the AI both the visual context AND the specific element markup.
+3. Unify grouped prompt building across edit mode and comment mode
+- Create one shared prompt-builder for single vs grouped element targeting.
+- Use it for:
+  - selected-element hotkey ideate/swap
+  - comment-mode ideate/swap
+- For grouped selections, the prompt should explicitly say:
+  - these elements are one contextual group
+  - every option must replace all selected elements together
+  - output must use grouped variants with an `items` array
+  - each item should map to the correct field type (headline, subheader/body, CTA, image, etc.)
+- Remove the current “specific element only” wording from grouped comment-region prompts.
 
-**How it works:**
-- When placing a comment pin, send a `postMessage` to the iframe: `{ type: 'getElementAtPoint', x, y }` (for point clicks) or `{ type: 'getElementsInRegion', rect: {x,y,w,h} }` (for drag regions).
-- The iframe script uses `document.elementFromPoint(x, y)` or iterates elements to find those within the rect, then replies with `{ type: 'commentElementInfo', tagName, text, outerHTML, allElements: [...] }`.
-- Store this element info on the `CommentThread` object: `thread.pin.elementInfo?: { tagName: string; text: string; outerHTML: string; elements?: {tagName: string; text: string; outerHTML: string}[] }`.
-- When sending swap/ideate/comment prompts, include the element HTML alongside the screenshot. The prompt becomes: `"The user clicked on this specific element: <a class='btn'>Shop Now</a>. Here is a screenshot of the surrounding area for visual context."` This disambiguates between adjacent elements.
+4. Teach the backend grouped variant mode explicitly
+- Update `supabase/functions/edit-campaign/index.ts` system instructions so variant mode supports two legal shapes:
+  - single option: `find` / `replace`
+  - grouped option: `items[]`
+- Add a hard rule: if the request targets multiple elements, do not return headline-only variants.
+- Require each `items[]` entry to include:
+  - exact live `find`
+  - `replace`
+  - `label`
+  - `preview`
+- Keep the grouped option cohesive so headline/subheader/CTA tone changes stay aligned.
 
-**Files**: `src/pages/CampaignEditor.tsx`
-- Add `getElementAtPoint` / `getElementsInRegion` postMessage types to the iframe script injection (around line ~2900 where the existing iframe script is).
-- Add a message listener for `commentElementInfo` responses.
-- Store element info on the thread's pin object.
-- Update `handleCommentSubmitNew`, `handleCommentSwap`, `handleCommentIdeate` to include element HTML in the prompt.
+5. Make grouped preview/apply truly atomic
+- Replace the current best-effort loop with a grouped resolver that:
+  - validates all items in the group
+  - previews/applies only if the whole group can be resolved
+  - aborts with a visible error if part of the group can’t be matched
+- Track grouped live replacements in variant metadata so hover/apply can keep working after one grouped option has already been applied.
+- Use that same live-target resolution for switching between grouped options, so they behave “just like normal” instead of only working once from the original state.
 
-#### Part 2: Clean Chat Display (Hidden Prompts)
+6. Preserve hidden prompts for “Generate More”
+- Right now “Generate More” looks backward through visible messages, which loses the real grouped prompt.
+- Update it to prefer the stored hidden prompt metadata, so follow-up generation keeps the full group context instead of using the shortened display bubble.
 
-Use the existing `ideatePayloadRef` pattern for ALL comment-originated messages (not just ideate). The real prompt with coordinates, element HTML, and screenshot context is sent to the AI, but the chat shows a clean, short display message.
+Files to update
+- `src/pages/CampaignEditor.tsx`
+  - persist/display hidden vs visible message text correctly
+  - improve legacy message cleaning
+  - unify grouped prompt creation
+  - fix comment-mode grouped ideate/swap
+  - make grouped preview/apply atomic
+  - use hidden prompt metadata for “Generate More”
+- `src/lib/types.ts`
+  - extend chat/variant local types for hidden prompt metadata and grouped live-target tracking
+- `supabase/functions/edit-campaign/index.ts`
+  - add first-class grouped variant schema/instructions
+  - store visible content + hidden prompt metadata for user rows
 
-**Display messages:**
-- New comment: `"💬 Comment: {user's text}"` (no coordinates, no element HTML shown)
-- Swap: `"🔄 Swap element"` (already done, but ensure it uses ideatePayloadRef)
-- Reply: `"💬 Reply: {user's text}"`
-
-**Implementation:**
-- In `handleCommentSubmitNew` and `handleCommentReply`: wrap the verbose prompt in `ideatePayloadRef` just like ideate does, with a clean `displayText`.
-- In `handleCommentSwap`: already shows "🔄 Auto-swap element" as the thread comment, but the chat message still shows the raw prompt. Route through `ideatePayloadRef` with `displayText: "🔄 Swap: Auto-replace element"`.
-
-**Files**: `src/pages/CampaignEditor.tsx` — modify the four comment handler functions to use `ideatePayloadRef`.
-
-#### Part 3: Update CommentThread Type
-
-**Files**: `src/components/campaign/CommentOverlay.tsx`
-- Extend the `CommentThread` pin type to include optional `elementInfo`.
-
-### Technical Details
-
+Technical details
 ```text
-User clicks on CTA button in email
-         │
-         ▼
-  postMessage → iframe
-  { type: 'getElementAtPoint', x: 234, y: 567 }
-         │
-         ▼
-  iframe replies with:
-  { tagName: 'A', text: 'Shop Now', 
-    outerHTML: '<a href="..." class="btn">Shop Now</a>' }
-         │
-         ▼
-  Stored on thread.pin.elementInfo
-         │
-         ▼
-  AI prompt (hidden from chat):
-  "[Targeting <A> element: 'Shop Now']
-   Element HTML: <a href='...' class='btn'>Shop Now</a>
-   
-   Swap this element with a better alternative..."
-  + screenshot attachment for visual context
-         │
-         ▼
-  Chat display (visible): "🔄 Swap element"
+User action
+  -> UI builds:
+       visible_text = clean label shown in chat
+       hidden_prompt = full targeting/context payload for AI
+  -> backend receives hidden_prompt for generation
+  -> chat row stores:
+       content = visible_text
+       tool_calls.hidden_prompt = hidden_prompt
+  -> reload restores visible text only
+  -> "Generate More" reuses hidden_prompt, not the bubble text
 ```
 
-### Files Summary
-
-| File | Changes |
-|------|---------|
-| `src/pages/CampaignEditor.tsx` | Add postMessage element query to iframe script; update all 4 comment handlers to include element info in prompts and use ideatePayloadRef for clean display |
-| `src/components/campaign/CommentOverlay.tsx` | Extend `CommentThread` pin type with optional `elementInfo` field |
-
+Validation checklist
+- Refresh after ideate/swap/comment and confirm no raw HTML/targeting prompt ever appears
+- Test legacy saved messages and confirm they render safely
+- Select headline + subheader + CTA, press ideate, and confirm each option card contains all three fields as one grouped option
+- Hover grouped cards and confirm preview updates all selected elements together
+- Click grouped cards and confirm apply updates all targeted elements together or fails atomically
+- Run the same grouped flow in comment mode, not just edit-mode selection
