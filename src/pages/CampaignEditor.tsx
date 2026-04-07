@@ -3329,7 +3329,18 @@ export default function CampaignEditor() {
       {/* Top Bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={() => navigate(`/brands/${brandId}`)} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => {
+            // Flush any pending saves before navigating away
+            if (pendingSaveRef.current) {
+              const { html: h, history: hist, campaignId: cid, variantHtmls: vh } = pendingSaveRef.current;
+              pendingSaveRef.current = null;
+              if (inlineEditTimerRef.current) { clearTimeout(inlineEditTimerRef.current); inlineEditTimerRef.current = null; }
+              const payload: any = { html: h, html_history: hist };
+              if (vh) payload.variant_htmls = vh;
+              supabase.from("campaigns").update(payload).eq("id", cid);
+            }
+            navigate(`/brands/${brandId}`);
+          }} className="text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-4 h-4" />
           </button>
           {editingName ? (
