@@ -1396,13 +1396,7 @@ export default function CampaignEditor() {
         const { html: h, history: hist, campaignId: cid } = pendingSaveRef.current;
         pendingSaveRef.current = null;
         if (inlineEditTimerRef.current) { clearTimeout(inlineEditTimerRef.current); inlineEditTimerRef.current = null; }
-        // Use sendBeacon for reliability during unload, fall back to fire-and-forget
-        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/campaigns?id=eq.${cid}`;
-        const body = JSON.stringify({ html: h, html_history: hist });
-        const sent = navigator.sendBeacon?.(url, new Blob([body], { type: 'application/json' }));
-        if (!sent) {
-          supabase.from("campaigns").update({ html: h, html_history: hist }).eq("id", cid);
-        }
+        supabase.from("campaigns").update({ html: h, html_history: hist }).eq("id", cid);
       }
     };
     window.addEventListener('beforeunload', flushPendingSave);
