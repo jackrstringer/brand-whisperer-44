@@ -130,7 +130,8 @@ export default function CampaignEditor() {
   const [commentThreads, setCommentThreads] = useState<CommentThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [composerThreadId, setComposerThreadId] = useState<string | null>(null);
-  const commentDragRef = useRef<{ startX: number; startY: number } | null>(null);
+  const commentDragRef = useRef<{ startX: number; startY: number; currentX: number; currentY: number; isDragging: boolean } | null>(null);
+  const [commentDragRect, setCommentDragRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const pendingCommentIdRef = useRef<string | null>(null);
   const commentCurrentUser: CommentAuthor = {
     name: user?.email?.split("@")[0] || "You",
