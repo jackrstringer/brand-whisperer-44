@@ -323,7 +323,7 @@ export default function CampaignEditor() {
       const observer = new ResizeObserver(() => {
         cancelAnimationFrame(rafId);
         rafId = requestAnimationFrame(() => {
-          const h = Math.max(doc.body?.scrollHeight ?? 0, doc.documentElement?.scrollHeight ?? 0, 800);
+          const h = Math.max(doc.body?.scrollHeight ?? 0, doc.documentElement?.scrollHeight ?? 0, 200);
           if (h !== lastHeight) {
             lastHeight = h;
             setIframeContentHeight(h);
