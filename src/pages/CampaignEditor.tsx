@@ -3313,7 +3313,7 @@ export default function CampaignEditor() {
         <div className="w-px bg-border shrink-0" />
 
         {/* Right Panel — fixed 35% */}
-        <div className="h-full overflow-hidden" style={{ width: '35%', minWidth: 0 }}>
+        <div data-chat-panel className="h-full overflow-hidden" style={{ width: '35%', minWidth: 0 }}>
           <div className="h-full flex flex-col overflow-hidden">
             {isDraft && !isGenerating ? (
               <div className="p-6 space-y-5 overflow-y-auto flex-1">
