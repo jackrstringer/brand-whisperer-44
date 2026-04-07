@@ -1034,8 +1034,18 @@ export default function CampaignEditor() {
       return;
     }
 
-    const useAll = variant.apply_all === true;
-    const newHtml = useAll ? html.split(findTarget).join(variant.replace) : html.replace(findTarget, variant.replace);
+    // Grouped variant: apply all items' find/replace pairs
+    let newHtml = html;
+    if (variant.items && variant.items.length > 0) {
+      for (const item of variant.items) {
+        if (item.find && newHtml.includes(item.find)) {
+          newHtml = newHtml.replace(item.find, item.replace);
+        }
+      }
+    } else {
+      const useAll = variant.apply_all === true;
+      newHtml = useAll ? html.split(findTarget).join(variant.replace) : html.replace(findTarget, variant.replace);
+    }
     // Save to history
     const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
     history.push(html);
