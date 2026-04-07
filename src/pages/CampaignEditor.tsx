@@ -1387,7 +1387,7 @@ export default function CampaignEditor() {
   // Track iframe-owned HTML to avoid reloading iframe on every keystroke
   const iframeOwnedHtmlRef = useRef<string | null>(null);
   // Track pending save payload so we can flush on unmount/navigation
-  const pendingSaveRef = useRef<{ html: string; history: any[]; campaignId: string } | null>(null);
+  const pendingSaveRef = useRef<{ html: string; history: any[]; campaignId: string; variantHtmls?: any[] } | null>(null);
   // Stable HTML ref to prevent iframe reload during inline edits
   const lastStableHtmlRef = useRef<string | null>(null);
 
@@ -1395,10 +1395,12 @@ export default function CampaignEditor() {
   useEffect(() => {
     const flushPendingSave = () => {
       if (pendingSaveRef.current) {
-        const { html: h, history: hist, campaignId: cid } = pendingSaveRef.current;
+        const { html: h, history: hist, campaignId: cid, variantHtmls: vh } = pendingSaveRef.current;
         pendingSaveRef.current = null;
         if (inlineEditTimerRef.current) { clearTimeout(inlineEditTimerRef.current); inlineEditTimerRef.current = null; }
-        supabase.from("campaigns").update({ html: h, html_history: hist }).eq("id", cid);
+        const payload: any = { html: h, html_history: hist };
+        if (vh) payload.variant_htmls = vh;
+        supabase.from("campaigns").update(payload).eq("id", cid);
       }
     };
     window.addEventListener('beforeunload', flushPendingSave);
@@ -1619,19 +1621,32 @@ export default function CampaignEditor() {
       // Push to history for undo
       const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
       history.push(currentHtml);
+
+      // Sync variant_htmls if active variant is being manually edited
+      let nextVariantHtmls: any[] | undefined;
+      if (Array.isArray(variantHtmls) && variantHtmls.length > 0 && activeVariantIndex >= 0 && activeVariantIndex < variantHtmls.length) {
+        const activeVariant = variantHtmls[activeVariantIndex];
+        if (activeVariant && activeVariant.html !== newHtml) {
+          nextVariantHtmls = variantHtmls.map((v: any, i: number) => i === activeVariantIndex ? { ...v, html: newHtml } : v);
+          setVariantHtmls(nextVariantHtmls);
+        }
+      }
+
       // Update both history AND html in state so navigation always has latest
       setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
       setCanUndo(true);
       setRedoStack([]); // clear redo on new edit
 
-      // Debounced DB save — persist both html and history
+      // Debounced DB save — persist both html, history, and variant_htmls
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
-      pendingSaveRef.current = { html: newHtml, history, campaignId };
+      const savePayload: any = { html: newHtml, html_history: history };
+      if (nextVariantHtmls) savePayload.variant_htmls = nextVariantHtmls;
+      pendingSaveRef.current = { html: newHtml, history, campaignId, variantHtmls: nextVariantHtmls };
       inlineEditTimerRef.current = setTimeout(async () => {
         pendingSaveRef.current = null;
-        await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
+        await supabase.from("campaigns").update(savePayload).eq("id", campaignId);
         iframeOwnedHtmlRef.current = null;
-      }, 800);
+      }, 400);
     };
     window.addEventListener("message", handler);
     return () => {
@@ -1639,12 +1654,14 @@ export default function CampaignEditor() {
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
       // Flush any pending save immediately on cleanup
       if (pendingSaveRef.current) {
-        const { html: h, history: hist, campaignId: cid } = pendingSaveRef.current;
+        const { html: h, history: hist, campaignId: cid, variantHtmls: vh } = pendingSaveRef.current;
         pendingSaveRef.current = null;
-        supabase.from("campaigns").update({ html: h, html_history: hist }).eq("id", cid);
+        const payload: any = { html: h, html_history: hist };
+        if (vh) payload.variant_htmls = vh;
+        supabase.from("campaigns").update(payload).eq("id", cid);
       }
     };
-  }, [campaignId, campaign, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace]);
+  }, [campaignId, campaign, variantHtmls, activeVariantIndex, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace]);
 
   // Ideate/Swap for selected elements (single or multi)
   const triggerSelectedElementIdeate = useCallback(() => {
@@ -2110,44 +2127,53 @@ export default function CampaignEditor() {
       sel.addRange(range);
     }
   });
-  var timer = null;
-  function syncHtml(){
-    clearTimeout(timer);
-    timer = setTimeout(function(){
-      var clone = document.documentElement.cloneNode(true);
-      clone.querySelectorAll('script').forEach(function(s){ s.remove(); });
-      clone.querySelectorAll('[contenteditable]').forEach(function(el){
-        el.removeAttribute('contenteditable');
-        el.style.removeProperty('cursor');
-      });
-      clone.querySelectorAll('.section-handle-bar').forEach(function(el){ el.remove(); });
-      clone.querySelectorAll('.section-wrap').forEach(function(el){
-        el.classList.remove('section-wrap');
-        el.style.removeProperty('position');
-        el.removeAttribute('data-section-name');
-      });
-      clone.querySelectorAll('.ctx-menu').forEach(function(el){ el.remove(); });
-      clone.querySelectorAll('.ftb').forEach(function(el){ el.remove(); });
-      clone.querySelectorAll('.ftb-cpanel').forEach(function(el){ el.remove(); });
-      clone.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
-      clone.querySelectorAll('.el-hover').forEach(function(el){ el.classList.remove('el-hover'); });
-      clone.querySelectorAll('.region-select-overlay').forEach(function(el){ el.remove(); });
-      clone.querySelectorAll('.img-swap-arrow,.img-swap-cats').forEach(function(el){ el.remove(); });
-      clone.querySelectorAll('.img-selected').forEach(function(el){ el.classList.remove('img-selected'); });
-      clone.querySelectorAll('style').forEach(function(s){
-        if(s.textContent && (s.textContent.indexOf('[contenteditable]')>=0 || s.textContent.indexOf('section-drag')>=0 || s.textContent.indexOf('.ctx-menu')>=0 || s.textContent.indexOf('.ftb')>=0)) s.remove();
-      });
-      clone.querySelectorAll('font').forEach(function(f){
-        var span = document.createElement('span');
-        span.innerHTML = f.innerHTML;
-        if(f.color) span.style.color = f.color;
-        if(f.size) { var sizes = {1:'10px',2:'13px',3:'16px',4:'18px',5:'24px',6:'32px',7:'48px'}; span.style.fontSize = sizes[f.size]||f.size+'px'; }
-        f.replaceWith(span);
-      });
-      window.parent.postMessage({ type: 'textEdited', html: clone.outerHTML }, '*');
-    }, 1500);
+  var syncTimer = null;
+  function serializeCleanHtml(){
+    var clone = document.documentElement.cloneNode(true);
+    clone.querySelectorAll('script').forEach(function(s){ s.remove(); });
+    clone.querySelectorAll('[contenteditable]').forEach(function(el){
+      el.removeAttribute('contenteditable');
+      el.style.removeProperty('cursor');
+    });
+    clone.querySelectorAll('.section-handle-bar').forEach(function(el){ el.remove(); });
+    clone.querySelectorAll('.section-wrap').forEach(function(el){
+      el.classList.remove('section-wrap');
+      el.style.removeProperty('position');
+      el.removeAttribute('data-section-name');
+    });
+    clone.querySelectorAll('.ctx-menu').forEach(function(el){ el.remove(); });
+    clone.querySelectorAll('.ftb').forEach(function(el){ el.remove(); });
+    clone.querySelectorAll('.ftb-cpanel').forEach(function(el){ el.remove(); });
+    clone.querySelectorAll('.el-selected').forEach(function(el){ el.classList.remove('el-selected'); });
+    clone.querySelectorAll('.el-hover').forEach(function(el){ el.classList.remove('el-hover'); });
+    clone.querySelectorAll('.region-select-overlay').forEach(function(el){ el.remove(); });
+    clone.querySelectorAll('.img-swap-arrow,.img-swap-cats').forEach(function(el){ el.remove(); });
+    clone.querySelectorAll('.img-selected').forEach(function(el){ el.classList.remove('img-selected'); });
+    clone.querySelectorAll('style').forEach(function(s){
+      if(s.textContent && (s.textContent.indexOf('[contenteditable]')>=0 || s.textContent.indexOf('section-drag')>=0 || s.textContent.indexOf('.ctx-menu')>=0 || s.textContent.indexOf('.ftb')>=0)) s.remove();
+    });
+    clone.querySelectorAll('font').forEach(function(f){
+      var span = document.createElement('span');
+      span.innerHTML = f.innerHTML;
+      if(f.color) span.style.color = f.color;
+      if(f.size) { var sizes = {1:'10px',2:'13px',3:'16px',4:'18px',5:'24px',6:'32px',7:'48px'}; span.style.fontSize = sizes[f.size]||f.size+'px'; }
+      f.replaceWith(span);
+    });
+    return clone.outerHTML;
   }
+  function emitHtmlNow(){
+    clearTimeout(syncTimer);
+    window.parent.postMessage({ type: 'textEdited', html: serializeCleanHtml() }, '*');
+  }
+  function syncHtml(){
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(emitHtmlNow, 300);
+  }
+  function syncHtmlImmediate(){ emitHtmlNow(); }
   document.addEventListener('input', syncHtml);
+  /* Flush on blur/focusout so navigating away always captures latest state */
+  window.addEventListener('blur', emitHtmlNow);
+  document.addEventListener('focusout', function(){ clearTimeout(syncTimer); syncTimer = setTimeout(emitHtmlNow, 50); });
 
   /* --- SELECTION PERSISTENCE --- */
   var savedRange = null;
@@ -2177,7 +2203,7 @@ export default function CampaignEditor() {
     restoreSelection();
     ftbTarget.focus();
     try { document.execCommand(cmd, false, value || null); } catch(e){}
-    syncHtml();
+    syncHtmlImmediate();
     // Re-save the range after command
     var sel = window.getSelection();
     if(sel && sel.rangeCount > 0) savedRange = sel.getRangeAt(0).cloneRange();
@@ -2304,7 +2330,7 @@ export default function CampaignEditor() {
       }
       swatch.style.backgroundColor = hex;
       if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; }
-      syncHtml();
+      syncHtmlImmediate();
     }
 
     function makeSwatchEl(hex, isActive){
@@ -2409,7 +2435,7 @@ export default function CampaignEditor() {
       swatch.style.backgroundColor = hex;
       swatch.style.backgroundImage = 'none';
       if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; }
-      syncHtml();
+      syncHtmlImmediate();
     }
 
     function makeBgSwatch(hex, isActive){
@@ -2532,7 +2558,7 @@ export default function CampaignEditor() {
           f.replaceWith(span);
         });
       }
-      syncHtml();
+      syncHtmlImmediate();
     });
     bar.appendChild(sizeSelect);
 
@@ -2614,7 +2640,7 @@ export default function CampaignEditor() {
       el.style.textAlign = next;
       currentAlign = next;
       alignBtn.innerHTML = alignSvgs[next];
-      syncHtml();
+      syncHtmlImmediate();
       restoreSelection();
       el.focus();
     });
@@ -2651,7 +2677,7 @@ export default function CampaignEditor() {
           ev.stopPropagation();
           var cur = parseInt(window.getComputedStyle(el)[d.prop]) || 0;
           el.style[d.prop] = Math.max(0, cur - 4) + 'px';
-          syncHtml(); buildPadPanel();
+          syncHtmlImmediate(); buildPadPanel();
         });
         row.appendChild(minus);
         var val = document.createElement('span');
@@ -2666,7 +2692,7 @@ export default function CampaignEditor() {
           ev.stopPropagation();
           var cur = parseInt(window.getComputedStyle(el)[d.prop]) || 0;
           el.style[d.prop] = (cur + 4) + 'px';
-          syncHtml(); buildPadPanel();
+          syncHtmlImmediate(); buildPadPanel();
         });
         row.appendChild(plus);
         padPanel.appendChild(row);
@@ -2823,13 +2849,13 @@ export default function CampaignEditor() {
     addItem('Duplicate', '⧉', function(){
       var cloned = el.cloneNode(true);
       el.parentNode.insertBefore(cloned, el.nextSibling);
-      syncHtml();
+      syncHtmlImmediate();
     });
 
     /* Delete element */
     addItem('Delete', '🗑️', function(){
       el.remove();
-      syncHtml();
+      syncHtmlImmediate();
     });
 
     document.body.appendChild(menu);
@@ -2875,7 +2901,7 @@ export default function CampaignEditor() {
       bar.querySelector('.sec-del').addEventListener('click', function(e){
         e.stopPropagation();
         el.remove();
-        syncHtml();
+        syncHtmlImmediate();
         window.parent.postMessage({ type: 'sectionDeleted', sectionName: sec.name }, '*');
       });
     });
@@ -2891,7 +2917,7 @@ export default function CampaignEditor() {
           container.querySelectorAll('[data-section-name]').forEach(function(el){
             newOrder.push(el.dataset.sectionName);
           });
-          syncHtml();
+          syncHtmlImmediate();
           window.parent.postMessage({
             type: 'sectionReordered',
             newOrder: newOrder,
@@ -2926,7 +2952,7 @@ export default function CampaignEditor() {
         removeDeleteBtn();
         selectedEl = null;
         window.parent.postMessage({ type: 'elementDeselected' }, '*');
-        syncHtml();
+        syncHtmlImmediate();
       }
     });
     // Ensure parent can hold absolute positioning
@@ -2969,7 +2995,7 @@ export default function CampaignEditor() {
     removeDeleteBtn();
     selectedEl = null;
     window.parent.postMessage({ type: 'elementDeselected' }, '*');
-    syncHtml();
+    syncHtmlImmediate();
   }
 
   document.addEventListener('keydown', function(e){
@@ -3045,7 +3071,7 @@ export default function CampaignEditor() {
       removeDeleteBtn();
       selectedEl = null;
       window.parent.postMessage({ type: 'elementDeselected' }, '*');
-      syncHtml();
+      syncHtmlImmediate();
     }
   });
 
@@ -3113,7 +3139,7 @@ export default function CampaignEditor() {
       if(imgSwapTarget && newSrc){
         imgSwapTarget.src = newSrc;
         imgSwapTarget.setAttribute('src', newSrc);
-        syncHtml();
+        syncHtmlImmediate();
       }
     }
     if(e.data && e.data.type === 'getElementAtPoint'){
@@ -3303,7 +3329,18 @@ export default function CampaignEditor() {
       {/* Top Bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={() => navigate(`/brands/${brandId}`)} className="text-muted-foreground hover:text-foreground transition-colors">
+          <button onClick={() => {
+            // Flush any pending saves before navigating away
+            if (pendingSaveRef.current) {
+              const { html: h, history: hist, campaignId: cid, variantHtmls: vh } = pendingSaveRef.current;
+              pendingSaveRef.current = null;
+              if (inlineEditTimerRef.current) { clearTimeout(inlineEditTimerRef.current); inlineEditTimerRef.current = null; }
+              const payload: any = { html: h, html_history: hist };
+              if (vh) payload.variant_htmls = vh;
+              supabase.from("campaigns").update(payload).eq("id", cid);
+            }
+            navigate(`/brands/${brandId}`);
+          }} className="text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-4 h-4" />
           </button>
           {editingName ? (
@@ -3474,7 +3511,17 @@ export default function CampaignEditor() {
               </Button>
               <Button
                 size="sm"
-                onClick={() => navigate(`/brands/${brandId}/campaigns/${campaignId}/qa`)}
+                onClick={() => {
+                  if (pendingSaveRef.current) {
+                    const { html: h, history: hist, campaignId: cid, variantHtmls: vh } = pendingSaveRef.current;
+                    pendingSaveRef.current = null;
+                    if (inlineEditTimerRef.current) { clearTimeout(inlineEditTimerRef.current); inlineEditTimerRef.current = null; }
+                    const payload: any = { html: h, html_history: hist };
+                    if (vh) payload.variant_htmls = vh;
+                    supabase.from("campaigns").update(payload).eq("id", cid);
+                  }
+                  navigate(`/brands/${brandId}/campaigns/${campaignId}/qa`);
+                }}
                 className="active:scale-[0.98] transition-all"
               >
                 <ClipboardCheck className="w-3 h-3 mr-1" /> Review & Send
