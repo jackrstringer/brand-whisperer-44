@@ -20,16 +20,19 @@ Your job is to produce an extremely detailed, factual research dossier about the
 Mark fields "unknown" ONLY if you searched and genuinely cannot find the information. Never guess or fabricate. Never fill in data from a different company.`;
 
 function buildUserPrompt(brandName: string, domain: string): string {
-  return `Conduct deep research on the brand "${brandName}" at ${domain}.
+  return `Conduct deep research on the brand "${brandName}" whose website is at ${domain}.
+
+IMPORTANT: The domain ${domain} is the DEFINITIVE source. This is the ONLY brand you are researching. If "${brandName}" is a common word, do NOT confuse this with other companies that happen to share the name. Only report facts about the company operating at ${domain}.
 
 RESEARCH INSTRUCTIONS:
-1. Search for and visit their website at ${domain} — examine homepage, product pages, about page, FAQ, shipping/returns policy
-2. Search for "${brandName} reviews" to find customer sentiment and common feedback
-3. Search for "${brandName}" on social media and press to understand their marketing approach
-4. Search for competitors in their space to understand positioning
-5. Look for pricing, subscription offers, bundles, and promotional patterns
+1. FIRST: Search for "${domain}" and visit the actual website at ${domain} — examine homepage, product pages, about page, FAQ, shipping/returns policy. This is your primary source of truth.
+2. Search for "site:${domain}" to find all indexed pages on their actual site
+3. Search for "${domain} reviews" (using the domain, not just the brand name) to find customer sentiment
+4. Search for "${brandName} ${domain}" on social media and press — always include the domain to disambiguate
+5. Search for competitors in their space to understand positioning
+6. Look for pricing, subscription offers, bundles, and promotional patterns ON THEIR ACTUAL SITE
 
-Be THOROUGH. Do multiple searches. Cross-reference information. The more detail and accuracy, the better.
+Be THOROUGH. Do multiple searches. Cross-reference information. The more detail and accuracy, the better. If you find conflicting info from different "brands" with the same name, ONLY use info from the company at ${domain}.
 
 Return ONLY a valid JSON object matching this exact structure:
 
