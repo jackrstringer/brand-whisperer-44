@@ -130,7 +130,8 @@ export default function CampaignEditor() {
   const [commentThreads, setCommentThreads] = useState<CommentThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [composerThreadId, setComposerThreadId] = useState<string | null>(null);
-  const commentDragRef = useRef<{ startX: number; startY: number } | null>(null);
+  const commentDragRef = useRef<{ startX: number; startY: number; currentX: number; currentY: number; isDragging: boolean } | null>(null);
+  const [commentDragRect, setCommentDragRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const pendingCommentIdRef = useRef<string | null>(null);
   const commentCurrentUser: CommentAuthor = {
     name: user?.email?.split("@")[0] || "You",
@@ -3244,15 +3245,33 @@ export default function CampaignEditor() {
               if (e.button !== 0) return;
               if (!campaign?.html) return;
               const tag = (e.target as HTMLElement).tagName;
-              if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'IFRAME') return;
+              if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+              // Don't intercept clicks on comment overlay elements
+              if ((e.target as HTMLElement).closest?.('[data-comment-overlay]')) return;
+              if (tag === 'IFRAME' && !commentMode) return;
+              if (tag === 'IFRAME' && commentMode) {
+                // iframe has pointer-events:none in comment mode, so this shouldn't fire
+                return;
+              }
               const panelRect = previewPanelRef.current?.getBoundingClientRect();
               if (!panelRect) return;
               const x = e.clientX - panelRect.left;
               const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
 
               if (commentMode) {
+                // Click priority chain: dismiss first before placing
+                if (composerThreadId) {
+                  setCommentThreads(prev => prev.filter(t => t.id !== composerThreadId));
+                  setComposerThreadId(null);
+                  setActiveThreadId(null);
+                  return;
+                }
+                if (activeThreadId) {
+                  setActiveThreadId(null);
+                  return;
+                }
                 // Comment mode: start tracking for click or drag
-                commentDragRef.current = { startX: x, startY: y };
+                commentDragRef.current = { startX: x, startY: y, currentX: x, currentY: y, isDragging: false };
                 e.currentTarget.setPointerCapture(e.pointerId);
                 e.preventDefault();
                 return;
@@ -3263,6 +3282,29 @@ export default function CampaignEditor() {
               e.preventDefault();
             }}
             onPointerMove={(e) => {
+              // Comment mode drag tracking
+              if (commentMode && commentDragRef.current) {
+                const panelRect = previewPanelRef.current?.getBoundingClientRect();
+                if (!panelRect) return;
+                const x = e.clientX - panelRect.left;
+                const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+                const dx = Math.abs(x - commentDragRef.current.startX);
+                const dy = Math.abs(y - commentDragRef.current.startY);
+                if (dx > 4 || dy > 4) {
+                  commentDragRef.current.isDragging = true;
+                }
+                commentDragRef.current.currentX = x;
+                commentDragRef.current.currentY = y;
+                if (commentDragRef.current.isDragging) {
+                  const rx = Math.min(commentDragRef.current.startX, x);
+                  const ry = Math.min(commentDragRef.current.startY, y);
+                  const rw = Math.abs(x - commentDragRef.current.startX);
+                  const rh = Math.abs(y - commentDragRef.current.startY);
+                  setCommentDragRect({ x: rx, y: ry, w: rw, h: rh });
+                }
+                return;
+              }
+
               const state = interactionRef.current;
               const panelRect = previewPanelRef.current?.getBoundingClientRect();
               if (!panelRect) return;
@@ -3338,50 +3380,44 @@ export default function CampaignEditor() {
             onPointerUp={async (e) => {
               // Comment mode handling
               if (commentMode && commentDragRef.current) {
-                const panelRect = previewPanelRef.current?.getBoundingClientRect();
-                if (!panelRect) { commentDragRef.current = null; return; }
-                const x = e.clientX - panelRect.left;
-                const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
-                const start = commentDragRef.current;
-                const dx = Math.abs(x - start.startX);
-                const dy = Math.abs(y - start.startY);
-                const isDrag = dx > 4 || dy > 4;
-
-                // Click priority chain: dismiss composer → dismiss popover → place pin
-                if (composerThreadId) {
-                  // Cancel current composer
-                  setCommentThreads(prev => prev.filter(t => t.id !== composerThreadId));
-                  setComposerThreadId(null);
-                  commentDragRef.current = null;
-                  try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
-                  return;
-                }
-                if (activeThreadId) {
-                  // Close current popover
-                  setActiveThreadId(null);
-                  commentDragRef.current = null;
-                  try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
-                  return;
-                }
-
-                const pinX = isDrag ? (start.startX + x) / 2 : x;
-                const pinY = isDrag ? (start.startY + y) / 2 : y;
-                const regionW = isDrag ? Math.abs(x - start.startX) : undefined;
-                const regionH = isDrag ? Math.abs(y - start.startY) : undefined;
-
-                const threadId = crypto.randomUUID();
-                const newThread: CommentThread = {
-                  id: threadId,
-                  pin: { x: pinX, y: pinY, regionW, regionH },
-                  comments: [],
-                  resolved: false,
-                  isTemporary: true,
-                };
-                setCommentThreads(prev => [...prev, newThread]);
-                setComposerThreadId(threadId);
-                setActiveThreadId(threadId);
+                const drag = commentDragRef.current;
                 commentDragRef.current = null;
+                setCommentDragRect(null);
                 try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+
+                if (drag.isDragging) {
+                  // Region comment
+                  const x = Math.min(drag.startX, drag.currentX);
+                  const y = Math.min(drag.startY, drag.currentY);
+                  const w = Math.abs(drag.currentX - drag.startX);
+                  const h = Math.abs(drag.currentY - drag.startY);
+                  if (w > 8 && h > 8) {
+                    const threadId = crypto.randomUUID();
+                    const newThread: CommentThread = {
+                      id: threadId,
+                      pin: { x, y, regionW: w, regionH: h },
+                      comments: [],
+                      resolved: false,
+                      isTemporary: true,
+                    };
+                    setCommentThreads(prev => [...prev, newThread]);
+                    setComposerThreadId(threadId);
+                    setActiveThreadId(threadId);
+                  }
+                } else {
+                  // Point comment
+                  const threadId = crypto.randomUUID();
+                  const newThread: CommentThread = {
+                    id: threadId,
+                    pin: { x: drag.startX, y: drag.startY },
+                    comments: [],
+                    resolved: false,
+                    isTemporary: true,
+                  };
+                  setCommentThreads(prev => [...prev, newThread]);
+                  setComposerThreadId(threadId);
+                  setActiveThreadId(threadId);
+                }
                 return;
               }
 
@@ -3453,6 +3489,23 @@ export default function CampaignEditor() {
                 />
               );
             })()}
+            {/* Comment drag rectangle */}
+            {commentDragRect && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: commentDragRect.x,
+                  top: commentDragRect.y,
+                  width: commentDragRect.w,
+                  height: commentDragRect.h,
+                  border: '1.5px dashed rgba(59,130,246,0.4)',
+                  background: 'rgba(59,130,246,0.06)',
+                  pointerEvents: 'none',
+                  zIndex: 50,
+                  borderRadius: 2,
+                }}
+              />
+            )}
             {/* Comment mode banner */}
             {commentMode && (
               <div
@@ -3495,6 +3548,7 @@ export default function CampaignEditor() {
                 onCancelComposer={(id) => {
                   setCommentThreads(prev => prev.filter(t => t.id !== id));
                   setComposerThreadId(null);
+                  setActiveThreadId(null);
                 }}
               />
             )}
@@ -3531,6 +3585,7 @@ export default function CampaignEditor() {
                         height: iframeContentHeight,
                         transform: `scale(${zoomScale})`,
                         transformOrigin: "top left",
+                        pointerEvents: commentMode ? 'none' : undefined,
                       }}
                       title="Email Preview"
                       onLoad={(e) => {

@@ -107,6 +107,7 @@ function TeardropPin({
       {/* Teardrop shape */}
       <button
         onClick={onClick}
+        onPointerDown={(e) => e.stopPropagation()}
         style={{
           width: 32,
           height: 32,
@@ -227,7 +228,9 @@ function ThreadPopover({
 
   return (
     <div
+      data-comment-overlay
       onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
       style={{
         position: "absolute",
         left: thread.pin.x + 36 / zoom,
@@ -442,7 +445,9 @@ function ComposerPopover({
 
   return (
     <div
+      data-comment-overlay
       onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
       style={{
         position: "absolute",
         left: thread.pin.x + 36 / zoom,
