@@ -2924,6 +2924,40 @@ export default function CampaignEditor() {
         syncHtml();
       }
     }
+    if(e.data && e.data.type === 'getElementAtPoint'){
+      var pt = document.elementFromPoint(e.data.x, e.data.y);
+      var found = null;
+      while(pt && pt !== document.body && pt !== document.documentElement){
+        if(pt.tagName && /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL|TD|TH|IMG|DIV)$/i.test(pt.tagName)){
+          found = pt; break;
+        }
+        pt = pt.parentElement;
+      }
+      if(found){
+        window.parent.postMessage({ type: 'commentElementInfo', tagName: found.tagName, text: (found.textContent||'').trim().slice(0,300), outerHTML: (found.outerHTML||'').slice(0,1500) }, '*');
+      } else {
+        window.parent.postMessage({ type: 'commentElementInfo', tagName: '', text: '', outerHTML: '' }, '*');
+      }
+    }
+    if(e.data && e.data.type === 'getElementsInRegion'){
+      var rect = e.data.rect;
+      var candidates = [];
+      document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img,td,div').forEach(function(el){
+        var r = el.getBoundingClientRect();
+        if(r.width < 1 || r.height < 1) return;
+        if(r.right > rect.left && r.left < rect.right && r.bottom > rect.top && r.top < rect.bottom){
+          candidates.push(el);
+        }
+      });
+      var filtered = candidates.filter(function(el){
+        return !candidates.some(function(other){ return other !== el && el.contains(other); });
+      });
+      var elements = filtered.slice(0, 10).map(function(el){
+        return { tagName: el.tagName, text: (el.textContent||'').trim().slice(0,200), outerHTML: (el.outerHTML||'').slice(0,1000) };
+      });
+      var primary = filtered[0];
+      window.parent.postMessage({ type: 'commentElementInfo', tagName: primary ? primary.tagName : '', text: primary ? (primary.textContent||'').trim().slice(0,300) : '', outerHTML: primary ? (primary.outerHTML||'').slice(0,1500) : '', allElements: elements }, '*');
+    }
   });
 
   /* --- NATIVE HOVER INSIDE IFRAME --- */
