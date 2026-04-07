@@ -3508,28 +3508,28 @@ export default function CampaignEditor() {
             )}
             {/* Comment mode banner — show only first time, auto-dismiss */}
             {commentMode && !localStorage.getItem('comment-banner-seen') && (() => {
-              // Mark as seen after 2.5s
-              setTimeout(() => {
-                localStorage.setItem('comment-banner-seen', '1');
-              }, 2500);
+              setTimeout(() => localStorage.setItem('comment-banner-seen', '1'), 2500);
               return (
-                <div
-                  className="flex items-center gap-2 px-4 py-2 text-[12px] font-medium shadow-lg animate-in fade-in slide-in-from-top-2"
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    zIndex: 70,
-                    background: '#3B82F6',
-                    color: 'white',
-                    borderRadius: '0 0 8px 8px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                    animation: 'fadeIn 0.2s ease, fadeOut 0.4s ease 2.1s forwards',
-                  }}
-                >
-                  Click to comment · Drag to select region · Esc to exit
-                </div>
+                <>
+                  <style>{`@keyframes commentBannerFadeOut { from { opacity:1; } to { opacity:0; pointer-events:none; } }`}</style>
+                  <div
+                    className="flex items-center gap-2 px-4 py-2 text-[12px] font-medium shadow-lg"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      zIndex: 70,
+                      background: '#3B82F6',
+                      color: 'white',
+                      borderRadius: '0 0 8px 8px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      animation: 'commentBannerFadeOut 0.4s ease 2s forwards',
+                    }}
+                  >
+                    Click to comment · Drag to select region · Esc to exit
+                  </div>
+                </>
               );
             })()}
             {/* Comment threads overlay */}
