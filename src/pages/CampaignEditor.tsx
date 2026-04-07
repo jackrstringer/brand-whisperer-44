@@ -3275,13 +3275,47 @@ export default function CampaignEditor() {
                 }
               }
             }}
-            onPointerUp={(e) => {
+            onPointerUp={async (e) => {
+              // Comment mode handling
+              if (commentMode && commentDragRef.current) {
+                const panelRect = previewPanelRef.current?.getBoundingClientRect();
+                if (!panelRect) { commentDragRef.current = null; return; }
+                const x = e.clientX - panelRect.left;
+                const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+                const start = commentDragRef.current;
+                const dx = Math.abs(x - start.startX);
+                const dy = Math.abs(y - start.startY);
+                const isDrag = dx > 10 || dy > 10;
+
+                const pinX = isDrag ? (start.startX + x) / 2 : x;
+                const pinY = isDrag ? (start.startY + y) / 2 : y;
+                const regionW = isDrag ? Math.abs(x - start.startX) : undefined;
+                const regionH = isDrag ? Math.abs(y - start.startY) : undefined;
+
+                const screenshot = await captureCommentScreenshot(pinX, pinY, regionW, regionH);
+
+                const pinId = crypto.randomUUID();
+                const newPin: CommentPin = {
+                  id: pinId,
+                  x: pinX,
+                  y: pinY,
+                  width: regionW,
+                  height: regionH,
+                  text: "",
+                  screenshot,
+                  status: "draft",
+                };
+                setComments(prev => [...prev, newPin]);
+                setActiveCommentId(pinId);
+                commentDragRef.current = null;
+                try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+                return;
+              }
+
               const state = interactionRef.current;
               const iframe = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
 
               if (state.type === 'PRESSED') {
-                // This was a click (didn't exceed drag threshold)
-                // Click on grey area outside iframe → deselect all
                 if ((e.target as HTMLElement).tagName !== 'IFRAME') {
                   if (iframe?.contentWindow) {
                     try { iframe.contentWindow.postMessage({ type: 'clearSelection' }, '*'); } catch {}
@@ -3292,7 +3326,6 @@ export default function CampaignEditor() {
               }
 
               if (state.type === 'MARQUEE') {
-                // Finalize selection
                 const panelRect = previewPanelRef.current?.getBoundingClientRect();
                 if (panelRect && iframe) {
                   const iframeRect = iframe.getBoundingClientRect();
@@ -3317,7 +3350,6 @@ export default function CampaignEditor() {
                 setMarqueeRect(null);
               }
 
-              // Release pointer capture
               try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
               interactionRef.current = { type: 'IDLE' };
             }}
