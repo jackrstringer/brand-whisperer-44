@@ -1955,8 +1955,11 @@ export default function CampaignEditor() {
       queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH),
     ]);
 
-    const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
-    const realPrompt = `[Ideate request on email design]${elCtx}\n\nGenerate 5 alternative options for this specific element. If it's text (heading, body copy, CTA), generate text alternatives. If it's an image, suggest different image compositions or styles. Present these as variant options the user can select from. IMPORTANT: Only generate alternatives for the targeted element described above.`;
+    const elResult = elementInfo ? buildElementContext({ ...pin, elementInfo }) : { context: '', isGroup: false };
+    const isGroupIdeate = elResult.isGroup;
+    const realPrompt = isGroupIdeate
+      ? `[Ideate request on email design]${elResult.context}${(elResult as any).groupInstruction || ''}\n\nGenerate 5 alternative options for this group of elements. Present these as variant options the user can select from.`
+      : `[Ideate request on email design]${elResult.context}\n\nGenerate 5 alternative options for this specific element. If it's text (heading, body copy, CTA), generate text alternatives. If it's an image, suggest different image compositions or styles. Present these as variant options the user can select from. IMPORTANT: Only generate alternatives for the targeted element described above.`;
 
     let screenshotFile: File | undefined;
     if (screenshot) {
@@ -1966,7 +1969,7 @@ export default function CampaignEditor() {
 
     ideatePayloadRef.current = {
       realPrompt,
-      displayText: "💡 Ideate: Generate options",
+      displayText: isGroupIdeate ? `💡 Ideate: ${elementInfo?.elements?.length || ''} elements` : "💡 Ideate: Generate options",
       attachments: screenshotFile ? [screenshotFile] : undefined,
     };
     setIdeateActive(true);
