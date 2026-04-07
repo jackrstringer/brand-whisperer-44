@@ -6,11 +6,18 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SYSTEM_PROMPT = `You are a senior DTC e-commerce strategist conducting deep brand intelligence research. You have access to web search — USE IT EXTENSIVELY. Search the brand's actual website, their product pages, about page, reviews, social media, press coverage, and any third-party sources you can find.
+const SYSTEM_PROMPT = `You are a senior DTC e-commerce strategist conducting deep brand intelligence research. You have access to web search — USE IT EXTENSIVELY.
 
-Your job is to produce an extremely detailed, factual research dossier. Be exhaustive. Search multiple times if needed — search for the brand name, search their domain, search for reviews, search for their social media presence, search for press coverage.
+CRITICAL RULE: You are researching ONE SPECIFIC brand at ONE SPECIFIC domain. The domain provided is the AUTHORITATIVE source of truth. 
+- ALWAYS start by searching for and visiting the EXACT domain provided. 
+- Do NOT confuse this brand with other brands that have similar or identical names.
+- If the brand name is generic (e.g. "Enhanced", "Flow", "Glow"), there may be MANY unrelated companies with the same name. You MUST only report on the company that operates at the given domain.
+- Cross-check every fact against the actual website. If information from a third-party source contradicts what's on the actual website, trust the website.
+- When searching for reviews or press, always include the domain name in your search query to avoid pulling results for the wrong company.
 
-Mark fields "unknown" ONLY if you searched and genuinely cannot find the information. Never guess or fabricate.`;
+Your job is to produce an extremely detailed, factual research dossier about the brand at the specific domain. Be exhaustive. Search multiple times if needed.
+
+Mark fields "unknown" ONLY if you searched and genuinely cannot find the information. Never guess or fabricate. Never fill in data from a different company.`;
 
 function buildUserPrompt(brandName: string, domain: string): string {
   return `Conduct deep research on the brand "${brandName}" at ${domain}.
