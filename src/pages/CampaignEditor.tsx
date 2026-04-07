@@ -1617,8 +1617,8 @@ export default function CampaignEditor() {
       // Push to history for undo
       const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
       history.push(currentHtml);
-      // Update history in state (but NOT html — that would reload iframe)
-      setCampaign(c => c ? { ...c, html_history: history } : c);
+      // Update both history AND html in state so navigation always has latest
+      setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
       setCanUndo(true);
       setRedoStack([]); // clear redo on new edit
 
@@ -1628,11 +1628,8 @@ export default function CampaignEditor() {
       inlineEditTimerRef.current = setTimeout(async () => {
         pendingSaveRef.current = null;
         await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
-        // Silently sync campaign.html to match DB without triggering srcdoc recompute
-        // (srcdocHtml won't change because displayHtml hasn't changed)
-        setCampaign(c => c ? { ...c, html: newHtml } : c);
         iframeOwnedHtmlRef.current = null;
-      }, 2000);
+      }, 800);
     };
     window.addEventListener("message", handler);
     return () => {
