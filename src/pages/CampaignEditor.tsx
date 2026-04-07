@@ -1553,7 +1553,7 @@ export default function CampaignEditor() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedElementContext, commentMode]);
+  }, [selectedElementContext, commentMode, composerThreadId, activeThreadId]);
 
   // Click anywhere outside the preview panel → deselect + exit edit mode
   useEffect(() => {
