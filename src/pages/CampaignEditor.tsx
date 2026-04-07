@@ -17,21 +17,39 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 
-/** Strip verbose AI context from user messages so users never see raw HTML/element metadata */
+/** Strip verbose AI context from user messages so users never see raw HTML/element metadata.
+ * This is the safety net for legacy messages that were saved before we split content/hidden_prompt. */
 function cleanUserMessage(content: string): string | null {
-  // Fully silent messages — hide entirely
-  if (/^\[Visual comment on email design\]/.test(content) && !/\n\n/.test(content.trim())) return null;
-  // Extract just the human part after the context block
-  const parts = content.split(/\n\n/);
-  const humanParts = parts.filter(p =>
-    !p.startsWith("[Visual comment") &&
-    !p.startsWith("[Targeting ") &&
-    !p.startsWith("Element HTML:") &&
-    !/^<\w+\s/.test(p.trim())
-  );
-  const cleaned = humanParts.join("\n\n").trim();
-  if (!cleaned) return null;
-  return cleaned;
+  // Known hidden-prompt prefixes — if the entire message starts with one, it's an internal prompt
+  const HIDDEN_PREFIXES = [
+    /^\[Visual comment on email design\]/,
+    /^\[Ideate request on (email design|selected elements)\]/,
+    /^\[Swap request on (email design|selected elements)\]/,
+    /^\[Targeting (<\w+>|region with elements)/,
+  ];
+  // Check if the whole message is a hidden prompt
+  const isFullyHidden = HIDDEN_PREFIXES.some(rx => rx.test(content));
+  if (isFullyHidden) {
+    // Try to extract any human-readable text after the context blocks
+    const parts = content.split(/\n\n/);
+    const humanParts = parts.filter(p =>
+      !p.startsWith("[Visual comment") &&
+      !p.startsWith("[Ideate request") &&
+      !p.startsWith("[Swap request") &&
+      !p.startsWith("[Targeting ") &&
+      !p.startsWith("Element HTML:") &&
+      !p.startsWith("Primary element HTML:") &&
+      !p.startsWith("HTML:") &&
+      !/^Element \d+ \(/.test(p) &&
+      !/^<\w+[\s>]/.test(p.trim()) &&
+      !/^Generate \d+ alternative/.test(p) &&
+      !/^Automatically swap/.test(p) &&
+      !/^IMPORTANT:/.test(p)
+    );
+    const cleaned = humanParts.join("\n\n").trim();
+    return cleaned || null;
+  }
+  return content;
 }
 
 import type { Campaign, ChatMessage, VariantOption } from "@/lib/types";
@@ -303,6 +321,10 @@ export default function CampaignEditor() {
         if (m.tool_calls?.type === "variants" && m.tool_calls?.data) {
           msg.message_type = "variants";
           msg.variant_data = m.tool_calls.data;
+        }
+        // Restore hidden_prompt metadata for "Generate More" reuse
+        if (m.role === 'user' && m.tool_calls?.hidden_prompt) {
+          (msg as any)._hidden_prompt = m.tool_calls.hidden_prompt;
         }
         return msg;
       });
@@ -770,6 +792,7 @@ export default function CampaignEditor() {
           body: JSON.stringify({
             campaignId,
             message: userMsg,
+            displayMessage: displayContent,
             currentHtml: iframeOwnedHtmlRef.current || campaign.html,
             ...(attachedImageUrls.length > 0 ? { attachedImageUrls } : {}),
             ...(selectedReferences[0] ? {
@@ -1035,9 +1058,36 @@ export default function CampaignEditor() {
       return;
     }
 
-    // Grouped variant: apply all items' find/replace pairs
+    // Grouped variant: apply all items' find/replace pairs atomically
     let newHtml = html;
     if (variant.items && variant.items.length > 0) {
+      // Validate all items can be found before applying any
+      const missingItems = variant.items.filter(item => !item.find || !newHtml.includes(item.find));
+      if (missingItems.length > 0) {
+        // Try findLiveTarget-style resolution for grouped items
+        let resolved = true;
+        for (const item of variant.items) {
+          if (!item.find || !newHtml.includes(item.find)) {
+            // Check if any other variant's replace text is live for this item
+            const otherVariants = msg.variant_data.variants.filter(v => v.items);
+            let found = false;
+            for (const ov of otherVariants) {
+              const matchingItem = ov.items?.find(oi => oi.label === item.label);
+              if (matchingItem?.replace && newHtml.includes(matchingItem.replace)) {
+                newHtml = newHtml.replace(matchingItem.replace, item.replace);
+                found = true;
+                break;
+              }
+            }
+            if (!found) { resolved = false; break; }
+          }
+        }
+        if (!resolved) {
+          toast.error("Could not find all elements to replace — the content may have changed.");
+          return;
+        }
+      }
+      // Apply remaining items that matched directly
       for (const item of variant.items) {
         if (item.find && newHtml.includes(item.find)) {
           newHtml = newHtml.replace(item.find, item.replace);
@@ -1098,12 +1148,22 @@ export default function CampaignEditor() {
     const msg = messages.find(m => m.id === messageId);
     if (!msg?.variant_data) return;
 
-    // Grouped variant: preview all items' find/replace pairs
+    // Grouped variant: preview all items' find/replace pairs atomically
     if (variant.items && variant.items.length > 0) {
       let result = html;
       for (const item of variant.items) {
         if (item.find && result.includes(item.find)) {
           result = result.replace(item.find, item.replace);
+        } else {
+          // Try to find live text from other applied variants in same set
+          const otherVariants = msg.variant_data.variants.filter(v => v.items);
+          for (const ov of otherVariants) {
+            const matchingItem = ov.items?.find(oi => oi.label === item.label);
+            if (matchingItem?.replace && result.includes(matchingItem.replace)) {
+              result = result.replace(matchingItem.replace, item.replace);
+              break;
+            }
+          }
         }
       }
       setPreviewHtml(result);
@@ -1124,12 +1184,13 @@ export default function CampaignEditor() {
     const msg = messages.find(m => m.id === messageId);
     if (!msg?.variant_data) return;
 
-    // Find the original user message that triggered these variants
+    // Find the original user message that triggered these variants — prefer hidden prompt
     const msgIndex = messages.findIndex(m => m.id === messageId);
     let originalUserMsg = "";
     for (let i = msgIndex - 1; i >= 0; i--) {
       if (messages[i].role === "user") {
-        originalUserMsg = messages[i].content;
+        // Prefer hidden_prompt metadata over visible content
+        originalUserMsg = (messages[i] as any)._hidden_prompt || messages[i].content;
         break;
       }
     }
@@ -1788,12 +1849,22 @@ export default function CampaignEditor() {
   // Helper: build element context string for AI prompts
   const buildElementContext = (pin: CommentThread['pin']) => {
     const elInfo = pin.elementInfo;
-    if (!elInfo || !elInfo.tagName) return '';
+    if (!elInfo || !elInfo.tagName) return { context: '', isGroup: false };
     if (elInfo.elements && elInfo.elements.length > 1) {
-      const elDesc = elInfo.elements.map(e => `<${e.tagName}>: "${e.text.slice(0, 80)}"`).join('\n  ');
-      return `\n[Targeting region with elements:\n  ${elDesc}\n]\nPrimary element HTML:\n${elInfo.outerHTML}\n`;
+      const elDesc = elInfo.elements.map((e, i) => {
+        const typeLabel = /^H[1-6]$/.test(e.tagName) ? 'Headline' : (e.tagName === 'A' || e.tagName === 'BUTTON') ? 'CTA' : e.tagName === 'IMG' ? 'Image' : 'Copy';
+        return `Element ${i + 1} (${typeLabel} <${e.tagName}>): "${e.text.slice(0, 80)}"${e.outerHTML ? `\nHTML: ${e.outerHTML.slice(0, 500)}` : ''}`;
+      }).join('\n\n');
+      return {
+        context: `\n\n${elDesc}`,
+        isGroup: true,
+        groupInstruction: `\n\nIMPORTANT: These elements are a CONTEXTUAL GROUP. Every option must replace ALL elements together as a cohesive set. Each variant must have an "items" array with one entry per element, each containing "find" (exact current text from HTML), "replace" (new text), "label" (element type like Headline/CTA/Copy), and "preview" (the replacement text). The items must be contextually aware of each other.`,
+      };
     }
-    return `\n[Targeting <${elInfo.tagName}> element: "${elInfo.text.slice(0, 150)}"]\nElement HTML:\n${elInfo.outerHTML}\n`;
+    return {
+      context: `\n[Targeting <${elInfo.tagName}> element: "${elInfo.text.slice(0, 150)}"]\nElement HTML:\n${elInfo.outerHTML}\n`,
+      isGroup: false,
+    };
   };
 
   const handleCommentSubmitNew = useCallback(async (threadId: string, body: string) => {
@@ -1811,8 +1882,8 @@ export default function CampaignEditor() {
       queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH),
     ]);
 
-    const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
-    const realPrompt = `[Visual comment on email design]${elCtx}\n\n${body}`;
+    const elResult = elementInfo ? buildElementContext({ ...pin, elementInfo }) : { context: '', isGroup: false };
+    const realPrompt = `[Visual comment on email design]${elResult.context}\n\n${body}`;
 
     let screenshotFile: File | undefined;
     if (screenshot) {
@@ -1846,8 +1917,11 @@ export default function CampaignEditor() {
       queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH),
     ]);
 
-    const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
-    const realPrompt = `[Swap request on email design]${elCtx}\n\nAutomatically swap this specific element with a better alternative. If it's text, replace it with new copy. If it's an image, swap it with a different image from the brand assets. Make the change directly without asking. IMPORTANT: Only modify the targeted element described above — do not change surrounding elements.`;
+    const elResult = elementInfo ? buildElementContext({ ...pin, elementInfo }) : { context: '', isGroup: false };
+    const isGroupSwap = elResult.isGroup;
+    const realPrompt = isGroupSwap
+      ? `[Swap request on email design]${elResult.context}\n\nAutomatically swap all these elements with better alternatives as a cohesive group. Make the changes directly.${(elResult as any).groupInstruction || ''}`
+      : `[Swap request on email design]${elResult.context}\n\nAutomatically swap this specific element with a better alternative. If it's text, replace it with new copy. If it's an image, swap it with a different image from the brand assets. Make the change directly without asking. IMPORTANT: Only modify the targeted element described above — do not change surrounding elements.`;
 
     let screenshotFile: File | undefined;
     if (screenshot) {
@@ -1857,7 +1931,7 @@ export default function CampaignEditor() {
 
     ideatePayloadRef.current = {
       realPrompt,
-      displayText: "🔄 Swap element",
+      displayText: isGroupSwap ? `🔄 Swap ${elementInfo?.elements?.length || ''} elements` : "🔄 Swap element",
       attachments: screenshotFile ? [screenshotFile] : undefined,
     };
 
@@ -1881,8 +1955,11 @@ export default function CampaignEditor() {
       queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH),
     ]);
 
-    const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
-    const realPrompt = `[Ideate request on email design]${elCtx}\n\nGenerate 5 alternative options for this specific element. If it's text (heading, body copy, CTA), generate text alternatives. If it's an image, suggest different image compositions or styles. Present these as variant options the user can select from. IMPORTANT: Only generate alternatives for the targeted element described above.`;
+    const elResult = elementInfo ? buildElementContext({ ...pin, elementInfo }) : { context: '', isGroup: false };
+    const isGroupIdeate = elResult.isGroup;
+    const realPrompt = isGroupIdeate
+      ? `[Ideate request on email design]${elResult.context}${(elResult as any).groupInstruction || ''}\n\nGenerate 5 alternative options for this group of elements. Present these as variant options the user can select from.`
+      : `[Ideate request on email design]${elResult.context}\n\nGenerate 5 alternative options for this specific element. If it's text (heading, body copy, CTA), generate text alternatives. If it's an image, suggest different image compositions or styles. Present these as variant options the user can select from. IMPORTANT: Only generate alternatives for the targeted element described above.`;
 
     let screenshotFile: File | undefined;
     if (screenshot) {
@@ -1892,7 +1969,7 @@ export default function CampaignEditor() {
 
     ideatePayloadRef.current = {
       realPrompt,
-      displayText: "💡 Ideate: Generate options",
+      displayText: isGroupIdeate ? `💡 Ideate: ${elementInfo?.elements?.length || ''} elements` : "💡 Ideate: Generate options",
       attachments: screenshotFile ? [screenshotFile] : undefined,
     };
     setIdeateActive(true);

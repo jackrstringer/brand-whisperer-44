@@ -245,7 +245,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const { campaignId, message, currentHtml, attachedImageUrls, moreVariants, silent } = await req.json();
+    const { campaignId, message, displayMessage, currentHtml, attachedImageUrls, moreVariants, silent } = await req.json();
 
     const startMs = Date.now();
 
@@ -352,6 +352,34 @@ Brief intro text e.g. "Here are 3 headline options:"
   {"label": "Short option title", "preview": "The actual copy the user will read", "find": "exact string currently in the HTML to replace", "replace": "new string to replace it with", "apply_all": true}
 ]
 </variants>
+
+GROUPED VARIANT MODE (for multi-element requests):
+When the user targets MULTIPLE elements (e.g. a headline + subheader + CTA as a group), return grouped variants where each option replaces ALL elements together. Use the "items" array format:
+
+<response>
+Brief intro text
+</response>
+<variants>
+[
+  {
+    "label": "Option A — Bold & Direct",
+    "preview": "Summary of this option",
+    "find": "",
+    "replace": "",
+    "items": [
+      {"find": "exact current headline text", "replace": "new headline", "label": "Headline", "preview": "new headline"},
+      {"find": "exact current subheader text", "replace": "new subheader", "label": "Subheader", "preview": "new subheader"},
+      {"find": "exact current CTA text", "replace": "new CTA", "label": "CTA", "preview": "new CTA"}
+    ]
+  }
+]
+</variants>
+
+CRITICAL GROUPED VARIANT RULES:
+- If the request targets multiple elements, you MUST use the grouped "items" format — do NOT return headline-only variants.
+- Each "items" entry must have "find" (exact string from current HTML), "replace", "label" (element type), and "preview".
+- All items in a group must be contextually coherent — matching tone, style, and messaging.
+- The top-level "find"/"replace" can be empty strings when using "items".
 
 CRITICAL VARIANT RULE — "apply_all" field:
 - Set "apply_all": true when the change is SYSTEMIC — it should apply to ALL matching instances in the email. This includes: color changes, background colors, font changes, typography, button styling, border radius, padding patterns, or any visual/formatting property that repeats across multiple elements for consistency.
@@ -587,8 +615,10 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
                 }
 
                 if (!silent) {
+                  const userContent = displayMessage || message;
+                  const userToolCalls = message !== userContent ? { hidden_prompt: message } : undefined;
                   await supabase.from("chat_messages").insert([
-                    { campaign_id: campaignId, role: "user", content: message },
+                    { campaign_id: campaignId, role: "user", content: userContent, ...(userToolCalls ? { tool_calls: userToolCalls } : {}) },
                     { campaign_id: campaignId, role: "assistant", content: introText, tool_calls: { type: "variants", data: { message: introText, variants: allVariants, applied_index: null } } },
                   ]);
                 }
@@ -725,8 +755,10 @@ Format:
           }
 
           if (!silent) {
+            const userContent = displayMessage || message;
+            const userToolCalls = message !== userContent ? { hidden_prompt: message } : undefined;
             await supabase.from("chat_messages").insert([
-              { campaign_id: campaignId, role: "user", content: message },
+              { campaign_id: campaignId, role: "user", content: userContent, ...(userToolCalls ? { tool_calls: userToolCalls } : {}) },
               { campaign_id: campaignId, role: "assistant", content: responseText },
             ]);
           }
