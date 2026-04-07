@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Check, MoreHorizontal, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import type { VariantData, VariantOption } from "@/lib/types";
 
 /** Detect if a variant's replace value looks like an image URL */
@@ -32,7 +31,6 @@ interface VariantCardsProps {
 }
 
 export default function VariantCards({ variantData, onApply, onPreview, onPreviewClear, onMore, loadingMore, disabled }: VariantCardsProps) {
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [hoveringIndex, setHoveringIndex] = useState<number | null>(null);
   const hasApplied = variantData.applied_index !== null;
 
@@ -51,14 +49,13 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
         >
           {variantData.variants.map((v, i) => {
             const wasApplied = hasApplied && variantData.applied_index === i;
-            const isSelected = selectedIndex === i;
-            const imageUrl = extractImageUrl(v);
             const interactive = !disabled && !wasApplied;
+            const imageUrl = extractImageUrl(v);
 
             return (
               <button
                 key={i}
-                onClick={() => interactive && setSelectedIndex(i)}
+                onClick={() => interactive && onApply(v, i)}
                 onMouseEnter={() => {
                   if (!interactive) return;
                   setHoveringIndex(i);
@@ -68,10 +65,8 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
                 className={`relative rounded-lg overflow-hidden border-2 transition-all ${
                   wasApplied
                     ? "border-primary ring-2 ring-primary/20"
-                    : isSelected
-                    ? "border-primary/60"
                     : hoveringIndex === i
-                    ? "border-primary/40"
+                    ? "border-primary/40 scale-[1.02]"
                     : "border-border/40 hover:border-border/60"
                 } ${interactive ? "cursor-pointer" : "cursor-default"}`}
                 style={{ aspectRatio: "1" }}
@@ -89,13 +84,6 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
                     <Check className="w-3 h-3" />
                   </div>
                 )}
-                {isSelected && !wasApplied && (
-                  <div className="absolute inset-0 bg-primary/10 flex items-center justify-center">
-                    <div className="bg-primary/90 text-primary-foreground rounded-full p-1">
-                      <Check className="w-4 h-4" />
-                    </div>
-                  </div>
-                )}
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-1.5">
                   <span className="text-[10px] text-white font-medium leading-tight line-clamp-1">{v.label}</span>
                 </div>
@@ -103,37 +91,19 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
             );
           })}
         </div>
-        <div className="flex gap-2">
-          {(!hasApplied || (selectedIndex !== null && selectedIndex !== variantData.applied_index)) && (
-            <Button
-              size="sm"
-              disabled={selectedIndex === null || disabled}
-              onClick={() => {
-                if (selectedIndex !== null) {
-                  onApply(variantData.variants[selectedIndex], selectedIndex);
-                }
-              }}
-              className="flex-1 mt-1"
-            >
-              {hasApplied ? "Switch to this image" : "Apply"}
-            </Button>
-          )}
-          {onMore && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={disabled || loadingMore}
-              onClick={onMore}
-              className="mt-1"
-            >
-              {loadingMore ? (
-                <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Loading...</>
-              ) : (
-                <><MoreHorizontal className="w-3 h-3 mr-1" /> More</>
-              )}
-            </Button>
-          )}
-        </div>
+        {onMore && (
+          <button
+            disabled={disabled || loadingMore}
+            onClick={onMore}
+            className="text-[11px] text-muted-foreground hover:text-foreground transition-colors mt-1 disabled:opacity-40"
+          >
+            {loadingMore ? (
+              <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Loading…</span>
+            ) : (
+              <span className="flex items-center gap-1"><MoreHorizontal className="w-3 h-3" /> More options</span>
+            )}
+          </button>
+        )}
       </div>
     );
   }
@@ -150,14 +120,13 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
       >
         {variantData.variants.map((v, i) => {
           const wasApplied = hasApplied && variantData.applied_index === i;
-          const isSelected = selectedIndex === i;
           const isHovering = hoveringIndex === i;
           const interactive = !disabled && !wasApplied;
 
           return (
             <button
               key={i}
-              onClick={() => interactive && setSelectedIndex(i)}
+              onClick={() => interactive && onApply(v, i)}
               onMouseEnter={() => {
                 if (!interactive) return;
                 setHoveringIndex(i);
@@ -167,8 +136,6 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
               className={`w-full text-left px-3 py-2.5 transition-colors ${
                 wasApplied
                   ? "bg-primary/10"
-                  : isSelected
-                  ? "bg-primary/5"
                   : isHovering
                   ? "bg-primary/5"
                   : "bg-card hover:bg-muted/30"
@@ -189,37 +156,19 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
           );
         })}
       </div>
-      <div className="flex gap-2">
-        {(!hasApplied || (selectedIndex !== null && selectedIndex !== variantData.applied_index)) && (
-          <Button
-            size="sm"
-            disabled={selectedIndex === null || disabled}
-            onClick={() => {
-              if (selectedIndex !== null) {
-                onApply(variantData.variants[selectedIndex], selectedIndex);
-              }
-            }}
-            className="flex-1 mt-1"
-          >
-            {hasApplied ? "Switch to this option" : "Apply"}
-          </Button>
-        )}
-        {onMore && (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={disabled || loadingMore}
-            onClick={onMore}
-            className="mt-1"
-          >
-            {loadingMore ? (
-              <><Loader2 className="w-3 h-3 mr-1 animate-spin" /> Loading...</>
-            ) : (
-              <><MoreHorizontal className="w-3 h-3 mr-1" /> More</>
-            )}
-          </Button>
-        )}
-      </div>
+      {onMore && (
+        <button
+          disabled={disabled || loadingMore}
+          onClick={onMore}
+          className="text-[11px] text-muted-foreground hover:text-foreground transition-colors mt-1 disabled:opacity-40"
+        >
+          {loadingMore ? (
+            <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Loading…</span>
+          ) : (
+            <span className="flex items-center gap-1"><MoreHorizontal className="w-3 h-3" /> More options</span>
+          )}
+        </button>
+      )}
     </div>
   );
 }
