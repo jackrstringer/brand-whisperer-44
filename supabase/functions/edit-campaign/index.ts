@@ -313,6 +313,27 @@ Deno.serve(async (req) => {
     if (brandInstructions) extraRules += `\nBrand instructions: ${brandInstructions}`;
     if (globalRules) extraRules += `\nGlobal rules: ${globalRules}`;
 
+    // Build available image catalog so AI uses brand images, NOT reference campaign images
+    let assetCatalog = "";
+    const productAssets = productAssetsResult?.data || [];
+    const brandAssets = brandAssetsResult?.data || [];
+    if (productAssets.length > 0 || brandAssets.length > 0) {
+      assetCatalog = "\n\nAVAILABLE BRAND IMAGES (use ONLY these when adding/swapping images — NEVER invent URLs or use reference campaign screenshot URLs):";
+      if (productAssets.length > 0) {
+        assetCatalog += "\nProduct images:";
+        for (const a of productAssets) {
+          const bucket = (a.bucket || "").replace(/_/g, " ");
+          assetCatalog += `\n  [${bucket}] ${a.url}${a.description ? ` — ${a.description}` : ""}`;
+        }
+      }
+      if (brandAssets.length > 0) {
+        assetCatalog += "\nBrand assets:";
+        for (const a of brandAssets) {
+          assetCatalog += `\n  [${a.category}] ${a.url}${a.description ? ` — ${a.description}` : ""}`;
+        }
+      }
+    }
+
     // Determine variant count for "more" requests
     const variantCount = moreVariants ? 10 : undefined;
 
