@@ -1786,16 +1786,16 @@ export default function CampaignEditor() {
     const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
     const realPrompt = `[Ideate request on email design]${elCtx}\n\nGenerate 5 alternative options for this specific element. If it's text (heading, body copy, CTA), generate text alternatives. If it's an image, suggest different image compositions or styles. Present these as variant options the user can select from. IMPORTANT: Only generate alternatives for the targeted element described above.`;
 
+    let screenshotFile: File | undefined;
     if (screenshot) {
       const blob = await fetch(screenshot).then(r => r.blob());
-      const file = new File([blob], `ideate-context-${Date.now()}.jpg`, { type: 'image/jpeg' });
-      setChatAttachments([file]);
+      screenshotFile = new File([blob], `ideate-context-${Date.now()}.jpg`, { type: 'image/jpeg' });
     }
 
-    setChatInput(realPrompt);
     ideatePayloadRef.current = {
       realPrompt,
       displayText: "💡 Ideate: Generate options",
+      attachments: screenshotFile ? [screenshotFile] : undefined,
     };
     setIdeateActive(true);
 
