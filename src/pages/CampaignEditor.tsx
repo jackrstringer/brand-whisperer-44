@@ -3339,28 +3339,41 @@ export default function CampaignEditor() {
                 const start = commentDragRef.current;
                 const dx = Math.abs(x - start.startX);
                 const dy = Math.abs(y - start.startY);
-                const isDrag = dx > 10 || dy > 10;
+                const isDrag = dx > 4 || dy > 4;
+
+                // Click priority chain: dismiss composer → dismiss popover → place pin
+                if (composerThreadId) {
+                  // Cancel current composer
+                  setCommentThreads(prev => prev.filter(t => t.id !== composerThreadId));
+                  setComposerThreadId(null);
+                  commentDragRef.current = null;
+                  try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+                  return;
+                }
+                if (activeThreadId) {
+                  // Close current popover
+                  setActiveThreadId(null);
+                  commentDragRef.current = null;
+                  try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+                  return;
+                }
 
                 const pinX = isDrag ? (start.startX + x) / 2 : x;
                 const pinY = isDrag ? (start.startY + y) / 2 : y;
                 const regionW = isDrag ? Math.abs(x - start.startX) : undefined;
                 const regionH = isDrag ? Math.abs(y - start.startY) : undefined;
 
-                const screenshot = await captureCommentScreenshot(pinX, pinY, regionW, regionH);
-
-                const pinId = crypto.randomUUID();
-                const newPin: CommentPin = {
-                  id: pinId,
-                  x: pinX,
-                  y: pinY,
-                  width: regionW,
-                  height: regionH,
-                  text: "",
-                  screenshot,
-                  status: "draft",
+                const threadId = crypto.randomUUID();
+                const newThread: CommentThread = {
+                  id: threadId,
+                  pin: { x: pinX, y: pinY, regionW, regionH },
+                  comments: [],
+                  resolved: false,
+                  isTemporary: true,
                 };
-                setComments(prev => [...prev, newPin]);
-                setActiveCommentId(pinId);
+                setCommentThreads(prev => [...prev, newThread]);
+                setComposerThreadId(threadId);
+                setActiveThreadId(threadId);
                 commentDragRef.current = null;
                 try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
                 return;
