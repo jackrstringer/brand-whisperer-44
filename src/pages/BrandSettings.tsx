@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Trash2, Plus, X, Loader2 } from "lucide-react";
 import ReanalyzeBrand from "@/components/brand/ReanalyzeBrand";
+import BrandIntelligenceTab from "@/components/brand/BrandIntelligenceTab";
 import AssetManager from "@/components/brand/AssetManager";
 import ProductManager from "@/components/brand/ProductManager";
 import KlaviyoSetup from "@/components/brand/KlaviyoSetup";
@@ -109,6 +110,7 @@ export default function BrandSettings() {
       <Tabs defaultValue="info" className="space-y-6">
         <TabsList className="flex-wrap">
           <TabsTrigger value="info">Info</TabsTrigger>
+          <TabsTrigger value="intelligence">Intelligence</TabsTrigger>
           <TabsTrigger value="assets">Assets</TabsTrigger>
           <TabsTrigger value="products">Products</TabsTrigger>
           <TabsTrigger value="instructions">Instructions</TabsTrigger>
@@ -130,6 +132,10 @@ export default function BrandSettings() {
             <h3 className="text-sm font-medium text-destructive mb-2">Danger Zone</h3>
             <Button variant="destructive" onClick={() => setDeleteOpen(true)}><Trash2 className="w-4 h-4 mr-1" /> Delete Brand</Button>
           </div>
+        </TabsContent>
+
+        <TabsContent value="intelligence">
+          {brandId && <BrandIntelligenceTab brandId={brandId} brandName={name} domain={websiteUrl} />}
         </TabsContent>
 
         <TabsContent value="assets">
