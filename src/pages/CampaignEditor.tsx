@@ -1148,12 +1148,22 @@ export default function CampaignEditor() {
     const msg = messages.find(m => m.id === messageId);
     if (!msg?.variant_data) return;
 
-    // Grouped variant: preview all items' find/replace pairs
+    // Grouped variant: preview all items' find/replace pairs atomically
     if (variant.items && variant.items.length > 0) {
       let result = html;
       for (const item of variant.items) {
         if (item.find && result.includes(item.find)) {
           result = result.replace(item.find, item.replace);
+        } else {
+          // Try to find live text from other applied variants in same set
+          const otherVariants = msg.variant_data.variants.filter(v => v.items);
+          for (const ov of otherVariants) {
+            const matchingItem = ov.items?.find(oi => oi.label === item.label);
+            if (matchingItem?.replace && result.includes(matchingItem.replace)) {
+              result = result.replace(matchingItem.replace, item.replace);
+              break;
+            }
+          }
         }
       }
       setPreviewHtml(result);
