@@ -1100,8 +1100,19 @@ export default function CampaignEditor() {
     const findTarget = findLiveTarget(msg.variant_data, html);
     if (!findTarget) return; // silently skip — text no longer in HTML
 
-    const useAll = variant.apply_all === true;
-    setPreviewHtml(useAll ? html.split(findTarget).join(variant.replace) : html.replace(findTarget, variant.replace));
+    // Grouped variant: preview all items' find/replace pairs
+    if (variant.items && variant.items.length > 0) {
+      let result = html;
+      for (const item of variant.items) {
+        if (item.find && result.includes(item.find)) {
+          result = result.replace(item.find, item.replace);
+        }
+      }
+      setPreviewHtml(result);
+    } else {
+      const useAll = variant.apply_all === true;
+      setPreviewHtml(useAll ? html.split(findTarget).join(variant.replace) : html.replace(findTarget, variant.replace));
+    }
   }, [campaign?.html, messages, findLiveTarget]);
 
   const handlePreviewClear = useCallback(() => {
