@@ -95,7 +95,7 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
           <button
             disabled={disabled || loadingMore}
             onClick={onMore}
-            className="text-[11px] text-muted-foreground hover:text-foreground transition-colors mt-1 disabled:opacity-40"
+            className="text-[11px] text-[#c8f135] hover:text-[#d4f55a] transition-colors mt-1 disabled:opacity-40"
           >
             {loadingMore ? (
             <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Generating…</span>
@@ -160,7 +160,7 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
         <button
           disabled={disabled || loadingMore}
           onClick={onMore}
-          className="text-[11px] text-muted-foreground hover:text-foreground transition-colors mt-1 disabled:opacity-40"
+          className="text-[11px] text-[#c8f135] hover:text-[#d4f55a] transition-colors mt-1 disabled:opacity-40"
         >
           {loadingMore ? (
             <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Generating…</span>
