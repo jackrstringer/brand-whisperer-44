@@ -44,6 +44,7 @@
     --sidebar-ring: 330 80% 60%;
 
     --surface: 0 0% 96%;
+    --canvas: 0 0% 10%;
   }
 
   .dark {
@@ -85,6 +86,7 @@
     --sidebar-ring: 330 80% 60%;
 
     --surface: 0 0% 10.2%;
+    --canvas: 0 0% 5.9%;
   }
 }
 
