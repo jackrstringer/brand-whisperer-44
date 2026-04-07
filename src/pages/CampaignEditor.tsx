@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, Send, Undo2, Redo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, EyeOff, RotateCcw, Link2, Loader2, Copy, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, Download, Send, Undo2, Redo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, EyeOff, RotateCcw, Link2, Loader2, Copy, SlidersHorizontal, MessageCircle } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -21,6 +21,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Campaign, ChatMessage, VariantOption } from "@/lib/types";
 import VariantCards from "@/components/brand/VariantCards";
 import { captureEmailScreenshots } from "@/lib/visualQaCapture";
+import CommentOverlay, { type CommentPin } from "@/components/campaign/CommentOverlay";
+import html2canvas from "html2canvas";
 
 async function uploadChatImages(files: File[], brandId: string, campaignId: string): Promise<string[]> {
   const urls: string[] = [];
@@ -122,6 +124,13 @@ export default function CampaignEditor() {
   const [variantHtmls, setVariantHtmls] = useState<any[]>([]);
   const [activeVariantIndex, setActiveVariantIndex] = useState(0);
   const generationCompletedRef = useRef(false);
+
+  // Comment mode state
+  const [commentMode, setCommentMode] = useState(false);
+  const [comments, setComments] = useState<CommentPin[]>([]);
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+  const commentDragRef = useRef<{ startX: number; startY: number } | null>(null);
+  const pendingCommentIdRef = useRef<string | null>(null);
 
   const getMatchingVariantIndex = useCallback((variants: any[], html: string | null | undefined) => {
     if (!Array.isArray(variants) || variants.length === 0 || !html) return 0;
@@ -1492,10 +1501,25 @@ export default function CampaignEditor() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (document.activeElement as HTMLElement)?.tagName || '';
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      const inChat = tag === 'INPUT' || tag === 'TEXTAREA';
+      if (inChat) return;
       if ((document.activeElement as HTMLElement)?.isContentEditable) return;
 
+      // Toggle comment mode with C key
+      if (e.key === 'c' || e.key === 'C') {
+        if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+          setCommentMode(prev => !prev);
+          return;
+        }
+      }
+
       if (e.key === 'Escape') {
+        // If in comment mode, exit it
+        if (commentMode) {
+          setCommentMode(false);
+          setActiveCommentId(null);
+          return;
+        }
         const iframe = previewPanelRef.current?.querySelector('iframe');
         if (iframe) {
           try { (iframe as HTMLIFrameElement).contentWindow?.postMessage({ type: 'clearSelection' }, '*'); } catch {}
@@ -1515,7 +1539,7 @@ export default function CampaignEditor() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedElementContext]);
+  }, [selectedElementContext, commentMode]);
 
   // Click anywhere outside the preview panel → deselect + exit edit mode
   useEffect(() => {
@@ -1526,6 +1550,8 @@ export default function CampaignEditor() {
       // Don't deselect when clicking inside the image swap panel
       const target = e.target as HTMLElement;
       if (target.closest('[data-image-swap-panel]')) return;
+      // Don't deselect when clicking inside the chat panel (right panel)
+      if (target.closest('[data-chat-panel]')) return;
       const iframe = panel.querySelector('iframe') as HTMLIFrameElement | null;
       if (iframe?.contentWindow) {
         try {
@@ -1549,6 +1575,98 @@ export default function CampaignEditor() {
     // Also update the imageSwap state so panel knows which is current
     setImageSwap(prev => prev ? { ...prev, src: newUrl } : null);
   }, []);
+
+  // Comment mode: capture screenshot of area around a point or drag region
+  const captureCommentScreenshot = useCallback(async (
+    centerX: number, centerY: number, regionWidth?: number, regionHeight?: number
+  ): Promise<string | undefined> => {
+    const iframe = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+    if (!iframe?.contentDocument?.body) return undefined;
+    try {
+    const scale = screenZoom / 100;
+      const iframeRect = iframe.getBoundingClientRect();
+      const panelRect = previewPanelRef.current!.getBoundingClientRect();
+      const iframePanelLeft = iframeRect.left - panelRect.left;
+      const iframePanelTop = iframeRect.top - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+
+      // Convert panel coords to iframe content coords
+      const captureW = regionWidth ? regionWidth / scale + 100 : 500;
+      const captureH = regionHeight ? regionHeight / scale + 100 : 500;
+      const iX = (centerX - iframePanelLeft) / scale - captureW / 2;
+      const iY = (centerY - iframePanelTop) / scale - captureH / 2;
+
+      const clampedX = Math.max(0, iX);
+      const clampedY = Math.max(0, iY);
+
+      const canvas = await html2canvas(iframe.contentDocument.body, {
+        x: clampedX,
+        y: clampedY,
+        width: captureW,
+        height: captureH,
+        scale: 1,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+      });
+      return canvas.toDataURL("image/jpeg", 0.85);
+    } catch (err) {
+      console.error("Comment screenshot failed:", err);
+      return undefined;
+    }
+  }, [screenZoom]);
+
+  // Comment mode: submit a comment → send to AI as chat message
+  const handleCommentSubmit = useCallback(async (pinId: string, text: string) => {
+    const pin = comments.find(c => c.id === pinId);
+    if (!pin) return;
+
+    // Mark as pending
+    setComments(prev => prev.map(c => c.id === pinId ? { ...c, status: "pending" as const } : c));
+    pendingCommentIdRef.current = pinId;
+
+    // Convert screenshot to a File if available
+    const attachedFiles: File[] = [];
+    if (pin.screenshot) {
+      try {
+        const resp = await fetch(pin.screenshot);
+        const blob = await resp.blob();
+        attachedFiles.push(new File([blob], `comment-${pinId}.jpg`, { type: "image/jpeg" }));
+      } catch {}
+    }
+
+    // Build message with visual context
+    const commentMsg = `[Visual comment at position (${Math.round(pin.x)}, ${Math.round(pin.y)})${pin.width ? ` — region ${Math.round(pin.width)}×${Math.round(pin.height || 0)}px` : ""}]\n\n${text}`;
+
+    // Set chat state to send
+    setChatInput(commentMsg);
+    setChatAttachments(attachedFiles);
+    if (attachedFiles.length > 0) {
+      setChatAttachmentPreviews(attachedFiles.map(f => URL.createObjectURL(f)));
+    }
+
+    // Trigger send after state updates
+    setTimeout(() => {
+      const sendBtn = document.querySelector('[data-send-btn]') as HTMLButtonElement | null;
+      sendBtn?.click();
+    }, 100);
+  }, [comments]);
+
+  // Track AI replies and associate with comment pins
+  useEffect(() => {
+    const pendingId = pendingCommentIdRef.current;
+    if (!pendingId) return;
+    const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
+    if (!lastAssistantMsg) return;
+    // Check if this reply arrived after the comment was submitted
+    const pin = comments.find(c => c.id === pendingId && c.status === 'pending');
+    if (!pin) return;
+    setComments(prev => prev.map(c =>
+      c.id === pendingId ? { ...c, aiReply: lastAssistantMsg.content, status: "resolved" as const } : c
+    ));
+    pendingCommentIdRef.current = null;
+  }, [messages, comments]);
+
 
   if (loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
@@ -2908,6 +3026,15 @@ export default function CampaignEditor() {
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRedo} disabled={redoStack.length === 0} title="Redo">
                 <Redo2 className="w-3.5 h-3.5" />
               </Button>
+              <Button
+                variant={commentMode ? "default" : "ghost"}
+                size="icon"
+                className={`h-7 w-7 ${commentMode ? "bg-primary text-primary-foreground" : ""}`}
+                onClick={() => setCommentMode(prev => !prev)}
+                title="Comment mode (C)"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+              </Button>
             </div>
           )}
           <Popover>
@@ -3049,7 +3176,7 @@ export default function CampaignEditor() {
               width: showReferenceDialog && campaign?.html && selectedReferences.length > 0 ? '50%' : '100%',
               scrollbarWidth: 'none',
               msOverflowStyle: 'none' as any,
-              cursor: marqueeRect ? 'crosshair' : undefined,
+              cursor: commentMode ? 'crosshair' : marqueeRect ? 'crosshair' : undefined,
             }}
             onScroll={(e) => {
               if (!showReferenceDialog || syncingScroll) return;
@@ -3064,13 +3191,22 @@ export default function CampaignEditor() {
             }}
             onPointerDown={(e) => {
               if (e.button !== 0) return;
-              if (!campaign?.html) return; // ReferencePanel is showing — don't capture
+              if (!campaign?.html) return;
               const tag = (e.target as HTMLElement).tagName;
               if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'IFRAME') return;
               const panelRect = previewPanelRef.current?.getBoundingClientRect();
               if (!panelRect) return;
               const x = e.clientX - panelRect.left;
               const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+
+              if (commentMode) {
+                // Comment mode: start tracking for click or drag
+                commentDragRef.current = { startX: x, startY: y };
+                e.currentTarget.setPointerCapture(e.pointerId);
+                e.preventDefault();
+                return;
+              }
+
               e.currentTarget.setPointerCapture(e.pointerId);
               interactionRef.current = { type: 'PRESSED', originX: x, originY: y, pointerId: e.pointerId };
               e.preventDefault();
@@ -3148,13 +3284,47 @@ export default function CampaignEditor() {
                 }
               }
             }}
-            onPointerUp={(e) => {
+            onPointerUp={async (e) => {
+              // Comment mode handling
+              if (commentMode && commentDragRef.current) {
+                const panelRect = previewPanelRef.current?.getBoundingClientRect();
+                if (!panelRect) { commentDragRef.current = null; return; }
+                const x = e.clientX - panelRect.left;
+                const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+                const start = commentDragRef.current;
+                const dx = Math.abs(x - start.startX);
+                const dy = Math.abs(y - start.startY);
+                const isDrag = dx > 10 || dy > 10;
+
+                const pinX = isDrag ? (start.startX + x) / 2 : x;
+                const pinY = isDrag ? (start.startY + y) / 2 : y;
+                const regionW = isDrag ? Math.abs(x - start.startX) : undefined;
+                const regionH = isDrag ? Math.abs(y - start.startY) : undefined;
+
+                const screenshot = await captureCommentScreenshot(pinX, pinY, regionW, regionH);
+
+                const pinId = crypto.randomUUID();
+                const newPin: CommentPin = {
+                  id: pinId,
+                  x: pinX,
+                  y: pinY,
+                  width: regionW,
+                  height: regionH,
+                  text: "",
+                  screenshot,
+                  status: "draft",
+                };
+                setComments(prev => [...prev, newPin]);
+                setActiveCommentId(pinId);
+                commentDragRef.current = null;
+                try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+                return;
+              }
+
               const state = interactionRef.current;
               const iframe = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
 
               if (state.type === 'PRESSED') {
-                // This was a click (didn't exceed drag threshold)
-                // Click on grey area outside iframe → deselect all
                 if ((e.target as HTMLElement).tagName !== 'IFRAME') {
                   if (iframe?.contentWindow) {
                     try { iframe.contentWindow.postMessage({ type: 'clearSelection' }, '*'); } catch {}
@@ -3165,7 +3335,6 @@ export default function CampaignEditor() {
               }
 
               if (state.type === 'MARQUEE') {
-                // Finalize selection
                 const panelRect = previewPanelRef.current?.getBoundingClientRect();
                 if (panelRect && iframe) {
                   const iframeRect = iframe.getBoundingClientRect();
@@ -3190,7 +3359,6 @@ export default function CampaignEditor() {
                 setMarqueeRect(null);
               }
 
-              // Release pointer capture
               try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
               interactionRef.current = { type: 'IDLE' };
             }}
@@ -3221,6 +3389,44 @@ export default function CampaignEditor() {
                 />
               );
             })()}
+            {/* Comment mode indicator */}
+            {commentMode && (
+              <div
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium shadow-lg"
+                style={{
+                  position: 'absolute',
+                  top: 12,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  zIndex: 70,
+                  background: 'rgba(99,102,241,0.95)',
+                  color: 'white',
+                  backdropFilter: 'blur(8px)',
+                }}
+              >
+                <MessageCircle className="w-3 h-3" />
+                Comment Mode
+                <span className="opacity-60 ml-1">Press C or Esc to exit</span>
+              </div>
+            )}
+            {/* Comment pins overlay */}
+            {comments.length > 0 && (
+              <CommentOverlay
+                comments={comments}
+                activeCommentId={activeCommentId}
+                onSubmit={handleCommentSubmit}
+                onUpdateText={(id, text) => setComments(prev => prev.map(c => c.id === id ? { ...c, text } : c))}
+                onClose={(id) => {
+                  const pin = comments.find(c => c.id === id);
+                  if (pin?.status === 'draft') {
+                    setComments(prev => prev.filter(c => c.id !== id));
+                  }
+                  setActiveCommentId(null);
+                }}
+                onActivate={(id) => setActiveCommentId(id === activeCommentId ? null : id)}
+                onResolve={(id) => setComments(prev => prev.map(c => c.id === id ? { ...c, status: "resolved" as const } : c))}
+              />
+            )}
             {isGenerating ? (
               <div className="max-w-[600px] mx-auto space-y-4 p-8 mt-12">
                 <div className="text-center mb-6">
@@ -3287,7 +3493,7 @@ export default function CampaignEditor() {
         <div className="w-px bg-border shrink-0" />
 
         {/* Right Panel — fixed 35% */}
-        <div className="h-full overflow-hidden" style={{ width: '35%', minWidth: 0 }}>
+        <div data-chat-panel className="h-full overflow-hidden" style={{ width: '35%', minWidth: 0 }}>
           <div className="h-full flex flex-col overflow-hidden">
             {isDraft && !isGenerating ? (
               <div className="p-6 space-y-5 overflow-y-auto flex-1">
