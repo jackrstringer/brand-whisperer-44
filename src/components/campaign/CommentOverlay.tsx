@@ -606,6 +606,8 @@ export default function CommentOverlay({
   onResolve,
   onUnresolve,
   onCancelComposer,
+  onSwap,
+  onIdeate,
 }: CommentOverlayProps) {
   const [hoveredPinId, setHoveredPinId] = useState<string | null>(null);
 
