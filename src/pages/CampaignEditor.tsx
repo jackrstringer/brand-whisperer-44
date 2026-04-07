@@ -1882,8 +1882,8 @@ export default function CampaignEditor() {
       queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH),
     ]);
 
-    const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
-    const realPrompt = `[Visual comment on email design]${elCtx}\n\n${body}`;
+    const elResult = elementInfo ? buildElementContext({ ...pin, elementInfo }) : { context: '', isGroup: false };
+    const realPrompt = `[Visual comment on email design]${elResult.context}\n\n${body}`;
 
     let screenshotFile: File | undefined;
     if (screenshot) {
