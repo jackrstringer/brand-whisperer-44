@@ -135,33 +135,22 @@ Return ONLY a valid JSON object matching this exact structure:
 }`;
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+async function runResearch(brandId: string, brandName: string, domain: string) {
+  const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+
+  // Mark as researching
+  await supabase.from("brand_intelligence").upsert({
+    brand_id: brandId,
+    research_status: "researching",
+  }, { onConflict: "brand_id" });
 
   try {
-    const { brand_id, brand_name, domain } = await req.json();
-    if (!brand_id || !brand_name) {
-      return new Response(JSON.stringify({ error: "brand_id and brand_name required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    if (!domain || !domain.trim()) {
-      return new Response(JSON.stringify({ error: "A website URL is required to run brand research. Please add it in your brand settings first." }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
-    // Call Claude Opus with web search tool
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -180,7 +169,7 @@ Deno.serve(async (req) => {
             max_uses: 20,
           }
         ],
-        messages: [{ role: "user", content: buildUserPrompt(brand_name, domain) }],
+        messages: [{ role: "user", content: buildUserPrompt(brandName, domain) }],
       }),
     });
 
@@ -191,14 +180,11 @@ Deno.serve(async (req) => {
     }
 
     const result = await resp.json();
-    
-    // Extract the final text content from the response (may contain tool_use and web_search_result blocks)
     const textBlocks = (result.content || []).filter((b: any) => b.type === "text");
     const rawText = textBlocks.map((b: any) => b.text).join("\n");
 
     console.log("[research-brand] Response had", result.content?.length, "content blocks,", textBlocks.length, "text blocks");
 
-    // Parse JSON from response
     let parsed: any;
     try {
       parsed = JSON.parse(rawText);
@@ -218,11 +204,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Upsert into brand_intelligence
     const { error: upsertError } = await supabase
       .from("brand_intelligence")
       .upsert({
-        brand_id,
+        brand_id: brandId,
         ai_research: parsed,
         research_status: "ai_complete",
         ai_research_confidence: parsed.research_confidence || "unknown",
@@ -231,14 +216,46 @@ Deno.serve(async (req) => {
 
     if (upsertError) {
       console.error("[research-brand] Upsert error:", upsertError);
-      throw new Error(`Database error: ${upsertError.message}`);
+      throw upsertError;
     }
 
+    console.log("[research-brand] Research completed successfully for", brandId);
+  } catch (err: any) {
+    console.error("[research-brand] Background research failed:", err);
+    // Mark as failed so UI can show error
+    await supabase.from("brand_intelligence").upsert({
+      brand_id: brandId,
+      research_status: "failed",
+    }, { onConflict: "brand_id" });
+  }
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const { brand_id, brand_name, domain } = await req.json();
+    if (!brand_id || !brand_name) {
+      return new Response(JSON.stringify({ error: "brand_id and brand_name required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!domain || !domain.trim()) {
+      return new Response(JSON.stringify({ error: "A website URL is required to run brand research. Please add it in your brand settings first." }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Fire-and-forget: run research in background
+    EdgeRuntime.waitUntil(runResearch(brand_id, brand_name, domain));
+
+    // Return immediately
     return new Response(JSON.stringify({
       success: true,
-      research_status: "ai_complete",
-      ai_research_confidence: parsed.research_confidence || "unknown",
-      last_researched_at: new Date().toISOString(),
+      status: "researching",
+      message: "Research started. Poll brand_intelligence table for completion.",
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
