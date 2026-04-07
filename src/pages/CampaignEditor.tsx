@@ -1650,6 +1650,17 @@ export default function CampaignEditor() {
   }, [screenZoom]);
 
   // Comment mode: submit a new comment → send to AI as chat message with screenshot
+  // Helper: build element context string for AI prompts
+  const buildElementContext = (pin: CommentThread['pin']) => {
+    const elInfo = pin.elementInfo;
+    if (!elInfo || !elInfo.tagName) return '';
+    if (elInfo.elements && elInfo.elements.length > 1) {
+      const elDesc = elInfo.elements.map(e => `<${e.tagName}>: "${e.text.slice(0, 80)}"`).join('\n  ');
+      return `\n[Targeting region with elements:\n  ${elDesc}\n]\nPrimary element HTML:\n${elInfo.outerHTML}\n`;
+    }
+    return `\n[Targeting <${elInfo.tagName}> element: "${elInfo.text.slice(0, 150)}"]\nElement HTML:\n${elInfo.outerHTML}\n`;
+  };
+
   const handleCommentSubmitNew = useCallback(async (threadId: string, body: string) => {
     const thread = commentThreads.find(t => t.id === threadId);
     if (!thread) return;
@@ -1662,7 +1673,6 @@ export default function CampaignEditor() {
       time: now,
     };
 
-    // Convert temporary thread to permanent with the comment
     setCommentThreads(prev => prev.map(t =>
       t.id === threadId ? { ...t, comments: [newComment], isTemporary: false } : t
     ));
@@ -1670,33 +1680,43 @@ export default function CampaignEditor() {
     setActiveThreadId(threadId);
     pendingCommentIdRef.current = threadId;
 
-    // Capture screenshot context
     const pin = thread.pin;
-    const screenshot = await captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH);
+    const [screenshot, elementInfo] = await Promise.all([
+      captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH),
+      queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH),
+    ]);
 
-    // Build message with visual context
-    const commentMsg = `[Visual comment at position (${Math.round(pin.x)}, ${Math.round(pin.y)})${pin.regionW ? ` — region ${Math.round(pin.regionW)}×${Math.round(pin.regionH || 0)}px` : ""}]\n\n${body}`;
+    // Store element info on the thread
+    if (elementInfo) {
+      setCommentThreads(prev => prev.map(t =>
+        t.id === threadId ? { ...t, pin: { ...t.pin, elementInfo } } : t
+      ));
+    }
 
-    // If we have a screenshot, upload it and include as attachment
+    const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
+    const realPrompt = `[Visual comment on email design]${elCtx}\n\n${body}`;
+
     if (screenshot) {
       const blob = await fetch(screenshot).then(r => r.blob());
       const file = new File([blob], `comment-context-${Date.now()}.jpg`, { type: 'image/jpeg' });
       setChatAttachments([file]);
     }
 
-    setChatInput(commentMsg);
-    setTimeout(() => {
-      const sendBtn = document.querySelector('[data-send-btn]') as HTMLButtonElement | null;
-      sendBtn?.click();
-    }, 150);
-  }, [commentThreads, commentCurrentUser, captureCommentScreenshot]);
+    setChatInput(realPrompt);
+    ideatePayloadRef.current = {
+      realPrompt,
+      displayText: `💬 ${body}`,
+    };
 
-  // Comment mode: swap action — auto-swap element at pin location
+    setTimeout(() => {
+      sendMessage();
+    }, 150);
+  }, [commentThreads, commentCurrentUser, captureCommentScreenshot, queryElementInfo]);
+
   const handleCommentSwap = useCallback(async (threadId: string) => {
     const thread = commentThreads.find(t => t.id === threadId);
     if (!thread) return;
 
-    // Close composer, convert to permanent
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const swapComment: ThreadComment = {
       id: crypto.randomUUID(),
@@ -1712,9 +1732,19 @@ export default function CampaignEditor() {
     pendingCommentIdRef.current = threadId;
 
     const pin = thread.pin;
-    const screenshot = await captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH);
+    const [screenshot, elementInfo] = await Promise.all([
+      captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH),
+      queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH),
+    ]);
 
-    const swapMsg = `[Visual comment at position (${Math.round(pin.x)}, ${Math.round(pin.y)})${pin.regionW ? ` — region ${Math.round(pin.regionW)}×${Math.round(pin.regionH || 0)}px` : ""}]\n\nLook at the screenshot I've attached. Automatically swap the element at this location with a better alternative. If it's text, replace it with new copy. If it's an image, swap it with a different image from the brand assets. Make the change directly without asking.`;
+    if (elementInfo) {
+      setCommentThreads(prev => prev.map(t =>
+        t.id === threadId ? { ...t, pin: { ...t.pin, elementInfo } } : t
+      ));
+    }
+
+    const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
+    const realPrompt = `[Swap request on email design]${elCtx}\n\nAutomatically swap this specific element with a better alternative. If it's text, replace it with new copy. If it's an image, swap it with a different image from the brand assets. Make the change directly without asking. IMPORTANT: Only modify the targeted element described above — do not change surrounding elements.`;
 
     if (screenshot) {
       const blob = await fetch(screenshot).then(r => r.blob());
@@ -1722,14 +1752,17 @@ export default function CampaignEditor() {
       setChatAttachments([file]);
     }
 
-    setChatInput(swapMsg);
-    setTimeout(() => {
-      const sendBtn = document.querySelector('[data-send-btn]') as HTMLButtonElement | null;
-      sendBtn?.click();
-    }, 150);
-  }, [commentThreads, commentCurrentUser, captureCommentScreenshot]);
+    setChatInput(realPrompt);
+    ideatePayloadRef.current = {
+      realPrompt,
+      displayText: "🔄 Swap element",
+    };
 
-  // Comment mode: ideate action — generate options for element at pin location
+    setTimeout(() => {
+      sendMessage();
+    }, 150);
+  }, [commentThreads, commentCurrentUser, captureCommentScreenshot, queryElementInfo]);
+
   const handleCommentIdeate = useCallback(async (threadId: string) => {
     const thread = commentThreads.find(t => t.id === threadId);
     if (!thread) return;
@@ -1749,9 +1782,19 @@ export default function CampaignEditor() {
     pendingCommentIdRef.current = threadId;
 
     const pin = thread.pin;
-    const screenshot = await captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH);
+    const [screenshot, elementInfo] = await Promise.all([
+      captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH),
+      queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH),
+    ]);
 
-    const ideateMsg = `[Visual comment at position (${Math.round(pin.x)}, ${Math.round(pin.y)})${pin.regionW ? ` — region ${Math.round(pin.regionW)}×${Math.round(pin.regionH || 0)}px` : ""}]\n\nLook at the screenshot I've attached. Generate 5 alternative options for the element at this location. If it's text (heading, body copy, CTA), generate text alternatives. If it's an image, suggest different image compositions or styles. Present these as variant options the user can select from.`;
+    if (elementInfo) {
+      setCommentThreads(prev => prev.map(t =>
+        t.id === threadId ? { ...t, pin: { ...t.pin, elementInfo } } : t
+      ));
+    }
+
+    const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
+    const realPrompt = `[Ideate request on email design]${elCtx}\n\nGenerate 5 alternative options for this specific element. If it's text (heading, body copy, CTA), generate text alternatives. If it's an image, suggest different image compositions or styles. Present these as variant options the user can select from. IMPORTANT: Only generate alternatives for the targeted element described above.`;
 
     if (screenshot) {
       const blob = await fetch(screenshot).then(r => r.blob());
@@ -1759,21 +1802,18 @@ export default function CampaignEditor() {
       setChatAttachments([file]);
     }
 
-    setChatInput(ideateMsg);
-
-    // Use ideate pipeline for variant cards
+    setChatInput(realPrompt);
     ideatePayloadRef.current = {
-      realPrompt: ideateMsg,
-      displayText: "💡 Ideate: Generate options for this area",
+      realPrompt,
+      displayText: "💡 Ideate: Generate options",
     };
     setIdeateActive(true);
 
     setTimeout(() => {
       sendMessage();
     }, 150);
-  }, [commentThreads, commentCurrentUser, captureCommentScreenshot]);
+  }, [commentThreads, commentCurrentUser, captureCommentScreenshot, queryElementInfo]);
 
-  // Comment mode: reply to existing thread
   const handleCommentReply = useCallback(async (threadId: string, body: string) => {
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const newComment: ThreadComment = {
@@ -1790,10 +1830,13 @@ export default function CampaignEditor() {
     const thread = commentThreads.find(t => t.id === threadId);
     const pin = thread?.pin;
 
-    // Capture screenshot context for reply too
-    const screenshot = pin ? await captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH) : undefined;
+    const [screenshot, elementInfo] = await Promise.all([
+      pin ? captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH) : Promise.resolve(undefined),
+      pin ? queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH) : Promise.resolve(null),
+    ]);
 
-    const commentMsg = `[Reply to visual comment at (${Math.round(pin?.x || 0)}, ${Math.round(pin?.y || 0)})]\n\n${body}`;
+    const elCtx = (pin && (elementInfo || pin.elementInfo)) ? buildElementContext({ ...pin, elementInfo: elementInfo || pin.elementInfo }) : '';
+    const realPrompt = `[Reply to visual comment on email design]${elCtx}\n\n${body}`;
 
     if (screenshot) {
       const blob = await fetch(screenshot).then(r => r.blob());
@@ -1801,12 +1844,16 @@ export default function CampaignEditor() {
       setChatAttachments([file]);
     }
 
-    setChatInput(commentMsg);
+    setChatInput(realPrompt);
+    ideatePayloadRef.current = {
+      realPrompt,
+      displayText: `💬 Reply: ${body}`,
+    };
+
     setTimeout(() => {
-      const sendBtn = document.querySelector('[data-send-btn]') as HTMLButtonElement | null;
-      sendBtn?.click();
+      sendMessage();
     }, 150);
-  }, [commentThreads, commentCurrentUser, captureCommentScreenshot]);
+  }, [commentThreads, commentCurrentUser, captureCommentScreenshot, queryElementInfo]);
 
   // Track AI replies and associate with comment threads
   useEffect(() => {
