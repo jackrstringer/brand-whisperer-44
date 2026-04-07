@@ -1098,9 +1098,6 @@ export default function CampaignEditor() {
     const msg = messages.find(m => m.id === messageId);
     if (!msg?.variant_data) return;
 
-    const findTarget = findLiveTarget(msg.variant_data, html);
-    if (!findTarget) return; // silently skip — text no longer in HTML
-
     // Grouped variant: preview all items' find/replace pairs
     if (variant.items && variant.items.length > 0) {
       let result = html;
@@ -1111,6 +1108,8 @@ export default function CampaignEditor() {
       }
       setPreviewHtml(result);
     } else {
+      const findTarget = findLiveTarget(msg.variant_data, html);
+      if (!findTarget) return;
       const useAll = variant.apply_all === true;
       setPreviewHtml(useAll ? html.split(findTarget).join(variant.replace) : html.replace(findTarget, variant.replace));
     }
