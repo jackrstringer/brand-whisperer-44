@@ -1606,7 +1606,9 @@ export default function CampaignEditor() {
 
       // Debounced DB save — persist both html and history
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
+      pendingSaveRef.current = { html: newHtml, history, campaignId };
       inlineEditTimerRef.current = setTimeout(async () => {
+        pendingSaveRef.current = null;
         await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
         // Silently sync campaign.html to match DB without triggering srcdoc recompute
         // (srcdocHtml won't change because displayHtml hasn't changed)
@@ -1618,6 +1620,12 @@ export default function CampaignEditor() {
     return () => {
       window.removeEventListener("message", handler);
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
+      // Flush any pending save immediately on cleanup
+      if (pendingSaveRef.current) {
+        const { html: h, history: hist, campaignId: cid } = pendingSaveRef.current;
+        pendingSaveRef.current = null;
+        supabase.from("campaigns").update({ html: h, html_history: hist }).eq("id", cid);
+      }
     };
   }, [campaignId, campaign, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace]);
 
