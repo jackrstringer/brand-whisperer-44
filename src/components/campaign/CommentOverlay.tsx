@@ -534,8 +534,8 @@ function RegionHighlight({
   const { pin } = thread;
   if (!pin.regionW || !pin.regionH) return null;
 
-  const left = pin.x - pin.regionW / 2;
-  const top = pin.y - pin.regionH / 2;
+  const left = pin.x;
+  const top = pin.y;
 
   return (
     <div
