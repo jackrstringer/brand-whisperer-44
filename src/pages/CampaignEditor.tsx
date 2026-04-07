@@ -3167,7 +3167,7 @@ export default function CampaignEditor() {
               width: showReferenceDialog && campaign?.html && selectedReferences.length > 0 ? '50%' : '100%',
               scrollbarWidth: 'none',
               msOverflowStyle: 'none' as any,
-              cursor: marqueeRect ? 'crosshair' : undefined,
+              cursor: commentMode ? 'crosshair' : marqueeRect ? 'crosshair' : undefined,
             }}
             onScroll={(e) => {
               if (!showReferenceDialog || syncingScroll) return;
