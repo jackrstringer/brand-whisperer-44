@@ -134,6 +134,10 @@ export default function BrandSettings() {
           </div>
         </TabsContent>
 
+        <TabsContent value="intelligence">
+          {brandId && <BrandIntelligenceTab brandId={brandId} brandName={name} domain={websiteUrl} />}
+        </TabsContent>
+
         <TabsContent value="assets">
           {brandId && <AssetManager brandId={brandId} assets={assets} setAssets={setAssets} />}
         </TabsContent>
