@@ -1395,10 +1395,12 @@ export default function CampaignEditor() {
   useEffect(() => {
     const flushPendingSave = () => {
       if (pendingSaveRef.current) {
-        const { html: h, history: hist, campaignId: cid } = pendingSaveRef.current;
+        const { html: h, history: hist, campaignId: cid, variantHtmls: vh } = pendingSaveRef.current;
         pendingSaveRef.current = null;
         if (inlineEditTimerRef.current) { clearTimeout(inlineEditTimerRef.current); inlineEditTimerRef.current = null; }
-        supabase.from("campaigns").update({ html: h, html_history: hist }).eq("id", cid);
+        const payload: any = { html: h, html_history: hist };
+        if (vh) payload.variant_htmls = vh;
+        supabase.from("campaigns").update(payload).eq("id", cid);
       }
     };
     window.addEventListener('beforeunload', flushPendingSave);
