@@ -1147,12 +1147,13 @@ export default function CampaignEditor() {
     const msg = messages.find(m => m.id === messageId);
     if (!msg?.variant_data) return;
 
-    // Find the original user message that triggered these variants
+    // Find the original user message that triggered these variants — prefer hidden prompt
     const msgIndex = messages.findIndex(m => m.id === messageId);
     let originalUserMsg = "";
     for (let i = msgIndex - 1; i >= 0; i--) {
       if (messages[i].role === "user") {
-        originalUserMsg = messages[i].content;
+        // Prefer hidden_prompt metadata over visible content
+        originalUserMsg = (messages[i] as any)._hidden_prompt || messages[i].content;
         break;
       }
     }
