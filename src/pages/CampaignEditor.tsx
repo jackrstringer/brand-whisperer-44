@@ -1387,7 +1387,7 @@ export default function CampaignEditor() {
   // Track iframe-owned HTML to avoid reloading iframe on every keystroke
   const iframeOwnedHtmlRef = useRef<string | null>(null);
   // Track pending save payload so we can flush on unmount/navigation
-  const pendingSaveRef = useRef<{ html: string; history: any[]; campaignId: string } | null>(null);
+  const pendingSaveRef = useRef<{ html: string; history: any[]; campaignId: string; variantHtmls?: any[] } | null>(null);
   // Stable HTML ref to prevent iframe reload during inline edits
   const lastStableHtmlRef = useRef<string | null>(null);
 
