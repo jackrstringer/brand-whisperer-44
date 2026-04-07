@@ -1695,6 +1695,12 @@ export default function CampaignEditor() {
       const currentHtml = iframeOwnedHtmlRef.current || campaign.html || "";
       if (newHtml === currentHtml) return;
 
+      // Resolve any pending snapshot request
+      if (snapshotResolveRef.current) {
+        snapshotResolveRef.current(newHtml);
+        snapshotResolveRef.current = null;
+      }
+
       // Track iframe's live HTML WITHOUT updating campaign state (prevents iframe reload)
       iframeOwnedHtmlRef.current = newHtml;
 
@@ -1717,6 +1723,9 @@ export default function CampaignEditor() {
       setCanUndo(true);
       setRedoStack([]); // clear redo on new edit
 
+      // Write localStorage draft immediately (zero-loss fallback)
+      writeDraft(newHtml, history, nextVariantHtmls);
+
       // Debounced DB save — persist both html, history, and variant_htmls
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
       const savePayload: any = { html: newHtml, html_history: history };
@@ -1725,7 +1734,8 @@ export default function CampaignEditor() {
       inlineEditTimerRef.current = setTimeout(async () => {
         pendingSaveRef.current = null;
         await supabase.from("campaigns").update(savePayload).eq("id", campaignId);
-        iframeOwnedHtmlRef.current = null;
+        // Do NOT clear iframeOwnedHtmlRef here — it must stay until the iframe reloads new HTML
+        if (draftKey) { try { localStorage.removeItem(draftKey); } catch {} }
       }, 400);
     };
     window.addEventListener("message", handler);
@@ -1741,7 +1751,7 @@ export default function CampaignEditor() {
         supabase.from("campaigns").update(payload).eq("id", cid);
       }
     };
-  }, [campaignId, campaign, variantHtmls, activeVariantIndex, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace]);
+  }, [campaignId, campaign, variantHtmls, activeVariantIndex, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace, writeDraft, draftKey]);
 
   // Ideate/Swap for selected elements (single or multi)
   const triggerSelectedElementIdeate = useCallback(() => {
