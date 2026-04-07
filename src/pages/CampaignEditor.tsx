@@ -1447,10 +1447,7 @@ export default function CampaignEditor() {
     if (variantsToSave) payload.variant_htmls = variantsToSave;
 
     // 3. Persist and wait
-    const savePromise = supabase.from("campaigns").update(payload).eq("id", campaignId).then();
-    inflightSaveRef.current = savePromise;
-    await savePromise;
-    inflightSaveRef.current = null;
+    await supabase.from("campaigns").update(payload).eq("id", campaignId);
 
     // 4. Clear draft from localStorage after successful DB save
     if (draftKey) { try { localStorage.removeItem(draftKey); } catch {} }
