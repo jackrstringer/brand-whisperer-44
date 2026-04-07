@@ -3078,7 +3078,10 @@ export default function CampaignEditor() {
                 variant={commentMode ? "default" : "ghost"}
                 size="icon"
                 className={`h-7 w-7 ${commentMode ? "bg-primary text-primary-foreground" : ""}`}
-                onClick={() => setCommentMode(prev => !prev)}
+                onClick={() => setCommentMode(prev => {
+                  if (prev) { setComposerThreadId(null); setActiveThreadId(null); }
+                  return !prev;
+                })}
                 title="Comment mode (C)"
               >
                 <MessageCircle className="w-3.5 h-3.5" />
