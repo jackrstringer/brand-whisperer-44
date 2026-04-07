@@ -187,9 +187,10 @@ interface Props {
 }
 
 export default function BrandIntelligenceWizard({ brandId, brandName, domain, existingIntel, onComplete, editMode }: Props) {
-  const [phase, setPhase] = useState<"researching" | "survey" | "compiling" | "done">(
-    editMode ? "survey" : existingIntel?.research_status === "ai_complete" ? "survey" : "researching"
+  const [phase, setPhase] = useState<"confirm_url" | "researching" | "survey" | "compiling" | "done">(
+    editMode ? "survey" : existingIntel?.research_status === "ai_complete" ? "survey" : "confirm_url"
   );
+  const [confirmedDomain, setConfirmedDomain] = useState(domain || "");
   const [surveyStep, setSurveyStep] = useState(0);
   const [survey, setSurvey] = useState<SurveyData>(defaultSurvey());
   const [researchProgress, setResearchProgress] = useState(0);
