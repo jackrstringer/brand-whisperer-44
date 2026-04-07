@@ -1705,33 +1705,16 @@ export default function CampaignEditor() {
     const thread = commentThreads.find(t => t.id === threadId);
     if (!thread) return;
 
-    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const newComment: ThreadComment = {
-      id: crypto.randomUUID(),
-      author: commentCurrentUser,
-      body,
-      time: now,
-    };
-
-    setCommentThreads(prev => prev.map(t =>
-      t.id === threadId ? { ...t, comments: [newComment], isTemporary: false } : t
-    ));
+    // Remove thread immediately — no pin left behind
+    setCommentThreads(prev => prev.filter(t => t.id !== threadId));
     setComposerThreadId(null);
-    setActiveThreadId(threadId);
-    pendingCommentIdRef.current = threadId;
+    setActiveThreadId(null);
 
     const pin = thread.pin;
     const [screenshot, elementInfo] = await Promise.all([
       captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH),
       queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH),
     ]);
-
-    // Store element info on the thread
-    if (elementInfo) {
-      setCommentThreads(prev => prev.map(t =>
-        t.id === threadId ? { ...t, pin: { ...t.pin, elementInfo } } : t
-      ));
-    }
 
     const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
     const realPrompt = `[Visual comment on email design]${elCtx}\n\n${body}`;
