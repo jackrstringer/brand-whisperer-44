@@ -96,6 +96,59 @@ export type Database = {
           },
         ]
       }
+      brand_intelligence: {
+        Row: {
+          ai_research: Json | null
+          ai_research_confidence: string | null
+          brand_id: string
+          compiled_context: string | null
+          created_at: string
+          last_compiled_at: string | null
+          last_researched_at: string | null
+          last_surveyed_at: string | null
+          merged_profile: Json | null
+          research_status: string
+          survey_answers: Json | null
+          updated_at: string
+        }
+        Insert: {
+          ai_research?: Json | null
+          ai_research_confidence?: string | null
+          brand_id: string
+          compiled_context?: string | null
+          created_at?: string
+          last_compiled_at?: string | null
+          last_researched_at?: string | null
+          last_surveyed_at?: string | null
+          merged_profile?: Json | null
+          research_status?: string
+          survey_answers?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          ai_research?: Json | null
+          ai_research_confidence?: string | null
+          brand_id?: string
+          compiled_context?: string | null
+          created_at?: string
+          last_compiled_at?: string | null
+          last_researched_at?: string | null
+          last_surveyed_at?: string | null
+          merged_profile?: Json | null
+          research_status?: string
+          survey_answers?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_intelligence_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: true
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brand_profiles: {
         Row: {
           audit_findings: Json | null
