@@ -3243,6 +3243,12 @@ export default function CampaignEditor() {
             }}
             onPointerDown={(e) => {
               if (e.button !== 0) return;
+              // Always reclaim focus from iframe so keyboard shortcuts (C, Escape) work reliably
+              const iframe = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+              if (iframe && document.activeElement === iframe) {
+                iframe.blur();
+                previewPanelRef.current?.focus();
+              }
               if (!campaign?.html) return;
               const tag = (e.target as HTMLElement).tagName;
               if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA') return;
