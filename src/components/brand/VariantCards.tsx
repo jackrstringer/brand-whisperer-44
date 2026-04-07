@@ -163,9 +163,9 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
           className="text-[11px] text-muted-foreground hover:text-foreground transition-colors mt-1 disabled:opacity-40"
         >
           {loadingMore ? (
-            <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Loading…</span>
+            <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Generating…</span>
           ) : (
-            <span className="flex items-center gap-1"><MoreHorizontal className="w-3 h-3" /> More options</span>
+            "Generate More →"
           )}
         </button>
       )}
