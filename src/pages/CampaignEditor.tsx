@@ -1386,8 +1386,26 @@ export default function CampaignEditor() {
   const inlineEditTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Track iframe-owned HTML to avoid reloading iframe on every keystroke
   const iframeOwnedHtmlRef = useRef<string | null>(null);
+  // Track pending save payload so we can flush on unmount/navigation
+  const pendingSaveRef = useRef<{ html: string; history: any[]; campaignId: string } | null>(null);
 
-  // Background edit: sends instruction to AI silently (no chat message)
+  // Flush pending saves on page unload or component unmount
+  useEffect(() => {
+    const flushPendingSave = () => {
+      if (pendingSaveRef.current) {
+        const { html: h, history: hist, campaignId: cid } = pendingSaveRef.current;
+        pendingSaveRef.current = null;
+        if (inlineEditTimerRef.current) { clearTimeout(inlineEditTimerRef.current); inlineEditTimerRef.current = null; }
+        supabase.from("campaigns").update({ html: h, html_history: hist }).eq("id", cid);
+      }
+    };
+    window.addEventListener('beforeunload', flushPendingSave);
+    return () => {
+      window.removeEventListener('beforeunload', flushPendingSave);
+      flushPendingSave();
+    };
+  }, []);
+
   const sendBackgroundEdit = useCallback(async (instruction: string, onComplete?: () => void) => {
     if (!campaignId || !brandId || !(iframeOwnedHtmlRef.current || campaign?.html)) return;
     try {
@@ -1455,7 +1473,9 @@ export default function CampaignEditor() {
     setCanUndo(true);
     setRedoStack([]);
     if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
+    pendingSaveRef.current = { html: newHtml, history, campaignId };
     inlineEditTimerRef.current = setTimeout(async () => {
+      pendingSaveRef.current = null;
       await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
     }, 500);
   }, [campaign, campaignId]);
@@ -1604,7 +1624,9 @@ export default function CampaignEditor() {
 
       // Debounced DB save — persist both html and history
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
+      pendingSaveRef.current = { html: newHtml, history, campaignId };
       inlineEditTimerRef.current = setTimeout(async () => {
+        pendingSaveRef.current = null;
         await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
         // Silently sync campaign.html to match DB without triggering srcdoc recompute
         // (srcdocHtml won't change because displayHtml hasn't changed)
@@ -1616,6 +1638,12 @@ export default function CampaignEditor() {
     return () => {
       window.removeEventListener("message", handler);
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
+      // Flush any pending save immediately on cleanup
+      if (pendingSaveRef.current) {
+        const { html: h, history: hist, campaignId: cid } = pendingSaveRef.current;
+        pendingSaveRef.current = null;
+        supabase.from("campaigns").update({ html: h, html_history: hist }).eq("id", cid);
+      }
     };
   }, [campaignId, campaign, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace]);
 
