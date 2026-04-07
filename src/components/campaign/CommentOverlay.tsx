@@ -147,7 +147,12 @@ function ComposerPopover({
         <textarea
           ref={inputRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            // Auto-resize
+            e.target.style.height = "auto";
+            e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -165,7 +170,8 @@ function ComposerPopover({
             resize: "none",
             fontSize: 13,
             color: "#334155",
-            maxHeight: 80,
+            minHeight: 22,
+            maxHeight: 160,
             overflowY: "auto",
             lineHeight: 1.4,
           }}
