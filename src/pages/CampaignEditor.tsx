@@ -17,21 +17,39 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 
-/** Strip verbose AI context from user messages so users never see raw HTML/element metadata */
+/** Strip verbose AI context from user messages so users never see raw HTML/element metadata.
+ * This is the safety net for legacy messages that were saved before we split content/hidden_prompt. */
 function cleanUserMessage(content: string): string | null {
-  // Fully silent messages — hide entirely
-  if (/^\[Visual comment on email design\]/.test(content) && !/\n\n/.test(content.trim())) return null;
-  // Extract just the human part after the context block
-  const parts = content.split(/\n\n/);
-  const humanParts = parts.filter(p =>
-    !p.startsWith("[Visual comment") &&
-    !p.startsWith("[Targeting ") &&
-    !p.startsWith("Element HTML:") &&
-    !/^<\w+\s/.test(p.trim())
-  );
-  const cleaned = humanParts.join("\n\n").trim();
-  if (!cleaned) return null;
-  return cleaned;
+  // Known hidden-prompt prefixes — if the entire message starts with one, it's an internal prompt
+  const HIDDEN_PREFIXES = [
+    /^\[Visual comment on email design\]/,
+    /^\[Ideate request on (email design|selected elements)\]/,
+    /^\[Swap request on (email design|selected elements)\]/,
+    /^\[Targeting (<\w+>|region with elements)/,
+  ];
+  // Check if the whole message is a hidden prompt
+  const isFullyHidden = HIDDEN_PREFIXES.some(rx => rx.test(content));
+  if (isFullyHidden) {
+    // Try to extract any human-readable text after the context blocks
+    const parts = content.split(/\n\n/);
+    const humanParts = parts.filter(p =>
+      !p.startsWith("[Visual comment") &&
+      !p.startsWith("[Ideate request") &&
+      !p.startsWith("[Swap request") &&
+      !p.startsWith("[Targeting ") &&
+      !p.startsWith("Element HTML:") &&
+      !p.startsWith("Primary element HTML:") &&
+      !p.startsWith("HTML:") &&
+      !/^Element \d+ \(/.test(p) &&
+      !/^<\w+[\s>]/.test(p.trim()) &&
+      !/^Generate \d+ alternative/.test(p) &&
+      !/^Automatically swap/.test(p) &&
+      !/^IMPORTANT:/.test(p)
+    );
+    const cleaned = humanParts.join("\n\n").trim();
+    return cleaned || null;
+  }
+  return content;
 }
 
 import type { Campaign, ChatMessage, VariantOption } from "@/lib/types";
