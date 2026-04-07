@@ -3775,26 +3775,13 @@ export default function CampaignEditor() {
                 </>
               );
             })()}
-            {/* Comment threads overlay */}
-            {commentThreads.length > 0 && (
+            {/* Comment composer overlay (no persistent pins) */}
+            {composerThreadId && (
               <CommentOverlay
                 threads={commentThreads}
-                activeThreadId={activeThreadId}
                 composerThreadId={composerThreadId}
-                currentUser={commentCurrentUser}
                 zoom={zoomScale}
-                onActivate={(id) => {
-                  if (composerThreadId) {
-                    setCommentThreads(prev => prev.filter(t => t.id !== composerThreadId));
-                    setComposerThreadId(null);
-                  }
-                  setActiveThreadId(id === activeThreadId ? null : id);
-                }}
-                onCloseThread={() => setActiveThreadId(null)}
                 onSubmitNew={handleCommentSubmitNew}
-                onReply={handleCommentReply}
-                onResolve={(id) => setCommentThreads(prev => prev.map(t => t.id === id ? { ...t, resolved: true } : t))}
-                onUnresolve={(id) => setCommentThreads(prev => prev.map(t => t.id === id ? { ...t, resolved: false } : t))}
                 onCancelComposer={(id) => {
                   setCommentThreads(prev => prev.filter(t => t.id !== id));
                   setComposerThreadId(null);
