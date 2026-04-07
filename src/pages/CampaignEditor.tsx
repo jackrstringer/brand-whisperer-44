@@ -3380,6 +3380,56 @@ export default function CampaignEditor() {
                 />
               );
             })()}
+            {/* Comment mode indicator */}
+            {commentMode && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 12,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  zIndex: 70,
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium shadow-lg"
+                style2="background: rgba(99,102,241,0.95); color: white;"
+              >
+                <div
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium shadow-lg"
+                  style={{
+                    position: 'absolute',
+                    top: 12,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    zIndex: 70,
+                    background: 'rgba(99,102,241,0.95)',
+                    color: 'white',
+                    backdropFilter: 'blur(8px)',
+                  }}
+                >
+                  <MessageCircle className="w-3 h-3" />
+                  Comment Mode
+                  <span className="opacity-60 ml-1">Press C or Esc to exit</span>
+                </div>
+              </div>
+            )}
+            {/* Comment pins overlay */}
+            {comments.length > 0 && (
+              <CommentOverlay
+                comments={comments}
+                activeCommentId={activeCommentId}
+                onSubmit={handleCommentSubmit}
+                onUpdateText={(id, text) => setComments(prev => prev.map(c => c.id === id ? { ...c, text } : c))}
+                onClose={(id) => {
+                  const pin = comments.find(c => c.id === id);
+                  if (pin?.status === 'draft') {
+                    setComments(prev => prev.filter(c => c.id !== id));
+                  }
+                  setActiveCommentId(null);
+                }}
+                onActivate={(id) => setActiveCommentId(id === activeCommentId ? null : id)}
+                onResolve={(id) => setComments(prev => prev.map(c => c.id === id ? { ...c, status: "resolved" as const } : c))}
+              />
+            )}
             {isGenerating ? (
               <div className="max-w-[600px] mx-auto space-y-4 p-8 mt-12">
                 <div className="text-center mb-6">
