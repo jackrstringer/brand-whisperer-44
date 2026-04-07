@@ -1,8 +1,9 @@
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useState } from "react";
+import { useTheme } from "next-themes";
 import { supabase } from "@/integrations/supabase/client";
-import { LayoutDashboard, Settings, LogOut, FolderOpen, Palette, BookOpen, Library } from "lucide-react";
+import { LayoutDashboard, Settings, LogOut, FolderOpen, Palette, BookOpen, Library, Sun, Moon } from "lucide-react";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -17,7 +18,6 @@ import {
   SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Button } from "@/components/ui/button";
 
 export function AppSidebar() {
   const { state } = useSidebar();
@@ -28,6 +28,7 @@ export function AppSidebar() {
   const location = useLocation();
   const params = useParams();
   const brandId = params.brandId;
+  const { theme, setTheme } = useTheme();
 
   const [brandName, setBrandName] = useState<string | null>(null);
 
@@ -41,6 +42,10 @@ export function AppSidebar() {
   const handleSignOut = async () => {
     await signOut();
     navigate("/login");
+  };
+
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark");
   };
 
   return (
@@ -127,6 +132,16 @@ export function AppSidebar() {
 
       <SidebarFooter>
         <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={toggleTheme} className="text-muted-foreground hover:text-foreground">
+              {theme === "dark" ? (
+                <Sun className="mr-2 h-4 w-4 shrink-0" />
+              ) : (
+                <Moon className="mr-2 h-4 w-4 shrink-0" />
+              )}
+              {!collapsed && <span>{theme === "dark" ? "Light Mode" : "Dark Mode"}</span>}
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={handleSignOut} className="text-muted-foreground hover:text-foreground">
               <LogOut className="mr-2 h-4 w-4 shrink-0" />
