@@ -1514,7 +1514,10 @@ export default function CampaignEditor() {
       // Toggle comment mode with C key
       if (e.key === 'c' || e.key === 'C') {
         if (!e.metaKey && !e.ctrlKey && !e.altKey) {
-          setCommentMode(prev => !prev);
+          setCommentMode(prev => {
+            if (prev) { setComposerThreadId(null); setActiveThreadId(null); }
+            return !prev;
+          });
           return;
         }
       }
