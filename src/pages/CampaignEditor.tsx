@@ -1583,7 +1583,7 @@ export default function CampaignEditor() {
     const iframe = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
     if (!iframe?.contentDocument?.body) return undefined;
     try {
-      const scale = zoomScale;
+    const scale = screenZoom / 100;
       const iframeRect = iframe.getBoundingClientRect();
       const panelRect = previewPanelRef.current!.getBoundingClientRect();
       const iframePanelLeft = iframeRect.left - panelRect.left;
