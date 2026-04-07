@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, Send, Undo2, Redo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, EyeOff, RotateCcw, Link2, Loader2, Copy, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, Download, Send, Undo2, Redo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, EyeOff, RotateCcw, Link2, Loader2, Copy, SlidersHorizontal, MessageCircle } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
