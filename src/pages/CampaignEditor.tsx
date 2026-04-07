@@ -1619,19 +1619,32 @@ export default function CampaignEditor() {
       // Push to history for undo
       const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
       history.push(currentHtml);
+
+      // Sync variant_htmls if active variant is being manually edited
+      let nextVariantHtmls: any[] | undefined;
+      if (Array.isArray(variantHtmls) && variantHtmls.length > 0 && activeVariantIndex >= 0 && activeVariantIndex < variantHtmls.length) {
+        const activeVariant = variantHtmls[activeVariantIndex];
+        if (activeVariant && activeVariant.html !== newHtml) {
+          nextVariantHtmls = variantHtmls.map((v: any, i: number) => i === activeVariantIndex ? { ...v, html: newHtml } : v);
+          setVariantHtmls(nextVariantHtmls);
+        }
+      }
+
       // Update both history AND html in state so navigation always has latest
       setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
       setCanUndo(true);
       setRedoStack([]); // clear redo on new edit
 
-      // Debounced DB save — persist both html and history
+      // Debounced DB save — persist both html, history, and variant_htmls
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
-      pendingSaveRef.current = { html: newHtml, history, campaignId };
+      const savePayload: any = { html: newHtml, html_history: history };
+      if (nextVariantHtmls) savePayload.variant_htmls = nextVariantHtmls;
+      pendingSaveRef.current = { html: newHtml, history, campaignId, variantHtmls: nextVariantHtmls };
       inlineEditTimerRef.current = setTimeout(async () => {
         pendingSaveRef.current = null;
-        await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
+        await supabase.from("campaigns").update(savePayload).eq("id", campaignId);
         iframeOwnedHtmlRef.current = null;
-      }, 800);
+      }, 400);
     };
     window.addEventListener("message", handler);
     return () => {
@@ -1639,12 +1652,14 @@ export default function CampaignEditor() {
       if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
       // Flush any pending save immediately on cleanup
       if (pendingSaveRef.current) {
-        const { html: h, history: hist, campaignId: cid } = pendingSaveRef.current;
+        const { html: h, history: hist, campaignId: cid, variantHtmls: vh } = pendingSaveRef.current;
         pendingSaveRef.current = null;
-        supabase.from("campaigns").update({ html: h, html_history: hist }).eq("id", cid);
+        const payload: any = { html: h, html_history: hist };
+        if (vh) payload.variant_htmls = vh;
+        supabase.from("campaigns").update(payload).eq("id", cid);
       }
     };
-  }, [campaignId, campaign, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace]);
+  }, [campaignId, campaign, variantHtmls, activeVariantIndex, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace]);
 
   // Ideate/Swap for selected elements (single or multi)
   const triggerSelectedElementIdeate = useCallback(() => {
