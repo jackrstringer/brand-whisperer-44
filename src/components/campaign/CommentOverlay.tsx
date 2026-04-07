@@ -41,6 +41,8 @@ interface CommentOverlayProps {
   onResolve: (threadId: string) => void;
   onUnresolve: (threadId: string) => void;
   onCancelComposer: (threadId: string) => void;
+  onSwap?: (threadId: string) => void;
+  onIdeate?: (threadId: string) => void;
 }
 
 /* ── Spring animation keyframes ─────────────────────────── */
