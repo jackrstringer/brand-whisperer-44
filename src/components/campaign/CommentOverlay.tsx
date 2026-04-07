@@ -626,6 +626,7 @@ export default function CommentOverlay({
           />
         );
       })()}
-    </>
+      </div>
+    </div>
   );
 }
