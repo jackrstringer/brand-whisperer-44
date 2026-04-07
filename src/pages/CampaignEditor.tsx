@@ -3653,6 +3653,8 @@ export default function CampaignEditor() {
                   setComposerThreadId(null);
                   setActiveThreadId(null);
                 }}
+                onSwap={handleCommentSwap}
+                onIdeate={handleCommentIdeate}
               />
             )}
             {isGenerating ? (
