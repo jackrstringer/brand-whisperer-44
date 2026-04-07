@@ -227,7 +227,9 @@ function ThreadPopover({
 
   return (
     <div
+      data-comment-overlay
       onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
       style={{
         position: "absolute",
         left: thread.pin.x + 36 / zoom,
