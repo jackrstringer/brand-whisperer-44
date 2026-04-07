@@ -569,7 +569,8 @@ export default function CommentOverlay({
   const [hoveredPinId, setHoveredPinId] = useState<string | null>(null);
 
   return (
-    <>
+    <div data-comment-overlay style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+      <div style={{ position: 'relative', width: '100%', height: '100%', pointerEvents: 'auto' }}>
       <style>{SPRING_STYLE}</style>
 
       {/* Region highlights */}
