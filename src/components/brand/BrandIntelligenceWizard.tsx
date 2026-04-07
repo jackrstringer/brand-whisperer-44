@@ -241,8 +241,15 @@ export default function BrandIntelligenceWizard({ brandId, brandName, domain, ex
         clearInterval(progressInterval);
         if (error || data?.error) throw new Error(data?.error || error?.message || "Research failed");
 
+        const { data: latestIntel, error: intelError } = await supabase
+          .from("brand_intelligence")
+          .select("ai_research, survey_answers")
+          .eq("brand_id", brandId)
+          .single();
+        if (intelError) throw intelError;
+
         setResearchProgress(100);
-        prefillSurvey(data.research);
+        prefillSurvey(latestIntel?.ai_research, latestIntel?.survey_answers);
         setTimeout(() => { if (!cancelled) setPhase("survey"); }, 800);
       } catch (err: any) {
         if (cancelled) return;

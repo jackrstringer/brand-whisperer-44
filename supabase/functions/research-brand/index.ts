@@ -234,7 +234,12 @@ Deno.serve(async (req) => {
       throw new Error(`Database error: ${upsertError.message}`);
     }
 
-    return new Response(JSON.stringify({ success: true, research: parsed }), {
+    return new Response(JSON.stringify({
+      success: true,
+      research_status: "ai_complete",
+      ai_research_confidence: parsed.research_confidence || "unknown",
+      last_researched_at: new Date().toISOString(),
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err: any) {
