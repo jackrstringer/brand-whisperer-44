@@ -1451,6 +1451,20 @@ export default function CampaignEditor() {
         setImageSwap(prev => prev ? { ...prev, category: e.data.category } : null);
         return;
       }
+      // Resolve pending element info query from comment system
+      if (e.data?.type === 'commentElementInfo') {
+        if (pendingElementInfoResolveRef.current) {
+          const info: CommentElementInfo = {
+            tagName: e.data.tagName || '',
+            text: e.data.text || '',
+            outerHTML: e.data.outerHTML || '',
+            ...(e.data.allElements ? { elements: e.data.allElements } : {}),
+          };
+          pendingElementInfoResolveRef.current(info.tagName ? info : null);
+          pendingElementInfoResolveRef.current = null;
+        }
+        return;
+      }
       // Arrow navigation — cycle through assets
       if (e.data?.type === 'imageSwapPrev' || e.data?.type === 'imageSwapNext') {
         // Handled by cycling logic in imageSwapAssets
