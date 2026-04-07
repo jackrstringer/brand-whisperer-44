@@ -2186,7 +2186,7 @@ export default function CampaignEditor() {
     restoreSelection();
     ftbTarget.focus();
     try { document.execCommand(cmd, false, value || null); } catch(e){}
-    syncHtml();
+    syncHtmlImmediate();
     // Re-save the range after command
     var sel = window.getSelection();
     if(sel && sel.rangeCount > 0) savedRange = sel.getRangeAt(0).cloneRange();
@@ -2313,7 +2313,7 @@ export default function CampaignEditor() {
       }
       swatch.style.backgroundColor = hex;
       if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; }
-      syncHtml();
+      syncHtmlImmediate();
     }
 
     function makeSwatchEl(hex, isActive){
@@ -2418,7 +2418,7 @@ export default function CampaignEditor() {
       swatch.style.backgroundColor = hex;
       swatch.style.backgroundImage = 'none';
       if(ftbColorPanel){ ftbColorPanel.remove(); ftbColorPanel = null; }
-      syncHtml();
+      syncHtmlImmediate();
     }
 
     function makeBgSwatch(hex, isActive){
@@ -2541,7 +2541,7 @@ export default function CampaignEditor() {
           f.replaceWith(span);
         });
       }
-      syncHtml();
+      syncHtmlImmediate();
     });
     bar.appendChild(sizeSelect);
 
@@ -2623,7 +2623,7 @@ export default function CampaignEditor() {
       el.style.textAlign = next;
       currentAlign = next;
       alignBtn.innerHTML = alignSvgs[next];
-      syncHtml();
+      syncHtmlImmediate();
       restoreSelection();
       el.focus();
     });
@@ -2660,7 +2660,7 @@ export default function CampaignEditor() {
           ev.stopPropagation();
           var cur = parseInt(window.getComputedStyle(el)[d.prop]) || 0;
           el.style[d.prop] = Math.max(0, cur - 4) + 'px';
-          syncHtml(); buildPadPanel();
+          syncHtmlImmediate(); buildPadPanel();
         });
         row.appendChild(minus);
         var val = document.createElement('span');
@@ -2675,7 +2675,7 @@ export default function CampaignEditor() {
           ev.stopPropagation();
           var cur = parseInt(window.getComputedStyle(el)[d.prop]) || 0;
           el.style[d.prop] = (cur + 4) + 'px';
-          syncHtml(); buildPadPanel();
+          syncHtmlImmediate(); buildPadPanel();
         });
         row.appendChild(plus);
         padPanel.appendChild(row);
@@ -2832,13 +2832,13 @@ export default function CampaignEditor() {
     addItem('Duplicate', '⧉', function(){
       var cloned = el.cloneNode(true);
       el.parentNode.insertBefore(cloned, el.nextSibling);
-      syncHtml();
+      syncHtmlImmediate();
     });
 
     /* Delete element */
     addItem('Delete', '🗑️', function(){
       el.remove();
-      syncHtml();
+      syncHtmlImmediate();
     });
 
     document.body.appendChild(menu);
@@ -2935,7 +2935,7 @@ export default function CampaignEditor() {
         removeDeleteBtn();
         selectedEl = null;
         window.parent.postMessage({ type: 'elementDeselected' }, '*');
-        syncHtml();
+        syncHtmlImmediate();
       }
     });
     // Ensure parent can hold absolute positioning
@@ -2978,7 +2978,7 @@ export default function CampaignEditor() {
     removeDeleteBtn();
     selectedEl = null;
     window.parent.postMessage({ type: 'elementDeselected' }, '*');
-    syncHtml();
+    syncHtmlImmediate();
   }
 
   document.addEventListener('keydown', function(e){
