@@ -394,9 +394,11 @@ export default function BrandSetup() {
           .catch((e) => console.warn("Slice upload failed (non-blocking):", e));
 
         // Fire-and-forget: start brand intelligence AI research
-        supabase.functions.invoke("research-brand", {
-          body: { brand_id: brandId, brand_name: brandName, domain: websiteUrl || brandName },
-        }).catch((e) => console.warn("Brand intelligence research failed (non-blocking):", e));
+        if (websiteUrl?.trim()) {
+          supabase.functions.invoke("research-brand", {
+            body: { brand_id: brandId, brand_name: brandName, domain: websiteUrl },
+          }).catch((e) => console.warn("Brand intelligence research failed (non-blocking):", e));
+        }
 
         // Fire-and-forget: upload asset files and analyze with AI in background
         // This does NOT block guide generation — results are needed later for campaign building

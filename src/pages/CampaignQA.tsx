@@ -76,7 +76,7 @@ export default function CampaignQA() {
     if (!campaignId) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
-      await supabase.from("campaigns").update(updates).eq("id", campaignId);
+      await supabase.from("campaigns").update(updates as any).eq("id", campaignId);
     }, 800);
   }, [campaignId]);
 
