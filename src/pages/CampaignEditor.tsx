@@ -1774,13 +1774,24 @@ export default function CampaignEditor() {
 
     const thread = commentThreads.find(t => t.id === threadId);
     const pin = thread?.pin;
+
+    // Capture screenshot context for reply too
+    const screenshot = pin ? await captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH) : undefined;
+
     const commentMsg = `[Reply to visual comment at (${Math.round(pin?.x || 0)}, ${Math.round(pin?.y || 0)})]\n\n${body}`;
+
+    if (screenshot) {
+      const blob = await fetch(screenshot).then(r => r.blob());
+      const file = new File([blob], `reply-context-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      setChatAttachments([file]);
+    }
+
     setChatInput(commentMsg);
     setTimeout(() => {
       const sendBtn = document.querySelector('[data-send-btn]') as HTMLButtonElement | null;
       sendBtn?.click();
-    }, 100);
-  }, [commentThreads, commentCurrentUser]);
+    }, 150);
+  }, [commentThreads, commentCurrentUser, captureCommentScreenshot]);
 
   // Track AI replies and associate with comment threads
   useEffect(() => {
