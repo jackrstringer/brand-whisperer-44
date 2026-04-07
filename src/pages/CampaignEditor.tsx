@@ -302,7 +302,7 @@ export default function CampaignEditor() {
     try {
       const doc = iframe.contentDocument;
       if (!doc) return;
-      const h = Math.max(doc.body?.scrollHeight ?? 0, doc.documentElement?.scrollHeight ?? 0, 800);
+      const h = Math.max(doc.body?.scrollHeight ?? 0, doc.documentElement?.scrollHeight ?? 0, 200);
       setIframeContentHeight(h);
     } catch {}
   }, []);
@@ -323,7 +323,7 @@ export default function CampaignEditor() {
       const observer = new ResizeObserver(() => {
         cancelAnimationFrame(rafId);
         rafId = requestAnimationFrame(() => {
-          const h = Math.max(doc.body?.scrollHeight ?? 0, doc.documentElement?.scrollHeight ?? 0, 800);
+          const h = Math.max(doc.body?.scrollHeight ?? 0, doc.documentElement?.scrollHeight ?? 0, 200);
           if (h !== lastHeight) {
             lastHeight = h;
             setIframeContentHeight(h);
@@ -1205,6 +1205,8 @@ export default function CampaignEditor() {
     setRedoStack(prev => [...prev, currentHtml]);
     iframeOwnedHtmlRef.current = previousHtml;
     iframeRef.current?.contentWindow?.postMessage({ type: 'loadHtml', html: previousHtml }, '*');
+    setTimeout(() => measureIframeHeight(iframeRef.current), 100);
+    setTimeout(() => measureIframeHeight(iframeRef.current), 500);
     // Fire-and-forget persist
     supabase.from("campaigns").update({ html: previousHtml, html_history: newHistory }).eq("id", campaignId);
   }, [campaign, campaignId]);
@@ -1222,6 +1224,8 @@ export default function CampaignEditor() {
     setActiveVersionIndex(null);
     iframeOwnedHtmlRef.current = redoHtml as string;
     iframeRef.current?.contentWindow?.postMessage({ type: 'loadHtml', html: redoHtml }, '*');
+    setTimeout(() => measureIframeHeight(iframeRef.current), 100);
+    setTimeout(() => measureIframeHeight(iframeRef.current), 500);
     // Fire-and-forget persist
     supabase.from("campaigns").update({ html: redoHtml, html_history: history }).eq("id", campaignId);
   }, [campaign, campaignId, redoStack]);
