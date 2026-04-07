@@ -353,6 +353,34 @@ Brief intro text e.g. "Here are 3 headline options:"
 ]
 </variants>
 
+GROUPED VARIANT MODE (for multi-element requests):
+When the user targets MULTIPLE elements (e.g. a headline + subheader + CTA as a group), return grouped variants where each option replaces ALL elements together. Use the "items" array format:
+
+<response>
+Brief intro text
+</response>
+<variants>
+[
+  {
+    "label": "Option A — Bold & Direct",
+    "preview": "Summary of this option",
+    "find": "",
+    "replace": "",
+    "items": [
+      {"find": "exact current headline text", "replace": "new headline", "label": "Headline", "preview": "new headline"},
+      {"find": "exact current subheader text", "replace": "new subheader", "label": "Subheader", "preview": "new subheader"},
+      {"find": "exact current CTA text", "replace": "new CTA", "label": "CTA", "preview": "new CTA"}
+    ]
+  }
+]
+</variants>
+
+CRITICAL GROUPED VARIANT RULES:
+- If the request targets multiple elements, you MUST use the grouped "items" format — do NOT return headline-only variants.
+- Each "items" entry must have "find" (exact string from current HTML), "replace", "label" (element type), and "preview".
+- All items in a group must be contextually coherent — matching tone, style, and messaging.
+- The top-level "find"/"replace" can be empty strings when using "items".
+
 CRITICAL VARIANT RULE — "apply_all" field:
 - Set "apply_all": true when the change is SYSTEMIC — it should apply to ALL matching instances in the email. This includes: color changes, background colors, font changes, typography, button styling, border radius, padding patterns, or any visual/formatting property that repeats across multiple elements for consistency.
 - Set "apply_all": false (or omit) when the change is LOCALIZED — it targets specific unique content like a single headline, a specific paragraph, or one particular section's text.
