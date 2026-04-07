@@ -1537,6 +1537,52 @@ export default function CampaignEditor() {
     };
   }, [campaignId, campaign, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace]);
 
+  // Ideate/Swap for selected elements (single or multi)
+  const triggerSelectedElementIdeate = useCallback(() => {
+    if (!selectedElementContext) return;
+    const isGroup = selectedElementContext.isRegion && selectedElementContext.elements && selectedElementContext.elements.length > 1;
+    const elements = isGroup ? selectedElementContext.elements! : [{ tagName: selectedElementContext.tagName, text: selectedElementContext.text, outerHTML: selectedElementContext.outerHTML }];
+
+    const elementDescriptions = elements.map((el, i) => {
+      const typeLabel = /^H[1-6]$/.test(el.tagName) ? 'Headline' : (el.tagName === 'A' || el.tagName === 'BUTTON') ? 'CTA' : el.tagName === 'IMG' ? 'Image' : 'Copy';
+      return `Element ${i + 1} (${typeLabel} <${el.tagName}>): "${el.text?.slice(0, 100)}"${el.outerHTML ? `\nHTML: ${el.outerHTML.slice(0, 500)}` : ''}`;
+    }).join('\n\n');
+
+    const groupInstruction = isGroup
+      ? `\n\nIMPORTANT: These elements are a CONTEXTUAL GROUP. Generate 5 alternative options where EACH option replaces ALL elements together as a cohesive set. Each variant must have an "items" array with one entry per element, each containing "find" (current text), "replace" (new text), "label" (element type), and "preview" (the replacement text). The items should be contextually aware of each other — e.g. if a headline changes tone, the subheadline and CTA should match.`
+      : '';
+
+    const shortDesc = isGroup
+      ? `${elements.length} elements`
+      : (selectedElementContext.text.length > 40 ? selectedElementContext.text.slice(0, 40) + '…' : selectedElementContext.text);
+
+    const realPrompt = `[Ideate request on selected elements]\n\n${elementDescriptions}${groupInstruction}\n\nGenerate 5 alternative options for ${isGroup ? 'this group of elements' : 'this element'}.`;
+    const displayText = `✨ Ideate: "${shortDesc}"`;
+
+    ideatePayloadRef.current = { realPrompt, displayText };
+    setIdeateActive(true);
+    sendMessage();
+  }, [selectedElementContext]);
+
+  const triggerSelectedElementSwap = useCallback(() => {
+    if (!selectedElementContext) return;
+    const isGroup = selectedElementContext.isRegion && selectedElementContext.elements && selectedElementContext.elements.length > 1;
+    const elements = isGroup ? selectedElementContext.elements! : [{ tagName: selectedElementContext.tagName, text: selectedElementContext.text, outerHTML: selectedElementContext.outerHTML }];
+
+    const elementDescriptions = elements.map((el, i) => {
+      const typeLabel = /^H[1-6]$/.test(el.tagName) ? 'Headline' : (el.tagName === 'A' || el.tagName === 'BUTTON') ? 'CTA' : el.tagName === 'IMG' ? 'Image' : 'Copy';
+      return `Element ${i + 1} (${typeLabel} <${el.tagName}>): "${el.text?.slice(0, 100)}"${el.outerHTML ? `\nHTML: ${el.outerHTML.slice(0, 500)}` : ''}`;
+    }).join('\n\n');
+
+    const shortDesc = isGroup ? `${elements.length} elements` : 'element';
+
+    const realPrompt = `[Swap request on selected elements]\n\n${elementDescriptions}\n\nAutomatically swap ${isGroup ? 'all these elements' : 'this element'} with better alternatives. If text, replace with new copy. If image, swap with a different image. Make the changes directly. IMPORTANT: Only modify the targeted elements described above.${isGroup ? ' All replacements should be contextually coherent as a group.' : ''}`;
+    const displayText = `🔄 Swap: ${shortDesc}`;
+
+    ideatePayloadRef.current = { realPrompt, displayText };
+    sendMessage();
+  }, [selectedElementContext]);
+
   // Parent-level keyboard shortcuts → forward to iframe
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
