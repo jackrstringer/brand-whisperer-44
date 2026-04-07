@@ -407,6 +407,13 @@ STRUCTURE PRESERVATION (CRITICAL):
 - ONLY modify what the user specifically requested.
 - When asked to change spacing/padding, change ONLY the spacing value — nothing else.
 
+RENDERING CONTEXT (CRITICAL — read before every edit):
+- This email renders at exactly 470px wide. It is NOT a desktop email.
+- At 470px, multi-column grids use direct <td> siblings inside a single <tr>. DO NOT use display:inline-block tables or CSS class-based column systems.
+- Image dimensions are calculated for 470px: full-width = w-470, 2-col grid slots ≈ w-220, 3-col grid slots ≈ w-145.
+- Mobile stacking rules are stripped post-generation. DO NOT add any CSS that sets display:block on table cells or width:100% on columns.
+- The layout you see in the HTML IS the final layout. Do not "fix" or "improve" it by restructuring columns or changing stacking behavior.
+
 Never mix the two formats in one response. Use VARIANT MODE only when the user asks for ideas/options/alternatives. Use EDIT MODE for everything else.`;
 
     const anthropicMessages: any[] = [];
@@ -639,6 +646,13 @@ CRITICAL STRUCTURE RULES:
 - DO NOT add or remove sections unless explicitly asked.
 - ONLY modify the specific thing the user requested (spacing, colors, text, etc.).
 - The output HTML must be structurally identical to the input, with only the requested change applied.
+
+RENDERING CONTEXT:
+- This email renders at exactly 470px wide. It is NOT a desktop email.
+- At 470px, multi-column grids use direct <td> siblings inside a single <tr>. DO NOT use display:inline-block tables or CSS class-based column systems.
+- Image dimensions are calculated for 470px: full-width = w-470, 2-col grid slots ≈ w-220, 3-col grid slots ≈ w-145.
+- Mobile stacking rules are stripped post-generation. DO NOT add any CSS that sets display:block on table cells or width:100% on columns.
+- The layout you see in the HTML IS the final layout. Do not "fix" or "improve" it by restructuring columns or changing stacking behavior.
 
 Format:
 <reply>What changed</reply>
