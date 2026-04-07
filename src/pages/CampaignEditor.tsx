@@ -1389,7 +1389,29 @@ export default function CampaignEditor() {
   // Track pending save payload so we can flush on unmount/navigation
   const pendingSaveRef = useRef<{ html: string; history: any[]; campaignId: string } | null>(null);
 
-  // Background edit: sends instruction to AI silently (no chat message)
+  // Flush pending saves on page unload or component unmount
+  useEffect(() => {
+    const flushPendingSave = () => {
+      if (pendingSaveRef.current) {
+        const { html: h, history: hist, campaignId: cid } = pendingSaveRef.current;
+        pendingSaveRef.current = null;
+        if (inlineEditTimerRef.current) { clearTimeout(inlineEditTimerRef.current); inlineEditTimerRef.current = null; }
+        // Use sendBeacon for reliability during unload, fall back to fire-and-forget
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/campaigns?id=eq.${cid}`;
+        const body = JSON.stringify({ html: h, html_history: hist });
+        const sent = navigator.sendBeacon?.(url, new Blob([body], { type: 'application/json' }));
+        if (!sent) {
+          supabase.from("campaigns").update({ html: h, html_history: hist }).eq("id", cid);
+        }
+      }
+    };
+    window.addEventListener('beforeunload', flushPendingSave);
+    return () => {
+      window.removeEventListener('beforeunload', flushPendingSave);
+      flushPendingSave();
+    };
+  }, []);
+
   const sendBackgroundEdit = useCallback(async (instruction: string, onComplete?: () => void) => {
     if (!campaignId || !brandId || !(iframeOwnedHtmlRef.current || campaign?.html)) return;
     try {
