@@ -648,6 +648,8 @@ export default function CommentOverlay({
             zoom={zoom}
             onSubmit={(body) => onSubmitNew(composerThreadId, body)}
             onCancel={() => onCancelComposer(composerThreadId)}
+            onSwap={() => onSwap?.(composerThreadId)}
+            onIdeate={() => onIdeate?.(composerThreadId)}
           />
         );
       })()}
