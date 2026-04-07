@@ -2900,7 +2900,7 @@ export default function CampaignEditor() {
           container.querySelectorAll('[data-section-name]').forEach(function(el){
             newOrder.push(el.dataset.sectionName);
           });
-          syncHtml();
+          syncHtmlImmediate();
           window.parent.postMessage({
             type: 'sectionReordered',
             newOrder: newOrder,
