@@ -259,7 +259,7 @@ export default function CampaignsList() {
                   <Badge className={statusColors[c.status] || statusColors.draft}>
                     {c.status}
                   </Badge>
-                  <GenTimer campaign={c} />
+                  {showTimers && <GenTimer campaign={c} />}
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
