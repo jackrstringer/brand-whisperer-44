@@ -1614,7 +1614,7 @@ export default function CampaignEditor() {
       console.error("Comment screenshot failed:", err);
       return undefined;
     }
-  }, [zoomScale]);
+  }, [screenZoom]);
 
   // Comment mode: submit a comment → send to AI as chat message
   const handleCommentSubmit = useCallback(async (pinId: string, text: string) => {
