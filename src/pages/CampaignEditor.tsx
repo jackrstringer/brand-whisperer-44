@@ -3700,7 +3700,7 @@ export default function CampaignEditor() {
                       key={`${renderWidth}-${viewportWidth}-${activeVariantIndex}`}
                       srcDoc={srcdocHtml}
                       sandbox="allow-same-origin allow-scripts allow-forms"
-                      className="border-0 block bg-white shadow-2xl"
+                      className="border-0 block bg-white"
                       style={{
                         width: renderWidth,
                         height: iframeContentHeight,
