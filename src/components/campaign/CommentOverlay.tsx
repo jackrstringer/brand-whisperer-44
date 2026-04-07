@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Check, CornerDownRight, Undo2 } from "lucide-react";
+import { X, Check, CornerDownRight, Undo2, RefreshCw, Lightbulb } from "lucide-react";
 
 /* ── Data model ──────────────────────────────────────────── */
 export interface CommentAuthor {
