@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Plus, ArrowRight, Trash2, Copy } from "lucide-react";
+import { Plus, ArrowRight, Trash2, Copy, Timer } from "lucide-react";
 import { toast } from "sonner";
 import type { Brand, Campaign } from "@/lib/types";
 import { useAuth } from "@/hooks/useAuth";
