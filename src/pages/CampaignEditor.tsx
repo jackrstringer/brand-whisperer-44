@@ -21,7 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Campaign, ChatMessage, VariantOption } from "@/lib/types";
 import VariantCards from "@/components/brand/VariantCards";
 import { captureEmailScreenshots } from "@/lib/visualQaCapture";
-import CommentOverlay, { type CommentThread, type CommentAuthor, type ThreadComment, COMMENT_CURSOR_SVG } from "@/components/campaign/CommentOverlay";
+import CommentOverlay, { type CommentThread, type CommentAuthor, type CommentElementInfo, type ThreadComment, COMMENT_CURSOR_SVG } from "@/components/campaign/CommentOverlay";
 import html2canvas from "html2canvas";
 
 async function uploadChatImages(files: File[], brandId: string, campaignId: string): Promise<string[]> {
@@ -133,6 +133,7 @@ export default function CampaignEditor() {
   const commentDragRef = useRef<{ startX: number; startY: number; currentX: number; currentY: number; isDragging: boolean } | null>(null);
   const [commentDragRect, setCommentDragRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const pendingCommentIdRef = useRef<string | null>(null);
+  const pendingElementInfoResolveRef = useRef<((info: CommentElementInfo | null) => void) | null>(null);
   const commentCurrentUser: CommentAuthor = {
     name: user?.email?.split("@")[0] || "You",
     initials: (user?.email?.[0] || "Y").toUpperCase(),
@@ -1450,6 +1451,20 @@ export default function CampaignEditor() {
         setImageSwap(prev => prev ? { ...prev, category: e.data.category } : null);
         return;
       }
+      // Resolve pending element info query from comment system
+      if (e.data?.type === 'commentElementInfo') {
+        if (pendingElementInfoResolveRef.current) {
+          const info: CommentElementInfo = {
+            tagName: e.data.tagName || '',
+            text: e.data.text || '',
+            outerHTML: e.data.outerHTML || '',
+            ...(e.data.allElements ? { elements: e.data.allElements } : {}),
+          };
+          pendingElementInfoResolveRef.current(info.tagName ? info : null);
+          pendingElementInfoResolveRef.current = null;
+        }
+        return;
+      }
       // Arrow navigation — cycle through assets
       if (e.data?.type === 'imageSwapPrev' || e.data?.type === 'imageSwapNext') {
         // Handled by cycling logic in imageSwapAssets
@@ -1634,7 +1649,58 @@ export default function CampaignEditor() {
     }
   }, [screenZoom]);
 
+  // Query iframe for element info at a point or region
+  const queryElementInfo = useCallback(async (
+    pinX: number, pinY: number, regionW?: number, regionH?: number
+  ): Promise<CommentElementInfo | null> => {
+    const iframe = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+    if (!iframe?.contentWindow) return null;
+    const iframeRect = iframe.getBoundingClientRect();
+    const panelRect = previewPanelRef.current!.getBoundingClientRect();
+    const scale = screenZoom / 100;
+    const iframePanelLeft = iframeRect.left - panelRect.left;
+    const iframePanelTop = iframeRect.top - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+
+    return new Promise<CommentElementInfo | null>((resolve) => {
+      const timeout = setTimeout(() => {
+        if (pendingElementInfoResolveRef.current === wrappedResolve) {
+          pendingElementInfoResolveRef.current = null;
+          resolve(null);
+        }
+      }, 500);
+      const wrappedResolve = (info: CommentElementInfo | null) => {
+        clearTimeout(timeout);
+        resolve(info);
+      };
+      pendingElementInfoResolveRef.current = wrappedResolve;
+
+      if (regionW && regionH) {
+        const left = (pinX - iframePanelLeft) / scale;
+        const top = (pinY - iframePanelTop) / scale;
+        iframe.contentWindow!.postMessage({
+          type: 'getElementsInRegion',
+          rect: { left, top, right: left + regionW / scale, bottom: top + regionH / scale }
+        }, '*');
+      } else {
+        const iframeX = (pinX - iframePanelLeft) / scale;
+        const iframeY = (pinY - iframePanelTop) / scale;
+        iframe.contentWindow!.postMessage({ type: 'getElementAtPoint', x: iframeX, y: iframeY }, '*');
+      }
+    });
+  }, [screenZoom]);
+
   // Comment mode: submit a new comment → send to AI as chat message with screenshot
+  // Helper: build element context string for AI prompts
+  const buildElementContext = (pin: CommentThread['pin']) => {
+    const elInfo = pin.elementInfo;
+    if (!elInfo || !elInfo.tagName) return '';
+    if (elInfo.elements && elInfo.elements.length > 1) {
+      const elDesc = elInfo.elements.map(e => `<${e.tagName}>: "${e.text.slice(0, 80)}"`).join('\n  ');
+      return `\n[Targeting region with elements:\n  ${elDesc}\n]\nPrimary element HTML:\n${elInfo.outerHTML}\n`;
+    }
+    return `\n[Targeting <${elInfo.tagName}> element: "${elInfo.text.slice(0, 150)}"]\nElement HTML:\n${elInfo.outerHTML}\n`;
+  };
+
   const handleCommentSubmitNew = useCallback(async (threadId: string, body: string) => {
     const thread = commentThreads.find(t => t.id === threadId);
     if (!thread) return;
@@ -1647,7 +1713,6 @@ export default function CampaignEditor() {
       time: now,
     };
 
-    // Convert temporary thread to permanent with the comment
     setCommentThreads(prev => prev.map(t =>
       t.id === threadId ? { ...t, comments: [newComment], isTemporary: false } : t
     ));
@@ -1655,33 +1720,43 @@ export default function CampaignEditor() {
     setActiveThreadId(threadId);
     pendingCommentIdRef.current = threadId;
 
-    // Capture screenshot context
     const pin = thread.pin;
-    const screenshot = await captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH);
+    const [screenshot, elementInfo] = await Promise.all([
+      captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH),
+      queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH),
+    ]);
 
-    // Build message with visual context
-    const commentMsg = `[Visual comment at position (${Math.round(pin.x)}, ${Math.round(pin.y)})${pin.regionW ? ` — region ${Math.round(pin.regionW)}×${Math.round(pin.regionH || 0)}px` : ""}]\n\n${body}`;
+    // Store element info on the thread
+    if (elementInfo) {
+      setCommentThreads(prev => prev.map(t =>
+        t.id === threadId ? { ...t, pin: { ...t.pin, elementInfo } } : t
+      ));
+    }
 
-    // If we have a screenshot, upload it and include as attachment
+    const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
+    const realPrompt = `[Visual comment on email design]${elCtx}\n\n${body}`;
+
     if (screenshot) {
       const blob = await fetch(screenshot).then(r => r.blob());
       const file = new File([blob], `comment-context-${Date.now()}.jpg`, { type: 'image/jpeg' });
       setChatAttachments([file]);
     }
 
-    setChatInput(commentMsg);
-    setTimeout(() => {
-      const sendBtn = document.querySelector('[data-send-btn]') as HTMLButtonElement | null;
-      sendBtn?.click();
-    }, 150);
-  }, [commentThreads, commentCurrentUser, captureCommentScreenshot]);
+    setChatInput(realPrompt);
+    ideatePayloadRef.current = {
+      realPrompt,
+      displayText: `💬 ${body}`,
+    };
 
-  // Comment mode: swap action — auto-swap element at pin location
+    setTimeout(() => {
+      sendMessage();
+    }, 150);
+  }, [commentThreads, commentCurrentUser, captureCommentScreenshot, queryElementInfo]);
+
   const handleCommentSwap = useCallback(async (threadId: string) => {
     const thread = commentThreads.find(t => t.id === threadId);
     if (!thread) return;
 
-    // Close composer, convert to permanent
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const swapComment: ThreadComment = {
       id: crypto.randomUUID(),
@@ -1697,9 +1772,19 @@ export default function CampaignEditor() {
     pendingCommentIdRef.current = threadId;
 
     const pin = thread.pin;
-    const screenshot = await captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH);
+    const [screenshot, elementInfo] = await Promise.all([
+      captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH),
+      queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH),
+    ]);
 
-    const swapMsg = `[Visual comment at position (${Math.round(pin.x)}, ${Math.round(pin.y)})${pin.regionW ? ` — region ${Math.round(pin.regionW)}×${Math.round(pin.regionH || 0)}px` : ""}]\n\nLook at the screenshot I've attached. Automatically swap the element at this location with a better alternative. If it's text, replace it with new copy. If it's an image, swap it with a different image from the brand assets. Make the change directly without asking.`;
+    if (elementInfo) {
+      setCommentThreads(prev => prev.map(t =>
+        t.id === threadId ? { ...t, pin: { ...t.pin, elementInfo } } : t
+      ));
+    }
+
+    const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
+    const realPrompt = `[Swap request on email design]${elCtx}\n\nAutomatically swap this specific element with a better alternative. If it's text, replace it with new copy. If it's an image, swap it with a different image from the brand assets. Make the change directly without asking. IMPORTANT: Only modify the targeted element described above — do not change surrounding elements.`;
 
     if (screenshot) {
       const blob = await fetch(screenshot).then(r => r.blob());
@@ -1707,14 +1792,17 @@ export default function CampaignEditor() {
       setChatAttachments([file]);
     }
 
-    setChatInput(swapMsg);
-    setTimeout(() => {
-      const sendBtn = document.querySelector('[data-send-btn]') as HTMLButtonElement | null;
-      sendBtn?.click();
-    }, 150);
-  }, [commentThreads, commentCurrentUser, captureCommentScreenshot]);
+    setChatInput(realPrompt);
+    ideatePayloadRef.current = {
+      realPrompt,
+      displayText: "🔄 Swap element",
+    };
 
-  // Comment mode: ideate action — generate options for element at pin location
+    setTimeout(() => {
+      sendMessage();
+    }, 150);
+  }, [commentThreads, commentCurrentUser, captureCommentScreenshot, queryElementInfo]);
+
   const handleCommentIdeate = useCallback(async (threadId: string) => {
     const thread = commentThreads.find(t => t.id === threadId);
     if (!thread) return;
@@ -1734,9 +1822,19 @@ export default function CampaignEditor() {
     pendingCommentIdRef.current = threadId;
 
     const pin = thread.pin;
-    const screenshot = await captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH);
+    const [screenshot, elementInfo] = await Promise.all([
+      captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH),
+      queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH),
+    ]);
 
-    const ideateMsg = `[Visual comment at position (${Math.round(pin.x)}, ${Math.round(pin.y)})${pin.regionW ? ` — region ${Math.round(pin.regionW)}×${Math.round(pin.regionH || 0)}px` : ""}]\n\nLook at the screenshot I've attached. Generate 5 alternative options for the element at this location. If it's text (heading, body copy, CTA), generate text alternatives. If it's an image, suggest different image compositions or styles. Present these as variant options the user can select from.`;
+    if (elementInfo) {
+      setCommentThreads(prev => prev.map(t =>
+        t.id === threadId ? { ...t, pin: { ...t.pin, elementInfo } } : t
+      ));
+    }
+
+    const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
+    const realPrompt = `[Ideate request on email design]${elCtx}\n\nGenerate 5 alternative options for this specific element. If it's text (heading, body copy, CTA), generate text alternatives. If it's an image, suggest different image compositions or styles. Present these as variant options the user can select from. IMPORTANT: Only generate alternatives for the targeted element described above.`;
 
     if (screenshot) {
       const blob = await fetch(screenshot).then(r => r.blob());
@@ -1744,21 +1842,18 @@ export default function CampaignEditor() {
       setChatAttachments([file]);
     }
 
-    setChatInput(ideateMsg);
-
-    // Use ideate pipeline for variant cards
+    setChatInput(realPrompt);
     ideatePayloadRef.current = {
-      realPrompt: ideateMsg,
-      displayText: "💡 Ideate: Generate options for this area",
+      realPrompt,
+      displayText: "💡 Ideate: Generate options",
     };
     setIdeateActive(true);
 
     setTimeout(() => {
       sendMessage();
     }, 150);
-  }, [commentThreads, commentCurrentUser, captureCommentScreenshot]);
+  }, [commentThreads, commentCurrentUser, captureCommentScreenshot, queryElementInfo]);
 
-  // Comment mode: reply to existing thread
   const handleCommentReply = useCallback(async (threadId: string, body: string) => {
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const newComment: ThreadComment = {
@@ -1775,10 +1870,13 @@ export default function CampaignEditor() {
     const thread = commentThreads.find(t => t.id === threadId);
     const pin = thread?.pin;
 
-    // Capture screenshot context for reply too
-    const screenshot = pin ? await captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH) : undefined;
+    const [screenshot, elementInfo] = await Promise.all([
+      pin ? captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH) : Promise.resolve(undefined),
+      pin ? queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH) : Promise.resolve(null),
+    ]);
 
-    const commentMsg = `[Reply to visual comment at (${Math.round(pin?.x || 0)}, ${Math.round(pin?.y || 0)})]\n\n${body}`;
+    const elCtx = (pin && (elementInfo || pin.elementInfo)) ? buildElementContext({ ...pin, elementInfo: elementInfo || pin.elementInfo }) : '';
+    const realPrompt = `[Reply to visual comment on email design]${elCtx}\n\n${body}`;
 
     if (screenshot) {
       const blob = await fetch(screenshot).then(r => r.blob());
@@ -1786,12 +1884,16 @@ export default function CampaignEditor() {
       setChatAttachments([file]);
     }
 
-    setChatInput(commentMsg);
+    setChatInput(realPrompt);
+    ideatePayloadRef.current = {
+      realPrompt,
+      displayText: `💬 Reply: ${body}`,
+    };
+
     setTimeout(() => {
-      const sendBtn = document.querySelector('[data-send-btn]') as HTMLButtonElement | null;
-      sendBtn?.click();
+      sendMessage();
     }, 150);
-  }, [commentThreads, commentCurrentUser, captureCommentScreenshot]);
+  }, [commentThreads, commentCurrentUser, captureCommentScreenshot, queryElementInfo]);
 
   // Track AI replies and associate with comment threads
   useEffect(() => {
@@ -2922,6 +3024,40 @@ export default function CampaignEditor() {
         imgSwapTarget.setAttribute('src', newSrc);
         syncHtml();
       }
+    }
+    if(e.data && e.data.type === 'getElementAtPoint'){
+      var pt = document.elementFromPoint(e.data.x, e.data.y);
+      var found = null;
+      while(pt && pt !== document.body && pt !== document.documentElement){
+        if(pt.tagName && /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL|TD|TH|IMG|DIV)$/i.test(pt.tagName)){
+          found = pt; break;
+        }
+        pt = pt.parentElement;
+      }
+      if(found){
+        window.parent.postMessage({ type: 'commentElementInfo', tagName: found.tagName, text: (found.textContent||'').trim().slice(0,300), outerHTML: (found.outerHTML||'').slice(0,1500) }, '*');
+      } else {
+        window.parent.postMessage({ type: 'commentElementInfo', tagName: '', text: '', outerHTML: '' }, '*');
+      }
+    }
+    if(e.data && e.data.type === 'getElementsInRegion'){
+      var rect = e.data.rect;
+      var candidates = [];
+      document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label,img,td,div').forEach(function(el){
+        var r = el.getBoundingClientRect();
+        if(r.width < 1 || r.height < 1) return;
+        if(r.right > rect.left && r.left < rect.right && r.bottom > rect.top && r.top < rect.bottom){
+          candidates.push(el);
+        }
+      });
+      var filtered = candidates.filter(function(el){
+        return !candidates.some(function(other){ return other !== el && el.contains(other); });
+      });
+      var elements = filtered.slice(0, 10).map(function(el){
+        return { tagName: el.tagName, text: (el.textContent||'').trim().slice(0,200), outerHTML: (el.outerHTML||'').slice(0,1000) };
+      });
+      var primary = filtered[0];
+      window.parent.postMessage({ type: 'commentElementInfo', tagName: primary ? primary.tagName : '', text: primary ? (primary.textContent||'').trim().slice(0,300) : '', outerHTML: primary ? (primary.outerHTML||'').slice(0,1500) : '', allElements: elements }, '*');
     }
   });
 
