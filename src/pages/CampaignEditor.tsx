@@ -1630,56 +1630,87 @@ export default function CampaignEditor() {
     }
   }, [screenZoom]);
 
-  // Comment mode: submit a comment → send to AI as chat message
-  const handleCommentSubmit = useCallback(async (pinId: string, text: string) => {
-    const pin = comments.find(c => c.id === pinId);
-    if (!pin) return;
+  // Comment mode: submit a new comment → send to AI as chat message
+  const handleCommentSubmitNew = useCallback(async (threadId: string, body: string) => {
+    const thread = commentThreads.find(t => t.id === threadId);
+    if (!thread) return;
 
-    // Mark as pending
-    setComments(prev => prev.map(c => c.id === pinId ? { ...c, status: "pending" as const } : c));
-    pendingCommentIdRef.current = pinId;
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const newComment: ThreadComment = {
+      id: crypto.randomUUID(),
+      author: commentCurrentUser,
+      body,
+      time: now,
+    };
 
-    // Convert screenshot to a File if available
-    const attachedFiles: File[] = [];
-    if (pin.screenshot) {
-      try {
-        const resp = await fetch(pin.screenshot);
-        const blob = await resp.blob();
-        attachedFiles.push(new File([blob], `comment-${pinId}.jpg`, { type: "image/jpeg" }));
-      } catch {}
-    }
+    // Convert temporary thread to permanent with the comment
+    setCommentThreads(prev => prev.map(t =>
+      t.id === threadId ? { ...t, comments: [newComment], isTemporary: false } : t
+    ));
+    setComposerThreadId(null);
+    setActiveThreadId(threadId);
+    pendingCommentIdRef.current = threadId;
 
     // Build message with visual context
-    const commentMsg = `[Visual comment at position (${Math.round(pin.x)}, ${Math.round(pin.y)})${pin.width ? ` — region ${Math.round(pin.width)}×${Math.round(pin.height || 0)}px` : ""}]\n\n${text}`;
+    const pin = thread.pin;
+    const commentMsg = `[Visual comment at position (${Math.round(pin.x)}, ${Math.round(pin.y)})${pin.regionW ? ` — region ${Math.round(pin.regionW)}×${Math.round(pin.regionH || 0)}px` : ""}]\n\n${body}`;
 
     // Set chat state to send
     setChatInput(commentMsg);
-    setChatAttachments(attachedFiles);
-    if (attachedFiles.length > 0) {
-      setChatAttachmentPreviews(attachedFiles.map(f => URL.createObjectURL(f)));
-    }
 
     // Trigger send after state updates
     setTimeout(() => {
       const sendBtn = document.querySelector('[data-send-btn]') as HTMLButtonElement | null;
       sendBtn?.click();
     }, 100);
-  }, [comments]);
+  }, [commentThreads, commentCurrentUser]);
 
-  // Track AI replies and associate with comment pins
+  // Comment mode: reply to existing thread
+  const handleCommentReply = useCallback(async (threadId: string, body: string) => {
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const newComment: ThreadComment = {
+      id: crypto.randomUUID(),
+      author: commentCurrentUser,
+      body,
+      time: now,
+    };
+    setCommentThreads(prev => prev.map(t =>
+      t.id === threadId ? { ...t, comments: [...t.comments, newComment] } : t
+    ));
+    pendingCommentIdRef.current = threadId;
+
+    const thread = commentThreads.find(t => t.id === threadId);
+    const pin = thread?.pin;
+    const commentMsg = `[Reply to visual comment at (${Math.round(pin?.x || 0)}, ${Math.round(pin?.y || 0)})]\n\n${body}`;
+    setChatInput(commentMsg);
+    setTimeout(() => {
+      const sendBtn = document.querySelector('[data-send-btn]') as HTMLButtonElement | null;
+      sendBtn?.click();
+    }, 100);
+  }, [commentThreads, commentCurrentUser]);
+
+  // Track AI replies and associate with comment threads
   useEffect(() => {
     const pendingId = pendingCommentIdRef.current;
     if (!pendingId) return;
     const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
     if (!lastAssistantMsg) return;
-    // Check if this reply arrived after the comment was submitted
-    const pin = comments.find(c => c.id === pendingId && c.status === 'pending');
-    if (!pin) return;
-    setComments(prev => prev.map(c =>
-      c.id === pendingId ? { ...c, aiReply: lastAssistantMsg.content, status: "resolved" as const } : c
+    const thread = commentThreads.find(t => t.id === pendingId);
+    if (!thread) return;
+    // Add AI reply as a comment in the thread
+    const aiAuthor: CommentAuthor = { name: "AI", initials: "AI", bgColor: "#3B82F6" };
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const aiComment: ThreadComment = {
+      id: crypto.randomUUID(),
+      author: aiAuthor,
+      body: lastAssistantMsg.content,
+      time: now,
+    };
+    setCommentThreads(prev => prev.map(t =>
+      t.id === pendingId ? { ...t, comments: [...t.comments, aiComment] } : t
     ));
     pendingCommentIdRef.current = null;
-  }, [messages, comments]);
+  }, [messages, commentThreads]);
 
 
   if (loading) {
