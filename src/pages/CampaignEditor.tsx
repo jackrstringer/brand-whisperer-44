@@ -3373,50 +3373,44 @@ export default function CampaignEditor() {
             onPointerUp={async (e) => {
               // Comment mode handling
               if (commentMode && commentDragRef.current) {
-                const panelRect = previewPanelRef.current?.getBoundingClientRect();
-                if (!panelRect) { commentDragRef.current = null; return; }
-                const x = e.clientX - panelRect.left;
-                const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
-                const start = commentDragRef.current;
-                const dx = Math.abs(x - start.startX);
-                const dy = Math.abs(y - start.startY);
-                const isDrag = dx > 4 || dy > 4;
-
-                // Click priority chain: dismiss composer → dismiss popover → place pin
-                if (composerThreadId) {
-                  // Cancel current composer
-                  setCommentThreads(prev => prev.filter(t => t.id !== composerThreadId));
-                  setComposerThreadId(null);
-                  commentDragRef.current = null;
-                  try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
-                  return;
-                }
-                if (activeThreadId) {
-                  // Close current popover
-                  setActiveThreadId(null);
-                  commentDragRef.current = null;
-                  try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
-                  return;
-                }
-
-                const pinX = isDrag ? (start.startX + x) / 2 : x;
-                const pinY = isDrag ? (start.startY + y) / 2 : y;
-                const regionW = isDrag ? Math.abs(x - start.startX) : undefined;
-                const regionH = isDrag ? Math.abs(y - start.startY) : undefined;
-
-                const threadId = crypto.randomUUID();
-                const newThread: CommentThread = {
-                  id: threadId,
-                  pin: { x: pinX, y: pinY, regionW, regionH },
-                  comments: [],
-                  resolved: false,
-                  isTemporary: true,
-                };
-                setCommentThreads(prev => [...prev, newThread]);
-                setComposerThreadId(threadId);
-                setActiveThreadId(threadId);
+                const drag = commentDragRef.current;
                 commentDragRef.current = null;
+                setCommentDragRect(null);
                 try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+
+                if (drag.isDragging) {
+                  // Region comment
+                  const x = Math.min(drag.startX, drag.currentX);
+                  const y = Math.min(drag.startY, drag.currentY);
+                  const w = Math.abs(drag.currentX - drag.startX);
+                  const h = Math.abs(drag.currentY - drag.startY);
+                  if (w > 8 && h > 8) {
+                    const threadId = crypto.randomUUID();
+                    const newThread: CommentThread = {
+                      id: threadId,
+                      pin: { x, y, regionW: w, regionH: h },
+                      comments: [],
+                      resolved: false,
+                      isTemporary: true,
+                    };
+                    setCommentThreads(prev => [...prev, newThread]);
+                    setComposerThreadId(threadId);
+                    setActiveThreadId(threadId);
+                  }
+                } else {
+                  // Point comment
+                  const threadId = crypto.randomUUID();
+                  const newThread: CommentThread = {
+                    id: threadId,
+                    pin: { x: drag.startX, y: drag.startY },
+                    comments: [],
+                    resolved: false,
+                    isTemporary: true,
+                  };
+                  setCommentThreads(prev => [...prev, newThread]);
+                  setComposerThreadId(threadId);
+                  setActiveThreadId(threadId);
+                }
                 return;
               }
 
