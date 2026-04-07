@@ -47,6 +47,7 @@ interface ReanalyzeBrandProps {
   brandId: string;
   brandName: string;
   industry: string;
+  websiteUrl?: string;
 }
 
 export default function ReanalyzeBrand({ brandId, brandName, industry }: ReanalyzeBrandProps) {
