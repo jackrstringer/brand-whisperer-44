@@ -3252,8 +3252,19 @@ export default function CampaignEditor() {
               const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
 
               if (commentMode) {
+                // Click priority chain: dismiss first before placing
+                if (composerThreadId) {
+                  setCommentThreads(prev => prev.filter(t => t.id !== composerThreadId));
+                  setComposerThreadId(null);
+                  setActiveThreadId(null);
+                  return;
+                }
+                if (activeThreadId) {
+                  setActiveThreadId(null);
+                  return;
+                }
                 // Comment mode: start tracking for click or drag
-                commentDragRef.current = { startX: x, startY: y };
+                commentDragRef.current = { startX: x, startY: y, currentX: x, currentY: y, isDragging: false };
                 e.currentTarget.setPointerCapture(e.pointerId);
                 e.preventDefault();
                 return;
