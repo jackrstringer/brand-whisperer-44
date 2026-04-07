@@ -1501,10 +1501,25 @@ export default function CampaignEditor() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (document.activeElement as HTMLElement)?.tagName || '';
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      const inChat = tag === 'INPUT' || tag === 'TEXTAREA';
+      if (inChat) return;
       if ((document.activeElement as HTMLElement)?.isContentEditable) return;
 
+      // Toggle comment mode with C key
+      if (e.key === 'c' || e.key === 'C') {
+        if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+          setCommentMode(prev => !prev);
+          return;
+        }
+      }
+
       if (e.key === 'Escape') {
+        // If in comment mode, exit it
+        if (commentMode) {
+          setCommentMode(false);
+          setActiveCommentId(null);
+          return;
+        }
         const iframe = previewPanelRef.current?.querySelector('iframe');
         if (iframe) {
           try { (iframe as HTMLIFrameElement).contentWindow?.postMessage({ type: 'clearSelection' }, '*'); } catch {}
@@ -1524,7 +1539,7 @@ export default function CampaignEditor() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedElementContext]);
+  }, [selectedElementContext, commentMode]);
 
   // Click anywhere outside the preview panel → deselect + exit edit mode
   useEffect(() => {
