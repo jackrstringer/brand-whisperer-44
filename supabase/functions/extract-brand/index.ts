@@ -84,10 +84,11 @@ Footer (dark bg)
 
 SECTION PATTERNS:
 
-Cover: Compact dark intro section (NOT full viewport). Brand's accent color as a subtle blurred glow (600px circle, blur(200px), opacity 0.05). Simple and clean.
+Cover: Compact dark intro section (NOT full viewport). Brand's accent color as a subtle blurred glow (600px circle, blur(200px), opacity 0.05). Simple and clean. CRITICAL: The cover MUST be compact — maximum 280-360px total height. Do NOT use height:100vh, min-height:100vh, or any viewport-relative height. Use a fixed max-height or let content dictate height.
 
 VERTICAL RHYTHM GUARDRAILS:
-- Never use min-height:100vh for the cover.
+- NEVER use 100vh, 100svh, 100dvh, or any viewport-relative height anywhere in the document.
+- The cover section must be max 360px tall. Use padding: 48px 40px or similar, not large padding values.
 - Keep title block spacing tight: ~8-20px between label/title/meta.
 - Keep section vertical padding in a 36-56px range.
 - Keep section intro paragraph bottom margin in a 20-32px range.
