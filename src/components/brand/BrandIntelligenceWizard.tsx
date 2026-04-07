@@ -187,9 +187,10 @@ interface Props {
 }
 
 export default function BrandIntelligenceWizard({ brandId, brandName, domain, existingIntel, onComplete, editMode }: Props) {
-  const [phase, setPhase] = useState<"researching" | "survey" | "compiling" | "done">(
-    editMode ? "survey" : existingIntel?.research_status === "ai_complete" ? "survey" : "researching"
+  const [phase, setPhase] = useState<"confirm_url" | "researching" | "survey" | "compiling" | "done">(
+    editMode ? "survey" : existingIntel?.research_status === "ai_complete" ? "survey" : "confirm_url"
   );
+  const [confirmedDomain, setConfirmedDomain] = useState(domain || "");
   const [surveyStep, setSurveyStep] = useState(0);
   const [survey, setSurvey] = useState<SurveyData>(defaultSurvey());
   const [researchProgress, setResearchProgress] = useState(0);
@@ -211,7 +212,7 @@ export default function BrandIntelligenceWizard({ brandId, brandName, domain, ex
     setSurvey(merged);
   }, []);
 
-  // Start research on mount if needed
+  // Start research when phase transitions to "researching"
   useEffect(() => {
     if (phase !== "researching") {
       // Already have research, prefill
@@ -230,8 +231,11 @@ export default function BrandIntelligenceWizard({ brandId, brandName, domain, ex
 
     (async () => {
       try {
+        // Also persist the confirmed domain to the brands table
+        await supabase.from("brands").update({ website_url: confirmedDomain }).eq("id", brandId);
+
         const { data, error } = await supabase.functions.invoke("research-brand", {
-          body: { brand_id: brandId, brand_name: brandName, domain: domain || brandName },
+          body: { brand_id: brandId, brand_name: brandName, domain: confirmedDomain || brandName },
         });
         if (cancelled) return;
         clearInterval(progressInterval);
@@ -250,7 +254,7 @@ export default function BrandIntelligenceWizard({ brandId, brandName, domain, ex
     })();
 
     return () => { cancelled = true; clearInterval(progressInterval); };
-  }, [phase, brandId, brandName, domain, prefillSurvey, existingIntel]);
+  }, [phase, brandId, brandName, confirmedDomain, prefillSurvey, existingIntel]);
 
   const updateSurvey = (updates: Partial<SurveyData>) => setSurvey(prev => ({ ...prev, ...updates }));
 
@@ -283,6 +287,41 @@ export default function BrandIntelligenceWizard({ brandId, brandName, domain, ex
       setSaving(false);
     }
   };
+
+  // PHASE: Confirm URL
+  if (phase === "confirm_url") {
+    const handleStartResearch = () => {
+      if (!confirmedDomain.trim()) {
+        toast.error("Please enter your store URL so we can research your brand.");
+        return;
+      }
+      setPhase("researching");
+    };
+
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-6 p-8 max-w-md mx-auto">
+        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+          <Sparkles className="w-8 h-8 text-primary" />
+        </div>
+        <h2 className="text-xl font-semibold text-center">Let's research your brand</h2>
+        <p className="text-sm text-muted-foreground text-center">
+          Confirm your store URL so our AI can analyze your products, positioning, and market.
+        </p>
+        <div className="w-full space-y-2">
+          <Label>Store URL</Label>
+          <Input
+            value={confirmedDomain}
+            onChange={(e) => setConfirmedDomain(e.target.value)}
+            placeholder="yourstore.com"
+            onKeyDown={(e) => e.key === "Enter" && handleStartResearch()}
+          />
+        </div>
+        <Button onClick={handleStartResearch} className="w-full" disabled={!confirmedDomain.trim()}>
+          Start Research <ArrowRight className="w-4 h-4 ml-1" />
+        </Button>
+      </div>
+    );
+  }
 
   // PHASE: Researching
   if (phase === "researching") {
