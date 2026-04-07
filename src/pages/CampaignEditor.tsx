@@ -726,8 +726,9 @@ export default function CampaignEditor() {
     setActiveVersionIndex(null);
     if (!ideateOverride) { setIdeateMessageId(null); setIdeateActive(false); }
 
-    // Don't show a user message bubble for ideate requests
-    if (!ideateOverride) {
+    // Show user message bubble — for ideate overrides, show the clean display text
+    const showUserBubble = !ideateOverride || /^(💬|🔄|💡)/.test(ideateOverride.displayText);
+    if (showUserBubble) {
       setMessages((prev) => [
         ...prev,
         { id: crypto.randomUUID(), campaign_id: campaignId, role: "user", content: displayContent, created_at: new Date().toISOString() },
