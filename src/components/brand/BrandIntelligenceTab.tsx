@@ -2,11 +2,13 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, RefreshCw, Edit2, Sparkles } from "lucide-react";
+import { Loader2, RefreshCw, Edit2, Sparkles, FileText, Search } from "lucide-react";
 import { toast } from "sonner";
 import BrandIntelligenceWizard from "./BrandIntelligenceWizard";
+import BrandResearchReport from "./BrandResearchReport";
 
 interface Props {
   brandId: string;
@@ -29,6 +31,31 @@ export default function BrandIntelligenceTab({ brandId, brandName, domain }: Pro
       .single();
     setIntel(data);
     setLoading(false);
+
+    // If currently researching, poll
+    if (data?.research_status === "researching") {
+      startPolling();
+    }
+  };
+
+  const startPolling = () => {
+    const interval = setInterval(async () => {
+      const { data } = await supabase
+        .from("brand_intelligence")
+        .select("research_status")
+        .eq("brand_id", brandId)
+        .single();
+      if (data?.research_status !== "researching") {
+        clearInterval(interval);
+        fetchIntel();
+        if (data?.research_status === "ai_complete") {
+          toast.success("AI research completed!");
+        } else if (data?.research_status === "failed") {
+          toast.error("AI research failed.");
+        }
+      }
+    }, 3000);
+    return interval;
   };
 
   useEffect(() => { fetchIntel(); }, [brandId]);
@@ -40,20 +67,14 @@ export default function BrandIntelligenceTab({ brandId, brandName, domain }: Pro
     }
     setRerunning(true);
     try {
-      const { data, error } = await supabase.functions.invoke("research-brand", {
+      const { error } = await supabase.functions.invoke("research-brand", {
         body: { brand_id: brandId, brand_name: brandName, domain },
       });
-      if (error || data?.error) throw new Error(data?.error || error?.message);
-
-      // Then recompile
-      await supabase.functions.invoke("compile-brand-context", {
-        body: { brand_id: brandId },
-      });
-
-      toast.success("AI research updated and context recompiled");
-      await fetchIntel();
+      if (error) throw error;
+      toast.success("Research started — this takes about 30-60 seconds.");
+      startPolling();
     } catch (err: any) {
-      toast.error(err.message || "Research failed");
+      toast.error(err.message || "Research failed to start");
     } finally {
       setRerunning(false);
     }
@@ -79,7 +100,6 @@ export default function BrandIntelligenceTab({ brandId, brandName, domain }: Pro
     return <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>;
   }
 
-  // No intel yet or user wants to edit
   if (!intel || showWizard) {
     return (
       <BrandIntelligenceWizard
@@ -93,22 +113,36 @@ export default function BrandIntelligenceTab({ brandId, brandName, domain }: Pro
     );
   }
 
-  // Show status + compiled context
+  const isResearching = intel.research_status === "researching";
+
+  const statusLabels: Record<string, string> = {
+    pending: "Pending",
+    researching: "Researching…",
+    ai_complete: "AI Complete",
+    survey_complete: "Survey Complete",
+    complete: "Complete",
+    failed: "Failed",
+  };
+
   const statusColors: Record<string, string> = {
     pending: "bg-muted text-muted-foreground",
+    researching: "bg-blue-100 text-blue-800",
     ai_complete: "bg-yellow-100 text-yellow-800",
     survey_complete: "bg-blue-100 text-blue-800",
     complete: "bg-green-100 text-green-800",
+    failed: "bg-red-100 text-red-800",
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Sparkles className="w-5 h-5 text-primary" />
           <h3 className="font-semibold">Brand Intelligence</h3>
           <Badge className={statusColors[intel.research_status] || ""}>
-            {intel.research_status === "complete" ? "Complete" : intel.research_status?.replace("_", " ")}
+            {isResearching && <Loader2 className="w-3 h-3 animate-spin mr-1" />}
+            {statusLabels[intel.research_status] || intel.research_status}
           </Badge>
         </div>
       </div>
@@ -120,30 +154,60 @@ export default function BrandIntelligenceTab({ brandId, brandName, domain }: Pro
         </p>
       )}
 
-      {intel.compiled_context && (
-        <div>
-          <Label>Compiled Context (injected into every campaign)</Label>
-          <Textarea
-            value={intel.compiled_context}
-            readOnly
-            className="mt-1 min-h-[300px] text-xs font-mono bg-muted/30"
-          />
-        </div>
-      )}
-
+      {/* Actions */}
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={rerunResearch} disabled={rerunning}>
-          {rerunning ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+        <Button variant="outline" size="sm" onClick={rerunResearch} disabled={rerunning || isResearching}>
+          {rerunning || isResearching ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
           Re-run AI Research
         </Button>
-        <Button variant="outline" onClick={() => setShowWizard(true)}>
-          <Edit2 className="w-4 h-4 mr-1" /> Edit Survey Answers
+        <Button variant="outline" size="sm" onClick={() => setShowWizard(true)}>
+          <Edit2 className="w-4 h-4 mr-1" /> Edit Survey
         </Button>
-        <Button variant="outline" onClick={recompileContext} disabled={recompiling}>
+        <Button variant="outline" size="sm" onClick={recompileContext} disabled={recompiling}>
           {recompiling ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Sparkles className="w-4 h-4 mr-1" />}
           Recompile Context
         </Button>
       </div>
+
+      {/* Tabbed view: Report vs Compiled Context */}
+      <Tabs defaultValue="report" className="w-full">
+        <TabsList>
+          <TabsTrigger value="report" className="flex items-center gap-1.5">
+            <Search className="w-3.5 h-3.5" /> Research Report
+          </TabsTrigger>
+          <TabsTrigger value="context" className="flex items-center gap-1.5">
+            <FileText className="w-3.5 h-3.5" /> Compiled Context
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="report" className="mt-4">
+          {intel.ai_research ? (
+            <BrandResearchReport
+              research={intel.ai_research}
+              confidence={intel.ai_research_confidence}
+              lastResearchedAt={intel.last_researched_at}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground py-8 text-center">
+              No research data yet. Run AI Research to generate a report.
+            </p>
+          )}
+        </TabsContent>
+
+        <TabsContent value="context" className="mt-4">
+          {intel.compiled_context ? (
+            <Textarea
+              value={intel.compiled_context}
+              readOnly
+              className="min-h-[400px] text-xs font-mono bg-muted/30"
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground py-8 text-center">
+              No compiled context yet. Complete the survey and recompile.
+            </p>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
