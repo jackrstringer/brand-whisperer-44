@@ -1457,7 +1457,9 @@ export default function CampaignEditor() {
     setCanUndo(true);
     setRedoStack([]);
     if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
+    pendingSaveRef.current = { html: newHtml, history, campaignId };
     inlineEditTimerRef.current = setTimeout(async () => {
+      pendingSaveRef.current = null;
       await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
     }, 500);
   }, [campaign, campaignId]);
