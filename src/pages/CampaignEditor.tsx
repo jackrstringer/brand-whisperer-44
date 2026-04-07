@@ -257,7 +257,27 @@ export default function CampaignEditor() {
     const load = async () => {
       const { data: c } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
       if (c) {
-        const campaign = c as unknown as Campaign;
+        let campaign = c as unknown as Campaign;
+        
+        // Check for a newer localStorage draft
+        const dk = `campaign-draft-${campaignId}`;
+        try {
+          const draftRaw = localStorage.getItem(dk);
+          if (draftRaw) {
+            const draft = JSON.parse(draftRaw);
+            const dbUpdated = new Date(campaign.updated_at).getTime();
+            if (draft.ts && draft.html && draft.ts > dbUpdated) {
+              // Draft is newer — restore it
+              campaign = { ...campaign, html: draft.html, html_history: draft.history || campaign.html_history };
+              // Persist draft to DB in background so it's durable
+              supabase.from("campaigns").update({ html: draft.html, html_history: draft.history || campaign.html_history }).eq("id", campaignId);
+              localStorage.removeItem(dk);
+            } else {
+              localStorage.removeItem(dk);
+            }
+          }
+        } catch { /* ignore draft parse errors */ }
+
         setCampaign(campaign);
         setNameValue(campaign.name);
         setBrief(campaign.brief ?? "");
