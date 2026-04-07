@@ -3223,7 +3223,8 @@ export default function CampaignEditor() {
           {/* Campaign preview / Inspiration panel */}
           <div
             ref={previewPanelRef}
-            className="h-full min-w-0 bg-card overflow-y-auto scrollbar-hide relative"
+            tabIndex={-1}
+            className="h-full min-w-0 bg-card overflow-y-auto scrollbar-hide relative outline-none"
             style={{
               width: showReferenceDialog && campaign?.html && selectedReferences.length > 0 ? '50%' : '100%',
               scrollbarWidth: 'none',
