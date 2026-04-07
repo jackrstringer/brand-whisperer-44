@@ -3026,6 +3026,15 @@ export default function CampaignEditor() {
               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleRedo} disabled={redoStack.length === 0} title="Redo">
                 <Redo2 className="w-3.5 h-3.5" />
               </Button>
+              <Button
+                variant={commentMode ? "default" : "ghost"}
+                size="icon"
+                className={`h-7 w-7 ${commentMode ? "bg-primary text-primary-foreground" : ""}`}
+                onClick={() => setCommentMode(prev => !prev)}
+                title="Comment mode (C)"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+              </Button>
             </div>
           )}
           <Popover>
