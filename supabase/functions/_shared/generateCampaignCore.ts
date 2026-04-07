@@ -593,6 +593,7 @@ Do NOT add sections that don't exist in the reference. Do NOT remove sections th
     }
 
     let brandRulesText = `Brand design rules:\n${profile.system_prompt}`;
+    if (brandIntelBlock) brandRulesText += brandIntelBlock;
     if (brandInstructions) brandRulesText += `\n\nBrand-specific instructions:\n${brandInstructions}`;
     if (globalRules) brandRulesText += `\n\nGlobal rules:\n${globalRules}`;
     if (designNotes) brandRulesText += `\n\nDesign notes for this campaign:\n${designNotes}`;
