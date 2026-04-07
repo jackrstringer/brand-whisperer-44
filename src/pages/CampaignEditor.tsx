@@ -1775,31 +1775,16 @@ export default function CampaignEditor() {
     const thread = commentThreads.find(t => t.id === threadId);
     if (!thread) return;
 
-    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const ideateComment: ThreadComment = {
-      id: crypto.randomUUID(),
-      author: commentCurrentUser,
-      body: "💡 Generate options",
-      time: now,
-    };
-    setCommentThreads(prev => prev.map(t =>
-      t.id === threadId ? { ...t, comments: [ideateComment], isTemporary: false } : t
-    ));
+    // Remove thread immediately — no pin left behind
+    setCommentThreads(prev => prev.filter(t => t.id !== threadId));
     setComposerThreadId(null);
-    setActiveThreadId(threadId);
-    pendingCommentIdRef.current = threadId;
+    setActiveThreadId(null);
 
     const pin = thread.pin;
     const [screenshot, elementInfo] = await Promise.all([
       captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH),
       queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH),
     ]);
-
-    if (elementInfo) {
-      setCommentThreads(prev => prev.map(t =>
-        t.id === threadId ? { ...t, pin: { ...t.pin, elementInfo } } : t
-      ));
-    }
 
     const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
     const realPrompt = `[Ideate request on email design]${elCtx}\n\nGenerate 5 alternative options for this specific element. If it's text (heading, body copy, CTA), generate text alternatives. If it's an image, suggest different image compositions or styles. Present these as variant options the user can select from. IMPORTANT: Only generate alternatives for the targeted element described above.`;
@@ -1821,70 +1806,6 @@ export default function CampaignEditor() {
       sendMessage();
     }, 150);
   }, [commentThreads, commentCurrentUser, captureCommentScreenshot, queryElementInfo]);
-
-  const handleCommentReply = useCallback(async (threadId: string, body: string) => {
-    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const newComment: ThreadComment = {
-      id: crypto.randomUUID(),
-      author: commentCurrentUser,
-      body,
-      time: now,
-    };
-    setCommentThreads(prev => prev.map(t =>
-      t.id === threadId ? { ...t, comments: [...t.comments, newComment] } : t
-    ));
-    pendingCommentIdRef.current = threadId;
-
-    const thread = commentThreads.find(t => t.id === threadId);
-    const pin = thread?.pin;
-
-    const [screenshot, elementInfo] = await Promise.all([
-      pin ? captureCommentScreenshot(pin.x, pin.y, pin.regionW, pin.regionH) : Promise.resolve(undefined),
-      pin ? queryElementInfo(pin.x, pin.y, pin.regionW, pin.regionH) : Promise.resolve(null),
-    ]);
-
-    const elCtx = (pin && (elementInfo || pin.elementInfo)) ? buildElementContext({ ...pin, elementInfo: elementInfo || pin.elementInfo }) : '';
-    const realPrompt = `[Reply to visual comment on email design]${elCtx}\n\n${body}`;
-
-    if (screenshot) {
-      const blob = await fetch(screenshot).then(r => r.blob());
-      const file = new File([blob], `reply-context-${Date.now()}.jpg`, { type: 'image/jpeg' });
-      setChatAttachments([file]);
-    }
-
-    setChatInput(realPrompt);
-    ideatePayloadRef.current = {
-      realPrompt,
-      displayText: `💬 Reply: ${body}`,
-    };
-
-    setTimeout(() => {
-      sendMessage();
-    }, 150);
-  }, [commentThreads, commentCurrentUser, captureCommentScreenshot, queryElementInfo]);
-
-  // Track AI replies and associate with comment threads
-  useEffect(() => {
-    const pendingId = pendingCommentIdRef.current;
-    if (!pendingId) return;
-    const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
-    if (!lastAssistantMsg) return;
-    const thread = commentThreads.find(t => t.id === pendingId);
-    if (!thread) return;
-    // Add AI reply as a comment in the thread
-    const aiAuthor: CommentAuthor = { name: "AI", initials: "AI", bgColor: "#3B82F6" };
-    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const aiComment: ThreadComment = {
-      id: crypto.randomUUID(),
-      author: aiAuthor,
-      body: lastAssistantMsg.content,
-      time: now,
-    };
-    setCommentThreads(prev => prev.map(t =>
-      t.id === pendingId ? { ...t, comments: [...t.comments, aiComment] } : t
-    ));
-    pendingCommentIdRef.current = null;
-  }, [messages, commentThreads]);
 
 
   if (loading) {
