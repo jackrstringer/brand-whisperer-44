@@ -257,9 +257,15 @@ Deno.serve(async (req) => {
     const campaign = campaignResult.data;
     if (campaignResult.error || !campaign) throw new Error("Campaign not found");
 
-    const [profileResult, brandResult] = await Promise.all([
+    const [profileResult, brandResult, productAssetsResult, brandAssetsResult] = await Promise.all([
       supabase.from("brand_profiles").select("system_prompt, brand_instructions, raw_extraction").eq("brand_id", campaign.brand_id).single(),
       supabase.from("brands").select("user_id").eq("id", campaign.brand_id).single(),
+      // Fetch product assets for any products linked to this campaign
+      Array.isArray(campaign.product_ids) && campaign.product_ids.length > 0
+        ? supabase.from("product_assets").select("url, bucket, description, product_id").in("product_id", campaign.product_ids)
+        : Promise.resolve({ data: [] }),
+      // Fetch brand-level assets (lifestyle, hero shots, etc.)
+      supabase.from("brand_assets").select("url, category, description").eq("brand_id", campaign.brand_id).limit(50),
     ]);
 
     const profile = profileResult.data;
@@ -307,6 +313,27 @@ Deno.serve(async (req) => {
     if (brandInstructions) extraRules += `\nBrand instructions: ${brandInstructions}`;
     if (globalRules) extraRules += `\nGlobal rules: ${globalRules}`;
 
+    // Build available image catalog so AI uses brand images, NOT reference campaign images
+    let assetCatalog = "";
+    const productAssets = productAssetsResult?.data || [];
+    const brandAssets = brandAssetsResult?.data || [];
+    if (productAssets.length > 0 || brandAssets.length > 0) {
+      assetCatalog = "\n\nAVAILABLE BRAND IMAGES (use ONLY these when adding/swapping images — NEVER invent URLs or use reference campaign screenshot URLs):";
+      if (productAssets.length > 0) {
+        assetCatalog += "\nProduct images:";
+        for (const a of productAssets) {
+          const bucket = (a.bucket || "").replace(/_/g, " ");
+          assetCatalog += `\n  [${bucket}] ${a.url}${a.description ? ` — ${a.description}` : ""}`;
+        }
+      }
+      if (brandAssets.length > 0) {
+        assetCatalog += "\nBrand assets:";
+        for (const a of brandAssets) {
+          assetCatalog += `\n  [${a.category}] ${a.url}${a.description ? ` — ${a.description}` : ""}`;
+        }
+      }
+    }
+
     // Determine variant count for "more" requests
     const variantCount = moreVariants ? 10 : undefined;
 
@@ -345,6 +372,12 @@ ${brandValues.accent_color ? `- Default accent: ${brandValues.accent_color}` : "
 ${brandValues.text_color ? `- Default text color: ${brandValues.text_color}` : ""}
 - User requests OVERRIDE all defaults.
 ${extraRules}
+${assetCatalog}
+
+IMAGE RULES:
+- When adding or swapping images, ONLY use URLs from the AVAILABLE BRAND IMAGES list above.
+- NEVER use image URLs from reference campaigns, screenshots, or any URL not in the brand image catalog.
+- If no brand images are available and the user asks to add an image, tell them to upload images to their asset library first.
 
 OUTPUT FORMAT — use these EXACT tags:
 <reply>
