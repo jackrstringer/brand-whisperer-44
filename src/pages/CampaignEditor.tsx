@@ -1205,6 +1205,8 @@ export default function CampaignEditor() {
     setRedoStack(prev => [...prev, currentHtml]);
     iframeOwnedHtmlRef.current = previousHtml;
     iframeRef.current?.contentWindow?.postMessage({ type: 'loadHtml', html: previousHtml }, '*');
+    setTimeout(() => measureIframeHeight(iframeRef.current), 100);
+    setTimeout(() => measureIframeHeight(iframeRef.current), 500);
     // Fire-and-forget persist
     supabase.from("campaigns").update({ html: previousHtml, html_history: newHistory }).eq("id", campaignId);
   }, [campaign, campaignId]);
