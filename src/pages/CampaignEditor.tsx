@@ -302,7 +302,7 @@ export default function CampaignEditor() {
     try {
       const doc = iframe.contentDocument;
       if (!doc) return;
-      const h = Math.max(doc.body?.scrollHeight ?? 0, doc.documentElement?.scrollHeight ?? 0, 800);
+      const h = Math.max(doc.body?.scrollHeight ?? 0, doc.documentElement?.scrollHeight ?? 0, 200);
       setIframeContentHeight(h);
     } catch {}
   }, []);

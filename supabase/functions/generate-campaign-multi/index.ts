@@ -130,10 +130,41 @@ Deno.serve(async (req) => {
 
           const originalHtml = variantHtmls[0]?.html || variantHtmls.find(v => v.html)?.html || null;
 
+          // Derive a campaign name if still default
+          const { data: existingCamp } = await supabase
+            .from("campaigns")
+            .select("name")
+            .eq("id", campaignId)
+            .single();
+
+          const existingNameRaw = (existingCamp?.name || "").trim();
+          const DEFAULT_NAMES = ["new campaign", "untitled campaign", "untitled", ""];
+          const isDefaultName = DEFAULT_NAMES.includes(existingNameRaw.toLowerCase());
+
+          let campaignName = existingNameRaw;
+          if (isDefaultName) {
+            if (body.brief && body.brief.trim().length > 3) {
+              const briefWords = body.brief.trim().split(/\s+/);
+              campaignName = briefWords.length <= 7 ? body.brief.trim() : briefWords.slice(0, 7).join(" ");
+            } else if (originalHtml) {
+              const h1Match = originalHtml.match(/<(?:h1|h2)[^>]*>([\s\S]*?)<\/(?:h1|h2)>/i);
+              const titleMatch = originalHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+              const rawTitle = (h1Match?.[1] || titleMatch?.[1] || "").replace(/<[^>]*>/g, "").replace(/&[^;]+;/g, " ").replace(/\s+/g, " ").trim();
+              const titleWords = rawTitle.split(/\s+/);
+              if (rawTitle.length > 3) {
+                campaignName = titleWords.length <= 7 ? rawTitle : titleWords.slice(0, 7).join(" ");
+              } else {
+                const goalLabels: Record<string, string> = { promotional: "Promotional Campaign", educational: "Educational Campaign", "re-engagement": "Re-engagement Campaign", seasonal: "Seasonal Campaign", welcome: "Welcome Email", social_proof: "Social Proof Campaign", highlight: "Brand Highlight", product_launch: "Product Launch", abandoned_cart: "Abandoned Cart", win_back: "Win-back Campaign", newsletter: "Newsletter", announcement: "Announcement" };
+                campaignName = goalLabels[body.goal] || "Campaign";
+              }
+            }
+          }
+
           await supabase.from("campaigns").update({
             variant_htmls: variantHtmls,
             html: originalHtml,
             status: successCount > 0 ? "variants_ready" : "error",
+            name: campaignName,
           }).eq("id", campaignId);
         } catch (err: any) {
           console.error("[multi] Background processing error:", err);
