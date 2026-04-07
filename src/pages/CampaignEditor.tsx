@@ -21,7 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Campaign, ChatMessage, VariantOption } from "@/lib/types";
 import VariantCards from "@/components/brand/VariantCards";
 import { captureEmailScreenshots } from "@/lib/visualQaCapture";
-import CommentOverlay, { type CommentPin } from "@/components/campaign/CommentOverlay";
+import CommentOverlay, { type CommentThread, type CommentAuthor, type ThreadComment, COMMENT_CURSOR_SVG } from "@/components/campaign/CommentOverlay";
 import html2canvas from "html2canvas";
 
 async function uploadChatImages(files: File[], brandId: string, campaignId: string): Promise<string[]> {
@@ -127,10 +127,16 @@ export default function CampaignEditor() {
 
   // Comment mode state
   const [commentMode, setCommentMode] = useState(false);
-  const [comments, setComments] = useState<CommentPin[]>([]);
-  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
+  const [commentThreads, setCommentThreads] = useState<CommentThread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [composerThreadId, setComposerThreadId] = useState<string | null>(null);
   const commentDragRef = useRef<{ startX: number; startY: number } | null>(null);
   const pendingCommentIdRef = useRef<string | null>(null);
+  const commentCurrentUser: CommentAuthor = {
+    name: user?.email?.split("@")[0] || "You",
+    initials: (user?.email?.[0] || "Y").toUpperCase(),
+    bgColor: "#6366F1",
+  };
 
   const getMatchingVariantIndex = useCallback((variants: any[], html: string | null | undefined) => {
     if (!Array.isArray(variants) || variants.length === 0 || !html) return 0;
@@ -1508,16 +1514,27 @@ export default function CampaignEditor() {
       // Toggle comment mode with C key
       if (e.key === 'c' || e.key === 'C') {
         if (!e.metaKey && !e.ctrlKey && !e.altKey) {
-          setCommentMode(prev => !prev);
+          setCommentMode(prev => {
+            if (prev) { setComposerThreadId(null); setActiveThreadId(null); }
+            return !prev;
+          });
           return;
         }
       }
 
       if (e.key === 'Escape') {
-        // If in comment mode, exit it
+        // Escape priority chain: composer → thread popover → exit comment mode
+        if (composerThreadId) {
+          setCommentThreads(prev => prev.filter(t => t.id !== composerThreadId));
+          setComposerThreadId(null);
+          return;
+        }
+        if (activeThreadId) {
+          setActiveThreadId(null);
+          return;
+        }
         if (commentMode) {
           setCommentMode(false);
-          setActiveCommentId(null);
           return;
         }
         const iframe = previewPanelRef.current?.querySelector('iframe');
@@ -1539,7 +1556,7 @@ export default function CampaignEditor() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedElementContext, commentMode]);
+  }, [selectedElementContext, commentMode, composerThreadId, activeThreadId]);
 
   // Click anywhere outside the preview panel → deselect + exit edit mode
   useEffect(() => {
@@ -1616,56 +1633,87 @@ export default function CampaignEditor() {
     }
   }, [screenZoom]);
 
-  // Comment mode: submit a comment → send to AI as chat message
-  const handleCommentSubmit = useCallback(async (pinId: string, text: string) => {
-    const pin = comments.find(c => c.id === pinId);
-    if (!pin) return;
+  // Comment mode: submit a new comment → send to AI as chat message
+  const handleCommentSubmitNew = useCallback(async (threadId: string, body: string) => {
+    const thread = commentThreads.find(t => t.id === threadId);
+    if (!thread) return;
 
-    // Mark as pending
-    setComments(prev => prev.map(c => c.id === pinId ? { ...c, status: "pending" as const } : c));
-    pendingCommentIdRef.current = pinId;
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const newComment: ThreadComment = {
+      id: crypto.randomUUID(),
+      author: commentCurrentUser,
+      body,
+      time: now,
+    };
 
-    // Convert screenshot to a File if available
-    const attachedFiles: File[] = [];
-    if (pin.screenshot) {
-      try {
-        const resp = await fetch(pin.screenshot);
-        const blob = await resp.blob();
-        attachedFiles.push(new File([blob], `comment-${pinId}.jpg`, { type: "image/jpeg" }));
-      } catch {}
-    }
+    // Convert temporary thread to permanent with the comment
+    setCommentThreads(prev => prev.map(t =>
+      t.id === threadId ? { ...t, comments: [newComment], isTemporary: false } : t
+    ));
+    setComposerThreadId(null);
+    setActiveThreadId(threadId);
+    pendingCommentIdRef.current = threadId;
 
     // Build message with visual context
-    const commentMsg = `[Visual comment at position (${Math.round(pin.x)}, ${Math.round(pin.y)})${pin.width ? ` — region ${Math.round(pin.width)}×${Math.round(pin.height || 0)}px` : ""}]\n\n${text}`;
+    const pin = thread.pin;
+    const commentMsg = `[Visual comment at position (${Math.round(pin.x)}, ${Math.round(pin.y)})${pin.regionW ? ` — region ${Math.round(pin.regionW)}×${Math.round(pin.regionH || 0)}px` : ""}]\n\n${body}`;
 
     // Set chat state to send
     setChatInput(commentMsg);
-    setChatAttachments(attachedFiles);
-    if (attachedFiles.length > 0) {
-      setChatAttachmentPreviews(attachedFiles.map(f => URL.createObjectURL(f)));
-    }
 
     // Trigger send after state updates
     setTimeout(() => {
       const sendBtn = document.querySelector('[data-send-btn]') as HTMLButtonElement | null;
       sendBtn?.click();
     }, 100);
-  }, [comments]);
+  }, [commentThreads, commentCurrentUser]);
 
-  // Track AI replies and associate with comment pins
+  // Comment mode: reply to existing thread
+  const handleCommentReply = useCallback(async (threadId: string, body: string) => {
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const newComment: ThreadComment = {
+      id: crypto.randomUUID(),
+      author: commentCurrentUser,
+      body,
+      time: now,
+    };
+    setCommentThreads(prev => prev.map(t =>
+      t.id === threadId ? { ...t, comments: [...t.comments, newComment] } : t
+    ));
+    pendingCommentIdRef.current = threadId;
+
+    const thread = commentThreads.find(t => t.id === threadId);
+    const pin = thread?.pin;
+    const commentMsg = `[Reply to visual comment at (${Math.round(pin?.x || 0)}, ${Math.round(pin?.y || 0)})]\n\n${body}`;
+    setChatInput(commentMsg);
+    setTimeout(() => {
+      const sendBtn = document.querySelector('[data-send-btn]') as HTMLButtonElement | null;
+      sendBtn?.click();
+    }, 100);
+  }, [commentThreads, commentCurrentUser]);
+
+  // Track AI replies and associate with comment threads
   useEffect(() => {
     const pendingId = pendingCommentIdRef.current;
     if (!pendingId) return;
     const lastAssistantMsg = [...messages].reverse().find(m => m.role === 'assistant');
     if (!lastAssistantMsg) return;
-    // Check if this reply arrived after the comment was submitted
-    const pin = comments.find(c => c.id === pendingId && c.status === 'pending');
-    if (!pin) return;
-    setComments(prev => prev.map(c =>
-      c.id === pendingId ? { ...c, aiReply: lastAssistantMsg.content, status: "resolved" as const } : c
+    const thread = commentThreads.find(t => t.id === pendingId);
+    if (!thread) return;
+    // Add AI reply as a comment in the thread
+    const aiAuthor: CommentAuthor = { name: "AI", initials: "AI", bgColor: "#3B82F6" };
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const aiComment: ThreadComment = {
+      id: crypto.randomUUID(),
+      author: aiAuthor,
+      body: lastAssistantMsg.content,
+      time: now,
+    };
+    setCommentThreads(prev => prev.map(t =>
+      t.id === pendingId ? { ...t, comments: [...t.comments, aiComment] } : t
     ));
     pendingCommentIdRef.current = null;
-  }, [messages, comments]);
+  }, [messages, commentThreads]);
 
 
   if (loading) {
@@ -3030,7 +3078,10 @@ export default function CampaignEditor() {
                 variant={commentMode ? "default" : "ghost"}
                 size="icon"
                 className={`h-7 w-7 ${commentMode ? "bg-primary text-primary-foreground" : ""}`}
-                onClick={() => setCommentMode(prev => !prev)}
+                onClick={() => setCommentMode(prev => {
+                  if (prev) { setComposerThreadId(null); setActiveThreadId(null); }
+                  return !prev;
+                })}
                 title="Comment mode (C)"
               >
                 <MessageCircle className="w-3.5 h-3.5" />
@@ -3176,7 +3227,7 @@ export default function CampaignEditor() {
               width: showReferenceDialog && campaign?.html && selectedReferences.length > 0 ? '50%' : '100%',
               scrollbarWidth: 'none',
               msOverflowStyle: 'none' as any,
-              cursor: commentMode ? 'crosshair' : marqueeRect ? 'crosshair' : undefined,
+              cursor: commentMode ? COMMENT_CURSOR_SVG : marqueeRect ? 'crosshair' : undefined,
             }}
             onScroll={(e) => {
               if (!showReferenceDialog || syncingScroll) return;
@@ -3294,28 +3345,41 @@ export default function CampaignEditor() {
                 const start = commentDragRef.current;
                 const dx = Math.abs(x - start.startX);
                 const dy = Math.abs(y - start.startY);
-                const isDrag = dx > 10 || dy > 10;
+                const isDrag = dx > 4 || dy > 4;
+
+                // Click priority chain: dismiss composer → dismiss popover → place pin
+                if (composerThreadId) {
+                  // Cancel current composer
+                  setCommentThreads(prev => prev.filter(t => t.id !== composerThreadId));
+                  setComposerThreadId(null);
+                  commentDragRef.current = null;
+                  try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+                  return;
+                }
+                if (activeThreadId) {
+                  // Close current popover
+                  setActiveThreadId(null);
+                  commentDragRef.current = null;
+                  try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+                  return;
+                }
 
                 const pinX = isDrag ? (start.startX + x) / 2 : x;
                 const pinY = isDrag ? (start.startY + y) / 2 : y;
                 const regionW = isDrag ? Math.abs(x - start.startX) : undefined;
                 const regionH = isDrag ? Math.abs(y - start.startY) : undefined;
 
-                const screenshot = await captureCommentScreenshot(pinX, pinY, regionW, regionH);
-
-                const pinId = crypto.randomUUID();
-                const newPin: CommentPin = {
-                  id: pinId,
-                  x: pinX,
-                  y: pinY,
-                  width: regionW,
-                  height: regionH,
-                  text: "",
-                  screenshot,
-                  status: "draft",
+                const threadId = crypto.randomUUID();
+                const newThread: CommentThread = {
+                  id: threadId,
+                  pin: { x: pinX, y: pinY, regionW, regionH },
+                  comments: [],
+                  resolved: false,
+                  isTemporary: true,
                 };
-                setComments(prev => [...prev, newPin]);
-                setActiveCommentId(pinId);
+                setCommentThreads(prev => [...prev, newThread]);
+                setComposerThreadId(threadId);
+                setActiveThreadId(threadId);
                 commentDragRef.current = null;
                 try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
                 return;
@@ -3389,42 +3453,49 @@ export default function CampaignEditor() {
                 />
               );
             })()}
-            {/* Comment mode indicator */}
+            {/* Comment mode banner */}
             {commentMode && (
               <div
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium shadow-lg"
+                className="flex items-center gap-2 px-4 py-2 text-[12px] font-medium shadow-lg"
                 style={{
                   position: 'absolute',
-                  top: 12,
+                  top: 0,
                   left: '50%',
                   transform: 'translateX(-50%)',
                   zIndex: 70,
-                  background: 'rgba(99,102,241,0.95)',
+                  background: '#3B82F6',
                   color: 'white',
-                  backdropFilter: 'blur(8px)',
+                  borderRadius: '0 0 8px 8px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                 }}
               >
-                <MessageCircle className="w-3 h-3" />
-                Comment Mode
-                <span className="opacity-60 ml-1">Press C or Esc to exit</span>
+                Click to comment · Drag to select region · Esc to exit
               </div>
             )}
-            {/* Comment pins overlay */}
-            {comments.length > 0 && (
+            {/* Comment threads overlay */}
+            {commentThreads.length > 0 && (
               <CommentOverlay
-                comments={comments}
-                activeCommentId={activeCommentId}
-                onSubmit={handleCommentSubmit}
-                onUpdateText={(id, text) => setComments(prev => prev.map(c => c.id === id ? { ...c, text } : c))}
-                onClose={(id) => {
-                  const pin = comments.find(c => c.id === id);
-                  if (pin?.status === 'draft') {
-                    setComments(prev => prev.filter(c => c.id !== id));
+                threads={commentThreads}
+                activeThreadId={activeThreadId}
+                composerThreadId={composerThreadId}
+                currentUser={commentCurrentUser}
+                zoom={zoomScale}
+                onActivate={(id) => {
+                  if (composerThreadId) {
+                    setCommentThreads(prev => prev.filter(t => t.id !== composerThreadId));
+                    setComposerThreadId(null);
                   }
-                  setActiveCommentId(null);
+                  setActiveThreadId(id === activeThreadId ? null : id);
                 }}
-                onActivate={(id) => setActiveCommentId(id === activeCommentId ? null : id)}
-                onResolve={(id) => setComments(prev => prev.map(c => c.id === id ? { ...c, status: "resolved" as const } : c))}
+                onCloseThread={() => setActiveThreadId(null)}
+                onSubmitNew={handleCommentSubmitNew}
+                onReply={handleCommentReply}
+                onResolve={(id) => setCommentThreads(prev => prev.map(t => t.id === id ? { ...t, resolved: true } : t))}
+                onUnresolve={(id) => setCommentThreads(prev => prev.map(t => t.id === id ? { ...t, resolved: false } : t))}
+                onCancelComposer={(id) => {
+                  setCommentThreads(prev => prev.filter(t => t.id !== id));
+                  setComposerThreadId(null);
+                }}
               />
             )}
             {isGenerating ? (
