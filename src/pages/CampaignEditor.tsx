@@ -1550,6 +1550,8 @@ export default function CampaignEditor() {
       // Don't deselect when clicking inside the image swap panel
       const target = e.target as HTMLElement;
       if (target.closest('[data-image-swap-panel]')) return;
+      // Don't deselect when clicking inside the chat panel (right panel)
+      if (target.closest('[data-chat-panel]')) return;
       const iframe = panel.querySelector('iframe') as HTMLIFrameElement | null;
       if (iframe?.contentWindow) {
         try {
