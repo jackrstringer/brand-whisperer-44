@@ -1668,6 +1668,7 @@ export default function CampaignEditor() {
   }, [messages, comments]);
 
 
+  if (loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
   }
 
