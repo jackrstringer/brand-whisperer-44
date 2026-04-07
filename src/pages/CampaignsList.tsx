@@ -212,9 +212,18 @@ export default function CampaignsList() {
     <div className="p-6 md:p-12">
       <div className="flex items-center justify-between mb-8 max-w-3xl">
         <h1 className="text-2xl font-semibold">{brand?.name || "Brand"}</h1>
-        <Button onClick={createCampaign} className="bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all">
-          <Plus className="w-4 h-4 mr-1" /> New Campaign
-        </Button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggleTimers}
+            className={`p-1.5 rounded transition-colors ${showTimers ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground"}`}
+            title="Toggle generation timers"
+          >
+            <Timer className="w-3.5 h-3.5" />
+          </button>
+          <Button onClick={createCampaign} className="bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all">
+            <Plus className="w-4 h-4 mr-1" /> New Campaign
+          </Button>
+        </div>
       </div>
 
       {campaigns.length === 0 ? (
