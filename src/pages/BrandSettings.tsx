@@ -62,7 +62,6 @@ export default function BrandSettings() {
       setAssets((brandAssets || []) as BrandAsset[]);
       setLoading(false);
 
-      // Fire-and-forget: reprocess any assets missing composition_data
       supabase.functions.invoke("reprocess-asset-compositions", {
         body: { brandId },
       }).catch(() => {});
@@ -78,14 +77,14 @@ export default function BrandSettings() {
     setSaving(false);
   };
 
-  const saveInstructions = async () => {
+  const savePreferences = async () => {
     if (!brandId) return;
     setSaving(true);
     const { data: existing } = await supabase.from("brand_profiles").select("id").eq("brand_id", brandId).single();
     if (existing) {
       await supabase.from("brand_profiles").update({ brand_instructions: brandInstructions || null, qa_checklist: qaChecklist } as any).eq("brand_id", brandId);
     }
-    toast.success("Saved");
+    toast.success("Preferences saved");
     setSaving(false);
   };
 
@@ -108,16 +107,13 @@ export default function BrandSettings() {
       <h1 className="text-2xl font-semibold mb-6">Brand Settings</h1>
 
       <Tabs defaultValue="info" className="space-y-6">
-        <TabsList className="flex-wrap">
+        <TabsList>
           <TabsTrigger value="info">Info</TabsTrigger>
           <TabsTrigger value="intelligence">Intelligence</TabsTrigger>
           <TabsTrigger value="assets">Assets</TabsTrigger>
           <TabsTrigger value="products">Products</TabsTrigger>
-          <TabsTrigger value="instructions">Instructions</TabsTrigger>
-          <TabsTrigger value="qa">QA Checklist</TabsTrigger>
-          <TabsTrigger value="klaviyo">Klaviyo</TabsTrigger>
-          <TabsTrigger value="shopify">Shopify</TabsTrigger>
-          <TabsTrigger value="clickup">ClickUp</TabsTrigger>
+          <TabsTrigger value="preferences">Preferences</TabsTrigger>
+          <TabsTrigger value="integrations">Integrations</TabsTrigger>
           <TabsTrigger value="analysis">Analysis</TabsTrigger>
         </TabsList>
 
@@ -147,17 +143,14 @@ export default function BrandSettings() {
           {brandId && <ShopifyProductGrid brandId={brandId} />}
         </TabsContent>
 
-        <TabsContent value="instructions" className="space-y-4">
+        <TabsContent value="preferences" className="space-y-6">
           <div>
             <Label>Brand Instructions / Notes / Guidelines</Label>
             <p className="text-xs text-muted-foreground mt-1 mb-2">Injected into every campaign generation.</p>
             <Textarea value={brandInstructions} onChange={e => setBrandInstructions(e.target.value)} placeholder="e.g. Always use a warm, friendly tone..." className="min-h-[200px]" />
           </div>
-          <Button onClick={saveInstructions} disabled={saving}>Save Instructions</Button>
-        </TabsContent>
 
-        <TabsContent value="qa" className="space-y-4">
-          <div>
+          <div className="border-t border-border pt-6">
             <Label>Brand-Specific QA Checklist</Label>
             <p className="text-xs text-muted-foreground mt-1 mb-3">Checked during QA audit for every campaign.</p>
             <div className="space-y-2">
@@ -173,19 +166,30 @@ export default function BrandSettings() {
               <Button variant="outline" onClick={addQaItem} disabled={!newQaItem.trim()}><Plus className="w-4 h-4" /></Button>
             </div>
           </div>
-          <Button onClick={saveInstructions} disabled={saving}>Save Checklist</Button>
+
+          <Button onClick={savePreferences} disabled={saving}>Save Preferences</Button>
         </TabsContent>
 
-        <TabsContent value="shopify">
-          {brandId && <ShopifySetup brandId={brandId} />}
-        </TabsContent>
-
-        <TabsContent value="klaviyo">
-          {brandId && <KlaviyoSetup brandId={brandId} />}
-        </TabsContent>
-
-        <TabsContent value="clickup">
-          {brandId && <ClickUpSetup brandId={brandId} />}
+        <TabsContent value="integrations" className="space-y-8">
+          {brandId && (
+            <>
+              <div>
+                <h3 className="text-lg font-semibold mb-1">Klaviyo</h3>
+                <p className="text-sm text-muted-foreground mb-4">Connect your Klaviyo account for list/segment targeting and campaign syncing.</p>
+                <KlaviyoSetup brandId={brandId} />
+              </div>
+              <div className="border-t border-border pt-6">
+                <h3 className="text-lg font-semibold mb-1">Shopify</h3>
+                <p className="text-sm text-muted-foreground mb-4">Connect your Shopify store to sync products and images.</p>
+                <ShopifySetup brandId={brandId} />
+              </div>
+              <div className="border-t border-border pt-6">
+                <h3 className="text-lg font-semibold mb-1">ClickUp</h3>
+                <p className="text-sm text-muted-foreground mb-4">Connect ClickUp to pull campaign briefs from tasks.</p>
+                <ClickUpSetup brandId={brandId} />
+              </div>
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="analysis">
