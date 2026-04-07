@@ -83,12 +83,13 @@ function ComposerPopover({
   const hasText = text.trim().length > 0;
 
   const actionBtnStyle: React.CSSProperties = {
-    width: 32, height: 32, borderRadius: 6,
-    background: "#F1F5F9", border: "1px solid #E2E8F0",
+    width: 32, height: 32, borderRadius: 8,
+    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
     cursor: "pointer",
     display: "flex", alignItems: "center", justifyContent: "center",
-    color: "#64748B", flexShrink: 0,
-    transition: "all 0.12s ease",
+    color: "rgba(255,255,255,0.5)", flexShrink: 0,
+    transition: "all 0.15s ease",
+    backdropFilter: "blur(4px)",
   };
 
   return (
@@ -103,10 +104,12 @@ function ComposerPopover({
         zIndex: 63,
         transform: `scale(${1 / zoom})`,
         transformOrigin: "0 0",
-        width: 260,
-        background: "#fff",
-        borderRadius: 12,
-        boxShadow: "0 8px 32px rgba(0,0,0,0.14)",
+        width: 270,
+        background: "rgba(15,15,15,0.92)",
+        backdropFilter: "blur(20px) saturate(1.4)",
+        borderRadius: 14,
+        border: "1px solid rgba(255,255,255,0.08)",
+        boxShadow: "0 8px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04) inset",
         animation: SPRING_ANIMATION,
         padding: 12,
       }}
@@ -115,8 +118,8 @@ function ComposerPopover({
       <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
         <button
           onClick={onSwap}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "#DBEAFE"; e.currentTarget.style.borderColor = "#93C5FD"; e.currentTarget.style.color = "#3B82F6"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "#F1F5F9"; e.currentTarget.style.borderColor = "#E2E8F0"; e.currentTarget.style.color = "#64748B"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(59,130,246,0.15)"; e.currentTarget.style.borderColor = "rgba(59,130,246,0.3)"; e.currentTarget.style.color = "#60A5FA"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "rgba(255,255,255,0.5)"; }}
           style={actionBtnStyle}
           title="Swap — auto-replace with a new option"
         >
@@ -124,8 +127,8 @@ function ComposerPopover({
         </button>
         <button
           onClick={onIdeate}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "#FEF9C3"; e.currentTarget.style.borderColor = "#FDE047"; e.currentTarget.style.color = "#CA8A04"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "#F1F5F9"; e.currentTarget.style.borderColor = "#E2E8F0"; e.currentTarget.style.color = "#64748B"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(200,241,53,0.12)"; e.currentTarget.style.borderColor = "rgba(200,241,53,0.3)"; e.currentTarget.style.color = "#c8f135"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "rgba(255,255,255,0.5)"; }}
           style={actionBtnStyle}
           title="Ideate — generate options for this area"
         >
@@ -134,13 +137,13 @@ function ComposerPopover({
       </div>
       <div
         style={{
-          background: "#F8FAFC",
-          borderRadius: 8,
-          border: `1px solid ${hasText ? "#3B82F6" : "#E2E8F0"}`,
-          padding: "4px 8px",
+          background: "rgba(255,255,255,0.04)",
+          borderRadius: 10,
+          border: `1px solid ${hasText ? "rgba(59,130,246,0.4)" : "rgba(255,255,255,0.08)"}`,
+          padding: "6px 10px",
           display: "flex",
-          alignItems: "center",
-          gap: 4,
+          alignItems: "flex-end",
+          gap: 6,
           transition: "border-color 0.15s",
         }}
       >
@@ -149,7 +152,6 @@ function ComposerPopover({
           value={text}
           onChange={(e) => {
             setText(e.target.value);
-            // Auto-resize
             e.target.style.height = "auto";
             e.target.style.height = Math.min(e.target.scrollHeight, 160) + "px";
           }}
@@ -169,7 +171,7 @@ function ComposerPopover({
             outline: "none",
             resize: "none",
             fontSize: 13,
-            color: "#334155",
+            color: "rgba(255,255,255,0.9)",
             minHeight: 22,
             maxHeight: 160,
             overflowY: "auto",
@@ -180,18 +182,18 @@ function ComposerPopover({
           <button
             onClick={() => onSubmit(text.trim())}
             style={{
-              width: 28, height: 28, borderRadius: 6,
+              width: 26, height: 26, borderRadius: 7,
               background: "#3B82F6", border: "none", cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center",
               color: "#fff", flexShrink: 0,
               animation: "tooltipFadeIn 120ms ease forwards",
             }}
           >
-            <CornerDownRight size={14} />
+            <CornerDownRight size={13} />
           </button>
         )}
       </div>
-      <p style={{ fontSize: 10, color: "#94A3B8", marginTop: 6, marginBottom: 0 }}>
+      <p style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 6, marginBottom: 0 }}>
         Enter to send · Esc to cancel
       </p>
     </div>
