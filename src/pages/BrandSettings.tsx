@@ -189,7 +189,7 @@ export default function BrandSettings() {
         </TabsContent>
 
         <TabsContent value="analysis">
-          {brandId && <ReanalyzeBrand brandId={brandId} brandName={name} industry={industry} />}
+          {brandId && <ReanalyzeBrand brandId={brandId} brandName={name} industry={industry} websiteUrl={websiteUrl} />}
         </TabsContent>
       </Tabs>
 
