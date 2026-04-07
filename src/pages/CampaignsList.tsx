@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Plus, ArrowRight, Trash2, Copy } from "lucide-react";
+import { Plus, ArrowRight, Trash2, Copy, Timer } from "lucide-react";
 import { toast } from "sonner";
 import type { Brand, Campaign } from "@/lib/types";
 import { useAuth } from "@/hooks/useAuth";
@@ -65,8 +65,42 @@ export default function CampaignsList() {
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [showTimers, setShowTimers] = useState(false);
+  const [timersLoaded, setTimersLoaded] = useState(false);
 
   const { selectedIds, handleSelect, clearSelection } = useMultiSelect(campaigns);
+
+  // Load timer preference from user_preferences
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("user_preferences")
+      .select("preferences")
+      .eq("user_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        const prefs = data?.preferences as any;
+        if (prefs?.show_campaign_timers) setShowTimers(true);
+        setTimersLoaded(true);
+      });
+  }, [user]);
+
+  const toggleTimers = async () => {
+    const next = !showTimers;
+    setShowTimers(next);
+    if (!user) return;
+    const { data: existing } = await supabase
+      .from("user_preferences")
+      .select("id, preferences")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const prefs = { ...((existing?.preferences as any) || {}), show_campaign_timers: next };
+    if (existing) {
+      await supabase.from("user_preferences").update({ preferences: prefs }).eq("id", existing.id);
+    } else {
+      await supabase.from("user_preferences").insert({ user_id: user.id, preferences: prefs });
+    }
+  };
 
   useEffect(() => {
     if (!brandId) return;
@@ -178,9 +212,18 @@ export default function CampaignsList() {
     <div className="p-6 md:p-12">
       <div className="flex items-center justify-between mb-8 max-w-3xl">
         <h1 className="text-2xl font-semibold">{brand?.name || "Brand"}</h1>
-        <Button onClick={createCampaign} className="bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all">
-          <Plus className="w-4 h-4 mr-1" /> New Campaign
-        </Button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={toggleTimers}
+            className={`p-1.5 rounded transition-colors ${showTimers ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground"}`}
+            title="Toggle generation timers"
+          >
+            <Timer className="w-3.5 h-3.5" />
+          </button>
+          <Button onClick={createCampaign} className="bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all">
+            <Plus className="w-4 h-4 mr-1" /> New Campaign
+          </Button>
+        </div>
       </div>
 
       {campaigns.length === 0 ? (
@@ -216,7 +259,7 @@ export default function CampaignsList() {
                   <Badge className={statusColors[c.status] || statusColors.draft}>
                     {c.status}
                   </Badge>
-                  <GenTimer campaign={c} />
+                  {showTimers && <GenTimer campaign={c} />}
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
