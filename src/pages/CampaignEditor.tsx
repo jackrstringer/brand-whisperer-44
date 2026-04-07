@@ -1388,6 +1388,8 @@ export default function CampaignEditor() {
   const iframeOwnedHtmlRef = useRef<string | null>(null);
   // Track pending save payload so we can flush on unmount/navigation
   const pendingSaveRef = useRef<{ html: string; history: any[]; campaignId: string } | null>(null);
+  // Stable HTML ref to prevent iframe reload during inline edits
+  const lastStableHtmlRef = useRef<string | null>(null);
 
   // Flush pending saves on page unload or component unmount
   useEffect(() => {
@@ -1617,8 +1619,8 @@ export default function CampaignEditor() {
       // Push to history for undo
       const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
       history.push(currentHtml);
-      // Update history in state (but NOT html — that would reload iframe)
-      setCampaign(c => c ? { ...c, html_history: history } : c);
+      // Update both history AND html in state so navigation always has latest
+      setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
       setCanUndo(true);
       setRedoStack([]); // clear redo on new edit
 
@@ -1628,11 +1630,8 @@ export default function CampaignEditor() {
       inlineEditTimerRef.current = setTimeout(async () => {
         pendingSaveRef.current = null;
         await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
-        // Silently sync campaign.html to match DB without triggering srcdoc recompute
-        // (srcdocHtml won't change because displayHtml hasn't changed)
-        setCampaign(c => c ? { ...c, html: newHtml } : c);
         iframeOwnedHtmlRef.current = null;
-      }, 2000);
+      }, 800);
     };
     window.addEventListener("message", handler);
     return () => {
@@ -2053,7 +2052,10 @@ export default function CampaignEditor() {
   const renderedWidth = Math.round(viewportWidth * zoomScale);
   const renderedHeight = Math.round(iframeContentHeight * zoomScale);
 
-  const displayHtml = previewHtml || (activeVersionIndex !== null ? allVersions[activeVersionIndex] : campaign?.html);
+  // When iframeOwnedHtmlRef is set, the iframe owns the live HTML — freeze displayHtml to prevent iframe reload
+  const baseHtml = previewHtml || (activeVersionIndex !== null ? allVersions[activeVersionIndex] : campaign?.html);
+  const displayHtml = iframeOwnedHtmlRef.current ? (lastStableHtmlRef.current || baseHtml) : baseHtml;
+  if (!iframeOwnedHtmlRef.current) lastStableHtmlRef.current = displayHtml || null;
   const htmlForPreview = displayHtml
     ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls)
     : "";
