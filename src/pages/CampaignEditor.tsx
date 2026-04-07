@@ -2052,7 +2052,6 @@ export default function CampaignEditor() {
 
   // When iframeOwnedHtmlRef is set, the iframe owns the live HTML — freeze displayHtml to prevent iframe reload
   const baseHtml = previewHtml || (activeVersionIndex !== null ? allVersions[activeVersionIndex] : campaign?.html);
-  const lastStableHtmlRef = useRef<string | null>(null);
   const displayHtml = iframeOwnedHtmlRef.current ? (lastStableHtmlRef.current || baseHtml) : baseHtml;
   if (!iframeOwnedHtmlRef.current) lastStableHtmlRef.current = displayHtml || null;
   const htmlForPreview = displayHtml
