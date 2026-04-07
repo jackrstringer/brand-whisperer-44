@@ -379,7 +379,7 @@ export default function BrandIntelligenceWizard({ brandId, brandName, domain, ex
   }
 
   // PHASE: Survey
-  const totalSteps = 6;
+  const totalSteps = 4;
 
   const renderStep = () => {
     switch (surveyStep) {
@@ -387,8 +387,6 @@ export default function BrandIntelligenceWizard({ brandId, brandName, domain, ex
       case 1: return <Step2 survey={survey} update={updateSurvey} />;
       case 2: return <Step3 survey={survey} update={updateSurvey} />;
       case 3: return <Step4 survey={survey} update={updateSurvey} />;
-      case 4: return <Step5 survey={survey} update={updateSurvey} />;
-      case 5: return <Step6 survey={survey} update={updateSurvey} />;
       default: return null;
     }
   };
