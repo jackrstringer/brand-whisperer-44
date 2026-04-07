@@ -3223,7 +3223,8 @@ export default function CampaignEditor() {
           {/* Campaign preview / Inspiration panel */}
           <div
             ref={previewPanelRef}
-            className="h-full min-w-0 bg-card overflow-y-auto scrollbar-hide relative"
+            tabIndex={-1}
+            className="h-full min-w-0 bg-card overflow-y-auto scrollbar-hide relative outline-none"
             style={{
               width: showReferenceDialog && campaign?.html && selectedReferences.length > 0 ? '50%' : '100%',
               scrollbarWidth: 'none',
@@ -3243,6 +3244,12 @@ export default function CampaignEditor() {
             }}
             onPointerDown={(e) => {
               if (e.button !== 0) return;
+              // Always reclaim focus from iframe so keyboard shortcuts (C, Escape) work reliably
+              const iframe = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+              if (iframe && document.activeElement === iframe) {
+                iframe.blur();
+                previewPanelRef.current?.focus();
+              }
               if (!campaign?.html) return;
               const tag = (e.target as HTMLElement).tagName;
               if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA') return;
@@ -3506,25 +3513,32 @@ export default function CampaignEditor() {
                 }}
               />
             )}
-            {/* Comment mode banner */}
-            {commentMode && (
-              <div
-                className="flex items-center gap-2 px-4 py-2 text-[12px] font-medium shadow-lg"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  zIndex: 70,
-                  background: '#3B82F6',
-                  color: 'white',
-                  borderRadius: '0 0 8px 8px',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                }}
-              >
-                Click to comment · Drag to select region · Esc to exit
-              </div>
-            )}
+            {/* Comment mode banner — show only first time, auto-dismiss */}
+            {commentMode && !localStorage.getItem('comment-banner-seen') && (() => {
+              setTimeout(() => localStorage.setItem('comment-banner-seen', '1'), 2500);
+              return (
+                <>
+                  <style>{`@keyframes commentBannerFadeOut { from { opacity:1; } to { opacity:0; pointer-events:none; } }`}</style>
+                  <div
+                    className="flex items-center gap-2 px-4 py-2 text-[12px] font-medium shadow-lg"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      zIndex: 70,
+                      background: '#3B82F6',
+                      color: 'white',
+                      borderRadius: '0 0 8px 8px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      animation: 'commentBannerFadeOut 0.4s ease 2s forwards',
+                    }}
+                  >
+                    Click to comment · Drag to select region · Esc to exit
+                  </div>
+                </>
+              );
+            })()}
             {/* Comment threads overlay */}
             {commentThreads.length > 0 && (
               <CommentOverlay
