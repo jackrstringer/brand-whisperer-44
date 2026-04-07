@@ -1849,12 +1849,22 @@ export default function CampaignEditor() {
   // Helper: build element context string for AI prompts
   const buildElementContext = (pin: CommentThread['pin']) => {
     const elInfo = pin.elementInfo;
-    if (!elInfo || !elInfo.tagName) return '';
+    if (!elInfo || !elInfo.tagName) return { context: '', isGroup: false };
     if (elInfo.elements && elInfo.elements.length > 1) {
-      const elDesc = elInfo.elements.map(e => `<${e.tagName}>: "${e.text.slice(0, 80)}"`).join('\n  ');
-      return `\n[Targeting region with elements:\n  ${elDesc}\n]\nPrimary element HTML:\n${elInfo.outerHTML}\n`;
+      const elDesc = elInfo.elements.map((e, i) => {
+        const typeLabel = /^H[1-6]$/.test(e.tagName) ? 'Headline' : (e.tagName === 'A' || e.tagName === 'BUTTON') ? 'CTA' : e.tagName === 'IMG' ? 'Image' : 'Copy';
+        return `Element ${i + 1} (${typeLabel} <${e.tagName}>): "${e.text.slice(0, 80)}"${e.outerHTML ? `\nHTML: ${e.outerHTML.slice(0, 500)}` : ''}`;
+      }).join('\n\n');
+      return {
+        context: `\n\n${elDesc}`,
+        isGroup: true,
+        groupInstruction: `\n\nIMPORTANT: These elements are a CONTEXTUAL GROUP. Every option must replace ALL elements together as a cohesive set. Each variant must have an "items" array with one entry per element, each containing "find" (exact current text from HTML), "replace" (new text), "label" (element type like Headline/CTA/Copy), and "preview" (the replacement text). The items must be contextually aware of each other.`,
+      };
     }
-    return `\n[Targeting <${elInfo.tagName}> element: "${elInfo.text.slice(0, 150)}"]\nElement HTML:\n${elInfo.outerHTML}\n`;
+    return {
+      context: `\n[Targeting <${elInfo.tagName}> element: "${elInfo.text.slice(0, 150)}"]\nElement HTML:\n${elInfo.outerHTML}\n`,
+      isGroup: false,
+    };
   };
 
   const handleCommentSubmitNew = useCallback(async (threadId: string, body: string) => {
