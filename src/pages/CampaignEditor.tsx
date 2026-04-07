@@ -3387,15 +3387,10 @@ export default function CampaignEditor() {
               const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
 
               if (commentMode) {
-                // Click priority chain: dismiss first before placing
+                // Dismiss open composer first before placing a new one
                 if (composerThreadId) {
                   setCommentThreads(prev => prev.filter(t => t.id !== composerThreadId));
                   setComposerThreadId(null);
-                  setActiveThreadId(null);
-                  return;
-                }
-                if (activeThreadId) {
-                  setActiveThreadId(null);
                   return;
                 }
                 // Comment mode: start tracking for click or drag
