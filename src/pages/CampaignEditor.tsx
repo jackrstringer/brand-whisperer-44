@@ -2050,8 +2050,11 @@ export default function CampaignEditor() {
   const renderedWidth = Math.round(viewportWidth * zoomScale);
   const renderedHeight = Math.round(iframeContentHeight * zoomScale);
 
-  // When iframeOwnedHtmlRef is set, the iframe owns the live HTML — don't change srcdoc
-  const displayHtml = previewHtml || (activeVersionIndex !== null ? allVersions[activeVersionIndex] : campaign?.html);
+  // When iframeOwnedHtmlRef is set, the iframe owns the live HTML — freeze displayHtml to prevent iframe reload
+  const baseHtml = previewHtml || (activeVersionIndex !== null ? allVersions[activeVersionIndex] : campaign?.html);
+  const lastStableHtmlRef = useRef<string | null>(null);
+  const displayHtml = iframeOwnedHtmlRef.current ? (lastStableHtmlRef.current || baseHtml) : baseHtml;
+  if (!iframeOwnedHtmlRef.current) lastStableHtmlRef.current = displayHtml || null;
   const htmlForPreview = displayHtml
     ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls)
     : "";
