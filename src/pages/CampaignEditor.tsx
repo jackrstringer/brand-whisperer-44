@@ -322,6 +322,10 @@ export default function CampaignEditor() {
           msg.message_type = "variants";
           msg.variant_data = m.tool_calls.data;
         }
+        // Restore hidden_prompt metadata for "Generate More" reuse
+        if (m.role === 'user' && m.tool_calls?.hidden_prompt) {
+          (msg as any)._hidden_prompt = m.tool_calls.hidden_prompt;
+        }
         return msg;
       });
 
