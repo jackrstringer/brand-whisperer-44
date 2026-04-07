@@ -81,9 +81,6 @@ function defaultSurvey(): SurveyData {
     evergreen_offer: "", top_promotions: [{ name: "", offer: "" }],
     cross_sell_paths: [{ buy: "", show: "" }],
     customer_journey: "", target_demographic: "", top_objection: "", repeat_purchase_drivers: "",
-    send_frequency: "", best_campaign_types: [], worst_campaign_types: "", blackout_periods: "",
-    primary_email_goal: "",
-    brand_voice_words: ["", "", ""], language_to_avoid: "", north_star_brand: "", anything_else: "",
   };
 }
 
