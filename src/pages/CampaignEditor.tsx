@@ -1556,6 +1556,20 @@ export default function CampaignEditor() {
         }
       }
 
+      // Ideate hotkey (I) — when elements are selected
+      if ((e.key === 'i' || e.key === 'I') && !e.metaKey && !e.ctrlKey && !e.altKey && selectedElementContext) {
+        e.preventDefault();
+        triggerSelectedElementIdeate();
+        return;
+      }
+
+      // Swap hotkey (S) — when elements are selected
+      if ((e.key === 's' || e.key === 'S') && !e.metaKey && !e.ctrlKey && !e.altKey && selectedElementContext) {
+        e.preventDefault();
+        triggerSelectedElementSwap();
+        return;
+      }
+
       if (e.key === 'Escape') {
         // Escape priority chain: composer → exit comment mode
         if (composerThreadId) {
