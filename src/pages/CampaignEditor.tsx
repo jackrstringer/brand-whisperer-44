@@ -3182,13 +3182,22 @@ export default function CampaignEditor() {
             }}
             onPointerDown={(e) => {
               if (e.button !== 0) return;
-              if (!campaign?.html) return; // ReferencePanel is showing — don't capture
+              if (!campaign?.html) return;
               const tag = (e.target as HTMLElement).tagName;
               if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'IFRAME') return;
               const panelRect = previewPanelRef.current?.getBoundingClientRect();
               if (!panelRect) return;
               const x = e.clientX - panelRect.left;
               const y = e.clientY - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+
+              if (commentMode) {
+                // Comment mode: start tracking for click or drag
+                commentDragRef.current = { startX: x, startY: y };
+                e.currentTarget.setPointerCapture(e.pointerId);
+                e.preventDefault();
+                return;
+              }
+
               e.currentTarget.setPointerCapture(e.pointerId);
               interactionRef.current = { type: 'PRESSED', originX: x, originY: y, pointerId: e.pointerId };
               e.preventDefault();
