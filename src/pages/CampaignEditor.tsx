@@ -3249,6 +3249,10 @@ export default function CampaignEditor() {
               // Don't intercept clicks on comment overlay elements
               if ((e.target as HTMLElement).closest?.('[data-comment-overlay]')) return;
               if (tag === 'IFRAME' && !commentMode) return;
+              if (tag === 'IFRAME' && commentMode) {
+                // iframe has pointer-events:none in comment mode, so this shouldn't fire
+                return;
+              }
               const panelRect = previewPanelRef.current?.getBoundingClientRect();
               if (!panelRect) return;
               const x = e.clientX - panelRect.left;
