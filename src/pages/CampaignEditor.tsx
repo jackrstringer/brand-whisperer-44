@@ -4017,10 +4017,12 @@ export default function CampaignEditor() {
                           </div>
                         );
                       }
+                      const cleaned = cleanUserMessage(msg.content);
+                      if (!cleaned) return null;
                       return (
                         <div key={msg.id} className="flex justify-end">
                           <div className="max-w-[80%] rounded-lg px-3 py-2 text-sm bg-background text-foreground">
-                            {msg.content}
+                            {cleaned}
                           </div>
                         </div>
                       );
