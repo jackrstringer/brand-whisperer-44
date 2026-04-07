@@ -1931,7 +1931,7 @@ export default function CampaignEditor() {
 
     ideatePayloadRef.current = {
       realPrompt,
-      displayText: "🔄 Swap element",
+      displayText: isGroupSwap ? `🔄 Swap ${elementInfo?.elements?.length || ''} elements` : "🔄 Swap element",
       attachments: screenshotFile ? [screenshotFile] : undefined,
     };
 
