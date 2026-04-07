@@ -231,31 +231,52 @@ export default function BrandIntelligenceWizard({ brandId, brandName, domain, ex
 
     (async () => {
       try {
-        // Also persist the confirmed domain to the brands table
+        // Persist the confirmed domain
         await supabase.from("brands").update({ website_url: confirmedDomain }).eq("id", brandId);
 
-        const { data, error } = await supabase.functions.invoke("research-brand", {
+        // Fire-and-forget kick off
+        const { error } = await supabase.functions.invoke("research-brand", {
           body: { brand_id: brandId, brand_name: brandName, domain: confirmedDomain },
         });
         if (cancelled) return;
-        clearInterval(progressInterval);
-        if (error || data?.error) throw new Error(data?.error || error?.message || "Research failed");
+        if (error) throw new Error(error.message || "Research failed to start");
 
-        const { data: latestIntel, error: intelError } = await supabase
-          .from("brand_intelligence")
-          .select("ai_research, survey_answers")
-          .eq("brand_id", brandId)
-          .single();
-        if (intelError) throw intelError;
+        // Poll for completion
+        const pollInterval = setInterval(async () => {
+          if (cancelled) { clearInterval(pollInterval); return; }
+          const { data } = await supabase
+            .from("brand_intelligence")
+            .select("research_status, ai_research, survey_answers")
+            .eq("brand_id", brandId)
+            .single();
 
-        setResearchProgress(100);
-        prefillSurvey(latestIntel?.ai_research, latestIntel?.survey_answers);
-        setTimeout(() => { if (!cancelled) setPhase("survey"); }, 800);
+          if (data?.research_status === "ai_complete") {
+            clearInterval(pollInterval);
+            clearInterval(progressInterval);
+            setResearchProgress(100);
+            prefillSurvey(data.ai_research, data.survey_answers);
+            setTimeout(() => { if (!cancelled) setPhase("survey"); }, 800);
+          } else if (data?.research_status === "failed") {
+            clearInterval(pollInterval);
+            clearInterval(progressInterval);
+            toast.error("AI research failed. You can still fill out the survey manually.");
+            setPhase("survey");
+          }
+        }, 3000);
+
+        // Safety timeout after 5 minutes
+        setTimeout(() => {
+          if (!cancelled) {
+            clearInterval(pollInterval);
+            clearInterval(progressInterval);
+            toast.error("Research is taking longer than expected. You can fill out the survey manually.");
+            setPhase("survey");
+          }
+        }, 300000);
       } catch (err: any) {
         if (cancelled) return;
         clearInterval(progressInterval);
         toast.error(err.message || "AI research failed");
-        // Still let them fill out survey manually
         setPhase("survey");
       }
     })();
