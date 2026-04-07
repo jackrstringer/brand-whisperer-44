@@ -3122,7 +3122,7 @@ export default function CampaignEditor() {
       if(imgSwapTarget && newSrc){
         imgSwapTarget.src = newSrc;
         imgSwapTarget.setAttribute('src', newSrc);
-        syncHtml();
+        syncHtmlImmediate();
       }
     }
     if(e.data && e.data.type === 'getElementAtPoint'){
