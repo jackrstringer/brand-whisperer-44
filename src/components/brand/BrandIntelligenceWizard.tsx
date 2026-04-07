@@ -48,15 +48,6 @@ interface SurveyData {
   target_demographic: string;
   top_objection: string;
   repeat_purchase_drivers: string;
-  send_frequency: string;
-  best_campaign_types: string[];
-  worst_campaign_types: string;
-  blackout_periods: string;
-  primary_email_goal: string;
-  brand_voice_words: string[];
-  language_to_avoid: string;
-  north_star_brand: string;
-  anything_else: string;
 }
 
 const CATALOG_OPTIONS = [
@@ -72,14 +63,6 @@ const SUBSCRIPTION_PLATFORMS = ["Recharge", "Skio", "Stay", "Bold", "Other"];
 
 const REPLENISHMENT_OPTIONS = ["30 days", "60 days", "90 days", "Varies"];
 
-const FREQUENCY_OPTIONS = ["Daily", "3–4x/week", "2x/week", "Weekly", "Less than weekly"];
-
-const CAMPAIGN_TYPES = [
-  "Promotional/sale", "Educational", "Brand story", "Product launch",
-  "Seasonal", "Winback", "Post-purchase",
-];
-
-const EMAIL_GOALS = ["Revenue per send", "List growth", "Retention & LTV", "Balanced"];
 
 function defaultSurvey(): SurveyData {
   return {
@@ -90,9 +73,6 @@ function defaultSurvey(): SurveyData {
     evergreen_offer: "", top_promotions: [{ name: "", offer: "" }],
     cross_sell_paths: [{ buy: "", show: "" }],
     customer_journey: "", target_demographic: "", top_objection: "", repeat_purchase_drivers: "",
-    send_frequency: "", best_campaign_types: [], worst_campaign_types: "", blackout_periods: "",
-    primary_email_goal: "",
-    brand_voice_words: ["", "", ""], language_to_avoid: "", north_star_brand: "", anything_else: "",
   };
 }
 
@@ -131,10 +111,6 @@ function prefillFromResearch(ai: any): Partial<SurveyData> {
       if (td.psychographic_profile) parts.push(td.psychographic_profile);
       s.target_demographic = parts.join(". ");
     }
-    if (bo.brand_tone) {
-      const words = bo.brand_tone.split(/[,;/]+/).map((w: string) => w.trim()).filter(Boolean);
-      s.brand_voice_words = [words[0] || "", words[1] || "", words[2] || ""];
-    }
   }
 
   const sm = ai.sales_model;
@@ -163,15 +139,12 @@ function prefillFromResearch(ai: any): Partial<SurveyData> {
     }
   }
 
-  const mi = ai.marketing_intelligence;
-  if (mi) {
-    if (mi.estimated_email_frequency) {
-      const f = mi.estimated_email_frequency.toLowerCase();
-      if (f.includes("daily")) s.send_frequency = "Daily";
-      else if (f.includes("3") || f.includes("4")) s.send_frequency = "3–4x/week";
-      else if (f.includes("2")) s.send_frequency = "2x/week";
-      else if (f.includes("week")) s.send_frequency = "Weekly";
-    }
+  // Prefill cross-sell paths from AI research
+  if (Array.isArray(ai.cross_sell_recommendations) && ai.cross_sell_recommendations.length > 0) {
+    s.cross_sell_paths = ai.cross_sell_recommendations.map((r: any) => ({
+      buy: r.if_buys || "",
+      show: r.then_show || "",
+    }));
   }
 
   return s;
@@ -398,7 +371,7 @@ export default function BrandIntelligenceWizard({ brandId, brandName, domain, ex
   }
 
   // PHASE: Survey
-  const totalSteps = 6;
+  const totalSteps = 4;
 
   const renderStep = () => {
     switch (surveyStep) {
@@ -406,8 +379,6 @@ export default function BrandIntelligenceWizard({ brandId, brandName, domain, ex
       case 1: return <Step2 survey={survey} update={updateSurvey} />;
       case 2: return <Step3 survey={survey} update={updateSurvey} />;
       case 3: return <Step4 survey={survey} update={updateSurvey} />;
-      case 4: return <Step5 survey={survey} update={updateSurvey} />;
-      case 5: return <Step6 survey={survey} update={updateSurvey} />;
       default: return null;
     }
   };
@@ -643,91 +614,6 @@ function Step4({ survey, update }: { survey: SurveyData; update: (u: Partial<Sur
       <div>
         <Label>Repeat Purchase Drivers</Label>
         <Textarea value={survey.repeat_purchase_drivers} onChange={e => update({ repeat_purchase_drivers: e.target.value })} placeholder="What keeps customers coming back?" className="mt-1" />
-      </div>
-    </div>
-  );
-}
-
-function Step5({ survey, update }: { survey: SurveyData; update: (u: Partial<SurveyData>) => void }) {
-  return (
-    <div className="space-y-5">
-      <h3 className="text-lg font-semibold">Email Program</h3>
-      <div className="space-y-2">
-        <Label>Send Frequency</Label>
-        <div className="flex flex-wrap gap-2">
-          {FREQUENCY_OPTIONS.map(opt => (
-            <label key={opt} className={`px-3 py-1.5 rounded-full border text-sm cursor-pointer transition-colors ${survey.send_frequency === opt ? "border-primary bg-primary/5 text-primary" : "border-border hover:border-primary/30"}`}>
-              <input type="radio" name="freq" checked={survey.send_frequency === opt} onChange={() => update({ send_frequency: opt })} className="sr-only" />
-              {opt}
-            </label>
-          ))}
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label>Best Campaign Types</Label>
-        <div className="flex flex-wrap gap-2">
-          {CAMPAIGN_TYPES.map(ct => (
-            <label key={ct} className="flex items-center gap-2 text-sm cursor-pointer">
-              <Checkbox checked={survey.best_campaign_types.includes(ct)} onCheckedChange={checked => {
-                update({ best_campaign_types: checked ? [...survey.best_campaign_types, ct] : survey.best_campaign_types.filter(c => c !== ct) });
-              }} />
-              {ct}
-            </label>
-          ))}
-        </div>
-      </div>
-      <div>
-        <Label>What Has Flopped?</Label>
-        <Textarea value={survey.worst_campaign_types} onChange={e => update({ worst_campaign_types: e.target.value })} placeholder="What has flopped or felt off-brand?" className="mt-1" />
-      </div>
-      <div>
-        <Label>Blackout Periods</Label>
-        <Textarea value={survey.blackout_periods} onChange={e => update({ blackout_periods: e.target.value })} placeholder="Any dates or periods to never send?" className="mt-1" />
-      </div>
-      <div className="space-y-2">
-        <Label>Primary Email Goal</Label>
-        <div className="flex flex-wrap gap-2">
-          {EMAIL_GOALS.map(g => (
-            <label key={g} className={`px-3 py-1.5 rounded-full border text-sm cursor-pointer transition-colors ${survey.primary_email_goal === g ? "border-primary bg-primary/5 text-primary" : "border-border hover:border-primary/30"}`}>
-              <input type="radio" name="goal" checked={survey.primary_email_goal === g} onChange={() => update({ primary_email_goal: g })} className="sr-only" />
-              {g}
-            </label>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Step6({ survey, update }: { survey: SurveyData; update: (u: Partial<SurveyData>) => void }) {
-  const updateVoiceWord = (i: number, val: string) => {
-    const next = [...survey.brand_voice_words];
-    next[i] = val;
-    update({ brand_voice_words: next });
-  };
-
-  return (
-    <div className="space-y-5">
-      <h3 className="text-lg font-semibold">Voice & Brand Context</h3>
-      <div className="space-y-2">
-        <Label>Brand Voice in 3 Words</Label>
-        <div className="flex gap-2">
-          {[0, 1, 2].map(i => (
-            <Input key={i} value={survey.brand_voice_words[i] || ""} onChange={e => updateVoiceWord(i, e.target.value)} placeholder={`Word ${i + 1}`} />
-          ))}
-        </div>
-      </div>
-      <div>
-        <Label>Language to Avoid</Label>
-        <Textarea value={survey.language_to_avoid} onChange={e => update({ language_to_avoid: e.target.value })} placeholder="Any words, phrases, or tones that feel off-brand?" className="mt-1" />
-      </div>
-      <div>
-        <Label>North Star Brand</Label>
-        <Input value={survey.north_star_brand} onChange={e => update({ north_star_brand: e.target.value })} placeholder="Brand whose email style you admire?" className="mt-1" />
-      </div>
-      <div>
-        <Label>Anything Else</Label>
-        <Textarea value={survey.anything_else} onChange={e => update({ anything_else: e.target.value })} placeholder="Anything else the AI must know to never get it wrong?" className="mt-1 min-h-[100px]" />
       </div>
     </div>
   );

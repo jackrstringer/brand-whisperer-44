@@ -129,6 +129,13 @@ Return ONLY a valid JSON object matching this exact structure:
     "overall_aesthetic": "",
     "packaging_notes": ""
   },
+  "cross_sell_recommendations": [
+    {
+      "if_buys": "Product A name",
+      "then_show": "Product B name",
+      "reasoning": "Why this pairing makes sense based on product complementarity, usage patterns, or customer behavior"
+    }
+  ],
   "research_confidence": "",
   "research_notes": "",
   "sources_consulted": []
