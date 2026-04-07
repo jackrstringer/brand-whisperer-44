@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Trash2, Plus, X, Loader2 } from "lucide-react";
 import ReanalyzeBrand from "@/components/brand/ReanalyzeBrand";
+import BrandIntelligenceTab from "@/components/brand/BrandIntelligenceTab";
 import AssetManager from "@/components/brand/AssetManager";
 import ProductManager from "@/components/brand/ProductManager";
 import KlaviyoSetup from "@/components/brand/KlaviyoSetup";
