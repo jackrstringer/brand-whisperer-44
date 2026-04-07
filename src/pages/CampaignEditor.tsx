@@ -94,7 +94,7 @@ export default function CampaignEditor() {
   const [pinnedAssetUrls, setPinnedAssetUrls] = useState<string[]>([]);
   const [canUndo, setCanUndo] = useState(false);
   const [redoStack, setRedoStack] = useState<string[]>([]);
-  const ideatePayloadRef = useRef<{ realPrompt: string; displayText: string } | null>(null);
+  const ideatePayloadRef = useRef<{ realPrompt: string; displayText: string; attachments?: File[] } | null>(null);
   const [ideateMessageId, setIdeateMessageId] = useState<string | null>(null); // tracks which variant msg is currently generating
   const [ideateActive, setIdeateActive] = useState(false); // true while an ideate request is in flight (before variants arrive)
   const [activeVersionIndex, setActiveVersionIndex] = useState<number | null>(null); // null = latest
@@ -711,11 +711,12 @@ export default function CampaignEditor() {
         ? `${chatInput.trim()}${chatInput.trim() ? "\n" : ""}[${chatAttachments.length} image${chatAttachments.length > 1 ? "s" : ""} attached]`
         : chatInput.trim();
 
-    const attachedFiles = ideateOverride ? [] : [...chatAttachments];
+    const attachedFiles = ideateOverride?.attachments ? [...ideateOverride.attachments] : [...chatAttachments];
+    // Always clear chat input and attachments
+    setChatInput("");
+    setChatAttachments([]);
+    setChatAttachmentPreviews(prev => { prev.forEach(u => URL.revokeObjectURL(u)); return []; });
     if (!ideateOverride) {
-      setChatInput("");
-      setChatAttachments([]);
-      setChatAttachmentPreviews(prev => { prev.forEach(u => URL.revokeObjectURL(u)); return []; });
       setSelectedElementContext(null);
     }
     setSending(true);
@@ -725,8 +726,9 @@ export default function CampaignEditor() {
     setActiveVersionIndex(null);
     if (!ideateOverride) { setIdeateMessageId(null); setIdeateActive(false); }
 
-    // Don't show a user message bubble for ideate requests
-    if (!ideateOverride) {
+    // Show user message bubble — for ideate overrides, show the clean display text
+    const showUserBubble = !ideateOverride || /^(💬|🔄|💡)/.test(ideateOverride.displayText);
+    if (showUserBubble) {
       setMessages((prev) => [
         ...prev,
         { id: crypto.randomUUID(), campaign_id: campaignId, role: "user", content: displayContent, created_at: new Date().toISOString() },
@@ -1715,16 +1717,16 @@ export default function CampaignEditor() {
     const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
     const realPrompt = `[Visual comment on email design]${elCtx}\n\n${body}`;
 
+    let screenshotFile: File | undefined;
     if (screenshot) {
       const blob = await fetch(screenshot).then(r => r.blob());
-      const file = new File([blob], `comment-context-${Date.now()}.jpg`, { type: 'image/jpeg' });
-      setChatAttachments([file]);
+      screenshotFile = new File([blob], `comment-context-${Date.now()}.jpg`, { type: 'image/jpeg' });
     }
 
-    setChatInput(realPrompt);
     ideatePayloadRef.current = {
       realPrompt,
       displayText: `💬 ${body}`,
+      attachments: screenshotFile ? [screenshotFile] : undefined,
     };
 
     setTimeout(() => {
@@ -1750,16 +1752,16 @@ export default function CampaignEditor() {
     const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
     const realPrompt = `[Swap request on email design]${elCtx}\n\nAutomatically swap this specific element with a better alternative. If it's text, replace it with new copy. If it's an image, swap it with a different image from the brand assets. Make the change directly without asking. IMPORTANT: Only modify the targeted element described above — do not change surrounding elements.`;
 
+    let screenshotFile: File | undefined;
     if (screenshot) {
       const blob = await fetch(screenshot).then(r => r.blob());
-      const file = new File([blob], `swap-context-${Date.now()}.jpg`, { type: 'image/jpeg' });
-      setChatAttachments([file]);
+      screenshotFile = new File([blob], `swap-context-${Date.now()}.jpg`, { type: 'image/jpeg' });
     }
 
-    setChatInput(realPrompt);
     ideatePayloadRef.current = {
       realPrompt,
       displayText: "🔄 Swap element",
+      attachments: screenshotFile ? [screenshotFile] : undefined,
     };
 
     setTimeout(() => {
@@ -1785,16 +1787,16 @@ export default function CampaignEditor() {
     const elCtx = elementInfo ? buildElementContext({ ...pin, elementInfo }) : '';
     const realPrompt = `[Ideate request on email design]${elCtx}\n\nGenerate 5 alternative options for this specific element. If it's text (heading, body copy, CTA), generate text alternatives. If it's an image, suggest different image compositions or styles. Present these as variant options the user can select from. IMPORTANT: Only generate alternatives for the targeted element described above.`;
 
+    let screenshotFile: File | undefined;
     if (screenshot) {
       const blob = await fetch(screenshot).then(r => r.blob());
-      const file = new File([blob], `ideate-context-${Date.now()}.jpg`, { type: 'image/jpeg' });
-      setChatAttachments([file]);
+      screenshotFile = new File([blob], `ideate-context-${Date.now()}.jpg`, { type: 'image/jpeg' });
     }
 
-    setChatInput(realPrompt);
     ideatePayloadRef.current = {
       realPrompt,
       displayText: "💡 Ideate: Generate options",
+      attachments: screenshotFile ? [screenshotFile] : undefined,
     };
     setIdeateActive(true);
 
