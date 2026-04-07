@@ -4,10 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Plus, ArrowRight, Trash2, Copy, Timer } from "lucide-react";
+import { Plus, ArrowRight, Trash2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import type { Brand, Campaign } from "@/lib/types";
 import { useAuth } from "@/hooks/useAuth";
+import { useMultiSelect } from "@/hooks/useMultiSelect";
+import { CampaignBulkBar } from "@/components/campaign/CampaignBulkBar";
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -38,7 +40,6 @@ function GenTimer({ campaign }: { campaign: any }) {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  // Show live timer if generating, otherwise show stored duration
   if (isGenerating) {
     return <span className="text-[10px] tabular-nums text-yellow-400 font-mono">{fmt(elapsed)}</span>;
   }
@@ -46,6 +47,13 @@ function GenTimer({ campaign }: { campaign: any }) {
     return <span className="text-[10px] tabular-nums text-muted-foreground font-mono">{fmt(campaign.generation_duration_secs)}</span>;
   }
   return null;
+}
+
+function formatDateTime(dateStr: string) {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) +
+    " · " +
+    d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
 export default function CampaignsList() {
@@ -56,7 +64,9 @@ export default function CampaignsList() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
-  const [showTimers, setShowTimers] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+
+  const { selectedIds, handleSelect, clearSelection } = useMultiSelect(campaigns);
 
   useEffect(() => {
     if (!brandId) return;
@@ -81,10 +91,7 @@ export default function CampaignsList() {
       .insert({ brand_id: brandId, name: "Untitled Campaign", status: "draft" })
       .select()
       .single();
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
+    if (error) { toast.error(error.message); return; }
     navigate(`/brands/${brandId}/campaigns/${(data as Campaign).id}`);
   };
 
@@ -115,14 +122,48 @@ export default function CampaignsList() {
       .insert(cloneData)
       .select()
       .single();
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
+    if (error) { toast.error(error.message); return; }
     const cloned = data as Campaign;
     setCampaigns(prev => [cloned, ...prev]);
     toast.success("Campaign cloned");
     navigate(`/brands/${brandId}/campaigns/${cloned.id}`);
+  };
+
+  // Bulk actions
+  const bulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    for (const id of ids) {
+      await supabase.from("campaigns").delete().eq("id", id);
+    }
+    setCampaigns(prev => prev.filter(c => !selectedIds.has(c.id)));
+    clearSelection();
+    setBulkDeleteOpen(false);
+    toast.success(`${ids.length} campaign${ids.length > 1 ? "s" : ""} deleted`);
+  };
+
+  const bulkClone = async () => {
+    if (!brandId || !user) return;
+    const toClone = campaigns.filter(c => selectedIds.has(c.id));
+    const cloned: Campaign[] = [];
+    for (const campaign of toClone) {
+      const cloneData: any = {
+        brand_id: brandId,
+        name: `${campaign.name} (clone)`,
+        status: "draft",
+        brief: campaign.brief,
+        goal: campaign.goal,
+        extra_copy: campaign.extra_copy ?? null,
+        speed_mode: campaign.speed_mode ?? "normal",
+        reference_campaign_ids: campaign.reference_campaign_ids,
+        product_ids: Array.isArray(campaign.product_ids) && campaign.product_ids.length > 0 ? campaign.product_ids : null,
+        pinned_asset_urls: Array.isArray(campaign.pinned_asset_urls) && campaign.pinned_asset_urls.length > 0 ? campaign.pinned_asset_urls : null,
+      };
+      const { data, error } = await supabase.from("campaigns").insert(cloneData).select().single();
+      if (!error && data) cloned.push(data as Campaign);
+    }
+    setCampaigns(prev => [...cloned, ...prev]);
+    clearSelection();
+    toast.success(`${cloned.length} campaign${cloned.length > 1 ? "s" : ""} cloned`);
   };
 
   if (loading) {
@@ -137,18 +178,9 @@ export default function CampaignsList() {
     <div className="p-6 md:p-12">
       <div className="flex items-center justify-between mb-8 max-w-3xl">
         <h1 className="text-2xl font-semibold">{brand?.name || "Brand"}</h1>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowTimers(t => !t)}
-            className={`p-1.5 rounded transition-colors ${showTimers ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground"}`}
-            title="Toggle generation timers"
-          >
-            <Timer className="w-3.5 h-3.5" />
-          </button>
-          <Button onClick={createCampaign} className="bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all">
-            <Plus className="w-4 h-4 mr-1" /> New Campaign
-          </Button>
-        </div>
+        <Button onClick={createCampaign} className="bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all">
+          <Plus className="w-4 h-4 mr-1" /> New Campaign
+        </Button>
       </div>
 
       {campaigns.length === 0 ? (
@@ -160,43 +192,66 @@ export default function CampaignsList() {
         </div>
       ) : (
         <div className="max-w-3xl space-y-2">
-          {campaigns.map((c) => (
-            <div
-              key={c.id}
-              className="flex items-center justify-between p-4 rounded-lg border border-border bg-card hover:border-primary/30 transition-colors cursor-pointer"
-              onClick={() => navigate(`/brands/${brandId}/campaigns/${c.id}`)}
-            >
-              <div className="flex items-center gap-4">
-                <span className="text-sm font-medium">{c.name}</span>
-                <Badge className={statusColors[c.status] || statusColors.draft}>
-                  {c.status}
-                </Badge>
-                {showTimers && <GenTimer campaign={c} />}
+          {campaigns.map((c, index) => {
+            const isSelected = selectedIds.has(c.id);
+            return (
+              <div
+                key={c.id}
+                className={`flex items-center justify-between p-4 rounded-lg border transition-colors cursor-pointer ${
+                  isSelected
+                    ? "border-primary bg-primary/5"
+                    : "border-border bg-card hover:border-primary/30"
+                }`}
+                onClick={(e) => {
+                  if (e.shiftKey || e.metaKey || e.ctrlKey || selectedIds.size > 0) {
+                    e.preventDefault();
+                    handleSelect(c.id, index, e);
+                  } else {
+                    navigate(`/brands/${brandId}/campaigns/${c.id}`);
+                  }
+                }}
+              >
+                <div className="flex items-center gap-4 min-w-0">
+                  <span className="text-sm font-medium truncate">{c.name}</span>
+                  <Badge className={statusColors[c.status] || statusColors.draft}>
+                    {c.status}
+                  </Badge>
+                  <GenTimer campaign={c} />
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {formatDateTime(c.created_at)}
+                  </span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); cloneCampaign(c); }}
+                    className="p-1.5 rounded text-muted-foreground hover:text-primary transition-colors"
+                    title="Clone campaign"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); }}
+                    className="p-1.5 rounded text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-muted-foreground">
-                  {new Date(c.created_at).toLocaleDateString()}
-                </span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); cloneCampaign(c); }}
-                  className="p-1.5 rounded text-muted-foreground hover:text-primary transition-colors"
-                  title="Clone campaign"
-                >
-                  <Copy className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); }}
-                  className="p-1.5 rounded text-muted-foreground hover:text-destructive transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-                <ArrowRight className="w-4 h-4 text-muted-foreground" />
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
+      {/* Bulk action bar */}
+      <CampaignBulkBar
+        count={selectedIds.size}
+        onDelete={() => setBulkDeleteOpen(true)}
+        onClone={bulkClone}
+        onClearSelection={clearSelection}
+      />
+
+      {/* Single delete dialog */}
       <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <DialogContent>
           <DialogHeader>
@@ -206,6 +261,20 @@ export default function CampaignsList() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
             <Button variant="destructive" onClick={handleDelete}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk delete dialog */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {selectedIds.size} campaign{selectedIds.size > 1 ? "s" : ""}?</DialogTitle>
+            <DialogDescription>This will permanently delete the selected campaigns and all their data.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={bulkDelete}>Delete {selectedIds.size}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
