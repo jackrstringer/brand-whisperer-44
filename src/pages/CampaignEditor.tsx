@@ -2884,7 +2884,7 @@ export default function CampaignEditor() {
       bar.querySelector('.sec-del').addEventListener('click', function(e){
         e.stopPropagation();
         el.remove();
-        syncHtml();
+        syncHtmlImmediate();
         window.parent.postMessage({ type: 'sectionDeleted', sectionName: sec.name }, '*');
       });
     });
