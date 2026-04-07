@@ -2880,7 +2880,7 @@ export default function CampaignEditor() {
     });
     var elements = [];
     filtered.forEach(function(el){
-      elements.push({ tagName: el.tagName, text: (el.textContent || '').trim().slice(0, 100) });
+      elements.push({ tagName: el.tagName, text: (el.textContent || '').trim().slice(0, 100), outerHTML: (el.outerHTML || '').slice(0, 1000) });
       el.classList.add('el-selected');
     });
     if(!isPreview && elements.length > 0){
