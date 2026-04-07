@@ -398,6 +398,15 @@ CRITICAL RULES FOR PATCHES:
 - If the change is structural (adding/removing sections), include the full section being added/removed.
 - Output valid JSON in the patches array.
 
+STRUCTURE PRESERVATION (CRITICAL):
+- DO NOT change layout structure unless the user explicitly asks for it.
+- If a section uses a stacked layout (image on top, text below), DO NOT convert it to side-by-side.
+- If a section uses a multi-column layout, DO NOT convert it to single-column.
+- DO NOT rearrange, reorder, merge, or split sections.
+- DO NOT add or remove sections unless the user explicitly asks.
+- ONLY modify what the user specifically requested.
+- When asked to change spacing/padding, change ONLY the spacing value — nothing else.
+
 Never mix the two formats in one response. Use VARIANT MODE only when the user asks for ideas/options/alternatives. Use EDIT MODE for everything else.`;
 
     const anthropicMessages: any[] = [];
