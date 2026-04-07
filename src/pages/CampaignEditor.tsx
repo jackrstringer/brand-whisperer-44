@@ -3383,33 +3383,21 @@ export default function CampaignEditor() {
             {/* Comment mode indicator */}
             {commentMode && (
               <div
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium shadow-lg"
                 style={{
                   position: 'absolute',
                   top: 12,
                   left: '50%',
                   transform: 'translateX(-50%)',
                   zIndex: 70,
+                  background: 'rgba(99,102,241,0.95)',
+                  color: 'white',
+                  backdropFilter: 'blur(8px)',
                 }}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium shadow-lg"
-                style2="background: rgba(99,102,241,0.95); color: white;"
               >
-                <div
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium shadow-lg"
-                  style={{
-                    position: 'absolute',
-                    top: 12,
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    zIndex: 70,
-                    background: 'rgba(99,102,241,0.95)',
-                    color: 'white',
-                    backdropFilter: 'blur(8px)',
-                  }}
-                >
-                  <MessageCircle className="w-3 h-3" />
-                  Comment Mode
-                  <span className="opacity-60 ml-1">Press C or Esc to exit</span>
-                </div>
+                <MessageCircle className="w-3 h-3" />
+                Comment Mode
+                <span className="opacity-60 ml-1">Press C or Esc to exit</span>
               </div>
             )}
             {/* Comment pins overlay */}
