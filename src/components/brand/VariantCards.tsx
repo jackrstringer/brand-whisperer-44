@@ -20,6 +20,11 @@ function extractImageUrl(variant: VariantOption): string | null {
   return null;
 }
 
+/** Check if a variant is a grouped variant with multiple items */
+function isGroupedVariant(variant: VariantOption): boolean {
+  return !!(variant.items && variant.items.length > 1);
+}
+
 interface VariantCardsProps {
   variantData: VariantData;
   onApply: (variant: VariantOption, index: number) => void;
@@ -35,6 +40,7 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
   const hasApplied = variantData.applied_index !== null;
 
   const isImageMode = variantData.variants.length > 0 && variantData.variants.every(v => isImageVariant(v));
+  const isGroupMode = variantData.variants.length > 0 && variantData.variants.some(v => isGroupedVariant(v));
 
   if (isImageMode) {
     return (
@@ -101,6 +107,81 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
             <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Generating…</span>
           ) : (
             "Generate More →"
+            )}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Grouped variant mode — each card shows multiple sub-items
+  if (isGroupMode) {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-foreground">{variantData.message}</p>
+        <div
+          className="space-y-2"
+          onMouseLeave={() => {
+            setHoveringIndex(null);
+            onPreviewClear?.();
+          }}
+        >
+          {variantData.variants.map((v, i) => {
+            const wasApplied = hasApplied && variantData.applied_index === i;
+            const isHovering = hoveringIndex === i;
+            const interactive = !disabled && !wasApplied;
+            const items = v.items || [];
+
+            return (
+              <button
+                key={i}
+                onClick={() => interactive && onApply(v, i)}
+                onMouseEnter={() => {
+                  if (!interactive) return;
+                  setHoveringIndex(i);
+                  onPreview?.(v, i);
+                }}
+                disabled={!interactive}
+                className={`w-full text-left rounded-lg border transition-all ${
+                  wasApplied
+                    ? "border-primary/50 bg-primary/10"
+                    : isHovering
+                    ? "border-primary/30 bg-primary/5"
+                    : "border-border/40 bg-card hover:bg-muted/30"
+                } ${interactive ? "cursor-pointer" : "cursor-default"}`}
+              >
+                {/* Card header */}
+                <div className="flex items-center justify-between px-3 py-2 border-b border-border/20">
+                  <span className="text-[11px] font-semibold text-foreground">{v.label}</span>
+                  {wasApplied && (
+                    <span className="flex items-center gap-1 text-[10px] text-primary">
+                      <Check className="w-3 h-3" /> Applied
+                    </span>
+                  )}
+                </div>
+                {/* Sub-items */}
+                <div className="divide-y divide-border/15">
+                  {items.map((item, j) => (
+                    <div key={j} className="px-3 py-1.5">
+                      <span className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">{item.label}</span>
+                      <p className="text-xs text-foreground leading-snug mt-0.5">{item.preview}</p>
+                    </div>
+                  ))}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        {onMore && (
+          <button
+            disabled={disabled || loadingMore}
+            onClick={onMore}
+            className="text-[11px] text-primary hover:text-primary/80 transition-colors mt-1 disabled:opacity-40"
+          >
+            {loadingMore ? (
+              <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Generating…</span>
+            ) : (
+              "Generate More →"
             )}
           </button>
         )}
