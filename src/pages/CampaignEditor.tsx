@@ -21,7 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Campaign, ChatMessage, VariantOption } from "@/lib/types";
 import VariantCards from "@/components/brand/VariantCards";
 import { captureEmailScreenshots } from "@/lib/visualQaCapture";
-import CommentOverlay, { type CommentThread, type CommentAuthor, type CommentElementInfo, type ThreadComment, COMMENT_CURSOR_SVG } from "@/components/campaign/CommentOverlay";
+import CommentOverlay, { type CommentThread, type CommentAuthor, type CommentElementInfo, COMMENT_CURSOR_SVG } from "@/components/campaign/CommentOverlay";
 import html2canvas from "html2canvas";
 
 async function uploadChatImages(files: File[], brandId: string, campaignId: string): Promise<string[]> {
