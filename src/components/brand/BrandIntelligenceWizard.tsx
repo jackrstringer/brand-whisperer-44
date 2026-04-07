@@ -212,7 +212,7 @@ export default function BrandIntelligenceWizard({ brandId, brandName, domain, ex
     setSurvey(merged);
   }, []);
 
-  // Start research on mount if needed
+  // Start research when phase transitions to "researching"
   useEffect(() => {
     if (phase !== "researching") {
       // Already have research, prefill
@@ -231,8 +231,11 @@ export default function BrandIntelligenceWizard({ brandId, brandName, domain, ex
 
     (async () => {
       try {
+        // Also persist the confirmed domain to the brands table
+        await supabase.from("brands").update({ website_url: confirmedDomain }).eq("id", brandId);
+
         const { data, error } = await supabase.functions.invoke("research-brand", {
-          body: { brand_id: brandId, brand_name: brandName, domain: domain || brandName },
+          body: { brand_id: brandId, brand_name: brandName, domain: confirmedDomain || brandName },
         });
         if (cancelled) return;
         clearInterval(progressInterval);
@@ -251,7 +254,7 @@ export default function BrandIntelligenceWizard({ brandId, brandName, domain, ex
     })();
 
     return () => { cancelled = true; clearInterval(progressInterval); };
-  }, [phase, brandId, brandName, domain, prefillSurvey, existingIntel]);
+  }, [phase, brandId, brandName, confirmedDomain, prefillSurvey, existingIntel]);
 
   const updateSurvey = (updates: Partial<SurveyData>) => setSurvey(prev => ({ ...prev, ...updates }));
 
