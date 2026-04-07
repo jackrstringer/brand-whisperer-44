@@ -151,7 +151,7 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
                 } ${interactive ? "cursor-pointer" : "cursor-default"}`}
               >
                 {/* Card header */}
-                <div className="flex items-center justify-between px-3 py-2 border-b border-border/20">
+                <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border/20">
                   <span className="text-[11px] font-semibold text-foreground">{v.label}</span>
                   {wasApplied && (
                     <span className="flex items-center gap-1 text-[10px] text-primary">
@@ -159,12 +159,12 @@ export default function VariantCards({ variantData, onApply, onPreview, onPrevie
                     </span>
                   )}
                 </div>
-                {/* Sub-items */}
-                <div className="divide-y divide-border/15">
+                {/* Sub-items — inline layout */}
+                <div className="px-2.5 py-1.5 space-y-0.5">
                   {items.map((item, j) => (
-                    <div key={j} className="px-3 py-1.5">
-                      <span className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">{item.label}</span>
-                      <p className="text-xs text-foreground leading-snug mt-0.5">{item.preview}</p>
+                    <div key={j} className="flex gap-1.5 items-baseline">
+                      <span className="text-[9px] font-semibold text-primary uppercase tracking-wider shrink-0">{item.label}</span>
+                      <p className="text-xs text-foreground leading-snug">{item.preview}</p>
                     </div>
                   ))}
                 </div>
