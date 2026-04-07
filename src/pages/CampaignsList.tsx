@@ -65,8 +65,42 @@ export default function CampaignsList() {
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<Campaign | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [showTimers, setShowTimers] = useState(false);
+  const [timersLoaded, setTimersLoaded] = useState(false);
 
   const { selectedIds, handleSelect, clearSelection } = useMultiSelect(campaigns);
+
+  // Load timer preference from user_preferences
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("user_preferences")
+      .select("preferences")
+      .eq("user_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        const prefs = data?.preferences as any;
+        if (prefs?.show_campaign_timers) setShowTimers(true);
+        setTimersLoaded(true);
+      });
+  }, [user]);
+
+  const toggleTimers = async () => {
+    const next = !showTimers;
+    setShowTimers(next);
+    if (!user) return;
+    const { data: existing } = await supabase
+      .from("user_preferences")
+      .select("id, preferences")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const prefs = { ...((existing?.preferences as any) || {}), show_campaign_timers: next };
+    if (existing) {
+      await supabase.from("user_preferences").update({ preferences: prefs }).eq("id", existing.id);
+    } else {
+      await supabase.from("user_preferences").insert({ user_id: user.id, preferences: prefs });
+    }
+  };
 
   useEffect(() => {
     if (!brandId) return;
