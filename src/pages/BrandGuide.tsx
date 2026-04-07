@@ -36,8 +36,21 @@ export default function BrandGuide() {
     if (!iframe || !html) return;
     const doc = iframe.contentDocument;
     if (!doc) return;
+
+    // Inject CSS overrides to cap cover/title section height and kill 100vh
+    const fixCss = `<style>
+      /* Fix oversized cover/title pages */
+      section:first-of-type, .cover, [class*="cover"], [class*="hero"], header:first-of-type {
+        min-height: unset !important;
+        max-height: 420px !important;
+        height: auto !important;
+      }
+      * { min-height: unset !important; }
+      html, body { height: auto !important; min-height: unset !important; }
+    </style>`;
+
     doc.open();
-    doc.write(html);
+    doc.write(html.replace("</head>", fixCss + "</head>"));
     doc.close();
 
     const poll = setInterval(() => {
