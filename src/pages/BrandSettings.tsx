@@ -110,6 +110,7 @@ export default function BrandSettings() {
       <Tabs defaultValue="info" className="space-y-6">
         <TabsList className="flex-wrap">
           <TabsTrigger value="info">Info</TabsTrigger>
+          <TabsTrigger value="intelligence">Intelligence</TabsTrigger>
           <TabsTrigger value="assets">Assets</TabsTrigger>
           <TabsTrigger value="products">Products</TabsTrigger>
           <TabsTrigger value="instructions">Instructions</TabsTrigger>
