@@ -63,14 +63,6 @@ const SUBSCRIPTION_PLATFORMS = ["Recharge", "Skio", "Stay", "Bold", "Other"];
 
 const REPLENISHMENT_OPTIONS = ["30 days", "60 days", "90 days", "Varies"];
 
-const FREQUENCY_OPTIONS = ["Daily", "3–4x/week", "2x/week", "Weekly", "Less than weekly"];
-
-const CAMPAIGN_TYPES = [
-  "Promotional/sale", "Educational", "Brand story", "Product launch",
-  "Seasonal", "Winback", "Post-purchase",
-];
-
-const EMAIL_GOALS = ["Revenue per send", "List growth", "Retention & LTV", "Balanced"];
 
 function defaultSurvey(): SurveyData {
   return {
