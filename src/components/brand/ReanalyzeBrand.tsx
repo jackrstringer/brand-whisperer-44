@@ -386,14 +386,15 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
     return (
       <div className="space-y-4">
         <div>
-          <h3 className="text-sm font-medium mb-1">Re-analyze Brand</h3>
+          <h3 className="text-sm font-medium mb-1">Re-process Brand</h3>
           <p className="text-xs text-muted-foreground mb-4">
-            Re-run the visual audit and regenerate the brand guide using the existing reference images. 
-            This updates the system prompt and design system without re-uploading anything.
+            Re-run the full brand pipeline using existing reference images and assets — visual audit, brand guide regeneration,
+            {websiteUrl ? " and AI intelligence research." : " (add a website URL in the Info tab to also run AI research)."}
+            {" "}No re-uploading needed.
           </p>
         </div>
         <Button onClick={startReanalysis} variant="outline">
-          <RefreshCw className="w-4 h-4 mr-1.5" /> Re-analyze Brand
+          <RefreshCw className="w-4 h-4 mr-1.5" /> Re-process Brand
         </Button>
       </div>
     );
