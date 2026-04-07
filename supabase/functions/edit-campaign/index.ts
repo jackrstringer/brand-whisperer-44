@@ -615,8 +615,10 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
                 }
 
                 if (!silent) {
+                  const userContent = displayMessage || message;
+                  const userToolCalls = message !== userContent ? { hidden_prompt: message } : undefined;
                   await supabase.from("chat_messages").insert([
-                    { campaign_id: campaignId, role: "user", content: message },
+                    { campaign_id: campaignId, role: "user", content: userContent, ...(userToolCalls ? { tool_calls: userToolCalls } : {}) },
                     { campaign_id: campaignId, role: "assistant", content: introText, tool_calls: { type: "variants", data: { message: introText, variants: allVariants, applied_index: null } } },
                   ]);
                 }
