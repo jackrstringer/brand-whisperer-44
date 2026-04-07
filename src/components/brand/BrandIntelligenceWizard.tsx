@@ -288,6 +288,41 @@ export default function BrandIntelligenceWizard({ brandId, brandName, domain, ex
     }
   };
 
+  // PHASE: Confirm URL
+  if (phase === "confirm_url") {
+    const handleStartResearch = () => {
+      if (!confirmedDomain.trim()) {
+        toast.error("Please enter your store URL so we can research your brand.");
+        return;
+      }
+      setPhase("researching");
+    };
+
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-6 p-8 max-w-md mx-auto">
+        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+          <Sparkles className="w-8 h-8 text-primary" />
+        </div>
+        <h2 className="text-xl font-semibold text-center">Let's research your brand</h2>
+        <p className="text-sm text-muted-foreground text-center">
+          Confirm your store URL so our AI can analyze your products, positioning, and market.
+        </p>
+        <div className="w-full space-y-2">
+          <Label>Store URL</Label>
+          <Input
+            value={confirmedDomain}
+            onChange={(e) => setConfirmedDomain(e.target.value)}
+            placeholder="yourstore.com"
+            onKeyDown={(e) => e.key === "Enter" && handleStartResearch()}
+          />
+        </div>
+        <Button onClick={handleStartResearch} className="w-full" disabled={!confirmedDomain.trim()}>
+          Start Research <ArrowRight className="w-4 h-4 ml-1" />
+        </Button>
+      </div>
+    );
+  }
+
   // PHASE: Researching
   if (phase === "researching") {
     return (
