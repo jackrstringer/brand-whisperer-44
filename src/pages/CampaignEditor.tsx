@@ -711,11 +711,12 @@ export default function CampaignEditor() {
         ? `${chatInput.trim()}${chatInput.trim() ? "\n" : ""}[${chatAttachments.length} image${chatAttachments.length > 1 ? "s" : ""} attached]`
         : chatInput.trim();
 
-    const attachedFiles = ideateOverride ? [] : [...chatAttachments];
+    const attachedFiles = ideateOverride?.attachments ? [...ideateOverride.attachments] : [...chatAttachments];
+    // Always clear chat input and attachments
+    setChatInput("");
+    setChatAttachments([]);
+    setChatAttachmentPreviews(prev => { prev.forEach(u => URL.revokeObjectURL(u)); return []; });
     if (!ideateOverride) {
-      setChatInput("");
-      setChatAttachments([]);
-      setChatAttachmentPreviews(prev => { prev.forEach(u => URL.revokeObjectURL(u)); return []; });
       setSelectedElementContext(null);
     }
     setSending(true);
