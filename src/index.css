@@ -4,46 +4,46 @@
 
 @layer base {
   :root {
-    --background: 0 0% 5.9%;
-    --foreground: 0 0% 100%;
+    --background: 0 0% 98%;
+    --foreground: 0 0% 9%;
 
-    --card: 0 0% 10.2%;
-    --card-foreground: 0 0% 100%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 9%;
 
-    --popover: 0 0% 10.2%;
-    --popover-foreground: 0 0% 100%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 9%;
 
-    --primary: 73 89% 58%;
-    --primary-foreground: 0 0% 5.9%;
+    --primary: 330 80% 60%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 0 0% 16.5%;
-    --secondary-foreground: 0 0% 100%;
+    --secondary: 0 0% 94%;
+    --secondary-foreground: 0 0% 20%;
 
-    --muted: 0 0% 16.5%;
-    --muted-foreground: 0 0% 63.9%;
+    --muted: 0 0% 94%;
+    --muted-foreground: 0 0% 45%;
 
-    --accent: 73 89% 58%;
-    --accent-foreground: 0 0% 5.9%;
+    --accent: 330 80% 60%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 62.8% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 16.5%;
-    --input: 0 0% 16.5%;
-    --ring: 73 89% 58%;
+    --border: 0 0% 89%;
+    --input: 0 0% 89%;
+    --ring: 330 80% 60%;
 
     --radius: 0.5rem;
 
-    --sidebar-background: 0 0% 5.9%;
-    --sidebar-foreground: 0 0% 100%;
-    --sidebar-primary: 73 89% 58%;
-    --sidebar-primary-foreground: 0 0% 5.9%;
-    --sidebar-accent: 0 0% 16.5%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 0 0% 16.5%;
-    --sidebar-ring: 73 89% 58%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 9%;
+    --sidebar-primary: 330 80% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 95%;
+    --sidebar-accent-foreground: 0 0% 20%;
+    --sidebar-border: 0 0% 89%;
+    --sidebar-ring: 330 80% 60%;
 
-    --surface: 0 0% 10.2%;
+    --surface: 0 0% 96%;
   }
 }
 
@@ -66,8 +66,8 @@
 }
 
 @keyframes ideate-pill-pulse {
-  0%, 100% { border-color: rgba(200, 241, 53, 0.2); box-shadow: 0 0 8px rgba(200, 241, 53, 0.05); }
-  50% { border-color: rgba(200, 241, 53, 0.4); box-shadow: 0 0 20px rgba(200, 241, 53, 0.1); }
+  0%, 100% { border-color: rgba(219, 39, 119, 0.2); box-shadow: 0 0 8px rgba(219, 39, 119, 0.05); }
+  50% { border-color: rgba(219, 39, 119, 0.4); box-shadow: 0 0 20px rgba(219, 39, 119, 0.1); }
 }
 
 @keyframes ideate-pill-shimmer {
