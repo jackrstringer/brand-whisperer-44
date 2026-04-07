@@ -257,9 +257,15 @@ Deno.serve(async (req) => {
     const campaign = campaignResult.data;
     if (campaignResult.error || !campaign) throw new Error("Campaign not found");
 
-    const [profileResult, brandResult] = await Promise.all([
+    const [profileResult, brandResult, productAssetsResult, brandAssetsResult] = await Promise.all([
       supabase.from("brand_profiles").select("system_prompt, brand_instructions, raw_extraction").eq("brand_id", campaign.brand_id).single(),
       supabase.from("brands").select("user_id").eq("id", campaign.brand_id).single(),
+      // Fetch product assets for any products linked to this campaign
+      Array.isArray(campaign.product_ids) && campaign.product_ids.length > 0
+        ? supabase.from("product_assets").select("url, bucket, description, product_id").in("product_id", campaign.product_ids)
+        : Promise.resolve({ data: [] }),
+      // Fetch brand-level assets (lifestyle, hero shots, etc.)
+      supabase.from("brand_assets").select("url, category, description").eq("brand_id", campaign.brand_id).limit(50),
     ]);
 
     const profile = profileResult.data;
