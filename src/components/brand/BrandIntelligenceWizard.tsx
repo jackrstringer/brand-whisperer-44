@@ -119,10 +119,6 @@ function prefillFromResearch(ai: any): Partial<SurveyData> {
       if (td.psychographic_profile) parts.push(td.psychographic_profile);
       s.target_demographic = parts.join(". ");
     }
-    if (bo.brand_tone) {
-      const words = bo.brand_tone.split(/[,;/]+/).map((w: string) => w.trim()).filter(Boolean);
-      s.brand_voice_words = [words[0] || "", words[1] || "", words[2] || ""];
-    }
   }
 
   const sm = ai.sales_model;
@@ -151,15 +147,12 @@ function prefillFromResearch(ai: any): Partial<SurveyData> {
     }
   }
 
-  const mi = ai.marketing_intelligence;
-  if (mi) {
-    if (mi.estimated_email_frequency) {
-      const f = mi.estimated_email_frequency.toLowerCase();
-      if (f.includes("daily")) s.send_frequency = "Daily";
-      else if (f.includes("3") || f.includes("4")) s.send_frequency = "3–4x/week";
-      else if (f.includes("2")) s.send_frequency = "2x/week";
-      else if (f.includes("week")) s.send_frequency = "Weekly";
-    }
+  // Prefill cross-sell paths from AI research
+  if (Array.isArray(ai.cross_sell_recommendations) && ai.cross_sell_recommendations.length > 0) {
+    s.cross_sell_paths = ai.cross_sell_recommendations.map((r: any) => ({
+      buy: r.if_buys || "",
+      show: r.then_show || "",
+    }));
   }
 
   return s;
