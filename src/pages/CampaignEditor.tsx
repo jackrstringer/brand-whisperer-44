@@ -1607,9 +1607,9 @@ export default function CampaignEditor() {
       const iframePanelLeft = iframeRect.left - panelRect.left;
       const iframePanelTop = iframeRect.top - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
 
-      // Convert panel coords to iframe content coords
-      const captureW = regionWidth ? regionWidth / scale + 100 : 500;
-      const captureH = regionHeight ? regionHeight / scale + 100 : 500;
+      // 400px square for point clicks, 200px padding around drag regions
+      const captureW = regionWidth ? regionWidth / scale + 200 : 400;
+      const captureH = regionHeight ? regionHeight / scale + 200 : 400;
       const iX = (centerX - iframePanelLeft) / scale - captureW / 2;
       const iY = (centerY - iframePanelTop) / scale - captureH / 2;
 
