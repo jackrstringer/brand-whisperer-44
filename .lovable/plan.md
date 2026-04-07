@@ -1,101 +1,71 @@
 
-Goal: fix two linked issues so the chat never re-exposes hidden AI prompts after reload, and multi-element ideate/swap truly behaves as a grouped edit instead of collapsing to headline-only options.
+Goal: make the editor always persist the true current manual state, even if you leave the campaign within about a second.
 
 What I found
-- The refresh bug is real: the UI shows a clean local bubble, but the backend still saves the raw hidden prompt into `chat_messages.content`. On reload, the page restores that raw content.
-- The current cleanup fallback is too narrow. It only strips a few prefixes, so prompts like `[Ideate request on ...]`, `Primary element HTML:`, and grouped region payloads can still leak through.
-- Grouped ideate is only half-implemented:
-  - `triggerSelectedElementIdeate` tries to ask for grouped `items`, but
-  - `handleCommentIdeate` / `handleCommentSwap` still say “this specific element” even for regions,
-  - and the `edit-campaign` system prompt only documents flat variants, so the model is being steered back toward single-field output.
-- Group apply/preview is not truly atomic yet. It currently replaces whatever item matches and silently skips misses, which breaks the “treat this as one cohesive group” behavior.
+- This is a client-side timing bug, not a backend/schema problem.
+- Manual edits are delayed twice right now:
+  1. inside the preview iframe, `syncHtml()` waits 1500ms before sending the latest HTML up
+  2. in the page, `CampaignEditor` waits another 800ms before saving to the database
+- So the real save path is over 2 seconds long.
+- If you type, swap an image, tweak styling, or delete/reorder something and then leave quickly, the iframe gets destroyed before it has posted the latest DOM. At that point the page has nothing real to flush, so it reloads the older chat-generated HTML.
+- Image swaps and most manual formatting actions use this same delayed iframe sync path, so they can all be lost the same way.
+- Manual edits also are not keeping the live variant snapshot aligned, which can make the campaign feel like it snaps back to the last AI-generated version.
 
 Implementation plan
 
-1. Make hidden prompts refresh-proof
-- Keep using clean chat bubbles in the UI, but persist both values:
-  - visible display text
-  - hidden raw prompt
-- Use the existing `tool_calls` JSON field on user chat rows for the hidden prompt metadata, so no schema change is needed.
-- Update the send flow so:
-  - AI still receives the raw prompt
-  - chat history stores clean visible text in `content`
-  - raw prompt is stored in metadata for internal reuse only
-- Update message restore logic so user messages can rehydrate a `hidden_content` value from metadata.
+1. Replace the current double-debounce autosave path with one save pipeline in `src/pages/CampaignEditor.tsx`.
+- Add a shared save helper that becomes the single source of truth for manual edits.
+- It should update local state immediately, update the pending-save ref immediately, and persist with only a short debounce.
 
-2. Close the leak for old and edge-case messages
-- Strengthen `cleanUserMessage` so legacy rows never show raw targeting/HTML blocks, even if they were already saved before the fix.
-- Cover all hidden-prompt prefixes, including ideate/swap/comment region payloads and `Primary element HTML`.
-- For legacy saved messages, render a safe fallback label instead of raw internals when needed.
+2. Refactor the injected iframe editor script to emit current HTML much faster.
+- Split the current `syncHtml()` into:
+  - serialize current clean HTML
+  - short debounced emit for typing
+  - immediate emit for non-typing actions
+- Reduce typing delay from 1500ms to a small idle window.
+- Emit immediately for image swaps, delete/duplicate/reorder, toolbar formatting, spacing/alignment/font changes, and other direct DOM edits.
 
-3. Unify grouped prompt building across edit mode and comment mode
-- Create one shared prompt-builder for single vs grouped element targeting.
-- Use it for:
-  - selected-element hotkey ideate/swap
-  - comment-mode ideate/swap
-- For grouped selections, the prompt should explicitly say:
-  - these elements are one contextual group
-  - every option must replace all selected elements together
-  - output must use grouped variants with an `items` array
-  - each item should map to the correct field type (headline, subheader/body, CTA, image, etc.)
-- Remove the current “specific element only” wording from grouped comment-region prompts.
+3. Add explicit leave/blur flushing.
+- Have the iframe flush its latest HTML on blur/focusout.
+- Add a parent-side “flush editor now” request before internal navigations from this screen, especially:
+  - back to campaigns
+  - Review & Send
+  - any other route change triggered inside the editor
+- Keep the current unmount cleanup, but make it flush real latest HTML instead of stale state.
 
-4. Teach the backend grouped variant mode explicitly
-- Update `supabase/functions/edit-campaign/index.ts` system instructions so variant mode supports two legal shapes:
-  - single option: `find` / `replace`
-  - grouped option: `items[]`
-- Add a hard rule: if the request targets multiple elements, do not return headline-only variants.
-- Require each `items[]` entry to include:
-  - exact live `find`
-  - `replace`
-  - `label`
-  - `preview`
-- Keep the grouped option cohesive so headline/subheader/CTA tone changes stay aligned.
+4. Stop relying on stale render closures during save.
+- Move latest campaign HTML/history/active-variant data into refs used by the save pipeline.
+- This prevents quick consecutive manual edits from being calculated against older state.
 
-5. Make grouped preview/apply truly atomic
-- Replace the current best-effort loop with a grouped resolver that:
-  - validates all items in the group
-  - previews/applies only if the whole group can be resolved
-  - aborts with a visible error if part of the group can’t be matched
-- Track grouped live replacements in variant metadata so hover/apply can keep working after one grouped option has already been applied.
-- Use that same live-target resolution for switching between grouped options, so they behave “just like normal” instead of only working once from the original state.
-
-6. Preserve hidden prompts for “Generate More”
-- Right now “Generate More” looks backward through visible messages, which loses the real grouped prompt.
-- Update it to prefer the stored hidden prompt metadata, so follow-up generation keeps the full group context instead of using the shortened display bubble.
+5. Keep variants in sync with manual edits.
+- When the active version is manually edited, sync that HTML back into the current variant snapshot before persistence.
+- That prevents the editor from restoring an older AI-generated version after re-entry.
 
 Files to update
 - `src/pages/CampaignEditor.tsx`
-  - persist/display hidden vs visible message text correctly
-  - improve legacy message cleaning
-  - unify grouped prompt creation
-  - fix comment-mode grouped ideate/swap
-  - make grouped preview/apply atomic
-  - use hidden prompt metadata for “Generate More”
-- `src/lib/types.ts`
-  - extend chat/variant local types for hidden prompt metadata and grouped live-target tracking
-- `supabase/functions/edit-campaign/index.ts`
-  - add first-class grouped variant schema/instructions
-  - store visible content + hidden prompt metadata for user rows
+  - refactor iframe edit serialization
+  - shorten autosave timing
+  - add blur/navigation flush
+  - unify manual save logic
+  - sync edited variant HTML with the live campaign state
 
 Technical details
 ```text
-User action
-  -> UI builds:
-       visible_text = clean label shown in chat
-       hidden_prompt = full targeting/context payload for AI
-  -> backend receives hidden_prompt for generation
-  -> chat row stores:
-       content = visible_text
-       tool_calls.hidden_prompt = hidden_prompt
-  -> reload restores visible text only
-  -> "Generate More" reuses hidden_prompt, not the bubble text
+Current:
+manual edit -> iframe waits 1500ms -> page waits 800ms -> save
+
+Problem:
+leave early -> latest DOM never reaches the page -> old HTML is what comes back
+
+Fixed:
+manual edit -> iframe emits quickly / on blur -> page updates immediately
+            -> short save debounce + explicit flush before leaving
 ```
 
-Validation checklist
-- Refresh after ideate/swap/comment and confirm no raw HTML/targeting prompt ever appears
-- Test legacy saved messages and confirm they render safely
-- Select headline + subheader + CTA, press ideate, and confirm each option card contains all three fields as one grouped option
-- Hover grouped cards and confirm preview updates all selected elements together
-- Click grouped cards and confirm apply updates all targeted elements together or fails atomically
-- Run the same grouped flow in comment mode, not just edit-mode selection
+Validation
+- Edit text and leave within 1 second; reopen and confirm the exact text persists.
+- Swap an image and leave immediately; reopen and confirm the new image persists.
+- Change manual styling and reopen; confirm it persists.
+- Delete/duplicate/reorder a section and reopen; confirm current layout persists.
+- Manually edit a generated version, leave, return, and confirm it does not revert to the last chat-generated snapshot.
+- Reload the browser after a quick manual edit and confirm the latest on-screen state is what reloads.
