@@ -1,67 +1,82 @@
 
 
-## Two Features: Selection-Aware Chat + Figma-Style Comment Mode
+## Plan: Precise Element Targeting for Comments + Clean Chat Display
 
-### Feature 1: Preserve Selection When Typing in Chat
+### Problem
+1. **Imprecise targeting**: The screenshot-only approach (400px square) gives the AI too much visual context without specifying which exact element the user clicked on. A CTA click captures surrounding images too, causing the AI to swap the wrong thing.
+2. **Ugly chat messages**: Comment prompts like `[Visual comment at position (234, 567)]...` appear raw in chat instead of using the clean ideate-style hidden prompt pattern.
 
-**Problem**: Clicking the chat textarea triggers the `handleOutsideClick` listener (line ~1520), which clears `selectedElementContext` and sends `clearSelection` to the iframe. The selection disappears before the user can type a message about it.
+### Solution
 
-**Fix**:
-1. **Guard the outside-click handler** (line ~1528): Add a check for the chat panel — if the click target is inside the right panel (chat area), skip deselection. The chat textarea, send button, and attachment area should all be excluded.
-2. **Guard the keyboard handler** (line ~1494): Currently returns early for `INPUT`/`TEXTAREA` — this is correct and already prevents Delete/Backspace from firing. But Escape in chat should also not deselect. Add a guard so Escape only deselects when focus is NOT in the chat area.
-3. **Keep the context chip visible** while typing — it already renders (line ~3641), this fix just ensures it stays populated.
+#### Part 1: Element-Level Precision via postMessage
 
-**Files**: `src/pages/CampaignEditor.tsx` — modify the `handleOutsideClick` useEffect (~line 1520) to exclude the chat panel container.
+Instead of relying solely on screenshot coordinates, query the iframe for the actual HTML element(s) at the click/drag location. This gives the AI both the visual context AND the specific element markup.
 
----
+**How it works:**
+- When placing a comment pin, send a `postMessage` to the iframe: `{ type: 'getElementAtPoint', x, y }` (for point clicks) or `{ type: 'getElementsInRegion', rect: {x,y,w,h} }` (for drag regions).
+- The iframe script uses `document.elementFromPoint(x, y)` or iterates elements to find those within the rect, then replies with `{ type: 'commentElementInfo', tagName, text, outerHTML, allElements: [...] }`.
+- Store this element info on the `CommentThread` object: `thread.pin.elementInfo?: { tagName: string; text: string; outerHTML: string; elements?: {tagName: string; text: string; outerHTML: string}[] }`.
+- When sending swap/ideate/comment prompts, include the element HTML alongside the screenshot. The prompt becomes: `"The user clicked on this specific element: <a class='btn'>Shop Now</a>. Here is a screenshot of the surrounding area for visual context."` This disambiguates between adjacent elements.
 
-### Feature 2: Figma-Style Comment Mode
+**Files**: `src/pages/CampaignEditor.tsx`
+- Add `getElementAtPoint` / `getElementsInRegion` postMessage types to the iframe script injection (around line ~2900 where the existing iframe script is).
+- Add a message listener for `commentElementInfo` responses.
+- Store element info on the thread's pin object.
+- Update `handleCommentSubmitNew`, `handleCommentSwap`, `handleCommentIdeate` to include element HTML in the prompt.
 
-**Overview**: Press `C` to enter comment mode. Click or click-drag on the preview to place a comment pin. A small bubble appears for typing. On submit, the system captures a screenshot of that area and sends it + the comment text to the edit AI. The AI response appears as a reply thread on that comment pin.
+#### Part 2: Clean Chat Display (Hidden Prompts)
 
-**State & Data Model**:
-- New state: `commentMode: boolean`, `comments: CommentPin[]`, `activeCommentId: string | null`
-- `CommentPin`: `{ id, x, y, width?, height?, text, screenshot?: string, aiReply?: string, status: 'draft' | 'pending' | 'resolved' }`
-- Comments are session-local (no DB persistence needed initially — they're ephemeral like Figma comment threads during editing)
+Use the existing `ideatePayloadRef` pattern for ALL comment-originated messages (not just ideate). The real prompt with coordinates, element HTML, and screenshot context is sent to the AI, but the chat shows a clean, short display message.
 
-**Interaction Flow**:
-1. **Toggle**: Press `C` when not focused on input → toggle `commentMode`. Show a subtle indicator ("Comment mode" badge near cursor or in toolbar).
-2. **Click to comment**: In comment mode, clicking on the preview panel places a pin at that coordinate. A small floating input bubble appears anchored to the pin.
-3. **Click-drag to comment**: Dragging draws a rectangular highlight (like marquee but for comments). On release, places a pin at the center of the rectangle. The drag region defines the screenshot capture area.
-4. **Screenshot capture**: Use `html2canvas` on the iframe content at the click/drag coordinates. For click: capture a ~500×500px region centered on the click point. For drag: capture the dragged region + ~50px padding on each side. Convert to JPEG data URL.
-5. **Submit comment**: When user types and presses Enter (or clicks send), construct a chat message that includes:
-   - The screenshot as an attached image (same pipeline as `chatAttachments`)
-   - The comment text prefixed with `[Visual comment at position X,Y]`
-   - Send via existing `sendMessage` flow
-6. **AI reply**: The AI response comes back through the normal streaming chat. Associate it with the comment pin by tracking which comment triggered the send. Display the reply in a small thread bubble anchored to the pin.
+**Display messages:**
+- New comment: `"💬 Comment: {user's text}"` (no coordinates, no element HTML shown)
+- Swap: `"🔄 Swap element"` (already done, but ensure it uses ideatePayloadRef)
+- Reply: `"💬 Reply: {user's text}"`
 
-**Screenshot Capture Implementation**:
-- Access `iframeRef.current.contentDocument.body`
-- Use `html2canvas` (already a dependency) to render a cropped region
-- For click: `{ x: clickX - 250, y: clickY - 250, width: 500, height: 500 }` (clamped to bounds)
-- For drag: the exact drag rectangle + 50px padding
-- Scale coordinates by `1/zoomScale` to get iframe-space coords
-- Output as JPEG data URL, add to chat as an attachment image
+**Implementation:**
+- In `handleCommentSubmitNew` and `handleCommentReply`: wrap the verbose prompt in `ideatePayloadRef` just like ideate does, with a clean `displayText`.
+- In `handleCommentSwap`: already shows "🔄 Auto-swap element" as the thread comment, but the chat message still shows the raw prompt. Route through `ideatePayloadRef` with `displayText: "🔄 Swap: Auto-replace element"`.
 
-**UI Components**:
-- **Comment pins**: Small numbered circles rendered as absolute-positioned overlays on the preview panel (same layer as marquee rect)
-- **Comment bubble**: A small popover anchored to the pin with a textarea + submit button
-- **Reply thread**: Below the comment text, show the AI's response in a slightly different style
-- **Toolbar indicator**: When comment mode is active, show a small "Comment Mode" badge or change cursor to crosshair
+**Files**: `src/pages/CampaignEditor.tsx` — modify the four comment handler functions to use `ideatePayloadRef`.
 
-**New file**: `src/components/campaign/CommentOverlay.tsx` — renders all comment pins and the active comment bubble on top of the preview panel.
+#### Part 3: Update CommentThread Type
 
-**Modified file**: `src/pages/CampaignEditor.tsx`:
-- Add `commentMode`, `comments`, `activeCommentId` state
-- Add `C` key handler in the keyboard shortcuts useEffect
-- In comment mode, override the pointer handlers on the preview panel to place pins instead of selecting elements
-- After comment submit, convert the comment into a chat message with screenshot attachment and send via `sendMessage`
-- Track which comment triggered a send to associate the AI reply
+**Files**: `src/components/campaign/CommentOverlay.tsx`
+- Extend the `CommentThread` pin type to include optional `elementInfo`.
+
+### Technical Details
+
+```text
+User clicks on CTA button in email
+         │
+         ▼
+  postMessage → iframe
+  { type: 'getElementAtPoint', x: 234, y: 567 }
+         │
+         ▼
+  iframe replies with:
+  { tagName: 'A', text: 'Shop Now', 
+    outerHTML: '<a href="..." class="btn">Shop Now</a>' }
+         │
+         ▼
+  Stored on thread.pin.elementInfo
+         │
+         ▼
+  AI prompt (hidden from chat):
+  "[Targeting <A> element: 'Shop Now']
+   Element HTML: <a href='...' class='btn'>Shop Now</a>
+   
+   Swap this element with a better alternative..."
+  + screenshot attachment for visual context
+         │
+         ▼
+  Chat display (visible): "🔄 Swap element"
+```
 
 ### Files Summary
 
-| File | Action |
-|------|--------|
-| `src/pages/CampaignEditor.tsx` | Modify: outside-click guard, keyboard handler for `C`, comment mode state + pointer overrides, comment-to-chat bridge |
-| `src/components/campaign/CommentOverlay.tsx` | Create: renders pins, active bubble, reply threads |
+| File | Changes |
+|------|---------|
+| `src/pages/CampaignEditor.tsx` | Add postMessage element query to iframe script; update all 4 comment handlers to include element info in prompts and use ideatePayloadRef for clean display |
+| `src/components/campaign/CommentOverlay.tsx` | Extend `CommentThread` pin type with optional `elementInfo` field |
 
