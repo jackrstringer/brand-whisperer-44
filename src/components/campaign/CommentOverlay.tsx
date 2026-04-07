@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { X, Check, CornerDownRight, Undo2 } from "lucide-react";
+import { X, Check, CornerDownRight, Undo2, RefreshCw, Lightbulb } from "lucide-react";
 
 /* ── Data model ──────────────────────────────────────────── */
 export interface CommentAuthor {
@@ -41,6 +41,8 @@ interface CommentOverlayProps {
   onResolve: (threadId: string) => void;
   onUnresolve: (threadId: string) => void;
   onCancelComposer: (threadId: string) => void;
+  onSwap?: (threadId: string) => void;
+  onIdeate?: (threadId: string) => void;
 }
 
 /* ── Spring animation keyframes ─────────────────────────── */
@@ -428,11 +430,15 @@ function ComposerPopover({
   zoom,
   onSubmit,
   onCancel,
+  onSwap,
+  onIdeate,
 }: {
   thread: CommentThread;
   zoom: number;
   onSubmit: (body: string) => void;
   onCancel: () => void;
+  onSwap?: () => void;
+  onIdeate?: () => void;
 }) {
   const [text, setText] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -442,6 +448,15 @@ function ComposerPopover({
   }, []);
 
   const hasText = text.trim().length > 0;
+
+  const actionBtnStyle: React.CSSProperties = {
+    width: 32, height: 32, borderRadius: 6,
+    background: "#F1F5F9", border: "1px solid #E2E8F0",
+    cursor: "pointer",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    color: "#64748B", flexShrink: 0,
+    transition: "all 0.12s ease",
+  };
 
   return (
     <div
@@ -463,6 +478,27 @@ function ComposerPopover({
         padding: 12,
       }}
     >
+      {/* Quick action buttons */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+        <button
+          onClick={onSwap}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "#DBEAFE"; e.currentTarget.style.borderColor = "#93C5FD"; e.currentTarget.style.color = "#3B82F6"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "#F1F5F9"; e.currentTarget.style.borderColor = "#E2E8F0"; e.currentTarget.style.color = "#64748B"; }}
+          style={actionBtnStyle}
+          title="Swap — auto-replace with a new option"
+        >
+          <RefreshCw size={14} />
+        </button>
+        <button
+          onClick={onIdeate}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "#FEF9C3"; e.currentTarget.style.borderColor = "#FDE047"; e.currentTarget.style.color = "#CA8A04"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "#F1F5F9"; e.currentTarget.style.borderColor = "#E2E8F0"; e.currentTarget.style.color = "#64748B"; }}
+          style={actionBtnStyle}
+          title="Ideate — generate options for this area"
+        >
+          <Lightbulb size={14} />
+        </button>
+      </div>
       <div
         style={{
           background: "#F8FAFC",
@@ -570,6 +606,8 @@ export default function CommentOverlay({
   onResolve,
   onUnresolve,
   onCancelComposer,
+  onSwap,
+  onIdeate,
 }: CommentOverlayProps) {
   const [hoveredPinId, setHoveredPinId] = useState<string | null>(null);
 
@@ -610,6 +648,8 @@ export default function CommentOverlay({
             zoom={zoom}
             onSubmit={(body) => onSubmitNew(composerThreadId, body)}
             onCancel={() => onCancelComposer(composerThreadId)}
+            onSwap={() => onSwap?.(composerThreadId)}
+            onIdeate={() => onIdeate?.(composerThreadId)}
           />
         );
       })()}
