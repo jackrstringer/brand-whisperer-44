@@ -15,9 +15,16 @@ export interface ThreadComment {
   time: string;
 }
 
+export interface CommentElementInfo {
+  tagName: string;
+  text: string;
+  outerHTML: string;
+  elements?: { tagName: string; text: string; outerHTML: string }[];
+}
+
 export interface CommentThread {
   id: string;
-  pin: { x: number; y: number; regionW?: number; regionH?: number };
+  pin: { x: number; y: number; regionW?: number; regionH?: number; elementInfo?: CommentElementInfo };
   comments: ThreadComment[];
   resolved: boolean;
   /** Transient: true while composer is open for a new pin not yet submitted */
