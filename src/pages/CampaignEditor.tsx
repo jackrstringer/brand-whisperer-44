@@ -1058,9 +1058,36 @@ export default function CampaignEditor() {
       return;
     }
 
-    // Grouped variant: apply all items' find/replace pairs
+    // Grouped variant: apply all items' find/replace pairs atomically
     let newHtml = html;
     if (variant.items && variant.items.length > 0) {
+      // Validate all items can be found before applying any
+      const missingItems = variant.items.filter(item => !item.find || !newHtml.includes(item.find));
+      if (missingItems.length > 0) {
+        // Try findLiveTarget-style resolution for grouped items
+        let resolved = true;
+        for (const item of variant.items) {
+          if (!item.find || !newHtml.includes(item.find)) {
+            // Check if any other variant's replace text is live for this item
+            const otherVariants = msg.variant_data.variants.filter(v => v.items);
+            let found = false;
+            for (const ov of otherVariants) {
+              const matchingItem = ov.items?.find(oi => oi.label === item.label);
+              if (matchingItem?.replace && newHtml.includes(matchingItem.replace)) {
+                newHtml = newHtml.replace(matchingItem.replace, item.replace);
+                found = true;
+                break;
+              }
+            }
+            if (!found) { resolved = false; break; }
+          }
+        }
+        if (!resolved) {
+          toast.error("Could not find all elements to replace — the content may have changed.");
+          return;
+        }
+      }
+      // Apply remaining items that matched directly
       for (const item of variant.items) {
         if (item.find && newHtml.includes(item.find)) {
           newHtml = newHtml.replace(item.find, item.replace);
