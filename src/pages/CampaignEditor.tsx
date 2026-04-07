@@ -116,7 +116,7 @@ export default function CampaignEditor() {
   const [activeVersionIndex, setActiveVersionIndex] = useState<number | null>(null); // null = latest
   const [matchProductColors, setMatchProductColors] = useState(false);
   const [selectedShopifyProducts, setSelectedShopifyProducts] = useState<SelectedShopifyProduct[]>([]);
-  const [selectedElementContext, setSelectedElementContext] = useState<{ tagName: string; text: string; outerHTML: string; isRegion?: boolean; elements?: { tagName: string; text: string }[] } | null>(null);
+  const [selectedElementContext, setSelectedElementContext] = useState<{ tagName: string; text: string; outerHTML: string; isRegion?: boolean; elements?: { tagName: string; text: string; outerHTML?: string }[] } | null>(null);
   const [designNotes, setDesignNotes] = useState("");
   const [clickupUrl, setClickupUrl] = useState("");
   const [clickupLoading, setClickupLoading] = useState(false);
