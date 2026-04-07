@@ -107,6 +107,7 @@ function TeardropPin({
       {/* Teardrop shape */}
       <button
         onClick={onClick}
+        onPointerDown={(e) => e.stopPropagation()}
         style={{
           width: 32,
           height: 32,
