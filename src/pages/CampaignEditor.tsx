@@ -2050,6 +2050,7 @@ export default function CampaignEditor() {
   const renderedWidth = Math.round(viewportWidth * zoomScale);
   const renderedHeight = Math.round(iframeContentHeight * zoomScale);
 
+  // When iframeOwnedHtmlRef is set, the iframe owns the live HTML — don't change srcdoc
   const displayHtml = previewHtml || (activeVersionIndex !== null ? allVersions[activeVersionIndex] : campaign?.html);
   const htmlForPreview = displayHtml
     ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls)
