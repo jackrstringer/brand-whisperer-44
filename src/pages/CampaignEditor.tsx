@@ -3597,15 +3597,8 @@ export default function CampaignEditor() {
               </Button>
               <Button
                 size="sm"
-                onClick={() => {
-                  if (pendingSaveRef.current) {
-                    const { html: h, history: hist, campaignId: cid, variantHtmls: vh } = pendingSaveRef.current;
-                    pendingSaveRef.current = null;
-                    if (inlineEditTimerRef.current) { clearTimeout(inlineEditTimerRef.current); inlineEditTimerRef.current = null; }
-                    const payload: any = { html: h, html_history: hist };
-                    if (vh) payload.variant_htmls = vh;
-                    supabase.from("campaigns").update(payload).eq("id", cid);
-                  }
+                onClick={async () => {
+                  await flushLatestManualState();
                   navigate(`/brands/${brandId}/campaigns/${campaignId}/qa`);
                 }}
                 className="active:scale-[0.98] transition-all"
