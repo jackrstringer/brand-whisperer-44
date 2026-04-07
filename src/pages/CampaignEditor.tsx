@@ -3482,6 +3482,23 @@ export default function CampaignEditor() {
                 />
               );
             })()}
+            {/* Comment drag rectangle */}
+            {commentDragRect && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: commentDragRect.x,
+                  top: commentDragRect.y,
+                  width: commentDragRect.w,
+                  height: commentDragRect.h,
+                  border: '1.5px dashed rgba(59,130,246,0.4)',
+                  background: 'rgba(59,130,246,0.06)',
+                  pointerEvents: 'none',
+                  zIndex: 50,
+                  borderRadius: 2,
+                }}
+              />
+            )}
             {/* Comment mode banner */}
             {commentMode && (
               <div
