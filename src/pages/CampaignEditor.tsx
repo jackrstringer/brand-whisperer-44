@@ -1447,7 +1447,7 @@ export default function CampaignEditor() {
     if (variantsToSave) payload.variant_htmls = variantsToSave;
 
     // 3. Persist and wait
-    const savePromise = supabase.from("campaigns").update(payload).eq("id", campaignId);
+    const savePromise = supabase.from("campaigns").update(payload).eq("id", campaignId).then();
     inflightSaveRef.current = savePromise;
     await savePromise;
     inflightSaveRef.current = null;
