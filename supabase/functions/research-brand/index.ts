@@ -180,7 +180,7 @@ Deno.serve(async (req) => {
             max_uses: 20,
           }
         ],
-        messages: [{ role: "user", content: buildUserPrompt(brand_name, domain || brand_name) }],
+        messages: [{ role: "user", content: buildUserPrompt(brand_name, domain) }],
       }),
     });
 
