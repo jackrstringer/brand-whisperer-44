@@ -31,7 +31,7 @@ export interface CommentThread {
 }
 
 /* ── Cursor SVG data URI ─────────────────────────────────── */
-export const COMMENT_CURSOR_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='34' viewBox='0 0 40 40'%3E%3Cpath fill='%233B82F6' stroke='white' stroke-width='1.5' stroke-miterlimit='10' d='M18.708,26.645L11.5,32.556l1-26.056l19.399,17.249l-9.22,1.183l5.449,12.77l-3.971,1.715L18.708,26.645z'/%3E%3C/svg%3E") 2 2, crosshair`;
+export const COMMENT_CURSOR_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='28' viewBox='0 0 20 28'%3E%3Cpath d='M2 1 L2 23 L6.5 17.5 L11 27 L14 25.5 L9.5 16 L16 15 Z' fill='%23c8f135' stroke='%23222' stroke-width='0.8' stroke-linejoin='round'/%3E%3C/svg%3E") 2 1, default`;
 
 /* ── Spring animation keyframes ─────────────────────────── */
 const SPRING_ANIMATION = "popIn 0.18s cubic-bezier(0.34,1.56,0.64,1) forwards";
