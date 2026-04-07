@@ -3102,6 +3102,10 @@ export default function CampaignEditor() {
     }
   }
   window.addEventListener('message', function(e){
+    if(e.data && e.data.type === 'flushEditorSnapshot'){
+      emitHtmlNow();
+      return;
+    }
     if(e.data && e.data.type === 'regionSelectQuery'){
       handleRegionSelect(e.data.rect, false);
     }
