@@ -34,10 +34,14 @@ export default function BrandIntelligenceTab({ brandId, brandName, domain }: Pro
   useEffect(() => { fetchIntel(); }, [brandId]);
 
   const rerunResearch = async () => {
+    if (!domain?.trim()) {
+      toast.error("Please set a website URL in the Info tab before running research.");
+      return;
+    }
     setRerunning(true);
     try {
       const { data, error } = await supabase.functions.invoke("research-brand", {
-        body: { brand_id: brandId, brand_name: brandName, domain: domain || brandName },
+        body: { brand_id: brandId, brand_name: brandName, domain },
       });
       if (error || data?.error) throw new Error(data?.error || error?.message);
 
