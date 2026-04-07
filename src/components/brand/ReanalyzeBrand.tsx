@@ -175,6 +175,13 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
           .catch((e) => console.warn("Slice re-upload failed (non-blocking):", e));
       }
 
+      // Fire-and-forget: re-run brand intelligence research
+      if (websiteUrl?.trim()) {
+        supabase.functions.invoke("research-brand", {
+          body: { brand_id: brandId, brand_name: brandName, domain: websiteUrl },
+        }).catch((e) => console.warn("Brand intelligence research failed (non-blocking):", e));
+      }
+
       // Auto-proceed to guide generation (no confirmation step)
       await autoGenerateGuide(data.audit);
     } catch (err: any) {
