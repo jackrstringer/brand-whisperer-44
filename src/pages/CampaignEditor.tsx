@@ -3054,7 +3054,7 @@ export default function CampaignEditor() {
       removeDeleteBtn();
       selectedEl = null;
       window.parent.postMessage({ type: 'elementDeselected' }, '*');
-      syncHtml();
+      syncHtmlImmediate();
     }
   });
 
