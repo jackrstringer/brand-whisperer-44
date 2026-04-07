@@ -3561,6 +3561,7 @@ export default function CampaignEditor() {
                         height: iframeContentHeight,
                         transform: `scale(${zoomScale})`,
                         transformOrigin: "top left",
+                        pointerEvents: commentMode ? 'none' : undefined,
                       }}
                       title="Email Preview"
                       onLoad={(e) => {
