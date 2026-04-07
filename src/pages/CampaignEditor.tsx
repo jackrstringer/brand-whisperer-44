@@ -1520,10 +1520,18 @@ export default function CampaignEditor() {
       }
 
       if (e.key === 'Escape') {
-        // If in comment mode, exit it
+        // Escape priority chain: composer → thread popover → exit comment mode
+        if (composerThreadId) {
+          setCommentThreads(prev => prev.filter(t => t.id !== composerThreadId));
+          setComposerThreadId(null);
+          return;
+        }
+        if (activeThreadId) {
+          setActiveThreadId(null);
+          return;
+        }
         if (commentMode) {
           setCommentMode(false);
-          setActiveCommentId(null);
           return;
         }
         const iframe = previewPanelRef.current?.querySelector('iframe');
