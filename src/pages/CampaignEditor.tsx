@@ -1649,6 +1649,46 @@ export default function CampaignEditor() {
     }
   }, [screenZoom]);
 
+  // Query iframe for element info at a point or region
+  const queryElementInfo = useCallback(async (
+    pinX: number, pinY: number, regionW?: number, regionH?: number
+  ): Promise<CommentElementInfo | null> => {
+    const iframe = previewPanelRef.current?.querySelector('iframe') as HTMLIFrameElement | null;
+    if (!iframe?.contentWindow) return null;
+    const iframeRect = iframe.getBoundingClientRect();
+    const panelRect = previewPanelRef.current!.getBoundingClientRect();
+    const scale = screenZoom / 100;
+    const iframePanelLeft = iframeRect.left - panelRect.left;
+    const iframePanelTop = iframeRect.top - panelRect.top + (previewPanelRef.current?.scrollTop || 0);
+
+    return new Promise<CommentElementInfo | null>((resolve) => {
+      const timeout = setTimeout(() => {
+        if (pendingElementInfoResolveRef.current === wrappedResolve) {
+          pendingElementInfoResolveRef.current = null;
+          resolve(null);
+        }
+      }, 500);
+      const wrappedResolve = (info: CommentElementInfo | null) => {
+        clearTimeout(timeout);
+        resolve(info);
+      };
+      pendingElementInfoResolveRef.current = wrappedResolve;
+
+      if (regionW && regionH) {
+        const left = (pinX - iframePanelLeft) / scale;
+        const top = (pinY - iframePanelTop) / scale;
+        iframe.contentWindow!.postMessage({
+          type: 'getElementsInRegion',
+          rect: { left, top, right: left + regionW / scale, bottom: top + regionH / scale }
+        }, '*');
+      } else {
+        const iframeX = (pinX - iframePanelLeft) / scale;
+        const iframeY = (pinY - iframePanelTop) / scale;
+        iframe.contentWindow!.postMessage({ type: 'getElementAtPoint', x: iframeX, y: iframeY }, '*');
+      }
+    });
+  }, [screenZoom]);
+
   // Comment mode: submit a new comment → send to AI as chat message with screenshot
   // Helper: build element context string for AI prompts
   const buildElementContext = (pin: CommentThread['pin']) => {
