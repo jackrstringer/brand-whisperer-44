@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,7 +8,6 @@ import AssetManager from "@/components/brand/AssetManager";
 import ProductManager from "@/components/brand/ProductManager";
 import ShopifyProductGrid from "@/components/brand/ShopifyProductGrid";
 import ReanalyzeBrand from "@/components/brand/ReanalyzeBrand";
-import BrandResearchReport from "@/components/brand/BrandResearchReport";
 
 interface BrandAsset {
   id: string;
@@ -28,54 +27,34 @@ export default function BrandProfile() {
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [assets, setAssets] = useState<BrandAsset[]>([]);
   const [guideHtml, setGuideHtml] = useState<string | null>(null);
-  const [intel, setIntel] = useState<any>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [iframeHeight, setIframeHeight] = useState(800);
 
   useEffect(() => {
     if (!brandId) return;
     (async () => {
-      const [{ data: brand }, { data: brandAssets }, { data: profile }, { data: intelligence }] = await Promise.all([
+      const [{ data: brand }, { data: brandAssets }, { data: profile }] = await Promise.all([
         supabase.from("brands").select("*").eq("id", brandId).single(),
         supabase.from("brand_assets").select("*").eq("brand_id", brandId),
         supabase.from("brand_profiles").select("brand_guide_html").eq("brand_id", brandId).single(),
-        supabase.from("brand_intelligence").select("*").eq("brand_id", brandId).single(),
       ]);
       if (brand) {
         setBrandName(brand.name);
         setIndustry(brand.industry || "");
         setWebsiteUrl(brand.website_url || "");
       }
-      setAssets((brandAssets || []) as BrandAsset[]);
       setGuideHtml((profile as any)?.brand_guide_html || null);
-      setIntel(intelligence);
       setLoading(false);
 
       supabase.functions.invoke("reprocess-asset-compositions", { body: { brandId } }).catch(() => {});
     })();
   }, [brandId]);
 
-  useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe || !guideHtml) return;
-    const doc = iframe.contentDocument;
-    if (!doc) return;
-    const fixCss = `<style>
-      section:first-of-type, .cover, [class*="cover"], [class*="hero"], header:first-of-type {
-        min-height: unset !important; max-height: 420px !important; height: auto !important;
-      }
-      * { min-height: unset !important; }
-      html, body { height: auto !important; min-height: unset !important; }
-    </style>`;
-    doc.open();
-    doc.write(guideHtml.replace("</head>", fixCss + "</head>"));
-    doc.close();
-    const poll = setInterval(() => {
-      const h = doc.documentElement?.scrollHeight;
-      if (h && h > 100) { setIframeHeight(h); clearInterval(poll); }
-    }, 200);
-    return () => clearInterval(poll);
-  }, [guideHtml]);
+  const guideSrcDoc = guideHtml ? guideHtml.replace("</head>", `<style>
+    section:first-of-type, .cover, [class*="cover"], [class*="hero"], header:first-of-type {
+      min-height: unset !important; max-height: 420px !important; height: auto !important;
+    }
+    * { min-height: unset !important; }
+    html, body { height: auto !important; min-height: unset !important; overflow: visible !important; }
+  </style></head>`) : null;
 
   const downloadGuide = () => {
     if (!guideHtml) return;
@@ -122,22 +101,13 @@ export default function BrandProfile() {
             </div>
             <div className="border border-border rounded-lg overflow-hidden bg-white">
               <iframe
-                ref={iframeRef}
                 title="Brand Guide"
                 className="w-full"
-                style={{ height: iframeHeight, border: "none" }}
+                style={{ minHeight: 800, border: "none" }}
                 sandbox="allow-same-origin"
+                srcDoc={guideSrcDoc || undefined}
               />
             </div>
-            {intel?.ai_research && (
-              <div className="mt-8">
-                <BrandResearchReport
-                  research={intel.ai_research}
-                  confidence={intel.ai_research_confidence}
-                  lastResearchedAt={intel.last_researched_at}
-                />
-              </div>
-            )}
           </TabsContent>
         )}
 
