@@ -110,20 +110,6 @@ serve(async (req) => {
       
       if (upsertError) throw new Error(`Failed to save connection: ${upsertError.message}`);
 
-      // Fire klaviyo-sync as fire-and-forget
-      try {
-        fetch(`${supabaseUrl}/functions/v1/klaviyo-sync`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${supabaseServiceKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ brandId }),
-        });
-      } catch (e) {
-        console.warn("[klaviyo-proxy] Failed to trigger sync:", e);
-      }
-
       return new Response(JSON.stringify({
         success: true,
         listCount: (listsData.data || []).length,
