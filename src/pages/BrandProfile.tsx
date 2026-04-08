@@ -102,11 +102,11 @@ export default function BrandProfile() {
             </div>
             <div className="border border-border rounded-lg overflow-hidden bg-white">
               <iframe
-                ref={iframeRef}
                 title="Brand Guide"
                 className="w-full"
-                style={{ height: iframeHeight, border: "none" }}
+                style={{ minHeight: 800, border: "none" }}
                 sandbox="allow-same-origin"
+                srcDoc={guideSrcDoc || undefined}
               />
             </div>
           </TabsContent>
