@@ -49,27 +49,13 @@ export default function BrandProfile() {
     })();
   }, [brandId]);
 
-  useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe || !guideHtml) return;
-    const doc = iframe.contentDocument;
-    if (!doc) return;
-    const fixCss = `<style>
-      section:first-of-type, .cover, [class*="cover"], [class*="hero"], header:first-of-type {
-        min-height: unset !important; max-height: 420px !important; height: auto !important;
-      }
-      * { min-height: unset !important; }
-      html, body { height: auto !important; min-height: unset !important; }
-    </style>`;
-    doc.open();
-    doc.write(guideHtml.replace("</head>", fixCss + "</head>"));
-    doc.close();
-    const poll = setInterval(() => {
-      const h = doc.documentElement?.scrollHeight;
-      if (h && h > 100) { setIframeHeight(h); clearInterval(poll); }
-    }, 200);
-    return () => clearInterval(poll);
-  }, [guideHtml]);
+  const guideSrcDoc = guideHtml ? guideHtml.replace("</head>", `<style>
+    section:first-of-type, .cover, [class*="cover"], [class*="hero"], header:first-of-type {
+      min-height: unset !important; max-height: 420px !important; height: auto !important;
+    }
+    * { min-height: unset !important; }
+    html, body { height: auto !important; min-height: unset !important; overflow: visible !important; }
+  </style></head>`) : null;
 
   const downloadGuide = () => {
     if (!guideHtml) return;
