@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
     const apiKey = connection.api_key;
 
     // Fetch metrics from Klaviyo
-    const metricsResp = await fetch(`${KLAVIYO_API_BASE}/metrics?page[size]=50`, {
+    const metricsResp = await fetch(`${KLAVIYO_API_BASE}/metrics`, {
       headers: {
         "Authorization": `Klaviyo-API-Key ${apiKey}`,
         "revision": "2024-02-15",
