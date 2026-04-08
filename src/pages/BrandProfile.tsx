@@ -8,7 +8,6 @@ import AssetManager from "@/components/brand/AssetManager";
 import ProductManager from "@/components/brand/ProductManager";
 import ShopifyProductGrid from "@/components/brand/ShopifyProductGrid";
 import ReanalyzeBrand from "@/components/brand/ReanalyzeBrand";
-import BrandResearchReport from "@/components/brand/BrandResearchReport";
 
 interface BrandAsset {
   id: string;
