@@ -4,6 +4,8 @@ import ProductSelector, { type SelectedShopifyProduct } from "@/components/brand
 import SegmentSelector from "@/components/brand/SegmentSelector";
 import ReferencePanel, { type SelectedReference } from "@/components/campaign/ReferencePanel";
 import ImageSwapPanel from "@/components/campaign/ImageSwapPanel";
+import FlowConfigPanel from "@/components/campaign/FlowConfigPanel";
+import FlowDetailsPanel from "@/components/campaign/FlowDetailsPanel";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -52,7 +54,7 @@ function cleanUserMessage(content: string): string | null {
   return content;
 }
 
-import type { Campaign, ChatMessage, VariantOption } from "@/lib/types";
+import type { Campaign, ChatMessage, VariantOption, FlowConfig } from "@/lib/types";
 import VariantCards from "@/components/brand/VariantCards";
 import { captureEmailScreenshots } from "@/lib/visualQaCapture";
 import CommentOverlay, { type CommentThread, type CommentAuthor, type CommentElementInfo, COMMENT_CURSOR_SVG } from "@/components/campaign/CommentOverlay";
@@ -108,6 +110,11 @@ export default function CampaignEditor() {
   const [extraCopy, setExtraCopy] = useState("");
   const [generating, setGenerating] = useState(false);
   const [visualQaRunning, setVisualQaRunning] = useState(false);
+  const [campaignMode, setCampaignMode] = useState<"campaign" | "flow">("campaign");
+  const [flowConfig, setFlowConfig] = useState<FlowConfig>({});
+  const [flowNotes, setFlowNotes] = useState("");
+  const [flowDetailTab, setFlowDetailTab] = useState<"chat" | "flow">("chat");
+  const [flowPreviewHtml, setFlowPreviewHtml] = useState<string | null>(null);
 
   const [chatInput, setChatInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -289,6 +296,9 @@ export default function CampaignEditor() {
         setPreviewText((campaign as any).preview_text || "");
         setSendListIds(Array.isArray((campaign as any).send_list_ids) ? (campaign as any).send_list_ids : []);
         setSendSegmentIds(Array.isArray((campaign as any).send_segment_ids) ? (campaign as any).send_segment_ids : []);
+        setCampaignMode((campaign as any).campaign_mode === "flow" ? "flow" : "campaign");
+        if ((campaign as any).flow_config) setFlowConfig((campaign as any).flow_config as FlowConfig);
+        if ((campaign as any).campaign_mode === "flow") setFlowDetailTab("flow");
         // speedMode is always "normal" now
         const history = campaign.html_history;
         setCanUndo(Array.isArray(history) && history.length > 0);

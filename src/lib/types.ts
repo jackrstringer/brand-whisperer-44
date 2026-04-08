@@ -15,6 +15,17 @@ export interface BrandProfile {
   created_at: string;
 }
 
+export interface FlowConfig {
+  trigger_metric_id?: string;
+  trigger_metric_name?: string;
+  flow_type?: string;
+  event_schema?: any;
+  liquid_variables?: string[];
+  selected_preview_event_id?: string;
+  klaviyo_synced_at?: string;
+  [key: string]: any;
+}
+
 export interface Campaign {
   id: string;
   brand_id: string;
@@ -31,6 +42,8 @@ export interface Campaign {
   product_ids?: string[] | null;
   pinned_asset_urls?: string[] | null;
   speed_mode?: "normal" | "fast" | null;
+  campaign_mode?: "campaign" | "flow";
+  flow_config?: FlowConfig | null;
   created_at: string;
   updated_at: string;
   _remediationAttempted?: boolean;
