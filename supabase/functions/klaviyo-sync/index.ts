@@ -7,12 +7,12 @@ const corsHeaders = {
 };
 
 const KLAVIYO_API_BASE = "https://a.klaviyo.com/api";
-const REVISION = "2024-02-15";
+const REVISION = "2024-10-15";
 
-function klaviyoHeaders(apiKey: string) {
+function klaviyoHeaders(apiKey: string, revision = REVISION) {
   return {
     "Authorization": `Klaviyo-API-Key ${apiKey}`,
-    "revision": REVISION,
+    "revision": revision,
     "Content-Type": "application/json",
     "Accept": "application/json",
   };
