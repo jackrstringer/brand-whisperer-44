@@ -1,30 +1,14 @@
 
 
-# Klaviyo OAuth Data Layer + Performance Intelligence
+# Klaviyo Data Layer — API Key + Performance Intelligence
 
 ## Overview
 
-Replace the existing private-API-key Klaviyo integration with a full OAuth 2.0 flow, pull 365 days of campaign performance data, analyze it with AI, and inject the intelligence into every campaign generation prompt.
-
-## Current State
-
-- `klaviyo_connections` table exists with `api_key_encrypted`, `cached_lists`, `cached_segments` columns (private key model)
-- `klaviyo-proxy` edge function handles validate-key, sync, create-template, create-campaign, disconnect
-- `KlaviyoSetup.tsx` component uses private API key input
-- `brand_intelligence` table has no Klaviyo-related columns
-- Generation pipeline fetches `compiled_context` from `brand_intelligence` and injects it
-
-## Prerequisites (User Action Required)
-
-Before implementation, three secrets must be added:
-- `KLAVIYO_CLIENT_ID` — from Klaviyo developer app registration
-- `KLAVIYO_CLIENT_SECRET` — from Klaviyo developer app registration  
-- `KLAVIYO_REDIRECT_URI` — set to `https://wauepdkxqhyndsmjzita.supabase.co/functions/v1/klaviyo-callback`
+Keep the existing API-key connection model (no OAuth), add 365-day campaign data pull, AI analysis, and inject intelligence into generation prompts. No `klaviyo-connect` or `klaviyo-callback` edge functions.
 
 ## Database Changes
 
 ### Migration 1: Add Klaviyo columns to `brand_intelligence`
-
 ```sql
 ALTER TABLE brand_intelligence
   ADD COLUMN klaviyo_raw jsonb,
@@ -33,123 +17,112 @@ ALTER TABLE brand_intelligence
   ADD COLUMN klaviyo_last_synced_at timestamptz;
 ```
 
-### Migration 2: Rebuild `klaviyo_connections` for OAuth
+### Migration 2: Rebuild `klaviyo_connections` for new schema
+Drop existing table and recreate with `api_key` (plain text, not `api_key_encrypted`), plus sync status columns. Use a validation trigger instead of CHECK constraint.
 
-Drop and recreate `klaviyo_connections` to support OAuth tokens instead of private API keys. Preserve RLS. Add `sync_status`, `sync_error`, `access_token`, `refresh_token`, `token_expires_at`, `klaviyo_account_id`, `klaviyo_account_name`. Remove `api_key_encrypted`. Keep `cached_lists`, `cached_segments` for existing list/segment sync. Use a validation trigger for `sync_status` instead of CHECK constraint.
+```sql
+DROP TABLE IF EXISTS klaviyo_connections;
+
+CREATE TABLE klaviyo_connections (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  brand_id uuid REFERENCES brands(id) ON DELETE CASCADE,
+  api_key text NOT NULL,
+  klaviyo_account_id text,
+  klaviyo_account_name text,
+  connected_at timestamptz DEFAULT now(),
+  last_synced_at timestamptz,
+  sync_status text DEFAULT 'pending',
+  sync_error text,
+  cached_lists jsonb DEFAULT '[]',
+  cached_segments jsonb DEFAULT '[]',
+  UNIQUE(brand_id)
+);
+
+ALTER TABLE klaviyo_connections ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their klaviyo connections"
+  ON klaviyo_connections FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM brands WHERE brands.id = klaviyo_connections.brand_id AND brands.user_id = auth.uid()))
+  WITH CHECK (EXISTS (SELECT 1 FROM brands WHERE brands.id = klaviyo_connections.brand_id AND brands.user_id = auth.uid()));
+
+CREATE OR REPLACE FUNCTION validate_klaviyo_sync_status()
+  RETURNS trigger LANGUAGE plpgsql SET search_path TO 'public' AS $$
+BEGIN
+  IF NEW.sync_status NOT IN ('pending', 'syncing', 'complete', 'failed') THEN
+    RAISE EXCEPTION 'Invalid sync_status: %', NEW.sync_status;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_validate_klaviyo_sync_status
+  BEFORE INSERT OR UPDATE ON klaviyo_connections
+  FOR EACH ROW EXECUTE FUNCTION validate_klaviyo_sync_status();
+```
 
 ## Edge Functions
 
-### 1. `klaviyo-connect` (new)
+### 1. Update `klaviyo-proxy` (existing)
+- Change `validate-key` action: call `GET /api/accounts/` to validate key and get account name, then upsert into `klaviyo_connections` with `api_key`, `klaviyo_account_id`, `klaviyo_account_name`
+- Read `api_key` instead of `api_key_encrypted` from `klaviyo_connections`
+- After successful validate-key, fire `klaviyo-sync` as fire-and-forget
 
-- Takes `brand_id` as query param
-- Validates user auth via JWT
-- Builds Klaviyo OAuth authorize URL with scopes: `campaigns:read metrics:read lists:read profiles:read`
-- Uses `state` param = `{brand_id}:{user_jwt}` (signed/encoded to prevent CSRF)
-- Returns 302 redirect to Klaviyo
+### 2. `klaviyo-sync` (new)
+Takes `brand_id`. Reads `api_key` from `klaviyo_connections`.
 
-### 2. `klaviyo-callback` (new)
+- Step 1: Fetch sent campaigns from last 365 days via paginated `GET /api/campaigns/`
+- Step 2: Resolve metric IDs via `GET /api/metrics/` (Opened Email, Clicked Email, Unsubscribed, Placed Order, Received Email)
+- Step 3: For each campaign (batches of 10), fetch metrics via `POST /api/metric-aggregates/`
+- Step 4: Assemble raw data, save as `klaviyo_raw` in `brand_intelligence`
+- Step 5: Also sync lists/segments into `cached_lists`/`cached_segments`
+- Step 6: Fire `analyze-klaviyo-performance` as fire-and-forget
 
-- Handles OAuth redirect with `code` and `state` query params
-- Exchanges code for access/refresh tokens via `POST https://a.klaviyo.com/oauth/token`
-- Fetches account info via `GET https://a.klaviyo.com/api/accounts/`
-- Upserts into `klaviyo_connections` with tokens, account ID, account name
-- Fires `klaviyo-sync` as fire-and-forget via `EdgeRuntime.waitUntil()`
-- Redirects user back to brand settings with `?klaviyo=connected`
+### 3. `analyze-klaviyo-performance` (new)
+- Fetch `klaviyo_raw` from `brand_intelligence`
+- Call Lovable AI (Claude Sonnet) with structured JSON report schema covering: summary stats, top/worst performers, subject line intelligence, offer performance, content intelligence, list health, recommendations
+- Save as `klaviyo_report`
+- Fire `compile-klaviyo-context`
 
-Config: `verify_jwt = false` (handles callback from Klaviyo, not from our frontend)
-
-### 3. `klaviyo-sync` (new)
-
-Main data pull function. Takes `brand_id`.
-
-**Step 1**: Fetch all sent campaigns from last 365 days via paginated `GET /api/campaigns/` with filter on channel=email and scheduled_at >= 365 days ago. Only keep status=sent.
-
-**Step 2**: Resolve metric IDs once via `GET /api/metrics/` (find Opened Email, Clicked Email, Unsubscribed, Placed Order, Received Email by name).
-
-**Step 3**: For each sent campaign (batches of 10, parallel within batch), fetch metrics via `POST /api/metric-aggregates/` for each metric type. Calculate open rate, click rate, CTR, unsubscribe rate, revenue per recipient.
-
-**Step 4**: Assemble raw data array. Save as `klaviyo_raw` in `brand_intelligence`. Update `klaviyo_last_synced_at`.
-
-**Step 5**: Fire `analyze-klaviyo-performance` as fire-and-forget.
-
-Also sync lists/segments into `cached_lists`/`cached_segments` on `klaviyo_connections` (preserves existing functionality).
-
-### 4. `analyze-klaviyo-performance` (new)
-
-- Fetches `klaviyo_raw` from `brand_intelligence`
-- Calls Claude Sonnet with the structured JSON report schema (top/worst performers, subject line intelligence, offer performance, content intelligence, list health, recommendations)
-- Saves parsed JSON as `klaviyo_report`
-- Fires `compile-klaviyo-context` as fire-and-forget
-
-### 5. `compile-klaviyo-context` (new)
-
-- Fetches `klaviyo_report` from `brand_intelligence`
-- Calls Claude Sonnet to convert report into concise prose briefing (~800 tokens)
-- Saves as `klaviyo_compiled`
-- Calls existing `compile-brand-context` to regenerate master `compiled_context`
-
-### 6. Update `klaviyo-proxy` (existing)
-
-- Change `validate-key` action → remove (replaced by OAuth)
-- Update all actions to read `access_token` instead of `api_key_encrypted`
-- Add token refresh logic: if `token_expires_at` is past, use `refresh_token` to get new access token before making API calls
-- Keep: `sync`, `get-cached`, `create-template`, `create-campaign`, `disconnect`
+### 4. `compile-klaviyo-context` (new)
+- Fetch `klaviyo_report`
+- Call Claude Sonnet to convert into ~800-token prose briefing
+- Save as `klaviyo_compiled`
+- Trigger `compile-brand-context` to regenerate master `compiled_context`
 
 ## Generation Prompt Injection
 
-**File: `supabase/functions/_shared/generateCampaignCore.ts`**
+**File: `supabase/functions/_shared/generateCampaignCore.ts`** (line ~395)
 
-Two-line change at line 395: add `klaviyo_compiled` to the select query. Then inject after `brandIntelBlock`:
-
+Add `klaviyo_compiled` to the select query, then inject:
 ```typescript
 const klaviyoBlock = brandIntelResult.data?.klaviyo_compiled
   ? `\n\nKLAVIYO PERFORMANCE INTELLIGENCE:\n${brandIntelResult.data.klaviyo_compiled}`
   : '';
 ```
 
-Inject `klaviyoBlock` into `brandRulesText` and `brandValuesText` alongside `brandIntelBlock`.
-
-## UI: Updated KlaviyoSetup Component
+## UI Changes
 
 **File: `src/components/brand/KlaviyoSetup.tsx`**
 
-Replace private API key input with OAuth flow:
-
-**Not connected state:**
-- "Connect Klaviyo" button → opens `klaviyo-connect` URL via `window.open()` (same pattern as Shopify OAuth)
-- Listen for `?klaviyo=connected` query param to refresh state
-
-**Connected state:**
-- Account name + connection date
-- Sync status badge (pending / syncing / complete / failed) with last synced timestamp
-- "Re-sync Data" button → calls `klaviyo-sync`
-- Collapsible "Performance Report" section: total campaigns, avg open rate, avg click rate, avg RPR, best send days (from `klaviyo_report.summary`)
-- Collapsible "Top Performing Campaigns" table: name, subject line, open rate, RPR (from `klaviyo_report.top_performers`)
-- Collapsible "Subject Line Intelligence": patterns that work/flop, best examples (from `klaviyo_report.subject_line_intelligence`)
-- Collapsible "AI Context Preview": read-only text of `klaviyo_compiled`
+Keep the existing API key input form (already there). Enhance the connected state to show:
+- Account name and sync status badge
+- "Re-sync Performance Data" button → calls `klaviyo-sync`
+- Collapsible sections: Performance Summary, Top Campaigns, Subject Line Intelligence, AI Context Preview
+- Fetch `brand_intelligence` for `klaviyo_report` and `klaviyo_compiled` to populate these sections
 
 **File: `src/pages/BrandSettings.tsx`**
-- Check for `?klaviyo=connected` query param on mount, show success toast, refresh KlaviyoSetup
-
-## Config
-
-**File: `supabase/config.toml`**
-- Add `[functions.klaviyo-callback]` with `verify_jwt = false`
+- No changes needed (already renders KlaviyoSetup)
 
 ## File Summary
 
 | File | Action |
 |------|--------|
 | DB migration: `brand_intelligence` columns | Add 4 columns |
-| DB migration: `klaviyo_connections` rebuild | Drop/recreate for OAuth |
-| `supabase/functions/klaviyo-connect/index.ts` | New |
-| `supabase/functions/klaviyo-callback/index.ts` | New |
-| `supabase/functions/klaviyo-sync/index.ts` | New |
-| `supabase/functions/analyze-klaviyo-performance/index.ts` | New |
-| `supabase/functions/compile-klaviyo-context/index.ts` | New |
-| `supabase/functions/klaviyo-proxy/index.ts` | Update for OAuth tokens |
+| DB migration: `klaviyo_connections` rebuild | Drop/recreate with `api_key` |
+| `supabase/functions/klaviyo-proxy/index.ts` | Update validate-key to use `/accounts/`, fire sync |
+| `supabase/functions/klaviyo-sync/index.ts` | New — 365-day data pull |
+| `supabase/functions/analyze-klaviyo-performance/index.ts` | New — AI analysis |
+| `supabase/functions/compile-klaviyo-context/index.ts` | New — prose briefing |
 | `supabase/functions/_shared/generateCampaignCore.ts` | 3-line injection |
-| `src/components/brand/KlaviyoSetup.tsx` | Rewrite for OAuth + reports |
-| `src/pages/BrandSettings.tsx` | Add callback detection |
-| `supabase/config.toml` | Add callback function config |
+| `src/components/brand/KlaviyoSetup.tsx` | Add report display sections |
 
