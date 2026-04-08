@@ -8,7 +8,7 @@ const corsHeaders = {
 
 const KLAVIYO_API_BASE = "https://a.klaviyo.com/api";
 const REVISION = "2024-02-15";
-const SEGMENT_REVISION = "2024-10-15"; // Segments API requires newer revision
+const SEGMENT_REVISION = "2024-10-15";
 
 async function klaviyoGet(path: string, apiKey: string, revision = REVISION): Promise<any> {
   const url = path.startsWith("http") ? path : `${KLAVIYO_API_BASE}${path}`;
@@ -49,8 +49,27 @@ async function klaviyoPost(path: string, apiKey: string, body: any, revision = R
   return res.json();
 }
 
+async function klaviyoDelete(path: string, apiKey: string, revision = REVISION): Promise<void> {
+  const url = `${KLAVIYO_API_BASE}${path}`;
+  const headers = {
+    "Authorization": `Klaviyo-API-Key ${apiKey}`,
+    "revision": revision,
+    "Accept": "application/json",
+  };
+  let res = await fetch(url, { method: "DELETE", headers });
+  if (res.status === 429) {
+    await new Promise(r => setTimeout(r, 2000));
+    res = await fetch(url, { method: "DELETE", headers });
+  }
+  if (!res.ok && res.status !== 404) {
+    const body = await res.text();
+    console.warn(`[quick-stats] DELETE ${path} failed: ${res.status} ${body}`);
+  }
+}
+
+const SEGMENT_NAME = "Active Profiles (can receive email marketing) v2";
+
 async function getActiveProfileCount(apiKey: string, brandId: string, supabase: any): Promise<number | null> {
-  // Step 1 — check if we already have a segment ID stored
   const { data: conn } = await supabase
     .from("klaviyo_connections")
     .select("active_profiles_segment_id")
@@ -60,27 +79,39 @@ async function getActiveProfileCount(apiKey: string, brandId: string, supabase: 
   let segmentId = conn?.active_profiles_segment_id || null;
   console.log("[quick-stats] Stored segment ID:", segmentId);
 
-  // Step 2 — if no stored segment, search for existing one first
+  // If no stored segment, search for existing ones and clean up old versions
   if (!segmentId) {
     const searchData = await klaviyoGet(`/segments/`, apiKey, SEGMENT_REVISION);
     const segments = searchData?.data || [];
-    const match = segments.find((s: any) =>
-      s.attributes?.name?.toLowerCase().includes("can receive email marketing")
-    );
+
+    // Delete any old-name segments
+    for (const s of segments) {
+      const name = s.attributes?.name || "";
+      if (
+        name.toLowerCase().includes("can receive email marketing") &&
+        name !== SEGMENT_NAME
+      ) {
+        console.log("[quick-stats] Deleting old segment:", s.id, name);
+        await klaviyoDelete(`/segments/${s.id}`, apiKey, SEGMENT_REVISION);
+      }
+    }
+
+    // Check if correct segment already exists
+    const match = segments.find((s: any) => s.attributes?.name === SEGMENT_NAME);
     if (match) {
       segmentId = match.id;
-      console.log("[quick-stats] Found existing segment:", segmentId);
+      console.log("[quick-stats] Found existing correct segment:", segmentId);
     }
   }
 
-  // Step 3 — if still no segment, create one using profile-marketing-consent condition
+  // Create segment if needed — NO consent_status sub-filter
   if (!segmentId) {
     console.log("[quick-stats] Creating new segment for active profiles...");
     const createData = await klaviyoPost(`/segments/`, apiKey, {
       data: {
         type: "segment",
         attributes: {
-          name: "Active Profiles (can receive email marketing)",
+          name: SEGMENT_NAME,
           definition: {
             condition_groups: [{
               conditions: [{
@@ -88,10 +119,6 @@ async function getActiveProfileCount(apiKey: string, brandId: string, supabase: 
                 consent: {
                   channel: "email",
                   can_receive_marketing: true,
-                  consent_status: {
-                    subscription: "subscribed",
-                    filters: [],
-                  },
                 },
               }],
             }],
@@ -103,21 +130,18 @@ async function getActiveProfileCount(apiKey: string, brandId: string, supabase: 
     segmentId = createData?.data?.id || null;
     if (!segmentId) throw new Error("Segment created but no ID returned");
     console.log("[quick-stats] Created segment:", segmentId);
-
-    // Store the segment ID so we never recreate it
-    await supabase
-      .from("klaviyo_connections")
-      .update({ active_profiles_segment_id: segmentId })
-      .eq("brand_id", brandId);
-  } else if (!conn?.active_profiles_segment_id) {
-    // Found via search but not stored yet — persist it
-    await supabase
-      .from("klaviyo_connections")
-      .update({ active_profiles_segment_id: segmentId })
-      .eq("brand_id", brandId);
   }
 
-  // Step 4 — poll for profile_count every 3 seconds, up to 10 attempts
+  // Persist segment ID
+  await supabase
+    .from("klaviyo_connections")
+    .update({ active_profiles_segment_id: segmentId })
+    .eq("brand_id", brandId);
+
+  // Poll for profile_count with STABILIZATION — wait for count to stop changing
+  let lastCount = -1;
+  let stableRounds = 0;
+
   for (let attempt = 0; attempt < 10; attempt++) {
     if (attempt > 0) {
       await new Promise(r => setTimeout(r, 3000));
@@ -131,17 +155,27 @@ async function getActiveProfileCount(apiKey: string, brandId: string, supabase: 
       );
 
       const count = countData?.data?.attributes?.profile_count;
-      console.log(`[quick-stats] Attempt ${attempt + 1}: profile_count =`, count);
+      console.log(`[quick-stats] Attempt ${attempt + 1}: profile_count = ${count}, lastCount = ${lastCount}, stableRounds = ${stableRounds}`);
 
       if (count !== null && count !== undefined && count > 0) {
-        return count;
+        if (count === lastCount) {
+          stableRounds++;
+          if (stableRounds >= 2) {
+            console.log(`[quick-stats] Count stabilized at ${count} after ${attempt + 1} attempts`);
+            return count;
+          }
+        } else {
+          stableRounds = 0;
+        }
+        lastCount = count;
       }
     } catch (e) {
       console.warn(`[quick-stats] Segment count attempt ${attempt + 1} failed:`, e.message);
     }
   }
 
-  return null;
+  console.log(`[quick-stats] Polling exhausted, returning lastCount: ${lastCount}`);
+  return lastCount > 0 ? lastCount : null;
 }
 
 Deno.serve(async (req) => {
@@ -165,10 +199,8 @@ Deno.serve(async (req) => {
     };
 
     const [profilesResult, campaignsResult, revenueResult] = await Promise.allSettled([
-      // Call 1: Active profiles via segment
       getActiveProfileCount(apiKey, brandId, supabase),
 
-      // Call 2: Campaigns sent in last 30 days
       (async () => {
         const data = await klaviyoGet(
           `/campaigns/?filter=equals(messages.channel,'email'),equals(status,'Sent'),greater-or-equal(updated_at,${thirtyDaysAgo})`,
@@ -180,7 +212,6 @@ Deno.serve(async (req) => {
         return data?.data?.length ?? 0;
       })(),
 
-      // Call 3: Revenue in last 30 days
       (async () => {
         const metricsData = await klaviyoGet(`/metrics/`, apiKey);
         const metrics = metricsData?.data || [];
