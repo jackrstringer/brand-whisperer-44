@@ -4398,14 +4398,57 @@ export default function CampaignEditor() {
               </div>
             ) : (
               <div className="flex flex-col flex-1 overflow-hidden">
+                {/* Chat / Flow Details tab toggle for flow mode */}
+                {campaignMode === "flow" && (
+                  <div className="flex items-center gap-1 p-2 border-b border-border bg-muted/30">
+                    <button
+                      onClick={() => setFlowDetailTab("chat")}
+                      className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                        flowDetailTab === "chat"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Chat
+                    </button>
+                    <button
+                      onClick={() => setFlowDetailTab("flow")}
+                      className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                        flowDetailTab === "flow"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Flow Details
+                    </button>
+                  </div>
+                )}
                 {/* Reference indicator in chat mode */}
-                {selectedReferences.length > 0 && (
+                {selectedReferences.length > 0 && flowDetailTab === "chat" && (
                   <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-primary/5 text-xs">
                     <span className="text-muted-foreground">Generating with {selectedReferences.length > 1 ? `${selectedReferences.length} references` : "reference"}:</span>
                     <span className="font-medium truncate">{selectedReferences.map((r) => r.title).join(", ")}</span>
                     <span className="text-muted-foreground">({selectedReferences[0].mode === "dupe" ? "Dupe" : "Reference"})</span>
                   </div>
                 )}
+                {/* Flow Details Panel */}
+                {campaignMode === "flow" && flowDetailTab === "flow" && brandId && campaignId ? (
+                  <FlowDetailsPanel
+                    brandId={brandId}
+                    campaignId={campaignId}
+                    html={flowPreviewHtml || campaign?.html || null}
+                    flowConfig={flowConfig}
+                    onPreviewHtml={(html) => {
+                      setFlowPreviewHtml(html);
+                      if (html) {
+                        setPreviewHtml(html);
+                      } else {
+                        setPreviewHtml(null);
+                      }
+                    }}
+                  />
+                ) : (
+                <>
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
                   {(() => {
                     let editCount = 0;
