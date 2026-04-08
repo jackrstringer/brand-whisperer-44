@@ -90,13 +90,9 @@ serve(async (req) => {
         || "Klaviyo Account";
       const accountId = account?.id || "";
 
-      // Fetch lists with profile_count
-      const listsData = await klaviyoFetch("/lists?fields[list]=name,profile_count", apiKey);
+      // Fetch lists
+      const listsData = await klaviyoFetch("/lists", apiKey);
       const lists = listsData.data || [];
-      const activeProfiles = lists.reduce((max: number, l: any) => {
-        const count = l.attributes?.profile_count || 0;
-        return count > max ? count : max;
-      }, 0);
       
       // Upsert connection
       const { error: upsertError } = await supabase
