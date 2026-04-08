@@ -693,6 +693,63 @@ export default function KlaviyoSetup({ brandId }: Props) {
   );
 }
 
+// ─── Campaign Report Row ───
+function CampaignReportRow({ brandId, klaviyoSynced }: { brandId: string; klaviyoSynced: boolean }) {
+  const navigate = useNavigate();
+  const { status: reportStatus, generatedAt, isLoading: reportLoading, generateReport } = useCampaignReport(brandId);
+
+  if (!klaviyoSynced) return null;
+
+  return (
+    <div className="rounded-lg border border-border bg-card px-4 py-3 flex items-center justify-between">
+      {reportStatus === "complete" && generatedAt && (
+        <>
+          <div className="flex items-center gap-2 text-sm">
+            <span>📊</span>
+            <span>
+              Performance Analysis ready · Generated{" "}
+              {formatDistanceToNow(new Date(generatedAt), { addSuffix: true })}
+            </span>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => navigate(`/brands/${brandId}/report`)}>
+            View Report →
+          </Button>
+        </>
+      )}
+
+      {reportStatus === "generating" && (
+        <div className="flex items-center gap-2 text-sm">
+          <span>📊</span>
+          <span>Building performance analysis...</span>
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+        </div>
+      )}
+
+      {(reportStatus === "pending" || reportStatus === null) && (
+        <div className="flex items-center justify-between w-full">
+          <span className="text-sm text-muted-foreground">📊 Performance Analysis not yet generated</span>
+          <Button variant="outline" size="sm" onClick={generateReport} disabled={reportLoading}>
+            {reportLoading ? (
+              <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> Generating...</>
+            ) : (
+              "Generate Performance Analysis"
+            )}
+          </Button>
+        </div>
+      )}
+
+      {reportStatus === "failed" && (
+        <div className="flex items-center justify-between w-full">
+          <span className="text-sm text-destructive">Report generation failed</span>
+          <Button variant="outline" size="sm" onClick={generateReport} disabled={reportLoading}>
+            Retry
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── StatCell Sub-component ───
 function StatCell({ icon, label, sublabel, value, format, loading, error }: {
   icon: React.ReactNode;
