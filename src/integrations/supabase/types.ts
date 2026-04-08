@@ -103,6 +103,10 @@ export type Database = {
           brand_id: string
           compiled_context: string | null
           created_at: string
+          klaviyo_compiled: string | null
+          klaviyo_last_synced_at: string | null
+          klaviyo_raw: Json | null
+          klaviyo_report: Json | null
           last_compiled_at: string | null
           last_researched_at: string | null
           last_surveyed_at: string | null
@@ -117,6 +121,10 @@ export type Database = {
           brand_id: string
           compiled_context?: string | null
           created_at?: string
+          klaviyo_compiled?: string | null
+          klaviyo_last_synced_at?: string | null
+          klaviyo_raw?: Json | null
+          klaviyo_report?: Json | null
           last_compiled_at?: string | null
           last_researched_at?: string | null
           last_surveyed_at?: string | null
@@ -131,6 +139,10 @@ export type Database = {
           brand_id?: string
           compiled_context?: string | null
           created_at?: string
+          klaviyo_compiled?: string | null
+          klaviyo_last_synced_at?: string | null
+          klaviyo_raw?: Json | null
+          klaviyo_report?: Json | null
           last_compiled_at?: string | null
           last_researched_at?: string | null
           last_surveyed_at?: string | null
@@ -423,31 +435,43 @@ export type Database = {
       }
       klaviyo_connections: {
         Row: {
-          api_key_encrypted: string
+          api_key: string
           brand_id: string
           cached_lists: Json | null
           cached_segments: Json | null
-          created_at: string
+          connected_at: string | null
           id: string
+          klaviyo_account_id: string | null
+          klaviyo_account_name: string | null
           last_synced_at: string | null
+          sync_error: string | null
+          sync_status: string | null
         }
         Insert: {
-          api_key_encrypted: string
+          api_key: string
           brand_id: string
           cached_lists?: Json | null
           cached_segments?: Json | null
-          created_at?: string
+          connected_at?: string | null
           id?: string
+          klaviyo_account_id?: string | null
+          klaviyo_account_name?: string | null
           last_synced_at?: string | null
+          sync_error?: string | null
+          sync_status?: string | null
         }
         Update: {
-          api_key_encrypted?: string
+          api_key?: string
           brand_id?: string
           cached_lists?: Json | null
           cached_segments?: Json | null
-          created_at?: string
+          connected_at?: string | null
           id?: string
+          klaviyo_account_id?: string | null
+          klaviyo_account_name?: string | null
           last_synced_at?: string | null
+          sync_error?: string | null
+          sync_status?: string | null
         }
         Relationships: [
           {
