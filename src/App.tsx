@@ -9,15 +9,18 @@ import Login from "./pages/Login";
 import BrandDashboard from "./pages/BrandDashboard";
 import BrandSetup from "./pages/BrandSetup";
 import BrandOnboarding from "./pages/BrandOnboarding";
-import BrandSettings from "./pages/BrandSettings";
-import BrandGuide from "./pages/BrandGuide";
+import BrandCalendar from "./pages/BrandCalendar";
+import BrandSegments from "./pages/BrandSegments";
+import BrandProfile from "./pages/BrandProfile";
+import BrandIntelligence from "./pages/BrandIntelligence";
+import BrandIntegrations from "./pages/BrandIntegrations";
+import BrandPreferences from "./pages/BrandPreferences";
 import GlobalSettings from "./pages/GlobalSettings";
 import CampaignsList from "./pages/CampaignsList";
 import CampaignEditor from "./pages/CampaignEditor";
 import CampaignQA from "./pages/CampaignQA";
 import AppLayout from "./components/AppLayout";
 import AdminLibrary from "./pages/AdminLibrary";
-import BrandIntelligence from "./pages/BrandIntelligence";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,13 +50,19 @@ function AppRoutes() {
       <Route path="/brands/new" element={<ProtectedLayout><BrandSetup /></ProtectedLayout>} />
       <Route path="/brands/:brandId" element={<ProtectedLayout><CampaignsList /></ProtectedLayout>} />
       <Route path="/brands/:brandId/onboarding" element={<ProtectedLayout><BrandOnboarding /></ProtectedLayout>} />
-      <Route path="/brands/:brandId/settings" element={<ProtectedLayout><BrandSettings /></ProtectedLayout>} />
+      <Route path="/brands/:brandId/calendar" element={<ProtectedLayout><BrandCalendar /></ProtectedLayout>} />
+      <Route path="/brands/:brandId/segments" element={<ProtectedLayout><BrandSegments /></ProtectedLayout>} />
+      <Route path="/brands/:brandId/brand" element={<ProtectedLayout><BrandProfile /></ProtectedLayout>} />
       <Route path="/brands/:brandId/intelligence" element={<ProtectedLayout><BrandIntelligence /></ProtectedLayout>} />
-      <Route path="/brands/:brandId/guide" element={<ProtectedLayout><BrandGuide /></ProtectedLayout>} />
+      <Route path="/brands/:brandId/integrations" element={<ProtectedLayout><BrandIntegrations /></ProtectedLayout>} />
+      <Route path="/brands/:brandId/preferences" element={<ProtectedLayout><BrandPreferences /></ProtectedLayout>} />
       <Route path="/brands/:brandId/campaigns/:campaignId" element={<ProtectedRoute><CampaignEditor /></ProtectedRoute>} />
       <Route path="/brands/:brandId/campaigns/:campaignId/qa" element={<ProtectedRoute><CampaignQA /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedLayout><GlobalSettings /></ProtectedLayout>} />
       <Route path="/admin/library" element={<ProtectedRoute><AdminLibrary /></ProtectedRoute>} />
+      {/* Redirect old routes */}
+      <Route path="/brands/:brandId/settings" element={<Navigate to="../preferences" replace />} />
+      <Route path="/brands/:brandId/guide" element={<Navigate to="../brand" replace />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

@@ -20,9 +20,12 @@ interface SubItem {
 function getBrandSubItems(brandId: string): SubItem[] {
   return [
     { label: "Campaigns", icon: "campaigns", path: `/brands/${brandId}` },
-    { label: "Brand Settings", icon: "brand", path: `/brands/${brandId}/settings` },
+    { label: "Calendar", icon: "calendar", path: `/brands/${brandId}/calendar` },
+    { label: "Segments", icon: "segments", path: `/brands/${brandId}/segments` },
+    { label: "Brand", icon: "brand", path: `/brands/${brandId}/brand` },
     { label: "Intelligence", icon: "intelligence", path: `/brands/${brandId}/intelligence` },
-    { label: "Brand Guide", icon: "guide", path: `/brands/${brandId}/guide` },
+    { label: "Integrations", icon: "integrations", path: `/brands/${brandId}/integrations` },
+    { label: "Preferences", icon: "preferences", path: `/brands/${brandId}/preferences` },
   ];
 }
 
