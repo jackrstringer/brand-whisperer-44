@@ -1,103 +1,155 @@
 
 
-# Fix: Add Skeleton Extraction Pre-Pass to Prevent Grid "Freelancing"
+# Klaviyo OAuth Data Layer + Performance Intelligence
 
-## Problem
+## Overview
 
-In **Dupe mode**, the model receives reference screenshots as raw pixels and is told "produce an IDENTICAL structural replica." Despite explicit instructions, it still interprets grids loosely — e.g., converting a 2x2 equal grid into a "1 large + 2 stacked" mosaic layout (lines 72-83 of the uploaded HTML). The dupe prompt text is already good ("SAME image slot count," "SAME column layouts") but the model is working from pixels alone, which leads to creative interpretation rather than faithful replication.
+Replace the existing private-API-key Klaviyo integration with a full OAuth 2.0 flow, pull 365 days of campaign performance data, analyze it with AI, and inject the intelligence into every campaign generation prompt.
 
-Secondary issue: mismatched hardcoded heights (191px, 178px, 231px) within the same grid row.
+## Current State
 
-## Solution: Structured Skeleton Extraction Pre-Pass
+- `klaviyo_connections` table exists with `api_key_encrypted`, `cached_lists`, `cached_segments` columns (private key model)
+- `klaviyo-proxy` edge function handles validate-key, sync, create-template, create-campaign, disconnect
+- `KlaviyoSetup.tsx` component uses private API key input
+- `brand_intelligence` table has no Klaviyo-related columns
+- Generation pipeline fetches `compiled_context` from `brand_intelligence` and injects it
 
-Add a fast, cheap AI call (Gemini 2.5 Flash) that analyzes the reference screenshots **before** the main generation call, and outputs a structured layout spec. The generation model then executes that spec instead of guessing from pixels.
+## Prerequisites (User Action Required)
 
----
+Before implementation, three secrets must be added:
+- `KLAVIYO_CLIENT_ID` — from Klaviyo developer app registration
+- `KLAVIYO_CLIENT_SECRET` — from Klaviyo developer app registration  
+- `KLAVIYO_REDIRECT_URI` — set to `https://wauepdkxqhyndsmjzita.supabase.co/functions/v1/klaviyo-callback`
 
-### Step 1: Add skeleton extraction function
+## Database Changes
+
+### Migration 1: Add Klaviyo columns to `brand_intelligence`
+
+```sql
+ALTER TABLE brand_intelligence
+  ADD COLUMN klaviyo_raw jsonb,
+  ADD COLUMN klaviyo_report jsonb,
+  ADD COLUMN klaviyo_compiled text,
+  ADD COLUMN klaviyo_last_synced_at timestamptz;
+```
+
+### Migration 2: Rebuild `klaviyo_connections` for OAuth
+
+Drop and recreate `klaviyo_connections` to support OAuth tokens instead of private API keys. Preserve RLS. Add `sync_status`, `sync_error`, `access_token`, `refresh_token`, `token_expires_at`, `klaviyo_account_id`, `klaviyo_account_name`. Remove `api_key_encrypted`. Keep `cached_lists`, `cached_segments` for existing list/segment sync. Use a validation trigger for `sync_status` instead of CHECK constraint.
+
+## Edge Functions
+
+### 1. `klaviyo-connect` (new)
+
+- Takes `brand_id` as query param
+- Validates user auth via JWT
+- Builds Klaviyo OAuth authorize URL with scopes: `campaigns:read metrics:read lists:read profiles:read`
+- Uses `state` param = `{brand_id}:{user_jwt}` (signed/encoded to prevent CSRF)
+- Returns 302 redirect to Klaviyo
+
+### 2. `klaviyo-callback` (new)
+
+- Handles OAuth redirect with `code` and `state` query params
+- Exchanges code for access/refresh tokens via `POST https://a.klaviyo.com/oauth/token`
+- Fetches account info via `GET https://a.klaviyo.com/api/accounts/`
+- Upserts into `klaviyo_connections` with tokens, account ID, account name
+- Fires `klaviyo-sync` as fire-and-forget via `EdgeRuntime.waitUntil()`
+- Redirects user back to brand settings with `?klaviyo=connected`
+
+Config: `verify_jwt = false` (handles callback from Klaviyo, not from our frontend)
+
+### 3. `klaviyo-sync` (new)
+
+Main data pull function. Takes `brand_id`.
+
+**Step 1**: Fetch all sent campaigns from last 365 days via paginated `GET /api/campaigns/` with filter on channel=email and scheduled_at >= 365 days ago. Only keep status=sent.
+
+**Step 2**: Resolve metric IDs once via `GET /api/metrics/` (find Opened Email, Clicked Email, Unsubscribed, Placed Order, Received Email by name).
+
+**Step 3**: For each sent campaign (batches of 10, parallel within batch), fetch metrics via `POST /api/metric-aggregates/` for each metric type. Calculate open rate, click rate, CTR, unsubscribe rate, revenue per recipient.
+
+**Step 4**: Assemble raw data array. Save as `klaviyo_raw` in `brand_intelligence`. Update `klaviyo_last_synced_at`.
+
+**Step 5**: Fire `analyze-klaviyo-performance` as fire-and-forget.
+
+Also sync lists/segments into `cached_lists`/`cached_segments` on `klaviyo_connections` (preserves existing functionality).
+
+### 4. `analyze-klaviyo-performance` (new)
+
+- Fetches `klaviyo_raw` from `brand_intelligence`
+- Calls Claude Sonnet with the structured JSON report schema (top/worst performers, subject line intelligence, offer performance, content intelligence, list health, recommendations)
+- Saves parsed JSON as `klaviyo_report`
+- Fires `compile-klaviyo-context` as fire-and-forget
+
+### 5. `compile-klaviyo-context` (new)
+
+- Fetches `klaviyo_report` from `brand_intelligence`
+- Calls Claude Sonnet to convert report into concise prose briefing (~800 tokens)
+- Saves as `klaviyo_compiled`
+- Calls existing `compile-brand-context` to regenerate master `compiled_context`
+
+### 6. Update `klaviyo-proxy` (existing)
+
+- Change `validate-key` action → remove (replaced by OAuth)
+- Update all actions to read `access_token` instead of `api_key_encrypted`
+- Add token refresh logic: if `token_expires_at` is past, use `refresh_token` to get new access token before making API calls
+- Keep: `sync`, `get-cached`, `create-template`, `create-campaign`, `disconnect`
+
+## Generation Prompt Injection
 
 **File: `supabase/functions/_shared/generateCampaignCore.ts`**
 
-Add a new `extractReferenceSkeleton()` function that sends the reference images to Gemini 2.5 Flash via the Lovable AI Gateway and returns a JSON skeleton like:
+Two-line change at line 395: add `klaviyo_compiled` to the select query. Then inject after `brandIntelBlock`:
 
-```json
-{
-  "sections": [
-    { "type": "header", "layout": "centered-logo" },
-    { "type": "hero-text", "layout": "dark-bg-headline-subheadline" },
-    { "type": "grid", "columns": 2, "rows": 2, "equal_sizing": true, "labels": "below" },
-    { "type": "cta", "layout": "centered-button" },
-    { "type": "footer" }
-  ],
-  "total_image_slots": 4,
-  "grid_patterns": ["2x2 equal"]
-}
+```typescript
+const klaviyoBlock = brandIntelResult.data?.klaviyo_compiled
+  ? `\n\nKLAVIYO PERFORMANCE INTELLIGENCE:\n${brandIntelResult.data.klaviyo_compiled}`
+  : '';
 ```
 
-This call uses `LOVABLE_API_KEY` (already available in the environment). Cost: minimal. Latency: ~3-5 seconds.
+Inject `klaviyoBlock` into `brandRulesText` and `brandValuesText` alongside `brandIntelBlock`.
 
-### Step 2: Inject skeleton into reference/dupe mode prompts
+## UI: Updated KlaviyoSetup Component
 
-**File: `supabase/functions/_shared/generateCampaignCore.ts`**
+**File: `src/components/brand/KlaviyoSetup.tsx`**
 
-In the reference/dupe mode branch (around line 568), after fetching reference images, call `extractReferenceSkeleton()` and prepend the result to `userContent`:
+Replace private API key input with OAuth flow:
 
-```
-STRUCTURAL SKELETON (extracted from reference — replicate this EXACTLY):
-[skeleton JSON]
+**Not connected state:**
+- "Connect Klaviyo" button → opens `klaviyo-connect` URL via `window.open()` (same pattern as Shopify OAuth)
+- Listen for `?klaviyo=connected` query param to refresh state
 
-CRITICAL GRID RULES:
-- "columns: 2, rows: 2, equal_sizing: true" = 2 <tr> rows, each with 2 <td> cells, ALL images identical width+height
-- Do NOT convert equal grids into asymmetric mosaics, L-shapes, or "1 large + 2 small" layouts
-- Match the exact column × row count from the skeleton
-```
+**Connected state:**
+- Account name + connection date
+- Sync status badge (pending / syncing / complete / failed) with last synced timestamp
+- "Re-sync Data" button → calls `klaviyo-sync`
+- Collapsible "Performance Report" section: total campaigns, avg open rate, avg click rate, avg RPR, best send days (from `klaviyo_report.summary`)
+- Collapsible "Top Performing Campaigns" table: name, subject line, open rate, RPR (from `klaviyo_report.top_performers`)
+- Collapsible "Subject Line Intelligence": patterns that work/flop, best examples (from `klaviyo_report.subject_line_intelligence`)
+- Collapsible "AI Context Preview": read-only text of `klaviyo_compiled`
 
-### Step 3: Strengthen anti-mosaic rules in REFERENCE_MODE_SYSTEM
+**File: `src/pages/BrandSettings.tsx`**
+- Check for `?klaviyo=connected` query param on mount, show success toast, refresh KlaviyoSetup
 
-**File: `supabase/functions/_shared/generateCampaignCore.ts`**
+## Config
 
-Add to `REFERENCE_MODE_SYSTEM` (line 207):
+**File: `supabase/config.toml`**
+- Add `[functions.klaviyo-callback]` with `verify_jwt = false`
 
-```
-GRID GEOMETRY (CRITICAL):
-- When the skeleton specifies an NxM equal grid, produce EXACTLY that geometry
-- A 2×2 grid = 2 <tr> rows, each with 2 <td> cells of equal width+height
-- Do NOT reinterpret equal grids as mosaic/magazine/asymmetric layouts
-- All images in a grid row MUST share identical width AND height attributes
-```
+## File Summary
 
-### Step 4: Add grid geometry check to QA (Pass 2)
-
-**File: `supabase/functions/_shared/generateCampaignCore.ts`**
-
-Add item 12 to `QA_SYSTEM_PROMPT` (around line 271):
-
-```
-12. GRID GEOMETRY: If a skeleton specifies "columns: 2, rows: 2, equal_sizing: true", verify the HTML has exactly 2 <tr> rows each with exactly 2 equal-width <td> cells. Flag any mosaic or asymmetric layout as critical.
-```
-
-### Step 5: Add anti-mosaic rule to Visual QA
-
-**File: `supabase/functions/visual-qa/index.ts`**
-
-Add to the system prompt's structural comparison section:
-
-```
-GRID GEOMETRY (CRITICAL): If the reference shows an NxN grid of equally-sized images, the output MUST replicate that exact geometry. A 2×2 equal grid converted into a "1 large + 2 stacked" mosaic is a CRITICAL failure (structural_fidelity ≤ 3).
-```
-
----
-
-## Files Changed
-
-| File | Change |
+| File | Action |
 |------|--------|
-| `supabase/functions/_shared/generateCampaignCore.ts` | Add `extractReferenceSkeleton()`, inject skeleton into prompts, strengthen system prompts and QA checklist |
-| `supabase/functions/visual-qa/index.ts` | Add anti-mosaic rule to structural comparison |
-
-## Impact
-
-- Adds ~3-5 seconds to reference/dupe mode generation (Gemini Flash is fast)
-- No impact on standard mode (skeleton only runs when references are present)
-- The generation model receives concrete specs like `grid: 2x2, equal` instead of guessing from pixels
+| DB migration: `brand_intelligence` columns | Add 4 columns |
+| DB migration: `klaviyo_connections` rebuild | Drop/recreate for OAuth |
+| `supabase/functions/klaviyo-connect/index.ts` | New |
+| `supabase/functions/klaviyo-callback/index.ts` | New |
+| `supabase/functions/klaviyo-sync/index.ts` | New |
+| `supabase/functions/analyze-klaviyo-performance/index.ts` | New |
+| `supabase/functions/compile-klaviyo-context/index.ts` | New |
+| `supabase/functions/klaviyo-proxy/index.ts` | Update for OAuth tokens |
+| `supabase/functions/_shared/generateCampaignCore.ts` | 3-line injection |
+| `src/components/brand/KlaviyoSetup.tsx` | Rewrite for OAuth + reports |
+| `src/pages/BrandSettings.tsx` | Add callback detection |
+| `supabase/config.toml` | Add callback function config |
 
