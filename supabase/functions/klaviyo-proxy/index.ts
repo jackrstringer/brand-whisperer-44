@@ -103,7 +103,7 @@ serve(async (req) => {
           klaviyo_account_id: accountId,
           klaviyo_account_name: accountName,
           cached_lists: lists,
-          cached_stats: { active_profiles: activeProfiles, campaigns_sent_l30d: 0, campaigns_sent_l365d: 0, total_revenue_l365d: 0 },
+          cached_stats: { active_profiles: 0, campaigns_sent_l30d: 0, campaigns_sent_l365d: 0, total_revenue_l365d: 0 },
           last_synced_at: new Date().toISOString(),
           sync_status: "pending",
         }, { onConflict: "brand_id" });
