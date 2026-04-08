@@ -514,6 +514,9 @@ export default function KlaviyoSetup({ brandId }: Props) {
         </div>
       </div>
 
+      {/* Campaign Report Row */}
+      <CampaignReportRow brandId={brandId} klaviyoSynced={syncStatus === "complete"} />
+
       {/* Deep Analysis Progress / Complete */}
       <div className="rounded-lg border border-border bg-card p-4">
         {syncStatus === "complete" && (
