@@ -443,12 +443,13 @@ export default function KlaviyoSetup({ brandId }: Props) {
         </Button>
       </div>
 
-      {/* Quick Stats Bar */}
+      {/* Quick Stats */}
       <div className="rounded-lg border border-border bg-card">
-        <div className="grid grid-cols-3 divide-x divide-border">
+        {/* Top row: Profiles + Campaigns */}
+        <div className="grid grid-cols-2 divide-x divide-border">
           <StatCell
             icon={<Users className="w-4 h-4 text-muted-foreground" />}
-            label="Profiles"
+            label="Active Profiles"
             value={quickStats?.active_profiles}
             format="number"
             loading={!quickStats}
@@ -456,20 +457,51 @@ export default function KlaviyoSetup({ brandId }: Props) {
           />
           <StatCell
             icon={<Mail className="w-4 h-4 text-muted-foreground" />}
-            label="Campaigns"
+            label="Campaigns Sent"
             sublabel="last 30d"
             value={quickStats?.campaigns_last_30d}
             format="number"
             loading={!quickStats}
             error={statsErrors?.campaigns_last_30d}
           />
+        </div>
+        {/* Revenue row */}
+        <div className="grid grid-cols-4 divide-x divide-border border-t border-border">
           <StatCell
-            icon={<DollarSign className="w-4 h-4 text-muted-foreground" />}
-            label="Revenue (30d)"
-            value={quickStats?.revenue_last_30d}
+            icon={<ShoppingCart className="w-4 h-4 text-muted-foreground" />}
+            label="Total Store"
+            sublabel="last 30d"
+            value={quickStats?.total_store_revenue}
             format="currency"
             loading={!quickStats}
-            error={statsErrors?.revenue_last_30d}
+            error={statsErrors?.total_store_revenue}
+          />
+          <StatCell
+            icon={<TrendingUp className="w-4 h-4 text-muted-foreground" />}
+            label="Email Revenue"
+            sublabel="last 30d"
+            value={quickStats?.email_revenue}
+            format="currency"
+            loading={!quickStats}
+            error={statsErrors?.campaign_revenue || statsErrors?.flow_revenue}
+          />
+          <StatCell
+            icon={<Mail className="w-4 h-4 text-muted-foreground" />}
+            label="Campaigns"
+            sublabel="last 30d"
+            value={quickStats?.campaign_revenue}
+            format="currency"
+            loading={!quickStats}
+            error={statsErrors?.campaign_revenue}
+          />
+          <StatCell
+            icon={<Zap className="w-4 h-4 text-muted-foreground" />}
+            label="Flows"
+            sublabel="last 30d"
+            value={quickStats?.flow_revenue}
+            format="currency"
+            loading={!quickStats}
+            error={statsErrors?.flow_revenue}
           />
         </div>
         <div className="flex items-center justify-end px-3 py-1.5 border-t border-border">
