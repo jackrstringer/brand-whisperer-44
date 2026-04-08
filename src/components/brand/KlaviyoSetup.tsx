@@ -21,7 +21,7 @@ export default function KlaviyoSetup({ brandId }: Props) {
   const [syncing, setSyncing] = useState(false);
   const [syncingPerformance, setSyncingPerformance] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const [stats, setStats] = useState<{ lists: number; segments: number; lastSynced: string | null }>({ lists: 0, segments: 0, lastSynced: null });
+  const [stats, setStats] = useState<{ activeProfiles: number; campaignsL30d: number; totalRevenue: number; lastSynced: string | null }>({ activeProfiles: 0, campaignsL30d: 0, totalRevenue: 0, lastSynced: null });
   const [connectionInfo, setConnectionInfo] = useState<{ accountName: string; syncStatus: string; syncError: string | null; connectedAt: string | null }>({
     accountName: "", syncStatus: "pending", syncError: null, connectedAt: null,
   });
@@ -38,9 +38,11 @@ export default function KlaviyoSetup({ brandId }: Props) {
       const { data } = await supabase.from("klaviyo_connections").select("*").eq("brand_id", brandId).maybeSingle();
       if (data) {
         setConnected(true);
+        const cachedStats = (data as any).cached_stats || {};
         setStats({
-          lists: Array.isArray(data.cached_lists) ? (data.cached_lists as any[]).length : 0,
-          segments: Array.isArray(data.cached_segments) ? (data.cached_segments as any[]).length : 0,
+          activeProfiles: cachedStats.active_profiles || 0,
+          campaignsL30d: cachedStats.campaigns_sent_l30d || 0,
+          totalRevenue: cachedStats.total_revenue_l365d || 0,
           lastSynced: data.last_synced_at,
         });
         setConnectionInfo({
@@ -100,11 +102,7 @@ export default function KlaviyoSetup({ brandId }: Props) {
         body: { action: "sync", brandId },
       });
       if (error || data?.error) throw new Error(data?.error || error?.message);
-      setStats({
-        lists: (data.lists || []).length,
-        segments: (data.segments || []).length,
-        lastSynced: new Date().toISOString(),
-      });
+      await checkConnection();
       toast.success("Lists & segments synced");
     } catch (e: any) {
       toast.error(e.message);
@@ -157,7 +155,7 @@ export default function KlaviyoSetup({ brandId }: Props) {
       });
       if (error || data?.error) throw new Error(data?.error || error?.message);
       setConnected(false);
-      setStats({ lists: 0, segments: 0, lastSynced: null });
+      setStats({ activeProfiles: 0, campaignsL30d: 0, totalRevenue: 0, lastSynced: null });
       setReport(null);
       setCompiled(null);
       toast.success("Klaviyo disconnected");
@@ -211,14 +209,18 @@ export default function KlaviyoSetup({ brandId }: Props) {
         )}
 
         {/* Stats */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <div className="p-4 rounded-lg bg-card border border-border">
-            <p className="text-2xl font-semibold">{stats.lists}</p>
-            <p className="text-xs text-muted-foreground mt-1">Lists</p>
+            <p className="text-2xl font-semibold">{stats.activeProfiles.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground mt-1">Active Profiles</p>
           </div>
           <div className="p-4 rounded-lg bg-card border border-border">
-            <p className="text-2xl font-semibold">{stats.segments}</p>
-            <p className="text-xs text-muted-foreground mt-1">Segments</p>
+            <p className="text-2xl font-semibold">{stats.campaignsL30d}</p>
+            <p className="text-xs text-muted-foreground mt-1">Campaigns L30D</p>
+          </div>
+          <div className="p-4 rounded-lg bg-card border border-border">
+            <p className="text-2xl font-semibold">${stats.totalRevenue.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground mt-1">Revenue L365D</p>
           </div>
         </div>
 

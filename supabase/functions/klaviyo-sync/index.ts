@@ -30,12 +30,14 @@ async function klaviyoFetch(path: string, apiKey: string, options: RequestInit =
 
 async function fetchAllPages(path: string, apiKey: string, params?: Record<string, string>): Promise<any[]> {
   const all: any[] = [];
-  const qs = new URLSearchParams(params || {});
-  let url = `${path}${qs.toString() ? `?${qs.toString()}` : ""}`;
+  // Build query string manually to preserve literal brackets (e.g. page[size])
+  const qs = params
+    ? Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&")
+    : "";
+  let url = `${path}${qs ? `?${qs}` : ""}`;
   while (url) {
     const data = await klaviyoFetch(url, apiKey);
     if (data.data) all.push(...data.data);
-    // Klaviyo returns full URLs in links.next
     const nextLink = data.links?.next;
     if (nextLink) {
       try {
@@ -129,10 +131,9 @@ serve(async (req) => {
                     type: "metric-aggregate",
                     attributes: {
                       metric_id: metricId,
-                      filter: [`equals(\"Campaign Name\",\"${attrs.name}\")`],
+                      filter: [`equals("Campaign Name","${attrs.name}")`],
                       measurements: ["count", "sum_value", "unique"],
                       interval: "month",
-                      page_size: 1,
                     },
                   },
                 }),
@@ -206,23 +207,46 @@ serve(async (req) => {
         klaviyo_last_synced_at: new Date().toISOString(),
       }).eq("brand_id", brandId);
 
-      // Step 5: Sync lists and segments
+      // Step 5: Sync lists (with profile_count) and active segments only
       const [listsData, segmentsData] = await Promise.all([
-        klaviyoFetch("/lists", apiKey),
-        klaviyoFetch("/segments", apiKey),
+        klaviyoFetch("/lists?fields[list]=name,profile_count", apiKey),
+        klaviyoFetch("/segments?filter=equals(is_active,true)", apiKey),
       ]);
 
+      // Step 6: Compute cached stats
+      const lists = listsData.data || [];
+      const activeProfiles = lists.reduce((max: number, l: any) => {
+        const count = l.attributes?.profile_count || 0;
+        return count > max ? count : max;
+      }, 0);
+
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const campaignsSentL30d = campaignData.filter((c: any) => {
+        const sentAt = c.sent_at ? new Date(c.sent_at) : null;
+        return sentAt && sentAt >= thirtyDaysAgo;
+      }).length;
+
+      const totalRevenue = campaignData.reduce((sum: number, c: any) => sum + (c.revenue || 0), 0);
+
+      const cachedStats = {
+        active_profiles: activeProfiles,
+        campaigns_sent_l30d: campaignsSentL30d,
+        campaigns_sent_l365d: campaignData.length,
+        total_revenue_l365d: Math.round(totalRevenue * 100) / 100,
+      };
+
       await supabase.from("klaviyo_connections").update({
-        cached_lists: listsData.data || [],
+        cached_lists: lists,
         cached_segments: segmentsData.data || [],
+        cached_stats: cachedStats,
         last_synced_at: new Date().toISOString(),
         sync_status: "complete",
         sync_error: null,
       }).eq("brand_id", brandId);
 
-      console.log(`[klaviyo-sync] Complete. ${campaignData.length} campaigns synced.`);
+      console.log(`[klaviyo-sync] Complete. ${campaignData.length} campaigns synced. Stats:`, cachedStats);
 
-      // Step 6: Fire analyze-klaviyo-performance
+      // Step 7: Fire analyze-klaviyo-performance
       try {
         await fetch(`${supabaseUrl}/functions/v1/analyze-klaviyo-performance`, {
           method: "POST",
@@ -239,6 +263,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({
         success: true,
         campaignCount: campaignData.length,
+        stats: cachedStats,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     } catch (syncError: any) {

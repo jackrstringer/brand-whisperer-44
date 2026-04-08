@@ -1,0 +1,1 @@
+ALTER TABLE klaviyo_connections ADD COLUMN IF NOT EXISTS cached_stats jsonb DEFAULT '{}'::jsonb;
