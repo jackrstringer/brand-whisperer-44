@@ -26,11 +26,14 @@ export interface Campaign {
   html_history: any;
   status: string;
   reference_campaign_ids: string[] | null;
+  reference_campaign_type?: string | null;
+  reference_strength?: number | null;
   product_ids?: string[] | null;
   pinned_asset_urls?: string[] | null;
   speed_mode?: "normal" | "fast" | null;
   created_at: string;
   updated_at: string;
+  _remediationAttempted?: boolean;
 }
 
 export interface VariantGroupItem {
