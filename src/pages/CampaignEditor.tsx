@@ -296,6 +296,9 @@ export default function CampaignEditor() {
         setPreviewText((campaign as any).preview_text || "");
         setSendListIds(Array.isArray((campaign as any).send_list_ids) ? (campaign as any).send_list_ids : []);
         setSendSegmentIds(Array.isArray((campaign as any).send_segment_ids) ? (campaign as any).send_segment_ids : []);
+        setCampaignMode((campaign as any).campaign_mode === "flow" ? "flow" : "campaign");
+        if ((campaign as any).flow_config) setFlowConfig((campaign as any).flow_config as FlowConfig);
+        if ((campaign as any).campaign_mode === "flow") setFlowDetailTab("flow");
         // speedMode is always "normal" now
         const history = campaign.html_history;
         setCanUndo(Array.isArray(history) && history.length > 0);
