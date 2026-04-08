@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import {
   Loader2, Check, RefreshCw, Unplug, Eye, EyeOff, ChevronDown,
   BarChart3, Trophy, Type, Brain, Users, Mail, DollarSign, AlertCircle, RotateCcw, ExternalLink,
+  ShoppingCart, Zap, TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
@@ -28,6 +29,10 @@ type ConnectStep = {
 type QuickStats = {
   active_profiles: number | null;
   campaigns_last_30d: number | null;
+  total_store_revenue: number | null;
+  email_revenue: number | null;
+  campaign_revenue: number | null;
+  flow_revenue: number | null;
   revenue_last_30d: number | null;
   fetched_at: string;
 };
@@ -35,7 +40,9 @@ type QuickStats = {
 type QuickStatsErrors = {
   active_profiles: string | null;
   campaigns_last_30d: string | null;
-  revenue_last_30d: string | null;
+  campaign_revenue: string | null;
+  flow_revenue: string | null;
+  total_store_revenue: string | null;
 };
 
 type SyncStatus = "pending" | "syncing" | "analyzing" | "compiling" | "complete" | "failed";
@@ -247,12 +254,11 @@ export default function KlaviyoSetup({ brandId }: Props) {
         if (errs) setStatsErrors(errs);
 
         // Step 2 is only "done" if at least one stat is non-null
-        const hasAnyValue = stats.active_profiles != null || stats.campaigns_last_30d != null || stats.revenue_last_30d != null;
+        const hasAnyValue = stats.active_profiles != null || stats.campaigns_last_30d != null || stats.email_revenue != null;
         if (hasAnyValue) {
           setConnectSteps(prev => prev.map((s, i) => i === 1 ? { ...s, status: "done" } : i === 2 ? { ...s, status: "active" } : s));
         } else {
-          // All null — mark as failed with first error
-          const firstError = errs?.active_profiles || errs?.campaigns_last_30d || errs?.revenue_last_30d || "All stats returned null";
+          const firstError = errs?.active_profiles || errs?.campaigns_last_30d || errs?.campaign_revenue || "All stats returned null";
           setConnectSteps(prev => prev.map((s, i) => i === 1 ? { ...s, status: "error", error: firstError } : i === 2 ? { ...s, status: "active" } : s));
         }
       }
@@ -437,12 +443,13 @@ export default function KlaviyoSetup({ brandId }: Props) {
         </Button>
       </div>
 
-      {/* Quick Stats Bar */}
+      {/* Quick Stats */}
       <div className="rounded-lg border border-border bg-card">
-        <div className="grid grid-cols-3 divide-x divide-border">
+        {/* Top row: Profiles + Campaigns */}
+        <div className="grid grid-cols-2 divide-x divide-border">
           <StatCell
             icon={<Users className="w-4 h-4 text-muted-foreground" />}
-            label="Profiles"
+            label="Active Profiles"
             value={quickStats?.active_profiles}
             format="number"
             loading={!quickStats}
@@ -450,20 +457,51 @@ export default function KlaviyoSetup({ brandId }: Props) {
           />
           <StatCell
             icon={<Mail className="w-4 h-4 text-muted-foreground" />}
-            label="Campaigns"
+            label="Campaigns Sent"
             sublabel="last 30d"
             value={quickStats?.campaigns_last_30d}
             format="number"
             loading={!quickStats}
             error={statsErrors?.campaigns_last_30d}
           />
+        </div>
+        {/* Revenue row */}
+        <div className="grid grid-cols-4 divide-x divide-border border-t border-border">
           <StatCell
-            icon={<DollarSign className="w-4 h-4 text-muted-foreground" />}
-            label="Revenue (30d)"
-            value={quickStats?.revenue_last_30d}
+            icon={<ShoppingCart className="w-4 h-4 text-muted-foreground" />}
+            label="Total Store"
+            sublabel="last 30d"
+            value={quickStats?.total_store_revenue}
             format="currency"
             loading={!quickStats}
-            error={statsErrors?.revenue_last_30d}
+            error={statsErrors?.total_store_revenue}
+          />
+          <StatCell
+            icon={<TrendingUp className="w-4 h-4 text-muted-foreground" />}
+            label="Email Revenue"
+            sublabel="last 30d"
+            value={quickStats?.email_revenue}
+            format="currency"
+            loading={!quickStats}
+            error={statsErrors?.campaign_revenue || statsErrors?.flow_revenue}
+          />
+          <StatCell
+            icon={<Mail className="w-4 h-4 text-muted-foreground" />}
+            label="Campaigns"
+            sublabel="last 30d"
+            value={quickStats?.campaign_revenue}
+            format="currency"
+            loading={!quickStats}
+            error={statsErrors?.campaign_revenue}
+          />
+          <StatCell
+            icon={<Zap className="w-4 h-4 text-muted-foreground" />}
+            label="Flows"
+            sublabel="last 30d"
+            value={quickStats?.flow_revenue}
+            format="currency"
+            loading={!quickStats}
+            error={statsErrors?.flow_revenue}
           />
         </div>
         <div className="flex items-center justify-end px-3 py-1.5 border-t border-border">
