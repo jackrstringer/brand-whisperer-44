@@ -155,7 +155,7 @@ export default function KlaviyoSetup({ brandId }: Props) {
       });
       if (error || data?.error) throw new Error(data?.error || error?.message);
       setConnected(false);
-      setStats({ lists: 0, segments: 0, lastSynced: null });
+      setStats({ activeProfiles: 0, campaignsL30d: 0, totalRevenue: 0, lastSynced: null });
       setReport(null);
       setCompiled(null);
       toast.success("Klaviyo disconnected");

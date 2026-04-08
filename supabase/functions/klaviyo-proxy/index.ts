@@ -148,8 +148,8 @@ serve(async (req) => {
 
     if (action === "sync") {
       const [listsData, segmentsData] = await Promise.all([
-        klaviyoFetch("/lists", apiKey),
-        klaviyoFetch("/segments", apiKey),
+        klaviyoFetch("/lists?fields[list]=name,profile_count", apiKey),
+        klaviyoFetch("/segments?filter=equals(is_active,true)", apiKey),
       ]);
 
       await supabase.from("klaviyo_connections").update({
