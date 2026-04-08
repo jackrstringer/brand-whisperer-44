@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
           const hasMore = !!data?.links?.next;
           console.log("[quick-stats] Profiles fallback: page has", pageCount, "items, hasMore:", hasMore);
           // If there's a next page, we know there are more than pageCount profiles
-          return hasMore ? `${pageCount}+` : pageCount;
+          return hasMore ? pageCount : pageCount;
         }
         throw new Error(`Could not extract profile count. Response keys: ${Object.keys(data).join(", ")}. Meta: ${JSON.stringify(data?.meta)}`);
       })(),
