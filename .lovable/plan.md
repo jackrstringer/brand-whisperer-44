@@ -1,54 +1,71 @@
 
-# CampaignStudio Design System Overhaul
 
-## Scope
-Replace the current pink-themed design with a premium monochrome system (8-color palette, Instrument Serif + DM Sans fonts, no shadows, no colored accents).
+# Restructure Brand Subpages
 
-## Phase 1: Foundation (CSS tokens, fonts, global reset)
-- Add Google Fonts import (Instrument Serif + DM Sans) to `index.html`
-- Rewrite `src/index.css` — replace all HSL color tokens with the 8-color hex palette, add shimmer animation, global reset, font-smoothing
-- Update `tailwind.config.ts` — map all design tokens to the new palette, update border-radius defaults, remove shadow utilities
-- Remove pink/colored accent references everywhere
+## Current State
+The sidebar has 4 sub-items per brand: Campaigns, Brand Settings, Intelligence, Brand Guide. Most content lives in the monolithic `BrandSettings.tsx` page with 7 tabs (Info, Intelligence, Assets, Products, Preferences, Integrations, Analysis).
 
-**Files**: `index.html`, `src/index.css`, `tailwind.config.ts`
+## New Structure
+Each brand gets 7 sidebar sub-items, each mapping to a dedicated route/page:
 
-## Phase 2: Core UI components (shadcn overrides)
-- `button.tsx` — primary = `#2B2B2B` fill, outline = `#E8E8E8` border, pill radius 15px, no shadows
-- `card.tsx` — `#FFFFFF` bg, `#E8E8E8` border, 12px radius, 28px padding, no shadow
-- `badge.tsx` — status pill style (15px radius, `#F2F2F2` bg or outline)
-- `input.tsx` — `#E8E8E8` border, 8px radius
-- `table.tsx` — 12px container radius, `#F2F2F2` row dividers, uppercase headers
-- `tabs.tsx`, `dialog.tsx`, `select.tsx`, `dropdown-menu.tsx` — align to monochrome palette
-- `skeleton.tsx` — shimmer gradient pattern
-- `progress.tsx` — gradient fill `#2B2B2B → #686868`
+| Sidebar Item | Route | Content |
+|---|---|---|
+| Campaigns | `/brands/:id` | Existing `CampaignsList` (no change) |
+| Calendar | `/brands/:id/calendar` | New "Coming Soon" placeholder |
+| Segments | `/brands/:id/segments` | New "Coming Soon" placeholder |
+| Brand | `/brands/:id/brand` | Assets + Products + ShopifyProductGrid + Analysis (ReanalyzeBrand) + Brand Guide |
+| Intelligence | `/brands/:id/intelligence` | Existing `BrandIntelligenceWizard` (already exists, keep as-is) |
+| Integrations | `/brands/:id/integrations` | Klaviyo, Shopify, ClickUp setup components (moved from BrandSettings) |
+| Preferences | `/brands/:id/preferences` | Brand Info (name/industry/url) + Instructions + QA Checklist + Delete Brand |
 
-**Files**: ~12 shadcn component files
+## Changes
 
-## Phase 3: Sidebar redesign
-- Rewrite `AppSidebar.tsx` — 240px expanded / 56px collapsed, white bg, new nav pill style
-- Add dock-effect dot magnification in collapsed state
-- Add peek-on-hover behavior (264px peek width, staggered label fade)
-- Add click-to-collapse/expand on dead space
-- Custom inline SVG icons (replace Lucide)
-- Bottom section with moon toggle + settings gear (with rotate animation)
+### 1. Update sidebar sub-items (`AppSidebar.tsx`)
+Replace `getBrandSubItems` to return 7 items with matching icons and paths. Add a `preferences` icon to `SidebarIcons.tsx` (sliders/toggle style).
 
-**Files**: `src/components/AppSidebar.tsx`, `src/components/ui/sidebar.tsx`
+### 2. Create new page files
 
-## Phase 4: Page layouts & remaining components
-- Update `AppLayout.tsx` — `#FAFAFA` bg, proper padding/max-width
-- Update all page headers to use Instrument Serif 32px titles
-- Update `KlaviyoSetup.tsx`, `BrandIntelligenceTab.tsx`, and other feature components to use new tokens
-- Remove all `text-emerald-*`, `text-yellow-*`, `bg-emerald-*` etc. hardcoded color classes
-- Replace Lucide icon usage in sidebar (keep Lucide in content areas for now)
+**`src/pages/BrandCalendar.tsx`** — Simple "Coming Soon" placeholder page.
 
-**Files**: All page files, feature components
+**`src/pages/BrandSegments.tsx`** — Simple "Coming Soon" placeholder page.
 
-## Implementation Order
-Start with Phase 1 (foundation) since everything else depends on it. Each phase builds on the previous.
+**`src/pages/BrandIntegrations.tsx`** — New page pulling Klaviyo/Shopify/ClickUp setup out of BrandSettings.
 
-## Anti-patterns to enforce
-- Zero `box-shadow` anywhere
-- No `rgba()`/`hsla()`
-- No colors outside the 8-token palette
-- Border-radius only: 3px, 8px, 10px, 12px, 15px, 50%
-- No `transition: all` — specify exact properties
+**`src/pages/BrandPreferences.tsx`** — New page with brand info fields (name, industry, URL), instructions textarea, QA checklist, and delete brand danger zone.
+
+**`src/pages/BrandProfile.tsx`** — New "Brand" page combining AssetManager, ProductManager, ShopifyProductGrid, ReanalyzeBrand, and Brand Guide content.
+
+### 3. Refactor `BrandSettings.tsx` → remove it
+All its content is redistributed. Remove the file and its route.
+
+### 4. Update `BrandIntelligence.tsx`
+Keep as-is — it already has the wizard. Just ensure the `onComplete` callback navigates correctly.
+
+### 5. Update routes (`App.tsx`)
+Remove `/brands/:id/settings` and `/brands/:id/guide`. Add:
+- `/brands/:id/calendar` → `BrandCalendar`
+- `/brands/:id/segments` → `BrandSegments`
+- `/brands/:id/brand` → `BrandProfile`
+- `/brands/:id/integrations` → `BrandIntegrations`
+- `/brands/:id/preferences` → `BrandPreferences`
+
+### 6. Add `preferences` icon to `SidebarIcons.tsx`
+A sliders/toggle icon to match the design system.
+
+### 7. Active path matching in sidebar
+The sidebar currently does exact `activePath === item.path` matching. This stays correct since each page has a unique route.
+
+## Files Summary
+
+| File | Action |
+|---|---|
+| `src/components/AppSidebar.tsx` | Update `getBrandSubItems` to 7 items |
+| `src/components/sidebar/SidebarIcons.tsx` | Add `preferences` icon |
+| `src/pages/BrandCalendar.tsx` | Create — coming soon |
+| `src/pages/BrandSegments.tsx` | Create — coming soon |
+| `src/pages/BrandProfile.tsx` | Create — combines assets, products, analysis, guide |
+| `src/pages/BrandIntegrations.tsx` | Create — Klaviyo/Shopify/ClickUp |
+| `src/pages/BrandPreferences.tsx` | Create — info, instructions, QA, delete |
+| `src/pages/BrandSettings.tsx` | Delete |
+| `src/App.tsx` | Update routes |
+
