@@ -192,16 +192,32 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0] + "T00:00:00+00:00";
-    const now = new Date().toISOString().split("T")[0] + "T23:59:59+00:00";
-
     const errors: Record<string, string | null> = {
       active_profiles: null,
       campaigns_last_30d: null,
-      revenue_last_30d: null,
+      campaign_revenue: null,
+      flow_revenue: null,
+      total_store_revenue: null,
     };
 
-    const [profilesResult, campaignsResult, revenueResult] = await Promise.allSettled([
+    // Find Placed Order metric first (needed by multiple stats)
+    let placedOrderMetricId: string | null = null;
+    try {
+      const metricsData = await klaviyoGet(`/metrics/`, apiKey);
+      const metrics = metricsData?.data || [];
+      const placedOrderMetric = metrics.find((m: any) =>
+        m.attributes?.name?.toLowerCase().includes("placed order")
+      );
+      placedOrderMetricId = placedOrderMetric?.id || null;
+      console.log("[quick-stats] Placed Order metric:", placedOrderMetricId);
+    } catch (e: any) {
+      console.warn("[quick-stats] Metric lookup failed:", e.message);
+    }
+
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0] + "T00:00:00+00:00";
+    const now = new Date().toISOString().split("T")[0] + "T23:59:59+00:00";
+
+    const [profilesResult, campaignsResult, campaignRevenueResult, flowRevenueResult, storeRevenueResult] = await Promise.allSettled([
       getActiveProfileCount(apiKey, brandId, supabase),
 
       (async () => {
@@ -209,51 +225,89 @@ Deno.serve(async (req) => {
           `/campaigns/?filter=equals(messages.channel,'email'),equals(status,'Sent'),greater-or-equal(updated_at,${thirtyDaysAgo})`,
           apiKey
         );
-        console.log("[quick-stats] Campaigns response keys:", Object.keys(data), "meta:", JSON.stringify(data?.meta));
         const total = data?.meta?.total ?? data?.meta?.page_info?.count ?? null;
         if (total !== null) return total;
         return data?.data?.length ?? 0;
       })(),
 
+      // Campaign Revenue via Reporting API
       (async () => {
-        // Use Reporting API (matches Klaviyo UI) instead of metric-aggregates (which doesn't)
-        const metricsData = await klaviyoGet(`/metrics/`, apiKey);
-        const metrics = metricsData?.data || [];
-        const placedOrderMetric = metrics.find((m: any) =>
-          m.attributes?.name?.toLowerCase().includes("placed order")
-        );
-        if (!placedOrderMetric) {
-          console.warn("[quick-stats] No 'Placed Order' metric found among", metrics.length, "metrics");
-          return null;
-        }
-        const metricId = placedOrderMetric.id;
-        console.log("[quick-stats] Found Placed Order metric:", metricId);
-
+        if (!placedOrderMetricId) return null;
         const reportData = await klaviyoPost(`/campaign-values-reports/`, apiKey, {
           data: {
             type: "campaign-values-report",
             attributes: {
               statistics: ["conversion_value"],
               timeframe: { key: "last_30_days" },
-              conversion_metric_id: metricId,
+              conversion_metric_id: placedOrderMetricId,
               filter: `equals(send_channel,"email")`,
             },
           },
-        }, "2024-10-15");
-
+        }, SEGMENT_REVISION);
         const results = reportData?.data?.attributes?.results || [];
         let total = 0;
-        for (const r of results) {
-          total += r.statistics?.conversion_value ?? 0;
+        for (const r of results) total += r.statistics?.conversion_value ?? 0;
+        console.log("[quick-stats] Campaign revenue:", total);
+        return Math.round(total * 100) / 100;
+      })(),
+
+      // Flow Revenue via Reporting API
+      (async () => {
+        if (!placedOrderMetricId) return null;
+        const reportData = await klaviyoPost(`/flow-values-reports/`, apiKey, {
+          data: {
+            type: "flow-values-report",
+            attributes: {
+              statistics: ["conversion_value"],
+              timeframe: { key: "last_30_days" },
+              conversion_metric_id: placedOrderMetricId,
+              filter: `equals(send_channel,"email")`,
+            },
+          },
+        }, SEGMENT_REVISION);
+        const results = reportData?.data?.attributes?.results || [];
+        let total = 0;
+        for (const r of results) total += r.statistics?.conversion_value ?? 0;
+        console.log("[quick-stats] Flow revenue:", total);
+        return Math.round(total * 100) / 100;
+      })(),
+
+      // Total Store Revenue via metric aggregates (all channels, not email-attributed)
+      (async () => {
+        if (!placedOrderMetricId) return null;
+        const aggData = await klaviyoPost(`/metric-aggregates/`, apiKey, {
+          data: {
+            type: "metric-aggregate",
+            attributes: {
+              metric_id: placedOrderMetricId,
+              interval: "month",
+              measurements: ["sum_value"],
+              filter: `greater-or-equal(datetime,${thirtyDaysAgo}),less-than(datetime,${now})`,
+              timezone: "UTC",
+            },
+          },
+        });
+        const measurements = aggData?.data?.attributes?.data;
+        if (!measurements || !Array.isArray(measurements)) return null;
+        let total = 0;
+        for (const m of measurements) {
+          if (m.measurements?.sum_value) {
+            for (const v of m.measurements.sum_value) total += v || 0;
+          }
         }
-        console.log("[quick-stats] Revenue via Reporting API:", total, "from", results.length, "results");
-        return total;
+        console.log("[quick-stats] Total store revenue:", total);
+        return Math.round(total * 100) / 100;
       })(),
     ]);
 
     const activeProfiles = profilesResult.status === "fulfilled" ? profilesResult.value : null;
     const campaignsL30d = campaignsResult.status === "fulfilled" ? campaignsResult.value : null;
-    const revenueL30d = revenueResult.status === "fulfilled" ? revenueResult.value : null;
+    const campaignRevenue = campaignRevenueResult.status === "fulfilled" ? campaignRevenueResult.value : null;
+    const flowRevenue = flowRevenueResult.status === "fulfilled" ? flowRevenueResult.value : null;
+    const totalStoreRevenue = storeRevenueResult.status === "fulfilled" ? storeRevenueResult.value : null;
+    const emailRevenue = (campaignRevenue != null || flowRevenue != null)
+      ? (campaignRevenue ?? 0) + (flowRevenue ?? 0)
+      : null;
 
     if (profilesResult.status === "rejected") {
       errors.active_profiles = profilesResult.reason?.message || "Unknown error";
@@ -261,17 +315,26 @@ Deno.serve(async (req) => {
     }
     if (campaignsResult.status === "rejected") {
       errors.campaigns_last_30d = campaignsResult.reason?.message || "Unknown error";
-      console.warn("[quick-stats] Campaigns failed:", errors.campaigns_last_30d);
     }
-    if (revenueResult.status === "rejected") {
-      errors.revenue_last_30d = revenueResult.reason?.message || "Unknown error";
-      console.warn("[quick-stats] Revenue failed:", errors.revenue_last_30d);
+    if (campaignRevenueResult.status === "rejected") {
+      errors.campaign_revenue = campaignRevenueResult.reason?.message || "Unknown error";
+    }
+    if (flowRevenueResult.status === "rejected") {
+      errors.flow_revenue = flowRevenueResult.reason?.message || "Unknown error";
+    }
+    if (storeRevenueResult.status === "rejected") {
+      errors.total_store_revenue = storeRevenueResult.reason?.message || "Unknown error";
     }
 
     const quickStats = {
       active_profiles: activeProfiles,
       campaigns_last_30d: campaignsL30d,
-      revenue_last_30d: revenueL30d,
+      total_store_revenue: totalStoreRevenue,
+      email_revenue: emailRevenue,
+      campaign_revenue: campaignRevenue,
+      flow_revenue: flowRevenue,
+      // Keep legacy key for backward compat
+      revenue_last_30d: emailRevenue,
       fetched_at: new Date().toISOString(),
     };
 
