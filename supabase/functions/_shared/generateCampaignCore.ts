@@ -5,6 +5,73 @@
 import { rehostHtmlImagesWithImageKit } from "./imagekit.ts";
 import { finalizeCampaignHtml } from "./finalizeCampaignHtml.ts";
 
+/**
+ * Extract a structured layout skeleton from reference screenshots using Gemini Flash.
+ * Returns a JSON string describing section types, grid geometry, and image slot counts.
+ */
+async function extractReferenceSkeleton(referenceImageUrls: string[]): Promise<string | null> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY || referenceImageUrls.length === 0) return null;
+
+  const content: any[] = [
+    {
+      type: "text",
+      text: `Analyze these reference email campaign screenshots and extract a precise structural skeleton. Return ONLY a JSON object with this exact format:
+
+{
+  "sections": [
+    { "type": "header|hero|hero-text|text|grid|cta|footer|divider|testimonial|stats", "layout": "description of layout", "columns": N, "rows": N, "equal_sizing": true/false, "labels": "none|below|overlay" }
+  ],
+  "total_image_slots": N,
+  "grid_patterns": ["NxM equal" or "NxM varied" for each grid found]
+}
+
+RULES:
+- For grids: count EXACTLY how many columns and rows of images you see. A 2×2 grid has columns:2, rows:2.
+- "equal_sizing": true means ALL images in the grid are the same size. false means they vary (mosaic/asymmetric).
+- If images are arranged in a simple NxN grid with equal sizes, report it as "NxN equal" in grid_patterns.
+- Count total_image_slots as the total number of distinct image placeholders in the entire email.
+- Be precise about section ordering — list them top to bottom as they appear.
+
+Return ONLY the JSON. No commentary.`,
+    },
+  ];
+
+  for (const url of referenceImageUrls.slice(0, 10)) {
+    content.push({ type: "image_url", image_url: { url } });
+  }
+
+  try {
+    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{ role: "user", content }],
+      }),
+    });
+
+    if (!resp.ok) {
+      console.warn(`[extractReferenceSkeleton] Gemini returned ${resp.status}, skipping skeleton`);
+      return null;
+    }
+
+    const result = await resp.json();
+    const raw = result.choices?.[0]?.message?.content || "";
+    const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    // Validate it's parseable JSON
+    JSON.parse(cleaned);
+    console.log(`[extractReferenceSkeleton] Extracted skeleton: ${cleaned.substring(0, 200)}...`);
+    return cleaned;
+  } catch (err) {
+    console.warn(`[extractReferenceSkeleton] Failed:`, err);
+    return null;
+  }
+}
+
 /** Strip any AI commentary and extract only the HTML document */
 function extractHtmlOnly(text: string): string {
   let html = text.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
