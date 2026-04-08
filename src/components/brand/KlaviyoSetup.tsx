@@ -21,7 +21,7 @@ export default function KlaviyoSetup({ brandId }: Props) {
   const [syncing, setSyncing] = useState(false);
   const [syncingPerformance, setSyncingPerformance] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
-  const [stats, setStats] = useState<{ lists: number; segments: number; lastSynced: string | null }>({ lists: 0, segments: 0, lastSynced: null });
+  const [stats, setStats] = useState<{ activeProfiles: number; campaignsL30d: number; totalRevenue: number; lastSynced: string | null }>({ activeProfiles: 0, campaignsL30d: 0, totalRevenue: 0, lastSynced: null });
   const [connectionInfo, setConnectionInfo] = useState<{ accountName: string; syncStatus: string; syncError: string | null; connectedAt: string | null }>({
     accountName: "", syncStatus: "pending", syncError: null, connectedAt: null,
   });
