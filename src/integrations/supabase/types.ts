@@ -441,6 +441,7 @@ export type Database = {
       }
       klaviyo_connections: {
         Row: {
+          active_profiles_segment_id: string | null
           api_key: string
           brand_id: string
           cached_lists: Json | null
@@ -456,6 +457,7 @@ export type Database = {
           sync_status: string | null
         }
         Insert: {
+          active_profiles_segment_id?: string | null
           api_key: string
           brand_id: string
           cached_lists?: Json | null
@@ -471,6 +473,7 @@ export type Database = {
           sync_status?: string | null
         }
         Update: {
+          active_profiles_segment_id?: string | null
           api_key?: string
           brand_id?: string
           cached_lists?: Json | null
