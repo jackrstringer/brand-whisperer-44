@@ -643,6 +643,11 @@ You MUST feature these products prominently in the campaign. Use at least one im
 
   if (referenceMode) {
     // ========== REFERENCE / DUPE MODE ==========
+
+    // Extract structural skeleton from reference images using Gemini Flash
+    const refUrlsForSkeleton = reference?.image_urls || [];
+    const skeleton = await extractReferenceSkeleton(refUrlsForSkeleton);
+
     if (imageBlocks.length > 0) {
       userContent.push({
         type: "text",
@@ -666,6 +671,21 @@ Do NOT add sections that don't exist in the reference. Do NOT remove sections th
         : `This is the reference layout. Strongly follow its structure, section count, column layout, image sizing, and proportions. Apply the brand's colors, fonts, and copy on top. You may adapt minor details but keep the overall skeleton very close.`;
       userContent.push({ type: "text", text: dupeLabel });
       userContent.push(...referenceImageBlocks);
+    }
+
+    // Inject skeleton if extracted
+    if (skeleton) {
+      userContent.push({
+        type: "text",
+        text: `STRUCTURAL SKELETON (extracted from reference — you MUST replicate this EXACTLY):
+${skeleton}
+
+CRITICAL GRID RULES:
+- If the skeleton specifies "columns: 2, rows: 2, equal_sizing: true", that means a 2×2 grid of equally-sized images = 2 <tr> rows, each with 2 <td> cells, ALL images identical width+height.
+- Do NOT convert equal grids into asymmetric mosaics, L-shapes, or "1 large + 2 small" layouts.
+- Match the exact column × row count from the skeleton.
+- If "equal_sizing" is true, every image in that grid must have identical width and height attributes.`,
+      });
     }
 
     let brandRulesText = `Brand design rules:\n${profile.system_prompt}`;
