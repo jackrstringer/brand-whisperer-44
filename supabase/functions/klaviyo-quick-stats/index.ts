@@ -105,12 +105,8 @@ Deno.serve(async (req) => {
           pages++;
           
           if (data?.links?.next) {
-            try {
-              const nextUrl = new URL(data.links.next);
-              url = `${nextUrl.pathname}${nextUrl.search}`;
-            } catch {
-              url = null;
-            }
+            // Pass full URL — klaviyoGet handles http-prefixed URLs
+            url = data.links.next;
           } else {
             url = null;
           }
