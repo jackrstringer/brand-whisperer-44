@@ -1,170 +1,85 @@
 
 
-# Klaviyo Integration — Full Technical Rundown
+## Fix: Active Profiles Count Shows 6,284 Instead of 63,000
 
-## Current State (What's Actually Happening in Production Right Now)
+### Two Bugs, Not One
 
-### Database State (verified via direct query just now)
+**Bug A: Wrong segment definition** (already identified)
+The `consent_status: { subscription: "subscribed" }` sub-filter restricts to explicitly opted-in profiles only. Needs to be removed so the condition is just "can receive email marketing" with no sub-qualification.
 
-| Field | Value |
-|-------|-------|
-| `sync_status` | `complete` |
-| `quick_stats.active_profiles` | `null` |
-| `quick_stats.campaigns_last_30d` | `21` |
-| `quick_stats.revenue_last_30d` | `$682,223` |
-| `active_profiles_segment_id` | `null` |
-| `brand_intelligence` row | **DOES NOT EXIST** for this brand |
-
-### Three Separate Bugs, Three Separate Root Causes
-
----
-
-## Bug 1: Active Profiles Always `null` — Segment Creation Fails with 404
-
-**What happens:** `klaviyo-quick-stats` tries to create a segment via `POST /api/segments/` using API revision `2024-02-15`. Klaviyo returns:
-
-```
-404: "No valid revisions found for method"
-```
-
-**Root cause:** The segment creation endpoint (`POST /api/segments/`) was introduced in a later API revision. Revision `2024-02-15` does not support it. The `additional-fields[segment]=profile_count` parameter on `GET /api/segments/{id}/` also requires a newer revision.
-
-Per Klaviyo's docs, the minimum revision that supports both segment creation with `condition_groups` and the `profile_count` additional field is **`2024-06-15`** or later. The current code uses `2024-02-15` globally.
-
-**Evidence from logs:**
-```
-[quick-stats] Creating new segment for active profiles...
-[quick-stats] Profiles failed: Failed to create segment: 404: {"errors":[{"detail":"No valid revisions found for method"}]}
-[quick-stats] Stats saved: { active_profiles: null, campaigns_last_30d: 21, revenue_last_30d: 682151 }
-```
-
-**The fix:** The segment-related calls (create segment, get segment with `profile_count`) need revision `2024-06-15` or later. The segment definition payload structure also needs verification against the docs — the current `dimension`/`operator`/`value` shape may not match Klaviyo's expected schema.
-
-**Specifically, the segment definition currently uses:**
-```json
-{
-  "type": "profile",
-  "dimension": { "type": "email_marketing", "value": "can_receive_email_marketing" },
-  "operator": { "id": "equals" },
-  "value": true
+**Bug B: Polling exits on first non-zero count (the unidentified bug)**
+Line 136 of `klaviyo-quick-stats`:
+```typescript
+if (count !== null && count !== undefined && count > 0) {
+  return count;
 }
 ```
 
-Klaviyo's actual segment condition schema for `can_receive_email_marketing` needs to be verified against their OpenAPI spec. The schema uses a `ProfileGroupMembershipEnum` and boolean `is_member` pattern, not the free-form dimension/operator/value pattern above.
+When Klaviyo creates or re-evaluates a segment, `profile_count` is computed **asynchronously**. Klaviyo doesn't jump from 0 to 63,000 instantly — it incrementally processes profiles. The polling loop returns the **first non-zero intermediate result** (e.g. 6,284 after 3 seconds) instead of waiting for the count to stabilize at the true total.
 
----
+This is why even if we fix the segment definition, we'd likely still get a wrong (low) number — the function grabs whatever partial count Klaviyo has computed so far and calls it done.
 
-## Bug 2: `analyze-klaviyo-performance` Always Fails — No `brand_intelligence` Row Exists
+### The Fix
 
-**What happens:** `klaviyo-sync` saves campaign data via:
-```typescript
-await supabase.from("brand_intelligence").update({
-  klaviyo_raw: campaignData,
-  klaviyo_last_synced_at: new Date().toISOString(),
-}).eq("brand_id", brandId);
+#### 1. `klaviyo-quick-stats/index.ts` — Fix segment definition
+
+Remove `consent_status` block entirely:
+```json
+{
+  "type": "profile-marketing-consent",
+  "consent": {
+    "channel": "email",
+    "can_receive_marketing": true
+  }
+}
 ```
 
-**Root cause:** This is an `.update()`, not an `.upsert()`. The `brand_intelligence` table has **no row** for brand `23d41f2c-...`. An update on a non-existent row silently succeeds with 0 rows affected. So `klaviyo_raw` is never saved.
+#### 2. `klaviyo-quick-stats/index.ts` — Fix polling to wait for count stabilization
 
-Then `analyze-klaviyo-performance` runs, queries `brand_intelligence` for `klaviyo_raw`, finds nothing, and throws:
-```
-Error: No Klaviyo raw data found
-```
-
-This is confirmed in logs — every single invocation of `analyze-klaviyo-performance` has failed with this exact error. The analysis has **never successfully run** for this brand.
-
-**The fix:** Change the `.update()` in `klaviyo-sync` Step 6 to `.upsert()` with `brand_id` as the conflict key, ensuring the row is created if it doesn't exist.
-
----
-
-## Bug 3: UI Says "Fetching 365 days" — Hardcoded Label
-
-**What happens:** The backend was changed to 30 days, but the UI label on line 53 of `KlaviyoSetup.tsx` still says:
-```typescript
-{ status: "syncing", label: "Fetching 365 days of campaigns..." },
-```
-
-**The fix:** Change to `"Fetching 30 days of campaigns..."`.
-
----
-
-## The Full Pipeline & What Should Happen
-
-```text
-User clicks "Connect & Sync"
-  │
-  ├─ Step 1: klaviyo-proxy (validate-key)
-  │   └─ Validates API key, stores connection row
-  │
-  ├─ Step 2: klaviyo-quick-stats  ← BUG 1 (profiles fail)
-  │   ├─ Active profiles (segment-based count)
-  │   ├─ Campaign count (GET /campaigns with status=Sent filter)
-  │   └─ Revenue (metric-aggregates on Placed Order)
-  │
-  └─ Step 3: klaviyo-proxy (sync-performance) → fires klaviyo-sync
-       │
-       ├─ klaviyo-sync
-       │   ├─ Fetches sent campaigns (30d, email only) ✓ WORKS
-       │   ├─ Finds Placed Order metric ID ✓ WORKS
-       │   ├─ Campaign Values Report API ✓ WORKS (returns 21 results)
-       │   ├─ Fetches subject lines per campaign ✓ WORKS
-       │   ├─ Saves to brand_intelligence ← BUG 2 (update on missing row = no-op)
-       │   ├─ Saves lists/segments/cached_stats ✓ WORKS
-       │   └─ Fires analyze-klaviyo-performance
-       │
-       ├─ analyze-klaviyo-performance ← FAILS (no klaviyo_raw data)
-       │   ├─ Reads brand_intelligence.klaviyo_raw → null
-       │   └─ Throws "No Klaviyo raw data found"
-       │
-       └─ compile-klaviyo-context ← NEVER REACHED
-           └─ Would compile prose briefing and set sync_status=complete
-```
-
-**Why does `sync_status` still reach `complete`?** Because `klaviyo-sync` sets `sync_status: "complete"` on line 260 *before* the async `analyze-klaviyo-performance` call returns. The analysis fires and fails in the background, but the sync has already marked itself done.
-
----
-
-## What Needs to Change (4 Surgical Fixes)
-
-### Fix 1: `klaviyo-quick-stats` — Upgrade revision for segment calls
-
-Change the revision header from `2024-02-15` to `2024-06-15` (or later) specifically for the segment create and segment get calls. Verify the segment definition payload matches Klaviyo's actual schema.
-
-### Fix 2: `klaviyo-sync` — Change `.update()` to `.upsert()` for `brand_intelligence`
+Replace the "return on first non-zero" logic with a stabilization check: poll until the count stops changing between consecutive reads, or until timeout.
 
 ```typescript
-// Line 226: change from
-await supabase.from("brand_intelligence").update({...}).eq("brand_id", brandId);
-// to
-await supabase.from("brand_intelligence").upsert({
-  brand_id: brandId,
-  klaviyo_raw: campaignData,
-  klaviyo_last_synced_at: new Date().toISOString(),
-}, { onConflict: "brand_id" });
+let lastCount = -1;
+let stableRounds = 0;
+
+for (let attempt = 0; attempt < 10; attempt++) {
+  if (attempt > 0) await new Promise(r => setTimeout(r, 3000));
+
+  const countData = await klaviyoGet(
+    `/segments/${segmentId}/?additional-fields[segment]=profile_count`,
+    apiKey, SEGMENT_REVISION
+  );
+  const count = countData?.data?.attributes?.profile_count;
+
+  if (count !== null && count !== undefined && count > 0) {
+    if (count === lastCount) {
+      stableRounds++;
+      if (stableRounds >= 2) return count; // same value 3 reads in a row = stable
+    } else {
+      stableRounds = 0;
+    }
+    lastCount = count;
+  }
+}
+// If we exhausted attempts, return whatever we last saw (better than null)
+return lastCount > 0 ? lastCount : null;
 ```
 
-This ensures the row exists before `analyze-klaviyo-performance` tries to read it.
+This waits for the count to be the same across 3 consecutive polls (9 seconds of stability) before accepting it. For a segment that already exists and is fully computed, it returns on the 3rd poll (~6 seconds). For a newly created segment, it gives Klaviyo up to 30 seconds to finish processing.
 
-### Fix 3: `klaviyo-sync` — Don't set `sync_status: "complete"` prematurely
+#### 3. Clear stale segment ID (data update)
 
-The sync function currently sets `complete` before analysis finishes. It should set `sync_status: "syncing"` and leave it for the downstream functions to advance. `analyze-klaviyo-performance` sets it to `"analyzing"`, `compile-klaviyo-context` sets it to `"compiling"` then `"complete"`.
+The stored segment `Uh57bW` was created with the wrong definition. We need to:
+- NULL out `active_profiles_segment_id` in the DB so the function creates a fresh segment
+- Add cleanup logic: if the function finds an existing segment by name search, delete it before creating the correct one
 
-Remove the `sync_status: "complete"` from the `klaviyo-sync` update on line 260. Instead, only update lists/segments/cached_stats without touching `sync_status`.
+#### 4. No other files change
 
-### Fix 4: `KlaviyoSetup.tsx` — Fix hardcoded "365 days" label
+### Summary
 
-Change line 53 from `"Fetching 365 days of campaigns..."` to `"Fetching 30 days of campaigns..."`.
-
----
-
-## Summary for Your Senior Engineer
-
-| # | File | Bug | Fix |
-|---|------|-----|-----|
-| 1 | `klaviyo-quick-stats` | Segment create/read uses revision `2024-02-15` which doesn't support the segments write endpoint or `profile_count` additional field | Upgrade revision to `2024-06-15`+ for segment API calls; verify condition payload schema |
-| 2 | `klaviyo-sync` | `.update()` on `brand_intelligence` silently no-ops because no row exists; all downstream analysis fails | Change to `.upsert()` with `onConflict: "brand_id"` |
-| 3 | `klaviyo-sync` | Sets `sync_status: "complete"` before analysis chain finishes | Remove premature `complete` — let `compile-klaviyo-context` set it |
-| 4 | `KlaviyoSetup.tsx` | UI label says "365 days" | Change to "30 days" |
-
-No other files need changes. `analyze-klaviyo-performance` and `compile-klaviyo-context` are correct — they just never get valid input because of bugs 2 and 3.
+| # | What | Why |
+|---|------|-----|
+| 1 | Remove `consent_status` from segment definition | Current definition only counts explicitly subscribed (6K), not all contactable (63K) |
+| 2 | Poll for count stabilization instead of first non-zero | Klaviyo computes `profile_count` asynchronously; first non-zero value is a partial/intermediate result |
+| 3 | Clear stored segment ID + delete old segment | Force recreation with correct definition |
 
