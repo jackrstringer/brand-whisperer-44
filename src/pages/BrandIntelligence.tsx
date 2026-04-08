@@ -115,7 +115,7 @@ export default function BrandIntelligencePage() {
                 variant="outline"
                 size="sm"
                 onClick={generateReport}
-                disabled={reportLoading || reportStatus === "generating"}
+                disabled={reportLoading}
               >
                 <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
                 Regenerate
