@@ -4,99 +4,91 @@
 
 @layer base {
   :root {
-    --background: 0 0% 98%;
-    --foreground: 0 0% 9%;
+    --black: #2B2B2B;
+    --gray-1: #686868;
+    --gray-2: #9B9B9B;
+    --gray-3: #CDCDCD;
+    --gray-4: #E8E8E8;
+    --gray-5: #F2F2F2;
+    --surface: #FAFAFA;
+    --white: #FFFFFF;
 
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 9%;
+    --background: var(--surface);
+    --foreground: var(--black);
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 9%;
+    --card: var(--white);
+    --card-foreground: var(--black);
 
-    --primary: 330 80% 60%;
-    --primary-foreground: 0 0% 100%;
+    --popover: var(--white);
+    --popover-foreground: var(--black);
 
-    --secondary: 0 0% 94%;
-    --secondary-foreground: 0 0% 20%;
+    --primary: var(--black);
+    --primary-foreground: var(--white);
 
-    --muted: 0 0% 94%;
-    --muted-foreground: 0 0% 45%;
+    --secondary: var(--gray-5);
+    --secondary-foreground: var(--black);
 
-    --accent: 330 80% 60%;
-    --accent-foreground: 0 0% 100%;
+    --muted: var(--gray-5);
+    --muted-foreground: var(--gray-2);
 
-    --destructive: 0 62.8% 50%;
-    --destructive-foreground: 0 0% 100%;
+    --accent: var(--gray-5);
+    --accent-foreground: var(--black);
 
-    --border: 0 0% 89%;
-    --input: 0 0% 89%;
-    --ring: 330 80% 60%;
+    --destructive: var(--black);
+    --destructive-foreground: var(--white);
 
-    --radius: 0.5rem;
+    --border: var(--gray-4);
+    --input: var(--gray-4);
+    --ring: var(--gray-3);
 
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 0 0% 9%;
-    --sidebar-primary: 330 80% 60%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 95%;
-    --sidebar-accent-foreground: 0 0% 20%;
-    --sidebar-border: 0 0% 89%;
-    --sidebar-ring: 330 80% 60%;
+    --radius: 12px;
 
-    --surface: 0 0% 96%;
-    --canvas: 0 0% 88%;
+    --sidebar-background: var(--white);
+    --sidebar-foreground: var(--black);
+    --sidebar-primary: var(--black);
+    --sidebar-primary-foreground: var(--white);
+    --sidebar-accent: var(--black);
+    --sidebar-accent-foreground: var(--white);
+    --sidebar-border: var(--gray-4);
+    --sidebar-ring: var(--gray-3);
+
+    --canvas: var(--gray-5);
   }
 
-  .dark {
-    --background: 0 0% 5.9%;
-    --foreground: 0 0% 100%;
-
-    --card: 0 0% 10.2%;
-    --card-foreground: 0 0% 100%;
-
-    --popover: 0 0% 10.2%;
-    --popover-foreground: 0 0% 100%;
-
-    --primary: 330 80% 60%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 0 0% 16.5%;
-    --secondary-foreground: 0 0% 100%;
-
-    --muted: 0 0% 16.5%;
-    --muted-foreground: 0 0% 63.9%;
-
-    --accent: 330 80% 60%;
-    --accent-foreground: 0 0% 100%;
-
-    --destructive: 0 62.8% 50%;
-    --destructive-foreground: 0 0% 100%;
-
-    --border: 0 0% 16.5%;
-    --input: 0 0% 16.5%;
-    --ring: 330 80% 60%;
-
-    --sidebar-background: 0 0% 5.9%;
-    --sidebar-foreground: 0 0% 100%;
-    --sidebar-primary: 330 80% 60%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 16.5%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 0 0% 16.5%;
-    --sidebar-ring: 330 80% 60%;
-
-    --surface: 0 0% 10.2%;
-    --canvas: 0 0% 5.9%;
-  }
+  /* No dark mode — monochrome only */
 }
 
 @layer base {
-  * {
+  *, *::before, *::after {
     @apply border-border;
+    box-sizing: border-box;
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--black);
+    background: var(--white);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::-webkit-scrollbar {
+    width: 0;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button {
+    font-family: inherit;
+  }
+
+  h1, h2, h3 {
+    font-family: 'Instrument Serif', Georgia, serif;
+    font-weight: 400;
+    letter-spacing: -0.02em;
   }
 
   .scrollbar-hide {
@@ -108,12 +100,45 @@
   }
 }
 
-@keyframes ideate-pill-pulse {
-  0%, 100% { border-color: rgba(219, 39, 119, 0.2); box-shadow: 0 0 8px rgba(219, 39, 119, 0.05); }
-  50% { border-color: rgba(219, 39, 119, 0.4); box-shadow: 0 0 20px rgba(219, 39, 119, 0.1); }
+/* Font utility classes */
+.font-display {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-weight: 400;
+  letter-spacing: -0.02em;
 }
 
-@keyframes ideate-pill-shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+.font-body {
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Shimmer loading animation */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes peekSlide {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* Accordion keyframes (needed by shadcn) */
+@keyframes accordion-down {
+  from { height: 0; }
+  to { height: var(--radix-accordion-content-height); }
+}
+
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); }
+  to { height: 0; }
+}
+
+/* Global: no box-shadow anywhere */
+* {
+  box-shadow: none !important;
 }
