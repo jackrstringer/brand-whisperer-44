@@ -126,7 +126,7 @@ export default function AssetManager({ brandId, assets, setAssets }: AssetManage
                       className="relative group aspect-square rounded-md overflow-hidden border border-border cursor-pointer hover:border-primary/50 transition-all hover:ring-1 hover:ring-primary/30"
                       onClick={() => setLightboxAsset(asset)}
                     >
-                      <img src={asset.url} alt={asset.filename || ""} className="w-full h-full object-cover" />
+                      <img src={asset.url} alt={asset.filename || ""} className="w-full h-full object-contain bg-surface p-1" />
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDelete(asset.id); }}
                         className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
