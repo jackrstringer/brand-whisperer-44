@@ -8,12 +8,13 @@ const corsHeaders = {
 
 const KLAVIYO_API_BASE = "https://a.klaviyo.com/api";
 const REVISION = "2024-02-15";
+const SEGMENT_REVISION = "2024-10-15"; // Segments API requires newer revision
 
-async function klaviyoGet(path: string, apiKey: string): Promise<any> {
+async function klaviyoGet(path: string, apiKey: string, revision = REVISION): Promise<any> {
   const url = path.startsWith("http") ? path : `${KLAVIYO_API_BASE}${path}`;
   const headers = {
     "Authorization": `Klaviyo-API-Key ${apiKey}`,
-    "revision": REVISION,
+    "revision": revision,
     "Accept": "application/json",
   };
   let res = await fetch(url, { headers });
@@ -28,11 +29,11 @@ async function klaviyoGet(path: string, apiKey: string): Promise<any> {
   return res.json();
 }
 
-async function klaviyoPost(path: string, apiKey: string, body: any): Promise<any> {
+async function klaviyoPost(path: string, apiKey: string, body: any, revision = REVISION): Promise<any> {
   const url = `${KLAVIYO_API_BASE}${path}`;
   const headers = {
     "Authorization": `Klaviyo-API-Key ${apiKey}`,
-    "revision": REVISION,
+    "revision": revision,
     "Content-Type": "application/json",
     "Accept": "application/json",
   };
@@ -49,13 +50,6 @@ async function klaviyoPost(path: string, apiKey: string, body: any): Promise<any
 }
 
 async function getActiveProfileCount(apiKey: string, brandId: string, supabase: any): Promise<number | null> {
-  const headers = {
-    "Authorization": `Klaviyo-API-Key ${apiKey}`,
-    "revision": REVISION,
-    "Content-Type": "application/json",
-    "Accept": "application/json",
-  };
-
   // Step 1 — check if we already have a segment ID stored
   const { data: conn } = await supabase
     .from("klaviyo_connections")
@@ -68,60 +62,42 @@ async function getActiveProfileCount(apiKey: string, brandId: string, supabase: 
 
   // Step 2 — if no stored segment, search for existing one first
   if (!segmentId) {
-    const searchResp = await fetch(
-      `${KLAVIYO_API_BASE}/segments/`,
-      { headers }
+    const searchData = await klaviyoGet(`/segments/`, apiKey, SEGMENT_REVISION);
+    const segments = searchData?.data || [];
+    const match = segments.find((s: any) =>
+      s.attributes?.name?.toLowerCase().includes("can receive email marketing")
     );
-    if (searchResp.ok) {
-      const searchData = await searchResp.json();
-      const segments = searchData?.data || [];
-      const match = segments.find((s: any) =>
-        s.attributes?.name?.toLowerCase().includes("can receive email marketing")
-      );
-      if (match) {
-        segmentId = match.id;
-        console.log("[quick-stats] Found existing segment:", segmentId);
-      }
+    if (match) {
+      segmentId = match.id;
+      console.log("[quick-stats] Found existing segment:", segmentId);
     }
   }
 
-  // Step 3 — if still no segment, create one
+  // Step 3 — if still no segment, create one using profile-marketing-consent condition
   if (!segmentId) {
     console.log("[quick-stats] Creating new segment for active profiles...");
-    const createResp = await fetch(`${KLAVIYO_API_BASE}/segments/`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        data: {
-          type: "segment",
-          attributes: {
-            name: "Active Profiles (can receive email marketing)",
-            definition: {
-              condition_groups: [{
-                conditions: [{
-                  type: "profile",
-                  dimension: {
-                    type: "email_marketing",
-                    value: "can_receive_email_marketing",
-                  },
-                  operator: { id: "equals" },
-                  value: true,
-                }],
+    const createData = await klaviyoPost(`/segments/`, apiKey, {
+      data: {
+        type: "segment",
+        attributes: {
+          name: "Active Profiles (can receive email marketing)",
+          definition: {
+            condition_groups: [{
+              conditions: [{
+                type: "profile-marketing-consent",
+                consent: {
+                  channel: "email",
+                  can_receive_marketing: true,
+                },
               }],
-            },
+            }],
           },
         },
-      }),
-    });
+      },
+    }, SEGMENT_REVISION);
 
-    if (!createResp.ok) {
-      const errText = await createResp.text();
-      throw new Error(`Failed to create segment: ${createResp.status}: ${errText}`);
-    }
-    const createData = await createResp.json();
     segmentId = createData?.data?.id || null;
     if (!segmentId) throw new Error("Segment created but no ID returned");
-
     console.log("[quick-stats] Created segment:", segmentId);
 
     // Store the segment ID so we never recreate it
@@ -143,22 +119,21 @@ async function getActiveProfileCount(apiKey: string, brandId: string, supabase: 
       await new Promise(r => setTimeout(r, 3000));
     }
 
-    const countResp = await fetch(
-      `${KLAVIYO_API_BASE}/segments/${segmentId}/?additional-fields[segment]=profile_count`,
-      { headers }
-    );
+    try {
+      const countData = await klaviyoGet(
+        `/segments/${segmentId}/?additional-fields[segment]=profile_count`,
+        apiKey,
+        SEGMENT_REVISION,
+      );
 
-    if (!countResp.ok) {
-      console.warn(`[quick-stats] Segment count attempt ${attempt + 1} failed: ${countResp.status}`);
-      continue;
-    }
+      const count = countData?.data?.attributes?.profile_count;
+      console.log(`[quick-stats] Attempt ${attempt + 1}: profile_count =`, count);
 
-    const countData = await countResp.json();
-    const count = countData?.data?.attributes?.profile_count;
-    console.log(`[quick-stats] Attempt ${attempt + 1}: profile_count =`, count);
-
-    if (count !== null && count !== undefined && count > 0) {
-      return count;
+      if (count !== null && count !== undefined && count > 0) {
+        return count;
+      }
+    } catch (e) {
+      console.warn(`[quick-stats] Segment count attempt ${attempt + 1} failed:`, e.message);
     }
   }
 

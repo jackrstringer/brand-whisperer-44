@@ -258,7 +258,6 @@ serve(async (req) => {
         cached_segments: segmentsData.data || [],
         cached_stats: cachedStats,
         last_synced_at: new Date().toISOString(),
-        sync_status: "complete",
         sync_error: null,
       }).eq("brand_id", brandId);
 
