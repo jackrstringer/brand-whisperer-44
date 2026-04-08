@@ -589,7 +589,6 @@ export default function KlaviyoSetup({ brandId }: Props) {
     </div>
   );
 }
-}
 
 // ─── StatCell Sub-component ───
 function StatCell({ icon, label, sublabel, value, format, loading, error }: {
