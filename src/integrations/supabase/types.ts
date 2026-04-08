@@ -101,6 +101,10 @@ export type Database = {
           ai_research: Json | null
           ai_research_confidence: string | null
           brand_id: string
+          campaign_report_error: string | null
+          campaign_report_generated_at: string | null
+          campaign_report_html: string | null
+          campaign_report_status: string | null
           compiled_context: string | null
           created_at: string
           klaviyo_compiled: string | null
@@ -119,6 +123,10 @@ export type Database = {
           ai_research?: Json | null
           ai_research_confidence?: string | null
           brand_id: string
+          campaign_report_error?: string | null
+          campaign_report_generated_at?: string | null
+          campaign_report_html?: string | null
+          campaign_report_status?: string | null
           compiled_context?: string | null
           created_at?: string
           klaviyo_compiled?: string | null
@@ -137,6 +145,10 @@ export type Database = {
           ai_research?: Json | null
           ai_research_confidence?: string | null
           brand_id?: string
+          campaign_report_error?: string | null
+          campaign_report_generated_at?: string | null
+          campaign_report_html?: string | null
+          campaign_report_status?: string | null
           compiled_context?: string | null
           created_at?: string
           klaviyo_compiled?: string | null
