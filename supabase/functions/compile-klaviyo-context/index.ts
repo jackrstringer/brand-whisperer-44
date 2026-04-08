@@ -12,7 +12,7 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY")!;
+    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const { brandId } = await req.json();
@@ -28,22 +28,20 @@ serve(async (req) => {
 
     console.log("[compile-klaviyo] Compiling context for brand", brandId);
 
-    // Update sync_status to 'compiling'
     await supabase.from("klaviyo_connections").update({ sync_status: "compiling" }).eq("brand_id", brandId);
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://ai.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": anthropicKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
+        "Authorization": `Bearer ${lovableApiKey}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "google/gemini-2.5-flash-lite",
         max_tokens: 1500,
         messages: [{
           role: "user",
-          content: `Convert the following Klaviyo performance report into a concise prose briefing optimized for injection into an AI email generation prompt. Write it as a strategist briefing a copywriter. Cover: what offer types and subject line patterns this audience responds to, best performing campaign types, what to avoid, send timing, and the top 3 subject line examples with their open rates. Max 800 tokens. Be specific.
+          content: `Convert this Klaviyo performance report into a concise prose briefing optimized for injection into an AI email generation prompt. Write it as a strategist briefing a copywriter. Cover: what offer types and subject line patterns this audience responds to, best performing campaign types, what to avoid, send timing, and the top 3 subject line examples with their open rates. Max 800 tokens. Be specific.
 
 Report: ${JSON.stringify(intel.klaviyo_report)}`,
         }],
@@ -52,20 +50,18 @@ Report: ${JSON.stringify(intel.klaviyo_report)}`,
 
     if (!response.ok) {
       const errBody = await response.text();
-      throw new Error(`Anthropic API error ${response.status}: ${errBody}`);
+      throw new Error(`AI API error ${response.status}: ${errBody}`);
     }
 
     const result = await response.json();
-    const compiled = result.content?.[0]?.text || "";
+    const compiled = result.choices?.[0]?.message?.content || "";
 
-    // Save compiled context
     await supabase.from("brand_intelligence").update({
       klaviyo_compiled: compiled,
     }).eq("brand_id", brandId);
 
     console.log("[compile-klaviyo] Context saved. Setting status to complete...");
 
-    // Mark sync as complete
     await supabase.from("klaviyo_connections").update({ sync_status: "complete", sync_error: null }).eq("brand_id", brandId);
 
     // Trigger compile-brand-context to regenerate master compiled_context
