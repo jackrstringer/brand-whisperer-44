@@ -94,7 +94,7 @@ Deno.serve(async (req) => {
       // Sum profile_count across all lists to get total active profiles
       // Use revision 2024-05-15 which supports additional-fields[list]=profile_count
       (async () => {
-        const url = `${KLAVIYO_API_BASE}/lists/?additional-fields[list]=profile_count`;
+        const url = `${KLAVIYO_API_BASE}/lists/?additional-fields[list]=profile_count&fields[list]=name,profile_count`;
         let res = await fetch(url, {
           headers: {
             "Authorization": `Klaviyo-API-Key ${apiKey}`,
