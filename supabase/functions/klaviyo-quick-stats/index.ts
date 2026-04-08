@@ -88,6 +88,9 @@ async function getActiveProfileCount(apiKey: string, brandId: string, supabase: 
                 consent: {
                   channel: "email",
                   can_receive_marketing: true,
+                  consent_status: {
+                    subscription: ["SUBSCRIBED"],
+                  },
                 },
               }],
             }],
