@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useCampaignReport } from "@/hooks/useCampaignReport";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -514,8 +512,8 @@ export default function KlaviyoSetup({ brandId }: Props) {
         </div>
       </div>
 
-      {/* Campaign Report Row */}
-      <CampaignReportRow brandId={brandId} klaviyoSynced={syncStatus === "complete"} />
+
+
 
       {/* Deep Analysis Progress / Complete */}
       <div className="rounded-lg border border-border bg-card p-4">
@@ -587,165 +585,7 @@ export default function KlaviyoSetup({ brandId }: Props) {
         )}
       </div>
 
-      {/* Performance Summary */}
-      {summary && (
-        <Collapsible>
-          <CollapsibleTrigger className="flex items-center gap-2 w-full text-left p-3 rounded-lg bg-card border border-border hover:bg-accent/50 transition-colors">
-            <BarChart3 className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium flex-1">Performance Summary</span>
-            <ChevronDown className="w-4 h-4 text-muted-foreground" />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-2 p-4 rounded-lg bg-card border border-border space-y-3">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-muted-foreground">Campaigns Sent:</span> <strong>{summary.total_campaigns_sent}</strong></div>
-              <div><span className="text-muted-foreground">Avg Open Rate:</span> <strong>{(summary.avg_open_rate * 100).toFixed(1)}%</strong></div>
-              <div><span className="text-muted-foreground">Avg Click Rate:</span> <strong>{(summary.avg_click_rate * 100).toFixed(1)}%</strong></div>
-              <div><span className="text-muted-foreground">Avg RPR:</span> <strong>${summary.avg_revenue_per_recipient?.toFixed(2)}</strong></div>
-              <div><span className="text-muted-foreground">Total Revenue:</span> <strong>${summary.total_revenue_attributed?.toLocaleString()}</strong></div>
-              <div><span className="text-muted-foreground">Frequency:</span> <strong>{summary.sending_frequency}</strong></div>
-            </div>
-            {summary.best_sending_days?.length > 0 && (
-              <p className="text-xs text-muted-foreground">Best days: {summary.best_sending_days.join(", ")}</p>
-            )}
-          </CollapsibleContent>
-        </Collapsible>
-      )}
 
-      {/* Top Performers */}
-      {topPerformers && topPerformers.length > 0 && (
-        <Collapsible>
-          <CollapsibleTrigger className="flex items-center gap-2 w-full text-left p-3 rounded-lg bg-card border border-border hover:bg-accent/50 transition-colors">
-            <Trophy className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium flex-1">Top Performing Campaigns</span>
-            <ChevronDown className="w-4 h-4 text-muted-foreground" />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-2 space-y-2">
-            {topPerformers.map((c: any, i: number) => (
-              <div key={i} className="p-3 rounded-lg bg-card border border-border">
-                <p className="text-sm font-medium">{c.campaign_name}</p>
-                <p className="text-xs text-muted-foreground mt-1">Subject: {c.subject_line}</p>
-                <div className="flex gap-4 mt-2 text-xs">
-                  <span>Open: <strong>{(c.open_rate * 100).toFixed(1)}%</strong></span>
-                  <span>Click: <strong>{(c.click_rate * 100).toFixed(1)}%</strong></span>
-                  <span>RPR: <strong>${c.revenue_per_recipient?.toFixed(2)}</strong></span>
-                </div>
-                {c.why_it_likely_worked && (
-                  <p className="text-xs text-muted-foreground mt-1 italic">{c.why_it_likely_worked}</p>
-                )}
-              </div>
-            ))}
-          </CollapsibleContent>
-        </Collapsible>
-      )}
-
-      {/* Subject Line Intelligence */}
-      {subjectIntel && (
-        <Collapsible>
-          <CollapsibleTrigger className="flex items-center gap-2 w-full text-left p-3 rounded-lg bg-card border border-border hover:bg-accent/50 transition-colors">
-            <Type className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium flex-1">Subject Line Intelligence</span>
-            <ChevronDown className="w-4 h-4 text-muted-foreground" />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-2 p-4 rounded-lg bg-card border border-border space-y-3 text-sm">
-            {subjectIntel.common_patterns_that_work?.length > 0 && (
-              <div>
-                <p className="text-xs text-muted-foreground font-medium mb-1">Patterns that work:</p>
-                <ul className="list-disc list-inside space-y-0.5 text-xs">
-                  {subjectIntel.common_patterns_that_work.map((p: string, i: number) => <li key={i}>{p}</li>)}
-                </ul>
-              </div>
-            )}
-            {subjectIntel.common_patterns_that_flop?.length > 0 && (
-              <div>
-                <p className="text-xs text-muted-foreground font-medium mb-1">Patterns that flop:</p>
-                <ul className="list-disc list-inside space-y-0.5 text-xs">
-                  {subjectIntel.common_patterns_that_flop.map((p: string, i: number) => <li key={i}>{p}</li>)}
-                </ul>
-              </div>
-            )}
-            {subjectIntel.best_subject_line_examples?.length > 0 && (
-              <div>
-                <p className="text-xs text-muted-foreground font-medium mb-1">Best examples:</p>
-                <ul className="list-disc list-inside space-y-0.5 text-xs">
-                  {subjectIntel.best_subject_line_examples.map((s: string, i: number) => <li key={i}>{s}</li>)}
-                </ul>
-              </div>
-            )}
-            {subjectIntel.emoji_usage && <p className="text-xs"><span className="text-muted-foreground">Emoji usage:</span> {subjectIntel.emoji_usage}</p>}
-          </CollapsibleContent>
-        </Collapsible>
-      )}
-
-      {/* AI Context Preview */}
-      {compiled && (
-        <Collapsible>
-          <CollapsibleTrigger className="flex items-center gap-2 w-full text-left p-3 rounded-lg bg-card border border-border hover:bg-accent/50 transition-colors">
-            <Brain className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium flex-1">AI Context Preview</span>
-            <ChevronDown className="w-4 h-4 text-muted-foreground" />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-2 p-4 rounded-lg bg-card border border-border">
-            <p className="text-xs text-muted-foreground whitespace-pre-wrap">{compiled}</p>
-          </CollapsibleContent>
-        </Collapsible>
-      )}
-    </div>
-  );
-}
-
-// ─── Campaign Report Row ───
-function CampaignReportRow({ brandId, klaviyoSynced }: { brandId: string; klaviyoSynced: boolean }) {
-  const navigate = useNavigate();
-  const { status: reportStatus, generatedAt, isLoading: reportLoading, generateReport } = useCampaignReport(brandId);
-
-  if (!klaviyoSynced) return null;
-
-  return (
-    <div className="rounded-lg border border-border bg-card px-4 py-3 flex items-center justify-between">
-      {reportStatus === "complete" && generatedAt && (
-        <>
-          <div className="flex items-center gap-2 text-sm">
-            <span>📊</span>
-            <span>
-              Performance Analysis ready · Generated{" "}
-              {formatDistanceToNow(new Date(generatedAt), { addSuffix: true })}
-            </span>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => navigate(`/brands/${brandId}/report`)}>
-            View Report →
-          </Button>
-        </>
-      )}
-
-      {reportStatus === "generating" && (
-        <div className="flex items-center gap-2 text-sm">
-          <span>📊</span>
-          <span>Building performance analysis...</span>
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
-        </div>
-      )}
-
-      {(reportStatus === "pending" || reportStatus === null) && (
-        <div className="flex items-center justify-between w-full">
-          <span className="text-sm text-muted-foreground">📊 Performance Analysis not yet generated</span>
-          <Button variant="outline" size="sm" onClick={generateReport} disabled={reportLoading}>
-            {reportLoading ? (
-              <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> Generating...</>
-            ) : (
-              "Generate Performance Analysis"
-            )}
-          </Button>
-        </div>
-      )}
-
-      {reportStatus === "failed" && (
-        <div className="flex items-center justify-between w-full">
-          <span className="text-sm text-destructive">Report generation failed</span>
-          <Button variant="outline" size="sm" onClick={generateReport} disabled={reportLoading}>
-            Retry
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

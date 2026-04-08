@@ -24,7 +24,6 @@ function getBrandSubItems(brandId: string): SubItem[] {
     { label: "Segments", icon: "segments", path: `/brands/${brandId}/segments` },
     { label: "Brand", icon: "brand", path: `/brands/${brandId}/brand` },
     { label: "Intelligence", icon: "intelligence", path: `/brands/${brandId}/intelligence` },
-    { label: "Report", icon: "report", path: `/brands/${brandId}/report` },
     { label: "Integrations", icon: "integrations", path: `/brands/${brandId}/integrations` },
     { label: "Preferences", icon: "preferences", path: `/brands/${brandId}/preferences` },
   ];
