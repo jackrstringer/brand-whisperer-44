@@ -66,6 +66,7 @@ const SYNC_STEPS: { status: SyncStatus; label: string }[] = [
 const STALL_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes
 
 export default function KlaviyoSetup({ brandId }: Props) {
+  const navigate = useNavigate();
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [connected, setConnected] = useState(false);
