@@ -180,32 +180,30 @@ export default function KlaviyoSetup({ brandId }: Props) {
         {/* Connection Status */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-              <Check className="w-3 h-3 mr-1" /> Connected
+            <Badge>
+              <span className="w-[5px] h-[5px] rounded-full bg-black mr-1.5 inline-block" /> Connected
             </Badge>
             <span className="text-sm font-medium">{connectionInfo.accountName}</span>
           </div>
           <div className="flex items-center gap-2">
             {connectionInfo.syncStatus === "syncing" && (
-              <Badge variant="outline" className="text-yellow-400 border-yellow-500/30">
+              <Badge variant="outline">
                 <Loader2 className="w-3 h-3 mr-1 animate-spin" /> Syncing...
               </Badge>
             )}
             {connectionInfo.syncStatus === "complete" && (
-              <Badge variant="outline" className="text-emerald-400 border-emerald-500/30">
-                <Check className="w-3 h-3 mr-1" /> Synced
+              <Badge variant="outline">
+                <span className="w-[5px] h-[5px] rounded-full bg-black mr-1.5 inline-block" /> Synced
               </Badge>
             )}
             {connectionInfo.syncStatus === "failed" && (
-              <Badge variant="outline" className="text-destructive border-destructive/30">
-                Failed
-              </Badge>
+              <Badge variant="outline">Failed</Badge>
             )}
           </div>
         </div>
 
         {connectionInfo.syncError && (
-          <p className="text-xs text-destructive">{connectionInfo.syncError}</p>
+          <p className="text-xs text-gray-1">{connectionInfo.syncError}</p>
         )}
 
         {/* Stats */}
