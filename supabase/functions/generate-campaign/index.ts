@@ -73,6 +73,7 @@ Deno.serve(async (req) => {
 
     await supabase.from("campaigns").update({
       html, status: "ready", brief: body.brief, goal: body.goal, name: campaignName, generation_duration_secs: durationSecs,
+      ...(body.campaignMode === "flow" && body.flowConfig ? { flow_config: { ...body.flowConfig, klaviyo_synced_at: body.flowConfig.klaviyo_synced_at || new Date().toISOString() } } : {}),
     }).eq("id", campaignId);
 
     await supabase.from("chat_messages").insert({
