@@ -4212,73 +4212,115 @@ export default function CampaignEditor() {
                     <Badge className="text-[9px] ml-auto bg-primary/20 text-primary">{selectedReferences[0].mode === "dupe" ? "Dupe" : "Reference"}</Badge>
                   </div>
                 )}
+
+                {/* Mode Toggle */}
+                <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                  <button
+                    onClick={() => setCampaignMode("campaign")}
+                    className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                      campaignMode === "campaign"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Campaign
+                  </button>
+                  <button
+                    onClick={() => setCampaignMode("flow")}
+                    className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                      campaignMode === "flow"
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Flow / Transactional
+                  </button>
+                </div>
+
                 <div>
-                  <h2 className="text-sm font-medium mb-4">Campaign Brief</h2>
+                  <h2 className="text-sm font-medium mb-4">{campaignMode === "flow" ? "Flow Configuration" : "Campaign Brief"}</h2>
                 </div>
-                {/* Import from ClickUp */}
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Link2 className="w-3 h-3" /> Import from ClickUp (optional)
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      value={clickupUrl}
-                      onChange={(e) => setClickupUrl(e.target.value)}
-                      placeholder="Paste ClickUp task URL..."
-                      className="bg-card border-border text-sm"
-                      onKeyDown={(e) => e.key === "Enter" && importFromClickUp()}
+
+                {campaignMode === "campaign" ? (
+                  <>
+                    {/* Import from ClickUp */}
+                    <div className="space-y-2">
+                      <label className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Link2 className="w-3 h-3" /> Import from ClickUp (optional)
+                      </label>
+                      <div className="flex gap-2">
+                        <Input
+                          value={clickupUrl}
+                          onChange={(e) => setClickupUrl(e.target.value)}
+                          placeholder="Paste ClickUp task URL..."
+                          className="bg-card border-border text-sm"
+                          onKeyDown={(e) => e.key === "Enter" && importFromClickUp()}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={importFromClickUp}
+                          disabled={!clickupUrl.trim() || clickupLoading}
+                          className="shrink-0"
+                        >
+                          {clickupLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Import"}
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs text-muted-foreground">What's this campaign about?</label>
+                      <Textarea
+                        value={brief}
+                        onChange={(e) => setBrief(e.target.value)}
+                        placeholder="Describe the campaign..."
+                        className="bg-card border-border min-h-[100px]"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs text-muted-foreground">Campaign goal</label>
+                      <Select value={goal} onValueChange={setGoal}>
+                        <SelectTrigger className="bg-card border-border">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="promotional">Promotional</SelectItem>
+                          <SelectItem value="educational">Educational</SelectItem>
+                          <SelectItem value="re-engagement">Re-engagement</SelectItem>
+                          <SelectItem value="seasonal">Seasonal</SelectItem>
+                          <SelectItem value="welcome">Welcome</SelectItem>
+                          <SelectItem value="social_proof">Social Proof</SelectItem>
+                          <SelectItem value="highlight">Highlight</SelectItem>
+                          <SelectItem value="product_launch">Product Launch</SelectItem>
+                          <SelectItem value="abandoned_cart">Abandoned Cart</SelectItem>
+                          <SelectItem value="win_back">Win-back</SelectItem>
+                          <SelectItem value="newsletter">Newsletter</SelectItem>
+                          <SelectItem value="announcement">Announcement</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs text-muted-foreground">Any specific copy to include? (optional)</label>
+                      <Textarea
+                        value={extraCopy}
+                        onChange={(e) => setExtraCopy(e.target.value)}
+                        placeholder="Paste specific copy here..."
+                        className="bg-card border-border"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  /* Flow mode config panel */
+                  brandId ? (
+                    <FlowConfigPanel
+                      brandId={brandId}
+                      flowConfig={flowConfig}
+                      onConfigChange={setFlowConfig}
+                      additionalNotes={flowNotes}
+                      onNotesChange={setFlowNotes}
                     />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={importFromClickUp}
-                      disabled={!clickupUrl.trim() || clickupLoading}
-                      className="shrink-0"
-                    >
-                      {clickupLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Import"}
-                    </Button>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">What's this campaign about?</label>
-                  <Textarea
-                    value={brief}
-                    onChange={(e) => setBrief(e.target.value)}
-                    placeholder="Describe the campaign..."
-                    className="bg-card border-border min-h-[100px]"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Campaign goal</label>
-                  <Select value={goal} onValueChange={setGoal}>
-                    <SelectTrigger className="bg-card border-border">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="promotional">Promotional</SelectItem>
-                      <SelectItem value="educational">Educational</SelectItem>
-                      <SelectItem value="re-engagement">Re-engagement</SelectItem>
-                      <SelectItem value="seasonal">Seasonal</SelectItem>
-                      <SelectItem value="welcome">Welcome</SelectItem>
-                      <SelectItem value="social_proof">Social Proof</SelectItem>
-                      <SelectItem value="highlight">Highlight</SelectItem>
-                      <SelectItem value="product_launch">Product Launch</SelectItem>
-                      <SelectItem value="abandoned_cart">Abandoned Cart</SelectItem>
-                      <SelectItem value="win_back">Win-back</SelectItem>
-                      <SelectItem value="newsletter">Newsletter</SelectItem>
-                      <SelectItem value="announcement">Announcement</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Any specific copy to include? (optional)</label>
-                  <Textarea
-                    value={extraCopy}
-                    onChange={(e) => setExtraCopy(e.target.value)}
-                    placeholder="Paste specific copy here..."
-                    className="bg-card border-border"
-                  />
-                </div>
+                  ) : null
+                )}
+
                 {brandId && (
                   <ProductSelector
                     brandId={brandId}
@@ -4350,7 +4392,7 @@ export default function CampaignEditor() {
                     disabled={generating}
                     className="w-full bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all"
                   >
-                    {generating ? "Generating 3 Variants..." : "Generate Campaign"}
+                    {generating ? "Generating 3 Variants..." : campaignMode === "flow" ? "Generate Flow Email" : "Generate Campaign"}
                   </Button>
                 </div>
               </div>
