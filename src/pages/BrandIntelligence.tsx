@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
 import BrandIntelligenceWizard from "@/components/brand/BrandIntelligenceWizard";
+import BrandResearchReport from "@/components/brand/BrandResearchReport";
 
 export default function BrandIntelligencePage() {
   const { brandId } = useParams<{ brandId: string }>();
@@ -35,8 +36,18 @@ export default function BrandIntelligencePage() {
         brandName={brand?.name || ""}
         domain={brand?.website_url || ""}
         existingIntel={intel}
-        onComplete={() => navigate(`/brands/${brandId}`)}
+        onComplete={() => navigate(`/brands/${brandId}/intelligence`)}
       />
+
+      {intel?.ai_research && (
+        <div className="p-6 md:p-10 max-w-5xl mx-auto">
+          <BrandResearchReport
+            research={intel.ai_research}
+            confidence={intel.ai_research_confidence}
+            lastResearchedAt={intel.last_researched_at}
+          />
+        </div>
+      )}
     </div>
   );
 }

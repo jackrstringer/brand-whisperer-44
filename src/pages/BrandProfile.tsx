@@ -129,15 +129,6 @@ export default function BrandProfile() {
                 sandbox="allow-same-origin"
               />
             </div>
-            {intel?.ai_research && (
-              <div className="mt-8">
-                <BrandResearchReport
-                  research={intel.ai_research}
-                  confidence={intel.ai_research_confidence}
-                  lastResearchedAt={intel.last_researched_at}
-                />
-              </div>
-            )}
           </TabsContent>
         )}
 

@@ -211,7 +211,9 @@ export default function CampaignsList() {
   return (
     <div className="p-6 md:p-12">
       <div className="flex items-center justify-between mb-8 max-w-3xl">
-        <h1 className="text-2xl font-semibold">{brand?.name || "Brand"}</h1>
+         <h1 className="text-2xl font-semibold">{brand?.name || "Brand"}</h1>
+       </div>
+       <div className="flex items-center gap-2">
         <div className="flex items-center gap-2">
           <button
             onClick={toggleTimers}

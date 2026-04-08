@@ -133,11 +133,6 @@ export default function AssetManager({ brandId, assets, setAssets }: AssetManage
                       >
                         <X className="w-3 h-3" />
                       </button>
-                      {asset.description && (
-                        <div className="absolute bottom-0 left-0 right-0 bg-background/80 px-1.5 py-0.5">
-                          <p className="text-[9px] text-foreground truncate">{asset.description}</p>
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
