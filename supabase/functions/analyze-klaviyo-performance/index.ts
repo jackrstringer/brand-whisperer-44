@@ -35,7 +35,7 @@ serve(async (req) => {
 
     const systemPrompt = `You are a senior email marketing analyst. You analyze Klaviyo campaign performance data and extract actionable intelligence for a brand's email program. Be specific, data-driven, and direct.`;
 
-    const userPrompt = `Analyze the following 365 days of Klaviyo email campaign performance data for this brand and return a structured JSON intelligence report.
+    const userPrompt = `Analyze the following 30 days of Klaviyo email campaign performance data for this brand and return a structured JSON intelligence report.
 
 Campaign data:
 ${JSON.stringify(intel.klaviyo_raw, null, 2)}

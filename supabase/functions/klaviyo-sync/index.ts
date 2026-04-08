@@ -9,22 +9,23 @@ const corsHeaders = {
 const KLAVIYO_API_BASE = "https://a.klaviyo.com/api";
 const REVISION = "2024-02-15";
 
+function klaviyoHeaders(apiKey: string) {
+  return {
+    "Authorization": `Klaviyo-API-Key ${apiKey}`,
+    "revision": REVISION,
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+  };
+}
+
 async function klaviyoFetch(path: string, apiKey: string, options: RequestInit = {}) {
   const url = path.startsWith("http") ? path : `${KLAVIYO_API_BASE}${path}`;
   const doFetch = () => fetch(url, {
     ...options,
-    headers: {
-      "Authorization": `Klaviyo-API-Key ${apiKey}`,
-      "revision": REVISION,
-      "Content-Type": "application/json",
-      "Accept": "application/json",
-      ...(options.headers || {}),
-    },
+    headers: { ...klaviyoHeaders(apiKey), ...(options.headers || {}) },
   });
 
   let res = await doFetch();
-
-  // Basic 429 rate-limit retry
   if (res.status === 429) {
     console.warn(`[klaviyo-sync] Rate limited on ${path}, retrying in 2s...`);
     await new Promise(r => setTimeout(r, 2000));
@@ -44,7 +45,6 @@ async function fetchAllPages(path: string, apiKey: string, params?: Record<strin
   const qs = params
     ? Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&")
     : "";
-  // If path already has ?, append with &; otherwise use ?
   const separator = path.includes("?") ? "&" : "?";
   let url = `${path}${qs ? `${separator}${qs}` : ""}`;
   while (url) {
@@ -93,11 +93,11 @@ serve(async (req) => {
     }).eq("brand_id", brandId);
 
     try {
-      // Step 1: Fetch sent campaigns from last 365 days
-      const cutoff = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+      // ── Step 1: Fetch sent email campaigns from last 30 days ──
+      const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const filterStr = `equals(messages.channel,'email'),greater-or-equal(created_at,${cutoff})`;
-      
-      console.log("[klaviyo-sync] Fetching campaigns...");
+
+      console.log("[klaviyo-sync] Fetching campaigns (last 30 days)...");
       const allCampaigns = await fetchAllPages(
         `/campaigns?fields[campaign]=name,status,created_at,updated_at,send_time,scheduled_at`,
         apiKey,
@@ -109,135 +109,135 @@ serve(async (req) => {
       });
       console.log(`[klaviyo-sync] Found ${sentCampaigns.length} sent campaigns out of ${allCampaigns.length} total`);
 
-      // Step 2: Resolve metric IDs
-      console.log("[klaviyo-sync] Resolving metric IDs...");
+      // ── Step 2: Find Placed Order metric ID ──
+      console.log("[klaviyo-sync] Resolving Placed Order metric ID...");
       const metricsData = await fetchAllPages("/metrics", apiKey);
-      const metricMap: Record<string, string> = {};
-      const targetMetrics = ["Opened Email", "Clicked Email", "Unsubscribed", "Placed Order", "Received Email"];
-      for (const m of metricsData) {
-        if (targetMetrics.includes(m.attributes?.name)) {
-          metricMap[m.attributes.name] = m.id;
+      const placedOrderMetric = metricsData.find((m: any) =>
+        m.attributes?.name?.toLowerCase().includes("placed order")
+      );
+      const placedOrderMetricId = placedOrderMetric?.id || null;
+      console.log("[klaviyo-sync] Placed Order metric ID:", placedOrderMetricId);
+
+      // ── Step 3: Fetch all campaign stats via Reporting API (single call) ──
+      let reportResults: any[] = [];
+      if (placedOrderMetricId && sentCampaigns.length > 0) {
+        console.log("[klaviyo-sync] Fetching campaign values report...");
+        try {
+          const reportResp = await klaviyoFetch("/campaign-values-reports/", apiKey, {
+            method: "POST",
+            body: JSON.stringify({
+              data: {
+                type: "campaign-values-report",
+                attributes: {
+                  statistics: [
+                    "recipients", "delivered", "opens_unique", "open_rate",
+                    "clicks_unique", "click_rate", "click_to_open_rate",
+                    "unsubscribes", "unsubscribe_rate",
+                    "conversion_uniques", "conversion_value",
+                    "revenue_per_recipient",
+                  ],
+                  timeframe: { key: "last_30_days" },
+                  conversion_metric_id: placedOrderMetricId,
+                  filter: `equals(send_channel,"email")`,
+                },
+              },
+            }),
+          });
+          reportResults = reportResp?.data?.attributes?.results || [];
+          console.log(`[klaviyo-sync] Report returned ${reportResults.length} campaign results`);
+        } catch (e) {
+          console.error("[klaviyo-sync] Campaign values report failed:", e);
         }
       }
-      console.log("[klaviyo-sync] Resolved metrics:", Object.keys(metricMap));
 
-      // Step 3: Fetch metrics for each campaign in batches of 10
-      const campaignData: any[] = [];
+      // Build a lookup map: campaign_id → stats from the report
+      const statsMap = new Map<string, any>();
+      for (const r of reportResults) {
+        const cid = r.groupings?.campaign_id;
+        if (cid) statsMap.set(cid, r.statistics || {});
+      }
+
+      // ── Step 4: Fetch message details (subject lines) in parallel batches ──
       const batchSize = 10;
+      const messageDetailsMap = new Map<string, any>();
 
       for (let i = 0; i < sentCampaigns.length; i += batchSize) {
         const batch = sentCampaigns.slice(i, i + batchSize);
-        const batchResults = await Promise.all(batch.map(async (campaign: any) => {
+        const results = await Promise.all(batch.map(async (campaign: any) => {
           const cid = campaign.id;
-          const attrs = campaign.attributes || {};
-          
-          const metrics: Record<string, any> = {};
-          
-          // Fetch each metric for this campaign
-          for (const [metricName, metricId] of Object.entries(metricMap)) {
-            try {
-              const result = await klaviyoFetch("/metric-aggregates", apiKey, {
-                method: "POST",
-                body: JSON.stringify({
-                  data: {
-                    type: "metric-aggregate",
-                    attributes: {
-                      metric_id: metricId,
-                      filter: [`equals("Campaign Name","${attrs.name}")`],
-                      measurements: ["count", "sum_value", "unique"],
-                      interval: "month",
-                    },
-                  },
-                }),
-              });
-              const measurements = result.data?.attributes?.data || [];
-              let count = 0, sumValue = 0, unique = 0;
-              for (const m of measurements) {
-                if (m.measurements?.count) count += m.measurements.count.reduce((a: number, b: number) => a + b, 0);
-                if (m.measurements?.sum_value) sumValue += m.measurements.sum_value.reduce((a: number, b: number) => a + b, 0);
-                if (m.measurements?.unique) unique += m.measurements.unique.reduce((a: number, b: number) => a + b, 0);
-              }
-              metrics[metricName] = { count, sumValue, unique };
-            } catch (e) {
-              console.warn(`[klaviyo-sync] Failed to fetch ${metricName} for campaign ${cid}:`, e);
-              metrics[metricName] = { count: 0, sumValue: 0, unique: 0 };
-            }
-          }
-
-          const delivered = metrics["Received Email"]?.count || 0;
-          const uniqueOpens = metrics["Opened Email"]?.unique || 0;
-          const uniqueClicks = metrics["Clicked Email"]?.unique || 0;
-          const unsubscribes = metrics["Unsubscribed"]?.count || 0;
-          const orders = metrics["Placed Order"]?.count || 0;
-          const revenue = metrics["Placed Order"]?.sumValue || 0;
-          const openRate = delivered > 0 ? uniqueOpens / delivered : 0;
-          const clickRate = delivered > 0 ? uniqueClicks / delivered : 0;
-          const ctr = uniqueOpens > 0 ? uniqueClicks / uniqueOpens : 0;
-
-          // Get message details
-          let subjectLine = "";
-          let previewText = "";
-          let fromName = "";
           try {
             const msgs = await klaviyoFetch(`/campaigns/${cid}/campaign-messages`, apiKey);
             const msg = msgs.data?.[0]?.attributes;
-            if (msg) {
-              subjectLine = msg.content?.subject || msg.definition?.content?.subject || "";
-              previewText = msg.content?.preview_text || msg.definition?.content?.preview_text || "";
-              fromName = msg.content?.from_name || msg.definition?.content?.from_name || msg.label || "";
-            }
-          } catch {}
-
-          return {
-            id: cid,
-            name: attrs.name || "",
-            subject_line: subjectLine,
-            preview_text: previewText,
-            from_name: fromName,
-            sent_at: attrs.send_time || attrs.created_at || "",
-            recipient_count: delivered,
-            delivered_count: delivered,
-            unique_opens: uniqueOpens,
-            open_rate: Math.round(openRate * 10000) / 10000,
-            unique_clicks: uniqueClicks,
-            click_rate: Math.round(clickRate * 10000) / 10000,
-            click_to_open_rate: Math.round(ctr * 10000) / 10000,
-            unsubscribes,
-            unsubscribe_rate: delivered > 0 ? Math.round((unsubscribes / delivered) * 10000) / 10000 : 0,
-            orders_placed: orders,
-            revenue: Math.round(revenue * 100) / 100,
-            revenue_per_recipient: delivered > 0 ? Math.round((revenue / delivered) * 100) / 100 : 0,
-          };
+            return {
+              id: cid,
+              subject_line: msg?.content?.subject || msg?.definition?.content?.subject || "",
+              preview_text: msg?.content?.preview_text || msg?.definition?.content?.preview_text || "",
+              from_name: msg?.content?.from_name || msg?.definition?.content?.from_name || msg?.label || "",
+            };
+          } catch {
+            return { id: cid, subject_line: "", preview_text: "", from_name: "" };
+          }
         }));
-        campaignData.push(...batchResults);
-        console.log(`[klaviyo-sync] Processed batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(sentCampaigns.length / batchSize)}`);
+        for (const r of results) messageDetailsMap.set(r.id, r);
       }
 
-      // Step 4: Save raw data
+      // ── Step 5: Merge into final campaignData array ──
+      const campaignData = sentCampaigns.map((campaign: any) => {
+        const cid = campaign.id;
+        const attrs = campaign.attributes || {};
+        const stats = statsMap.get(cid) || {};
+        const msgDetails = messageDetailsMap.get(cid) || {};
+
+        const delivered = stats.delivered ?? stats.recipients ?? 0;
+        const openRate = stats.open_rate ?? 0;
+        const clickRate = stats.click_rate ?? 0;
+        const ctr = stats.click_to_open_rate ?? 0;
+        const uniqueOpens = stats.opens_unique ?? 0;
+        const uniqueClicks = stats.clicks_unique ?? 0;
+        const unsubscribes = stats.unsubscribes ?? 0;
+        const unsubRate = stats.unsubscribe_rate ?? 0;
+        const orders = stats.conversion_uniques ?? 0;
+        const revenue = stats.conversion_value ?? 0;
+        const rpr = stats.revenue_per_recipient ?? 0;
+
+        return {
+          id: cid,
+          name: attrs.name || "",
+          subject_line: msgDetails.subject_line || "",
+          preview_text: msgDetails.preview_text || "",
+          from_name: msgDetails.from_name || "",
+          sent_at: attrs.send_time || attrs.created_at || "",
+          recipient_count: delivered,
+          delivered_count: delivered,
+          unique_opens: uniqueOpens,
+          open_rate: Math.round(openRate * 10000) / 10000,
+          unique_clicks: uniqueClicks,
+          click_rate: Math.round(clickRate * 10000) / 10000,
+          click_to_open_rate: Math.round(ctr * 10000) / 10000,
+          unsubscribes,
+          unsubscribe_rate: Math.round(unsubRate * 10000) / 10000,
+          orders_placed: orders,
+          revenue: Math.round(revenue * 100) / 100,
+          revenue_per_recipient: Math.round(rpr * 100) / 100,
+        };
+      });
+
+      // ── Step 6: Save raw data ──
       await supabase.from("brand_intelligence").update({
         klaviyo_raw: campaignData,
         klaviyo_last_synced_at: new Date().toISOString(),
       }).eq("brand_id", brandId);
 
-      // Step 5: Sync lists (with profile_count) and active segments only
+      // ── Step 7: Sync lists and active segments ──
       const [listsData, segmentsData] = await Promise.all([
         klaviyoFetch("/lists", apiKey),
         klaviyoFetch("/segments?filter=equals(is_active,true)", apiKey),
       ]);
 
-      // Step 6: Compute cached stats — preserve existing cached_stats (e.g. event_schemas)
-      const lists = listsData.data || [];
-      const activeProfiles = 0;
-
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const campaignsSentL30d = campaignData.filter((c: any) => {
-        const sentAt = c.sent_at ? new Date(c.sent_at) : null;
-        return sentAt && sentAt >= thirtyDaysAgo;
-      }).length;
-
+      // ── Step 8: Compute cached stats ──
       const totalRevenue = campaignData.reduce((sum: number, c: any) => sum + (c.revenue || 0), 0);
 
-      // Fetch existing cached_stats to preserve event_schemas written by klaviyo-fetch-schema
+      // Preserve existing cached_stats (e.g. event_schemas)
       const { data: existingConn } = await supabase
         .from("klaviyo_connections")
         .select("cached_stats")
@@ -248,14 +248,12 @@ serve(async (req) => {
 
       const cachedStats = {
         ...existingStats,
-        active_profiles: activeProfiles,
-        campaigns_sent_l30d: campaignsSentL30d,
-        campaigns_sent_l365d: campaignData.length,
-        total_revenue_l365d: Math.round(totalRevenue * 100) / 100,
+        campaigns_sent_l30d: campaignData.length,
+        total_revenue_l30d: Math.round(totalRevenue * 100) / 100,
       };
 
       await supabase.from("klaviyo_connections").update({
-        cached_lists: lists,
+        cached_lists: listsData.data || [],
         cached_segments: segmentsData.data || [],
         cached_stats: cachedStats,
         last_synced_at: new Date().toISOString(),
@@ -265,7 +263,7 @@ serve(async (req) => {
 
       console.log(`[klaviyo-sync] Complete. ${campaignData.length} campaigns synced. Stats:`, cachedStats);
 
-      // Step 7: Fire analyze-klaviyo-performance
+      // ── Step 9: Fire analyze-klaviyo-performance ──
       try {
         await fetch(`${supabaseUrl}/functions/v1/analyze-klaviyo-performance`, {
           method: "POST",
