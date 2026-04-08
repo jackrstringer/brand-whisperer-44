@@ -38,9 +38,11 @@ export default function KlaviyoSetup({ brandId }: Props) {
       const { data } = await supabase.from("klaviyo_connections").select("*").eq("brand_id", brandId).maybeSingle();
       if (data) {
         setConnected(true);
+        const cachedStats = (data as any).cached_stats || {};
         setStats({
-          lists: Array.isArray(data.cached_lists) ? (data.cached_lists as any[]).length : 0,
-          segments: Array.isArray(data.cached_segments) ? (data.cached_segments as any[]).length : 0,
+          activeProfiles: cachedStats.active_profiles || 0,
+          campaignsL30d: cachedStats.campaigns_sent_l30d || 0,
+          totalRevenue: cachedStats.total_revenue_l365d || 0,
           lastSynced: data.last_synced_at,
         });
         setConnectionInfo({
