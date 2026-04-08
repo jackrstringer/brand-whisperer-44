@@ -28,6 +28,10 @@ type ConnectStep = {
 type QuickStats = {
   active_profiles: number | null;
   campaigns_last_30d: number | null;
+  total_store_revenue: number | null;
+  email_revenue: number | null;
+  campaign_revenue: number | null;
+  flow_revenue: number | null;
   revenue_last_30d: number | null;
   fetched_at: string;
 };
@@ -35,7 +39,9 @@ type QuickStats = {
 type QuickStatsErrors = {
   active_profiles: string | null;
   campaigns_last_30d: string | null;
-  revenue_last_30d: string | null;
+  campaign_revenue: string | null;
+  flow_revenue: string | null;
+  total_store_revenue: string | null;
 };
 
 type SyncStatus = "pending" | "syncing" | "analyzing" | "compiling" | "complete" | "failed";
