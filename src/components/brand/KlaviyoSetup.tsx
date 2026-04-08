@@ -325,6 +325,22 @@ export default function KlaviyoSetup({ brandId }: Props) {
           </Collapsible>
         )}
 
+        {/* Full Report JSON */}
+        {report && (
+          <Collapsible>
+            <CollapsibleTrigger className="flex items-center gap-2 w-full text-left p-3 rounded-lg bg-card border border-border hover:bg-accent/50 transition-colors">
+              <BarChart3 className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium flex-1">Full Intelligence Report</span>
+              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2 p-4 rounded-lg bg-card border border-border">
+              <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap overflow-auto max-h-96">
+                {JSON.stringify(report, null, 2)}
+              </pre>
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+
         {/* Actions */}
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" onClick={syncData} disabled={syncing}>

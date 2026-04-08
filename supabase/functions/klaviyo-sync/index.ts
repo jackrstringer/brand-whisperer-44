@@ -28,13 +28,25 @@ async function klaviyoFetch(path: string, apiKey: string, options: RequestInit =
   return data;
 }
 
-async function fetchAllPages(path: string, apiKey: string, filter?: string): Promise<any[]> {
+async function fetchAllPages(path: string, apiKey: string, params?: Record<string, string>): Promise<any[]> {
   const all: any[] = [];
-  let url = `${path}?page[size]=50${filter ? `&filter=${encodeURIComponent(filter)}` : ""}`;
+  const qs = new URLSearchParams(params || {});
+  let url = `${path}${qs.toString() ? `?${qs.toString()}` : ""}`;
   while (url) {
     const data = await klaviyoFetch(url, apiKey);
     if (data.data) all.push(...data.data);
-    url = data.links?.next ? data.links.next.replace(KLAVIYO_API_BASE, "") : null;
+    // Klaviyo returns full URLs in links.next
+    const nextLink = data.links?.next;
+    if (nextLink) {
+      try {
+        const nextUrl = new URL(nextLink);
+        url = `${nextUrl.pathname}${nextUrl.search}`.replace("/api", "");
+      } catch {
+        url = null as any;
+      }
+    } else {
+      url = null as any;
+    }
   }
   return all;
 }
@@ -69,11 +81,18 @@ serve(async (req) => {
     try {
       // Step 1: Fetch sent campaigns from last 365 days
       const cutoff = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
-      const filter = `equals(messages.channel,"email"),greater-or-equal(created_at,${cutoff})`;
+      const filterStr = `equals(messages.channel,'email'),greater-or-equal(created_at,${cutoff})`;
       
       console.log("[klaviyo-sync] Fetching campaigns...");
-      const allCampaigns = await fetchAllPages("/campaigns", apiKey, filter);
-      const sentCampaigns = allCampaigns.filter((c: any) => c.attributes?.status === "Sent");
+      const allCampaigns = await fetchAllPages("/campaigns", apiKey, {
+        "filter": filterStr,
+        "page[size]": "50",
+        "fields[campaign]": "name,status,created_at,updated_at,send_time",
+      });
+      const sentCampaigns = allCampaigns.filter((c: any) => {
+        const status = c.attributes?.status;
+        return status === "Sent" || status === "sent";
+      });
       console.log(`[klaviyo-sync] Found ${sentCampaigns.length} sent campaigns out of ${allCampaigns.length} total`);
 
       // Step 2: Resolve metric IDs
