@@ -16,13 +16,14 @@ export interface BrandProfile {
 }
 
 export interface FlowConfig {
-  trigger_metric_id: string;
-  trigger_metric_name: string;
-  flow_type: string;
-  event_schema: any;
-  liquid_variables: string[];
+  trigger_metric_id?: string;
+  trigger_metric_name?: string;
+  flow_type?: string;
+  event_schema?: any;
+  liquid_variables?: string[];
   selected_preview_event_id?: string;
   klaviyo_synced_at?: string;
+  [key: string]: any;
 }
 
 export interface Campaign {
