@@ -81,11 +81,18 @@ serve(async (req) => {
     try {
       // Step 1: Fetch sent campaigns from last 365 days
       const cutoff = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
-      const filter = `equals(messages.channel,"email"),greater-or-equal(created_at,${cutoff})`;
+      const filterStr = `equals(messages.channel,'email'),greater-or-equal(created_at,${cutoff})`;
       
       console.log("[klaviyo-sync] Fetching campaigns...");
-      const allCampaigns = await fetchAllPages("/campaigns", apiKey, filter);
-      const sentCampaigns = allCampaigns.filter((c: any) => c.attributes?.status === "Sent");
+      const allCampaigns = await fetchAllPages("/campaigns", apiKey, {
+        "filter": filterStr,
+        "page[size]": "50",
+        "fields[campaign]": "name,status,created_at,updated_at,send_time",
+      });
+      const sentCampaigns = allCampaigns.filter((c: any) => {
+        const status = c.attributes?.status;
+        return status === "Sent" || status === "sent";
+      });
       console.log(`[klaviyo-sync] Found ${sentCampaigns.length} sent campaigns out of ${allCampaigns.length} total`);
 
       // Step 2: Resolve metric IDs
