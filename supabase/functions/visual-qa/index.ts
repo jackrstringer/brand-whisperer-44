@@ -42,6 +42,8 @@ A structural_fidelity score of 8-10 means the output is a near-perfect structura
 A score of 5-7 means the structure is roughly similar but with notable differences.
 A score of 1-4 means the structure is fundamentally different from the reference — this is a CRITICAL failure that should NOT reach the user.
 
+GRID GEOMETRY (CRITICAL): If the reference shows an NxN grid of equally-sized images, the output MUST replicate that exact geometry. A 2×2 equal grid converted into a "1 large + 2 stacked" mosaic layout is a CRITICAL structural failure (structural_fidelity ≤ 3). Similarly, converting a 3-column row into a 2-column row, or vice versa, is a critical failure.
+
 If NO reference screenshots are provided, set structural_fidelity to null.
 
 IMPORTANT: You are looking at the email at 470px viewport width. Side-by-side layouts MUST remain side-by-side — they should NOT stack. If you see grids or two-column sections stacking into single columns, that is a CRITICAL issue.

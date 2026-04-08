@@ -5,6 +5,73 @@
 import { rehostHtmlImagesWithImageKit } from "./imagekit.ts";
 import { finalizeCampaignHtml } from "./finalizeCampaignHtml.ts";
 
+/**
+ * Extract a structured layout skeleton from reference screenshots using Gemini Flash.
+ * Returns a JSON string describing section types, grid geometry, and image slot counts.
+ */
+async function extractReferenceSkeleton(referenceImageUrls: string[]): Promise<string | null> {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY || referenceImageUrls.length === 0) return null;
+
+  const content: any[] = [
+    {
+      type: "text",
+      text: `Analyze these reference email campaign screenshots and extract a precise structural skeleton. Return ONLY a JSON object with this exact format:
+
+{
+  "sections": [
+    { "type": "header|hero|hero-text|text|grid|cta|footer|divider|testimonial|stats", "layout": "description of layout", "columns": N, "rows": N, "equal_sizing": true/false, "labels": "none|below|overlay" }
+  ],
+  "total_image_slots": N,
+  "grid_patterns": ["NxM equal" or "NxM varied" for each grid found]
+}
+
+RULES:
+- For grids: count EXACTLY how many columns and rows of images you see. A 2×2 grid has columns:2, rows:2.
+- "equal_sizing": true means ALL images in the grid are the same size. false means they vary (mosaic/asymmetric).
+- If images are arranged in a simple NxN grid with equal sizes, report it as "NxN equal" in grid_patterns.
+- Count total_image_slots as the total number of distinct image placeholders in the entire email.
+- Be precise about section ordering — list them top to bottom as they appear.
+
+Return ONLY the JSON. No commentary.`,
+    },
+  ];
+
+  for (const url of referenceImageUrls.slice(0, 10)) {
+    content.push({ type: "image_url", image_url: { url } });
+  }
+
+  try {
+    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{ role: "user", content }],
+      }),
+    });
+
+    if (!resp.ok) {
+      console.warn(`[extractReferenceSkeleton] Gemini returned ${resp.status}, skipping skeleton`);
+      return null;
+    }
+
+    const result = await resp.json();
+    const raw = result.choices?.[0]?.message?.content || "";
+    const cleaned = raw.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    // Validate it's parseable JSON
+    JSON.parse(cleaned);
+    console.log(`[extractReferenceSkeleton] Extracted skeleton: ${cleaned.substring(0, 200)}...`);
+    return cleaned;
+  } catch (err) {
+    console.warn(`[extractReferenceSkeleton] Failed:`, err);
+    return null;
+  }
+}
+
 /** Strip any AI commentary and extract only the HTML document */
 function extractHtmlOnly(text: string): string {
   let html = text.replace(/^```html?\n?/i, "").replace(/\n?```$/i, "").trim();
@@ -228,6 +295,14 @@ GRID LAYOUT — REQUIRED STRUCTURE:
 - Never use: <table align="left" style="display:inline-block"> as a column technique.
 - Never add mobile-grid-col or any CSS class that sets display:block on grid columns.
 
+GRID GEOMETRY REPLICATION (CRITICAL):
+- When the reference (or skeleton) uses an NxM grid of equally-sized images, replicate that EXACT grid geometry.
+- Do NOT convert equal grids into asymmetric mosaic/magazine layouts.
+- Do NOT create "1 large + 2 small" or "L-shaped" arrangements unless the reference explicitly uses one.
+- A 2×2 grid = 2 <tr> rows, each with 2 <td> cells of equal width+height. A 3-column row = 1 <tr> with 3 <td> cells.
+- Count the images in each grid section of the reference. Your output must have the SAME count in the SAME arrangement.
+- All images in a grid row MUST share identical width AND height attributes.
+
 - Return only complete HTML, no commentary, no markdown fences.`;
 
 const QA_SYSTEM_PROMPT = `You are an email QA auditor. You will receive a generated HTML email and brand rules.
@@ -268,6 +343,7 @@ Rules:
   9. GRID IMAGE DIMENSIONS: For every multi-column image row, verify all images share identical width and height attributes, have a fixed pixel height in their inline style (never height:auto), and have matching ?tr=w-{W},h-{H},fo-auto on ImageKit URLs. Flag any height:auto on a grid image as critical.
   10. PLACEHOLDER DIMENSIONS: Flag any image with width under 100px or height under 100px that is not a logo or icon. These are placeholder values that will break the layout.
   11. GRID STRUCTURE: Flag any multi-column grid that uses display:inline-block tables instead of direct <td> siblings inside a single <tr>. Flag any CSS class (e.g. mobile-grid-col) that sets display:block on grid columns.
+  12. GRID GEOMETRY: If a structural skeleton was provided specifying a grid (e.g., "columns: 2, rows: 2, equal_sizing: true"), verify the HTML implements that exact geometry. A 2×2 equal grid must have exactly 2 <tr> rows each containing exactly 2 equal-width <td> cells. Flag any mosaic, asymmetric, or "1 large + 2 small" layout as critical when the skeleton specifies equal sizing.
 
 Return ONLY the JSON object. No markdown fences, no explanation, no preamble.`;
 
@@ -567,6 +643,11 @@ You MUST feature these products prominently in the campaign. Use at least one im
 
   if (referenceMode) {
     // ========== REFERENCE / DUPE MODE ==========
+
+    // Extract structural skeleton from reference images using Gemini Flash
+    const refUrlsForSkeleton = reference?.image_urls || [];
+    const skeleton = await extractReferenceSkeleton(refUrlsForSkeleton);
+
     if (imageBlocks.length > 0) {
       userContent.push({
         type: "text",
@@ -590,6 +671,21 @@ Do NOT add sections that don't exist in the reference. Do NOT remove sections th
         : `This is the reference layout. Strongly follow its structure, section count, column layout, image sizing, and proportions. Apply the brand's colors, fonts, and copy on top. You may adapt minor details but keep the overall skeleton very close.`;
       userContent.push({ type: "text", text: dupeLabel });
       userContent.push(...referenceImageBlocks);
+    }
+
+    // Inject skeleton if extracted
+    if (skeleton) {
+      userContent.push({
+        type: "text",
+        text: `STRUCTURAL SKELETON (extracted from reference — you MUST replicate this EXACTLY):
+${skeleton}
+
+CRITICAL GRID RULES:
+- If the skeleton specifies "columns: 2, rows: 2, equal_sizing: true", that means a 2×2 grid of equally-sized images = 2 <tr> rows, each with 2 <td> cells, ALL images identical width+height.
+- Do NOT convert equal grids into asymmetric mosaics, L-shapes, or "1 large + 2 small" layouts.
+- Match the exact column × row count from the skeleton.
+- If "equal_sizing" is true, every image in that grid must have identical width and height attributes.`,
+      });
     }
 
     let brandRulesText = `Brand design rules:\n${profile.system_prompt}`;
