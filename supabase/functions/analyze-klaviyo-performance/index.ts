@@ -30,6 +30,9 @@ serve(async (req) => {
 
     console.log(`[analyze-klaviyo] Analyzing ${intel.klaviyo_raw.length} campaigns for brand ${brandId}`);
 
+    // Update sync_status to 'analyzing'
+    await supabase.from("klaviyo_connections").update({ sync_status: "analyzing" }).eq("brand_id", brandId);
+
     const systemPrompt = `You are a senior email marketing analyst. You analyze Klaviyo campaign performance data and extract actionable intelligence for a brand's email program. Be specific, data-driven, and direct.`;
 
     const userPrompt = `Analyze the following 365 days of Klaviyo email campaign performance data for this brand and return a structured JSON intelligence report.

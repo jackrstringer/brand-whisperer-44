@@ -28,6 +28,9 @@ serve(async (req) => {
 
     console.log("[compile-klaviyo] Compiling context for brand", brandId);
 
+    // Update sync_status to 'compiling'
+    await supabase.from("klaviyo_connections").update({ sync_status: "compiling" }).eq("brand_id", brandId);
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
