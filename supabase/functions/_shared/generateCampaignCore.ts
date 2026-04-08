@@ -366,6 +366,9 @@ export interface GenerateCampaignParams {
   reference?: any;
   _isSubGeneration?: boolean;
   _variantIndex?: number;
+  campaignMode?: "campaign" | "flow";
+  flowConfig?: any;
+  flowNotes?: string;
 }
 
 /**
@@ -380,6 +383,7 @@ export async function generateCampaignCore(
     brandId, campaignId, brief, goal, copy, productIds,
     pinnedAssetUrls: pinnedUrls, matchProductColors, designNotes,
     shopifyProducts, reference, _isSubGeneration,
+    campaignMode, flowConfig, flowNotes,
   } = params;
 
   const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
