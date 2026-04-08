@@ -126,7 +126,7 @@ Deno.serve(async (req) => {
 
       // Call 3: Revenue in last 30 days — fetch all metrics, find Placed Order client-side
       (async () => {
-        const metricsData = await klaviyoGet(`/metrics/?page[size]=100`, apiKey);
+        const metricsData = await klaviyoGet(`/metrics/`, apiKey);
         const metrics = metricsData?.data || [];
         const placedOrderMetric = metrics.find((m: any) =>
           m.attributes?.name?.toLowerCase().includes('placed order')
