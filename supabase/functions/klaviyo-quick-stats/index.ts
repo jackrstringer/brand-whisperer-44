@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
               metric_id: metricId,
               interval: "month",
               measurements: ["sum_value"],
-              filter: `greater-or-equal(datetime,${thirtyDaysAgo})`,
+              filter: `greater-or-equal(datetime,${thirtyDaysAgo}),less-than(datetime,${now})`,
               timezone: "UTC",
             },
           },
