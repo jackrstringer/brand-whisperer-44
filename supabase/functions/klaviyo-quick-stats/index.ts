@@ -90,43 +90,69 @@ Deno.serve(async (req) => {
     };
 
     const [profilesResult, campaignsResult, revenueResult] = await Promise.allSettled([
-      // Call 1: Active profiles — get largest list's profile count
-      // Klaviyo has no direct "total active profiles" endpoint.
-      // Fetch all lists and use the largest list's profile_count as the best proxy.
+      // Call 1: Active profiles — try multiple approaches
       (async () => {
-        const data = await klaviyoGet(`/lists/`, apiKey);
-        const lists = data?.data || [];
-        console.log("[quick-stats] Lists found:", lists.length, 
-          lists.map((l: any) => `${l.attributes?.name}: profile_count=${l.attributes?.profile_count}`));
+        // Approach 1: Try segments — they often include profile_count
+        const segData = await klaviyoGet(`/segments/`, apiKey);
+        const segments = segData?.data || [];
+        console.log("[quick-stats] Segments found:", segments.length,
+          segments.map((s: any) => `${s.attributes?.name}: profile_count=${s.attributes?.profile_count}, is_active=${s.attributes?.is_active}`));
         
-        if (lists.length === 0) {
-          throw new Error("No lists found in Klaviyo account");
-        }
-        
-        // Check if profile_count is available in attributes
-        const hasProfileCount = lists.some((l: any) => l.attributes?.profile_count != null);
-        
-        if (hasProfileCount) {
-          // Use the largest list as proxy for total active profiles
+        // Look for profile_count in any segment
+        const hasCount = segments.some((s: any) => s.attributes?.profile_count != null);
+        if (hasCount) {
+          // Find largest active segment as proxy
           let maxCount = 0;
-          for (const list of lists) {
-            const count = list.attributes?.profile_count ?? 0;
-            if (count > maxCount) maxCount = count;
+          for (const seg of segments) {
+            if (seg.attributes?.is_active !== false) {
+              const count = seg.attributes?.profile_count ?? 0;
+              if (count > maxCount) maxCount = count;
+            }
           }
-          return maxCount;
+          if (maxCount > 0) return maxCount;
         }
         
-        // profile_count not in default response — try fetching individual lists
-        // Just get the first list's profile count as a test
-        const firstListId = lists[0]?.id;
-        if (firstListId) {
-          const listData = await klaviyoGet(`/lists/${firstListId}/`, apiKey);
-          console.log("[quick-stats] Single list response:", JSON.stringify(listData?.data?.attributes));
-          const count = listData?.data?.attributes?.profile_count;
-          if (count != null) return count;
+        // Approach 2: Use metric aggregates — count unique "Received Email" profiles
+        // This gives us unique email recipients which ≈ active subscribers
+        const metricsData = await klaviyoGet(`/metrics/`, apiKey);
+        const receivedMetric = (metricsData?.data || []).find((m: any) =>
+          m.attributes?.name?.toLowerCase() === 'received email'
+        );
+        
+        if (receivedMetric) {
+          const now = new Date().toISOString().split("T")[0] + "T23:59:59+00:00";
+          const yearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0] + "T00:00:00+00:00";
+          const aggData = await klaviyoPost(`/metric-aggregates/`, apiKey, {
+            data: {
+              type: "metric-aggregate",
+              attributes: {
+                metric_id: receivedMetric.id,
+                interval: "month",
+                measurements: ["unique"],
+                filter: `greater-or-equal(datetime,${yearAgo}),less-than(datetime,${now})`,
+                timezone: "UTC",
+              },
+            },
+          });
+          const measurements = aggData?.data?.attributes?.data;
+          if (measurements && Array.isArray(measurements)) {
+            // unique is max across months (not sum, since same person can receive in multiple months)
+            let maxUnique = 0;
+            for (const m of measurements) {
+              if (m.measurements?.unique) {
+                for (const v of m.measurements.unique) {
+                  if ((v || 0) > maxUnique) maxUnique = v;
+                }
+              }
+            }
+            if (maxUnique > 0) {
+              console.log("[quick-stats] Active profiles via Received Email unique:", maxUnique);
+              return maxUnique;
+            }
+          }
         }
         
-        throw new Error("Cannot determine profile count — profile_count not available in list attributes");
+        throw new Error("Could not determine active profile count via any method");
       })(),
 
       // Call 2: Campaigns sent in last 30 days — NO page[size] (campaigns rejects it, cursor-based only)
