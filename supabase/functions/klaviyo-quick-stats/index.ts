@@ -90,30 +90,30 @@ Deno.serve(async (req) => {
     };
 
     const [profilesResult, campaignsResult, revenueResult] = await Promise.allSettled([
-      // Call 1: Active profiles — paginate through to get total count
+      // Call 1: Active profiles — use Lists API with additional-fields[list]=profile_count
+      // Sum profile_count across all lists to approximate total active profiles
       (async () => {
-        // Klaviyo profiles endpoint doesn't return meta.total. 
-        // Use cursor pagination to count. Cap at 5 pages to stay fast.
-        let total = 0;
-        let url: string | null = `/profiles/`;
-        let pages = 0;
-        const MAX_PAGES = 5;
+        const data = await klaviyoGet(`/lists/?additional-fields[list]=profile_count`, apiKey);
+        const lists = data?.data || [];
+        console.log("[quick-stats] Lists found:", lists.length, lists.map((l: any) => `${l.attributes?.name}: ${l.attributes?.profile_count}`));
         
-        while (url && pages < MAX_PAGES) {
-          const data = await klaviyoGet(url, apiKey);
-          total += data?.data?.length || 0;
-          pages++;
-          
-          if (data?.links?.next) {
-            // Pass full URL — klaviyoGet handles http-prefixed URLs
-            url = data.links.next;
-          } else {
-            url = null;
+        if (lists.length === 0) {
+          throw new Error("No lists found in Klaviyo account");
+        }
+        
+        // Find the largest list — this is typically the main subscriber list
+        let maxCount = 0;
+        let maxName = "";
+        for (const list of lists) {
+          const count = list.attributes?.profile_count ?? 0;
+          if (count > maxCount) {
+            maxCount = count;
+            maxName = list.attributes?.name || "Unknown";
           }
         }
         
-        console.log("[quick-stats] Profiles counted:", total, "across", pages, "pages, more:", !!url);
-        return total;
+        console.log("[quick-stats] Largest list:", maxName, "with", maxCount, "profiles");
+        return maxCount;
       })(),
 
       // Call 2: Campaigns sent in last 30 days — NO page[size] (campaigns rejects it, cursor-based only)
