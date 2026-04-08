@@ -451,6 +451,7 @@ export type Database = {
           klaviyo_account_id: string | null
           klaviyo_account_name: string | null
           last_synced_at: string | null
+          quick_stats: Json | null
           sync_error: string | null
           sync_status: string | null
         }
@@ -465,6 +466,7 @@ export type Database = {
           klaviyo_account_id?: string | null
           klaviyo_account_name?: string | null
           last_synced_at?: string | null
+          quick_stats?: Json | null
           sync_error?: string | null
           sync_status?: string | null
         }
@@ -479,6 +481,7 @@ export type Database = {
           klaviyo_account_id?: string | null
           klaviyo_account_name?: string | null
           last_synced_at?: string | null
+          quick_stats?: Json | null
           sync_error?: string | null
           sync_status?: string | null
         }
