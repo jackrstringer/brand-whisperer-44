@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Brain, RefreshCw, Download } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import BrandIntelligenceWizard from "@/components/brand/BrandIntelligenceWizard";
 import BrandResearchReport from "@/components/brand/BrandResearchReport";
 import { useCampaignReport } from "@/hooks/useCampaignReport";
@@ -12,7 +12,7 @@ import { useCampaignReport } from "@/hooks/useCampaignReport";
 export default function BrandIntelligencePage() {
   const { brandId } = useParams<{ brandId: string }>();
   const navigate = useNavigate();
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   const [brand, setBrand] = useState<any>(null);
   const [intel, setIntel] = useState<any>(null);
@@ -43,23 +43,24 @@ export default function BrandIntelligencePage() {
     })();
   }, [brandId]);
 
-  // Auto-expand iframe
+  // Shadow DOM rendering for report
   useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe || !reportHtml) return;
-    const onLoad = () => {
-      const doc = iframe.contentDocument;
-      if (!doc) return;
-      const resize = () => {
-        iframe.style.height = `${doc.documentElement.scrollHeight}px`;
-      };
-      resize();
-      const observer = new ResizeObserver(resize);
-      observer.observe(doc.documentElement);
-      return () => observer.disconnect();
-    };
-    iframe.addEventListener("load", onLoad);
-    return () => iframe.removeEventListener("load", onLoad);
+    if (!reportRef.current || !reportHtml) return;
+    // Clear existing shadow root content if re-rendering
+    let shadow = reportRef.current.shadowRoot;
+    if (!shadow) {
+      shadow = reportRef.current.attachShadow({ mode: "open" });
+    }
+    shadow.innerHTML = reportHtml;
+  }, [reportHtml]);
+
+  const handleDownloadPdf = useCallback(() => {
+    if (!reportHtml) return;
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(reportHtml);
+    win.document.close();
+    win.print();
   }, [reportHtml]);
 
   if (loading || !brandId) {
@@ -101,25 +102,21 @@ export default function BrandIntelligencePage() {
           </div>
           <div className="flex items-center gap-2">
             {reportStatus === "complete" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => iframeRef.current?.contentWindow?.print()}
-              >
-                <Download className="w-3.5 h-3.5 mr-1.5" />
-                Download PDF
-              </Button>
-            )}
-            {reportStatus === "complete" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={generateReport}
-                disabled={reportLoading}
-              >
-                <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-                Regenerate
-              </Button>
+              <>
+                <Button variant="outline" size="sm" onClick={handleDownloadPdf}>
+                  <Download className="w-3.5 h-3.5 mr-1.5" />
+                  Download PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={generateReport}
+                  disabled={reportLoading}
+                >
+                  <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                  Regenerate
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -182,7 +179,7 @@ export default function BrandIntelligencePage() {
           </Card>
         )}
 
-        {/* Complete */}
+        {/* Complete — Shadow DOM render */}
         {reportStatus === "complete" && reportHtml && (
           <div className="space-y-2">
             {generatedAt && (
@@ -191,19 +188,7 @@ export default function BrandIntelligencePage() {
               </p>
             )}
             <div className="rounded-lg border border-border overflow-hidden bg-card">
-              <iframe
-                ref={iframeRef}
-                srcDoc={reportHtml}
-                className="w-full border-0"
-                style={{ minHeight: "800px" }}
-                sandbox="allow-same-origin allow-popups"
-                onLoad={(e) => {
-                  const doc = (e.target as HTMLIFrameElement).contentDocument;
-                  if (doc) {
-                    (e.target as HTMLIFrameElement).style.height = `${doc.documentElement.scrollHeight}px`;
-                  }
-                }}
-              />
+              <div ref={reportRef} className="w-full" />
             </div>
           </div>
         )}
