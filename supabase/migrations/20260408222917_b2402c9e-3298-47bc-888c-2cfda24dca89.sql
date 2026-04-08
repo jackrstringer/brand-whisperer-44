@@ -1,0 +1,1 @@
+UPDATE public.klaviyo_connections SET active_profiles_segment_id = NULL;
