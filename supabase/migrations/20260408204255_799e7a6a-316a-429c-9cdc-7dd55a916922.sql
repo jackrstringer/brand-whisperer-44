@@ -1,0 +1,1 @@
+ALTER TABLE klaviyo_connections ADD COLUMN IF NOT EXISTS active_profiles_segment_id text;

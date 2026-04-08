@@ -7,28 +7,19 @@ const corsHeaders = {
 };
 
 const KLAVIYO_API_BASE = "https://a.klaviyo.com/api";
-
-// Use 2024-10-15 revision which returns meta.total for profiles
-const REVISION = "2024-10-15";
+const REVISION = "2024-02-15";
 
 async function klaviyoGet(path: string, apiKey: string): Promise<any> {
   const url = path.startsWith("http") ? path : `${KLAVIYO_API_BASE}${path}`;
-  let res = await fetch(url, {
-    headers: {
-      "Authorization": `Klaviyo-API-Key ${apiKey}`,
-      "revision": REVISION,
-      "Accept": "application/json",
-    },
-  });
+  const headers = {
+    "Authorization": `Klaviyo-API-Key ${apiKey}`,
+    "revision": REVISION,
+    "Accept": "application/json",
+  };
+  let res = await fetch(url, { headers });
   if (res.status === 429) {
     await new Promise(r => setTimeout(r, 2000));
-    res = await fetch(url, {
-      headers: {
-        "Authorization": `Klaviyo-API-Key ${apiKey}`,
-        "revision": REVISION,
-        "Accept": "application/json",
-      },
-    });
+    res = await fetch(url, { headers });
   }
   if (!res.ok) {
     const body = await res.text();
@@ -39,34 +30,139 @@ async function klaviyoGet(path: string, apiKey: string): Promise<any> {
 
 async function klaviyoPost(path: string, apiKey: string, body: any): Promise<any> {
   const url = `${KLAVIYO_API_BASE}${path}`;
-  let res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Authorization": `Klaviyo-API-Key ${apiKey}`,
-      "revision": REVISION,
-      "Content-Type": "application/json",
-      "Accept": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  const headers = {
+    "Authorization": `Klaviyo-API-Key ${apiKey}`,
+    "revision": REVISION,
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+  };
+  let res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
   if (res.status === 429) {
     await new Promise(r => setTimeout(r, 2000));
-    res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Authorization": `Klaviyo-API-Key ${apiKey}`,
-        "revision": REVISION,
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
   }
   if (!res.ok) {
     const errBody = await res.text();
     throw new Error(`Klaviyo ${res.status}: ${errBody}`);
   }
   return res.json();
+}
+
+async function getActiveProfileCount(apiKey: string, brandId: string, supabase: any): Promise<number | null> {
+  const headers = {
+    "Authorization": `Klaviyo-API-Key ${apiKey}`,
+    "revision": REVISION,
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+  };
+
+  // Step 1 — check if we already have a segment ID stored
+  const { data: conn } = await supabase
+    .from("klaviyo_connections")
+    .select("active_profiles_segment_id")
+    .eq("brand_id", brandId)
+    .single();
+
+  let segmentId = conn?.active_profiles_segment_id || null;
+  console.log("[quick-stats] Stored segment ID:", segmentId);
+
+  // Step 2 — if no stored segment, search for existing one first
+  if (!segmentId) {
+    const searchResp = await fetch(
+      `${KLAVIYO_API_BASE}/segments/`,
+      { headers }
+    );
+    if (searchResp.ok) {
+      const searchData = await searchResp.json();
+      const segments = searchData?.data || [];
+      const match = segments.find((s: any) =>
+        s.attributes?.name?.toLowerCase().includes("can receive email marketing")
+      );
+      if (match) {
+        segmentId = match.id;
+        console.log("[quick-stats] Found existing segment:", segmentId);
+      }
+    }
+  }
+
+  // Step 3 — if still no segment, create one
+  if (!segmentId) {
+    console.log("[quick-stats] Creating new segment for active profiles...");
+    const createResp = await fetch(`${KLAVIYO_API_BASE}/segments/`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        data: {
+          type: "segment",
+          attributes: {
+            name: "Active Profiles (can receive email marketing)",
+            definition: {
+              condition_groups: [{
+                conditions: [{
+                  type: "profile",
+                  dimension: {
+                    type: "email_marketing",
+                    value: "can_receive_email_marketing",
+                  },
+                  operator: { id: "equals" },
+                  value: true,
+                }],
+              }],
+            },
+          },
+        },
+      }),
+    });
+
+    if (!createResp.ok) {
+      const errText = await createResp.text();
+      throw new Error(`Failed to create segment: ${createResp.status}: ${errText}`);
+    }
+    const createData = await createResp.json();
+    segmentId = createData?.data?.id || null;
+    if (!segmentId) throw new Error("Segment created but no ID returned");
+
+    console.log("[quick-stats] Created segment:", segmentId);
+
+    // Store the segment ID so we never recreate it
+    await supabase
+      .from("klaviyo_connections")
+      .update({ active_profiles_segment_id: segmentId })
+      .eq("brand_id", brandId);
+  } else if (!conn?.active_profiles_segment_id) {
+    // Found via search but not stored yet — persist it
+    await supabase
+      .from("klaviyo_connections")
+      .update({ active_profiles_segment_id: segmentId })
+      .eq("brand_id", brandId);
+  }
+
+  // Step 4 — poll for profile_count every 3 seconds, up to 10 attempts
+  for (let attempt = 0; attempt < 10; attempt++) {
+    if (attempt > 0) {
+      await new Promise(r => setTimeout(r, 3000));
+    }
+
+    const countResp = await fetch(
+      `${KLAVIYO_API_BASE}/segments/${segmentId}/?additional-fields[segment]=profile_count`,
+      { headers }
+    );
+
+    if (!countResp.ok) {
+      console.warn(`[quick-stats] Segment count attempt ${attempt + 1} failed: ${countResp.status}`);
+      continue;
+    }
+
+    const countData = await countResp.json();
+    const count = countData?.data?.attributes?.profile_count;
+    console.log(`[quick-stats] Attempt ${attempt + 1}: profile_count =`, count);
+
+    if (count !== null && count !== undefined && count > 0) {
+      return count;
+    }
+  }
+
+  return null;
 }
 
 Deno.serve(async (req) => {
@@ -90,95 +186,27 @@ Deno.serve(async (req) => {
     };
 
     const [profilesResult, campaignsResult, revenueResult] = await Promise.allSettled([
-      // Call 1: Active profiles — try multiple approaches
-      (async () => {
-        // Approach 1: Try segments — they often include profile_count
-        const segData = await klaviyoGet(`/segments/`, apiKey);
-        const segments = segData?.data || [];
-        console.log("[quick-stats] Segments found:", segments.length,
-          segments.map((s: any) => `${s.attributes?.name}: profile_count=${s.attributes?.profile_count}, is_active=${s.attributes?.is_active}`));
-        
-        // Look for profile_count in any segment
-        const hasCount = segments.some((s: any) => s.attributes?.profile_count != null);
-        if (hasCount) {
-          // Find largest active segment as proxy
-          let maxCount = 0;
-          for (const seg of segments) {
-            if (seg.attributes?.is_active !== false) {
-              const count = seg.attributes?.profile_count ?? 0;
-              if (count > maxCount) maxCount = count;
-            }
-          }
-          if (maxCount > 0) return maxCount;
-        }
-        
-        // Approach 2: Use metric aggregates — count unique "Received Email" profiles
-        // This gives us unique email recipients which ≈ active subscribers
-        const metricsData = await klaviyoGet(`/metrics/`, apiKey);
-        const receivedMetric = (metricsData?.data || []).find((m: any) =>
-          m.attributes?.name?.toLowerCase() === 'received email'
-        );
-        
-        if (receivedMetric) {
-          const nowDate = new Date();
-          const now = nowDate.toISOString().split("T")[0] + "T00:00:00+00:00";
-          const yearAgoDate = new Date(nowDate);
-          yearAgoDate.setFullYear(yearAgoDate.getFullYear() - 1);
-          yearAgoDate.setDate(yearAgoDate.getDate() + 1); // stay under 1 year
-          const yearAgo = yearAgoDate.toISOString().split("T")[0] + "T00:00:00+00:00";
-          const aggData = await klaviyoPost(`/metric-aggregates/`, apiKey, {
-            data: {
-              type: "metric-aggregate",
-              attributes: {
-                metric_id: receivedMetric.id,
-                interval: "month",
-                measurements: ["unique"],
-                filter: `greater-or-equal(datetime,${yearAgo}),less-than(datetime,${now})`,
-                timezone: "UTC",
-              },
-            },
-          });
-          const measurements = aggData?.data?.attributes?.data;
-          if (measurements && Array.isArray(measurements)) {
-            // unique is max across months (not sum, since same person can receive in multiple months)
-            let maxUnique = 0;
-            for (const m of measurements) {
-              if (m.measurements?.unique) {
-                for (const v of m.measurements.unique) {
-                  if ((v || 0) > maxUnique) maxUnique = v;
-                }
-              }
-            }
-            if (maxUnique > 0) {
-              console.log("[quick-stats] Active profiles via Received Email unique:", maxUnique);
-              return maxUnique;
-            }
-          }
-        }
-        
-        throw new Error("Could not determine active profile count via any method");
-      })(),
+      // Call 1: Active profiles via segment
+      getActiveProfileCount(apiKey, brandId, supabase),
 
-      // Call 2: Campaigns sent in last 30 days — NO page[size] (campaigns rejects it, cursor-based only)
+      // Call 2: Campaigns sent in last 30 days
       (async () => {
         const data = await klaviyoGet(
           `/campaigns/?filter=equals(messages.channel,'email'),equals(status,'Sent'),greater-or-equal(updated_at,${thirtyDaysAgo})`,
           apiKey
         );
         console.log("[quick-stats] Campaigns response keys:", Object.keys(data), "meta:", JSON.stringify(data?.meta));
-        // Try meta.total first, fallback to counting data array
         const total = data?.meta?.total ?? data?.meta?.page_info?.count ?? null;
         if (total !== null) return total;
-        // Fallback: count items on this page (may undercount if paginated)
         return data?.data?.length ?? 0;
       })(),
 
-      // Call 3: Revenue in last 30 days — fetch all metrics, find Placed Order client-side
+      // Call 3: Revenue in last 30 days
       (async () => {
         const metricsData = await klaviyoGet(`/metrics/`, apiKey);
         const metrics = metricsData?.data || [];
         const placedOrderMetric = metrics.find((m: any) =>
-          m.attributes?.name?.toLowerCase().includes('placed order')
+          m.attributes?.name?.toLowerCase().includes("placed order")
         );
         if (!placedOrderMetric) {
           console.warn("[quick-stats] No 'Placed Order' metric found among", metrics.length, "metrics");
@@ -187,7 +215,6 @@ Deno.serve(async (req) => {
         const metricId = placedOrderMetric.id;
         console.log("[quick-stats] Found Placed Order metric:", metricId);
 
-        // NO page_size in attributes — it's not a valid field for metric-aggregates
         const aggData = await klaviyoPost(`/metric-aggregates/`, apiKey, {
           data: {
             type: "metric-aggregate",
