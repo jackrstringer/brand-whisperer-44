@@ -80,24 +80,50 @@ Deno.serve(async (req) => {
 
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0] + "T00:00:00+00:00";
 
+    // Track errors per stat
+    const errors: Record<string, string | null> = {
+      active_profiles: null,
+      campaigns_last_30d: null,
+      revenue_last_30d: null,
+    };
+
     // Run all 3 calls in parallel
     const [profilesResult, campaignsResult, revenueResult] = await Promise.allSettled([
-      // Call 1: Active profiles count
-      klaviyoGet(`/profiles/?page[size]=1`, apiKey)
-        .then(data => data?.meta?.total ?? null),
-
-      // Call 2: Campaigns sent in last 30 days
-      klaviyoGet(
-        `/campaigns/?filter=equals(messages.channel,'email'),equals(status,'sent'),greater-or-equal(updated_at,${thirtyDaysAgo})&page[size]=1`,
-        apiKey
-      ).then(data => data?.meta?.total ?? null),
-
-      // Call 3: Revenue in last 30 days
+      // Call 1: Active profiles count — meta.total is at response root, not nested under data
       (async () => {
-        // First get the Placed Order metric ID
-        const metricsData = await klaviyoGet(`/metrics/?filter=contains(name,'Placed Order')`, apiKey);
-        const metricId = metricsData?.data?.[0]?.id;
-        if (!metricId) return null;
+        const data = await klaviyoGet(`/profiles/?page[size]=1`, apiKey);
+        console.log("[quick-stats] Profiles response keys:", Object.keys(data), "meta:", JSON.stringify(data?.meta));
+        const total = data?.meta?.total ?? null;
+        if (total === null) {
+          throw new Error(`meta.total not found in profiles response. Keys: ${Object.keys(data).join(", ")}`);
+        }
+        return total;
+      })(),
+
+      // Call 2: Campaigns sent in last 30 days — status must be capitalized 'Sent'
+      (async () => {
+        const data = await klaviyoGet(
+          `/campaigns/?filter=equals(messages.channel,'email'),equals(status,'Sent'),greater-or-equal(updated_at,${thirtyDaysAgo})&page[size]=1`,
+          apiKey
+        );
+        console.log("[quick-stats] Campaigns response keys:", Object.keys(data), "meta:", JSON.stringify(data?.meta));
+        return data?.meta?.total ?? null;
+      })(),
+
+      // Call 3: Revenue in last 30 days — fetch all metrics, find Placed Order client-side
+      (async () => {
+        // Fetch metrics with large page size and find Placed Order by name
+        const metricsData = await klaviyoGet(`/metrics/?page[size]=100`, apiKey);
+        const metrics = metricsData?.data || [];
+        const placedOrderMetric = metrics.find((m: any) =>
+          m.attributes?.name?.toLowerCase().includes('placed order')
+        );
+        if (!placedOrderMetric) {
+          console.warn("[quick-stats] No 'Placed Order' metric found among", metrics.length, "metrics");
+          return null;
+        }
+        const metricId = placedOrderMetric.id;
+        console.log("[quick-stats] Found Placed Order metric:", metricId);
 
         // Then fetch aggregate revenue
         const aggData = await klaviyoPost(`/metric-aggregates/`, apiKey, {
@@ -129,17 +155,30 @@ Deno.serve(async (req) => {
       })(),
     ]);
 
+    // Extract values and capture errors
+    const activeProfiles = profilesResult.status === "fulfilled" ? profilesResult.value : null;
+    const campaignsL30d = campaignsResult.status === "fulfilled" ? campaignsResult.value : null;
+    const revenueL30d = revenueResult.status === "fulfilled" ? revenueResult.value : null;
+
+    if (profilesResult.status === "rejected") {
+      errors.active_profiles = profilesResult.reason?.message || "Unknown error";
+      console.warn("[quick-stats] Profiles failed:", errors.active_profiles);
+    }
+    if (campaignsResult.status === "rejected") {
+      errors.campaigns_last_30d = campaignsResult.reason?.message || "Unknown error";
+      console.warn("[quick-stats] Campaigns failed:", errors.campaigns_last_30d);
+    }
+    if (revenueResult.status === "rejected") {
+      errors.revenue_last_30d = revenueResult.reason?.message || "Unknown error";
+      console.warn("[quick-stats] Revenue failed:", errors.revenue_last_30d);
+    }
+
     const quickStats = {
-      active_profiles: profilesResult.status === "fulfilled" ? profilesResult.value : null,
-      campaigns_last_30d: campaignsResult.status === "fulfilled" ? campaignsResult.value : null,
-      revenue_last_30d: revenueResult.status === "fulfilled" ? revenueResult.value : null,
+      active_profiles: activeProfiles,
+      campaigns_last_30d: campaignsL30d,
+      revenue_last_30d: revenueL30d,
       fetched_at: new Date().toISOString(),
     };
-
-    // Log any failures
-    if (profilesResult.status === "rejected") console.warn("[quick-stats] Profiles failed:", profilesResult.reason?.message);
-    if (campaignsResult.status === "rejected") console.warn("[quick-stats] Campaigns failed:", campaignsResult.reason?.message);
-    if (revenueResult.status === "rejected") console.warn("[quick-stats] Revenue failed:", revenueResult.reason?.message);
 
     // Save to klaviyo_connections
     await supabase
@@ -149,7 +188,11 @@ Deno.serve(async (req) => {
 
     console.log("[quick-stats] Stats saved for brand", brandId, quickStats);
 
-    return new Response(JSON.stringify({ success: true, stats: quickStats }), {
+    return new Response(JSON.stringify({
+      success: true,
+      stats: quickStats,
+      errors,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {

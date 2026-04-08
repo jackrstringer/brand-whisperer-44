@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Loader2, Check, RefreshCw, Unplug, Eye, EyeOff, ChevronDown,
@@ -31,6 +32,12 @@ type QuickStats = {
   fetched_at: string;
 };
 
+type QuickStatsErrors = {
+  active_profiles: string | null;
+  campaigns_last_30d: string | null;
+  revenue_last_30d: string | null;
+};
+
 type SyncStatus = "pending" | "syncing" | "analyzing" | "compiling" | "complete" | "failed";
 
 const SYNC_PROGRESS: Record<SyncStatus, number> = {
@@ -48,6 +55,8 @@ const SYNC_STEPS: { status: SyncStatus; label: string }[] = [
   { status: "compiling", label: "Building AI context..." },
 ];
 
+const STALL_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes
+
 export default function KlaviyoSetup({ brandId }: Props) {
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
@@ -60,6 +69,7 @@ export default function KlaviyoSetup({ brandId }: Props) {
 
   const [accountName, setAccountName] = useState("");
   const [quickStats, setQuickStats] = useState<QuickStats | null>(null);
+  const [statsErrors, setStatsErrors] = useState<QuickStatsErrors | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>("pending");
   const [syncError, setSyncError] = useState<string | null>(null);
 
@@ -70,6 +80,11 @@ export default function KlaviyoSetup({ brandId }: Props) {
   const [animatedProgress, setAnimatedProgress] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const animRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Track when sync_status last changed for stall detection
+  const lastStatusChangeRef = useRef<number>(Date.now());
+  const lastStatusRef = useRef<SyncStatus>("pending");
+  const [showStallWarning, setShowStallWarning] = useState(false);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -89,7 +104,6 @@ export default function KlaviyoSetup({ brandId }: Props) {
     const target = SYNC_PROGRESS[syncStatus] || 0;
 
     if (syncStatus === "syncing" || syncStatus === "analyzing" || syncStatus === "compiling") {
-      // Slowly creep up to next tier
       const ceiling = syncStatus === "syncing" ? 65 : syncStatus === "analyzing" ? 82 : 95;
       animRef.current = setInterval(() => {
         setAnimatedProgress(prev => {
@@ -124,7 +138,6 @@ export default function KlaviyoSetup({ brandId }: Props) {
 
         await fetchIntelligence();
 
-        // Start polling if sync is in progress
         const status = (data as any).sync_status;
         if (status === "syncing" || status === "analyzing" || status === "compiling" || status === "pending") {
           startPolling();
@@ -153,6 +166,10 @@ export default function KlaviyoSetup({ brandId }: Props) {
 
   const startPolling = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
+    lastStatusChangeRef.current = Date.now();
+    lastStatusRef.current = syncStatus;
+    setShowStallWarning(false);
+
     pollRef.current = setInterval(async () => {
       const { data: conn } = await supabase
         .from("klaviyo_connections")
@@ -162,6 +179,19 @@ export default function KlaviyoSetup({ brandId }: Props) {
 
       if (!conn) return;
       const status = ((conn as any).sync_status || "pending") as SyncStatus;
+
+      // Track status changes for stall detection
+      if (status !== lastStatusRef.current) {
+        lastStatusRef.current = status;
+        lastStatusChangeRef.current = Date.now();
+        setShowStallWarning(false);
+      } else if (
+        (status === "syncing" || status === "analyzing" || status === "compiling") &&
+        Date.now() - lastStatusChangeRef.current > STALL_THRESHOLD_MS
+      ) {
+        setShowStallWarning(true);
+      }
+
       setSyncStatus(status);
       setSyncError((conn as any).sync_error || null);
 
@@ -171,14 +201,16 @@ export default function KlaviyoSetup({ brandId }: Props) {
       if (status === "complete") {
         if (pollRef.current) clearInterval(pollRef.current);
         pollRef.current = null;
+        setShowStallWarning(false);
         await fetchIntelligence();
         toast.success("Performance analysis complete!");
       } else if (status === "failed") {
         if (pollRef.current) clearInterval(pollRef.current);
         pollRef.current = null;
+        setShowStallWarning(false);
       }
     }, 5000);
-  }, [brandId]);
+  }, [brandId, syncStatus]);
 
   const connect = async () => {
     if (!apiKey.trim()) return;
@@ -207,17 +239,29 @@ export default function KlaviyoSetup({ brandId }: Props) {
       });
       if (statsError || statsData?.error) {
         setConnectSteps(prev => prev.map((s, i) => i === 1 ? { ...s, status: "error", error: statsData?.error || statsError?.message } : s));
-        // Don't throw — quick stats failure is non-blocking
+        // Non-blocking
       } else {
-        setQuickStats(statsData.stats);
-        setConnectSteps(prev => prev.map((s, i) => i === 1 ? { ...s, status: "done" } : i === 2 ? { ...s, status: "active" } : s));
+        const stats = statsData.stats as QuickStats;
+        const errs = statsData.errors as QuickStatsErrors | undefined;
+        setQuickStats(stats);
+        if (errs) setStatsErrors(errs);
+
+        // Step 2 is only "done" if at least one stat is non-null
+        const hasAnyValue = stats.active_profiles != null || stats.campaigns_last_30d != null || stats.revenue_last_30d != null;
+        if (hasAnyValue) {
+          setConnectSteps(prev => prev.map((s, i) => i === 1 ? { ...s, status: "done" } : i === 2 ? { ...s, status: "active" } : s));
+        } else {
+          // All null — mark as failed with first error
+          const firstError = errs?.active_profiles || errs?.campaigns_last_30d || errs?.revenue_last_30d || "All stats returned null";
+          setConnectSteps(prev => prev.map((s, i) => i === 1 ? { ...s, status: "error", error: firstError } : i === 2 ? { ...s, status: "active" } : s));
+        }
       }
 
-      // Step 3: Fire deep sync (async)
+      // Step 3: Fire deep sync (async) — do NOT mark as done, leave as "active"
       supabase.functions.invoke("klaviyo-proxy", {
         body: { action: "sync-performance", brandId },
       }).catch(() => {});
-      setConnectSteps(prev => prev.map((s, i) => i === 2 ? { ...s, status: "done" } : s));
+      // Step 3 stays "active" — polling drives real progress
 
       setConnected(true);
       setApiKey("");
@@ -235,7 +279,6 @@ export default function KlaviyoSetup({ brandId }: Props) {
   const refreshQuickStats = async () => {
     setRefreshingStats(true);
     try {
-      // Get API key from connection
       const { data: conn } = await supabase
         .from("klaviyo_connections")
         .select("api_key")
@@ -248,6 +291,7 @@ export default function KlaviyoSetup({ brandId }: Props) {
       });
       if (error || data?.error) throw new Error(data?.error || error?.message);
       setQuickStats(data.stats);
+      setStatsErrors(data.errors || null);
       toast.success("Stats refreshed");
     } catch (e: any) {
       toast.error(e.message);
@@ -259,6 +303,7 @@ export default function KlaviyoSetup({ brandId }: Props) {
   const retrySyncPerformance = async () => {
     setSyncStatus("syncing");
     setSyncError(null);
+    setShowStallWarning(false);
     try {
       const { error } = await supabase.functions.invoke("klaviyo-proxy", {
         body: { action: "sync-performance", brandId },
@@ -280,9 +325,11 @@ export default function KlaviyoSetup({ brandId }: Props) {
       if (error || data?.error) throw new Error(data?.error || error?.message);
       setConnected(false);
       setQuickStats(null);
+      setStatsErrors(null);
       setReport(null);
       setCompiled(null);
       setSyncStatus("pending");
+      setShowStallWarning(false);
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
       toast.success("Klaviyo disconnected");
     } catch (e: any) {
@@ -334,7 +381,6 @@ export default function KlaviyoSetup({ brandId }: Props) {
           </p>
         </div>
 
-        {/* Inline connection stepper */}
         {connectSteps.length > 0 && (
           <div className="space-y-2 pt-2">
             {connectSteps.map((step, i) => (
@@ -400,6 +446,7 @@ export default function KlaviyoSetup({ brandId }: Props) {
             value={quickStats?.active_profiles}
             format="number"
             loading={!quickStats}
+            error={statsErrors?.active_profiles}
           />
           <StatCell
             icon={<Mail className="w-4 h-4 text-muted-foreground" />}
@@ -408,6 +455,7 @@ export default function KlaviyoSetup({ brandId }: Props) {
             value={quickStats?.campaigns_last_30d}
             format="number"
             loading={!quickStats}
+            error={statsErrors?.campaigns_last_30d}
           />
           <StatCell
             icon={<DollarSign className="w-4 h-4 text-muted-foreground" />}
@@ -415,6 +463,7 @@ export default function KlaviyoSetup({ brandId }: Props) {
             value={quickStats?.revenue_last_30d}
             format="currency"
             loading={!quickStats}
+            error={statsErrors?.revenue_last_30d}
           />
         </div>
         <div className="flex items-center justify-end px-3 py-1.5 border-t border-border">
@@ -482,9 +531,15 @@ export default function KlaviyoSetup({ brandId }: Props) {
                 );
               })}
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              Usually takes 3–5 minutes. You can close this page — we'll keep working in the background.
-            </p>
+            {showStallWarning ? (
+              <p className="text-[11px] text-amber-600">
+                This is taking longer than expected — the analysis is running in the background and may take up to 10 minutes for large accounts.
+              </p>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                Usually takes 3–5 minutes. You can close this page — we'll keep working in the background.
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -596,13 +651,14 @@ export default function KlaviyoSetup({ brandId }: Props) {
 }
 
 // ─── StatCell Sub-component ───
-function StatCell({ icon, label, sublabel, value, format, loading }: {
+function StatCell({ icon, label, sublabel, value, format, loading, error }: {
   icon: React.ReactNode;
   label: string;
   sublabel?: string;
   value: number | null | undefined;
   format: "number" | "currency";
   loading: boolean;
+  error?: string | null;
 }) {
   const formatted = value != null
     ? format === "currency"
@@ -616,10 +672,26 @@ function StatCell({ icon, label, sublabel, value, format, loading }: {
         {icon}
         <span className="text-xs text-muted-foreground">{label}</span>
       </div>
-      {loading || formatted === null ? (
+      {loading ? (
         <Skeleton className="h-7 w-20 mx-auto" />
-      ) : (
+      ) : formatted !== null ? (
         <p className="text-xl font-semibold">{formatted}</p>
+      ) : error ? (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center justify-center gap-1 cursor-help">
+                <AlertCircle className="w-4 h-4 text-destructive" />
+                <span className="text-sm text-destructive">Error</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-[250px]">
+              <p className="text-xs">{error}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : (
+        <p className="text-xl font-semibold text-muted-foreground">—</p>
       )}
       {sublabel && <p className="text-[10px] text-muted-foreground mt-0.5">{sublabel}</p>}
     </div>
