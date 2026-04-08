@@ -90,8 +90,13 @@ serve(async (req) => {
         || "Klaviyo Account";
       const accountId = account?.id || "";
 
-      // Also test fetching lists
-      const listsData = await klaviyoFetch("/lists", apiKey);
+      // Fetch lists with profile_count
+      const listsData = await klaviyoFetch("/lists?fields[list]=name,profile_count", apiKey);
+      const lists = listsData.data || [];
+      const activeProfiles = lists.reduce((max: number, l: any) => {
+        const count = l.attributes?.profile_count || 0;
+        return count > max ? count : max;
+      }, 0);
       
       // Upsert connection
       const { error: upsertError } = await supabase
@@ -101,7 +106,8 @@ serve(async (req) => {
           api_key: apiKey,
           klaviyo_account_id: accountId,
           klaviyo_account_name: accountName,
-          cached_lists: listsData.data || [],
+          cached_lists: lists,
+          cached_stats: { active_profiles: activeProfiles, campaigns_sent_l30d: 0, campaigns_sent_l365d: 0, total_revenue_l365d: 0 },
           last_synced_at: new Date().toISOString(),
           sync_status: "pending",
         }, { onConflict: "brand_id" });
