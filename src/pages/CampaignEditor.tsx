@@ -4722,6 +4722,8 @@ export default function CampaignEditor() {
                     </Button>
                   </div>
                 </div>
+                </>
+                )}
               </div>
             )}
           </div>
