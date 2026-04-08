@@ -32,11 +32,10 @@ export default function BrandProfile() {
   useEffect(() => {
     if (!brandId) return;
     (async () => {
-      const [{ data: brand }, { data: brandAssets }, { data: profile }, { data: intelligence }] = await Promise.all([
+      const [{ data: brand }, { data: brandAssets }, { data: profile }] = await Promise.all([
         supabase.from("brands").select("*").eq("id", brandId).single(),
         supabase.from("brand_assets").select("*").eq("brand_id", brandId),
         supabase.from("brand_profiles").select("brand_guide_html").eq("brand_id", brandId).single(),
-        supabase.from("brand_intelligence").select("*").eq("brand_id", brandId).single(),
       ]);
       if (brand) {
         setBrandName(brand.name);
