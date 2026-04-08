@@ -210,10 +210,8 @@ export default function CampaignsList() {
 
   return (
     <div className="p-6 md:p-12">
-      <div className="flex items-center justify-between mb-8 max-w-3xl">
-         <h1 className="text-2xl font-semibold">{brand?.name || "Brand"}</h1>
-       </div>
-       <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-2xl font-semibold">{brand?.name || "Brand"}</h1>
         <div className="flex items-center gap-2">
           <button
             onClick={toggleTimers}
@@ -229,14 +227,14 @@ export default function CampaignsList() {
       </div>
 
       {campaigns.length === 0 ? (
-        <div className="max-w-3xl border border-dashed border-border rounded-lg p-12 text-center">
+        <div className="border border-dashed border-border rounded-lg p-12 text-center">
           <p className="text-muted-foreground mb-4">No campaigns yet. Create your first one.</p>
           <Button onClick={createCampaign} variant="outline" className="active:scale-[0.98] transition-all">
             Create first campaign
           </Button>
         </div>
       ) : (
-        <div className="max-w-3xl space-y-2">
+        <div className="space-y-2">
           {campaigns.map((c, index) => {
             const isSelected = selectedIds.has(c.id);
             return (
