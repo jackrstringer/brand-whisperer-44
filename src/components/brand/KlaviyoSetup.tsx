@@ -433,7 +433,7 @@ export default function KlaviyoSetup({ brandId }: Props) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Badge>
-            <span className="w-[5px] h-[5px] rounded-full bg-foreground mr-1.5 inline-block" /> Connected
+            <span className="w-[5px] h-[5px] rounded-full mr-1.5 inline-block" style={{ backgroundColor: 'var(--success)' }} /> Connected
           </Badge>
           <span className="text-sm font-medium">{accountName}</span>
         </div>
