@@ -42,9 +42,7 @@ export default function BrandProfile() {
         setIndustry(brand.industry || "");
         setWebsiteUrl(brand.website_url || "");
       }
-      setAssets((brandAssets || []) as BrandAsset[]);
       setGuideHtml((profile as any)?.brand_guide_html || null);
-      setIntel(intelligence);
       setLoading(false);
 
       supabase.functions.invoke("reprocess-asset-compositions", { body: { brandId } }).catch(() => {});
