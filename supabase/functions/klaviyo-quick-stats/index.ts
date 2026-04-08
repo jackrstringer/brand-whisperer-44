@@ -104,7 +104,7 @@ async function getActiveProfileCount(apiKey: string, brandId: string, supabase: 
     }
   }
 
-  // Create segment if needed — NO consent_status sub-filter
+  // Create segment if needed
   if (!segmentId) {
     console.log("[quick-stats] Creating new segment for active profiles...");
     const createData = await klaviyoPost(`/segments/`, apiKey, {
@@ -119,6 +119,9 @@ async function getActiveProfileCount(apiKey: string, brandId: string, supabase: 
                 consent: {
                   channel: "email",
                   can_receive_marketing: true,
+                  consent_status: {
+                    subscription: "any",
+                  },
                 },
               }],
             }],
