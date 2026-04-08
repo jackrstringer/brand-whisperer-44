@@ -13,6 +13,7 @@ import BrandCalendar from "./pages/BrandCalendar";
 import BrandSegments from "./pages/BrandSegments";
 import BrandProfile from "./pages/BrandProfile";
 import BrandIntelligence from "./pages/BrandIntelligence";
+import IntelligencePage from "./pages/IntelligencePage";
 import BrandIntegrations from "./pages/BrandIntegrations";
 import BrandPreferences from "./pages/BrandPreferences";
 import GlobalSettings from "./pages/GlobalSettings";
@@ -56,6 +57,7 @@ function AppRoutes() {
       <Route path="/brands/:brandId/intelligence" element={<ProtectedLayout><BrandIntelligence /></ProtectedLayout>} />
       <Route path="/brands/:brandId/integrations" element={<ProtectedLayout><BrandIntegrations /></ProtectedLayout>} />
       <Route path="/brands/:brandId/preferences" element={<ProtectedLayout><BrandPreferences /></ProtectedLayout>} />
+      <Route path="/brands/:brandId/report" element={<ProtectedLayout><IntelligencePage /></ProtectedLayout>} />
       <Route path="/brands/:brandId/campaigns/:campaignId" element={<ProtectedRoute><CampaignEditor /></ProtectedRoute>} />
       <Route path="/brands/:brandId/campaigns/:campaignId/qa" element={<ProtectedRoute><CampaignQA /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedLayout><GlobalSettings /></ProtectedLayout>} />

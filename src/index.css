@@ -142,3 +142,8 @@
 * {
   box-shadow: none !important;
 }
+
+@keyframes report-progress {
+  from { width: 0%; }
+  to { width: 95%; }
+}
