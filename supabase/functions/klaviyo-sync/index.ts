@@ -10,7 +10,8 @@ const KLAVIYO_API_BASE = "https://a.klaviyo.com/api";
 const REVISION = "2024-02-15";
 
 async function klaviyoFetch(path: string, apiKey: string, options: RequestInit = {}) {
-  const res = await fetch(`${KLAVIYO_API_BASE}${path}`, {
+  const url = path.startsWith("http") ? path : `${KLAVIYO_API_BASE}${path}`;
+  const doFetch = () => fetch(url, {
     ...options,
     headers: {
       "Authorization": `Klaviyo-API-Key ${apiKey}`,
@@ -20,6 +21,16 @@ async function klaviyoFetch(path: string, apiKey: string, options: RequestInit =
       ...(options.headers || {}),
     },
   });
+
+  let res = await doFetch();
+
+  // Basic 429 rate-limit retry
+  if (res.status === 429) {
+    console.warn(`[klaviyo-sync] Rate limited on ${path}, retrying in 2s...`);
+    await new Promise(r => setTimeout(r, 2000));
+    res = await doFetch();
+  }
+
   const data = await res.json().catch(() => null);
   if (!res.ok) {
     const err = Array.isArray(data?.errors) ? data.errors[0]?.detail || data.errors[0]?.title : JSON.stringify(data);
@@ -30,11 +41,12 @@ async function klaviyoFetch(path: string, apiKey: string, options: RequestInit =
 
 async function fetchAllPages(path: string, apiKey: string, params?: Record<string, string>): Promise<any[]> {
   const all: any[] = [];
-  // Build query string manually to preserve literal brackets (e.g. page[size])
   const qs = params
     ? Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&")
     : "";
-  let url = `${path}${qs ? `?${qs}` : ""}`;
+  // If path already has ?, append with &; otherwise use ?
+  const separator = path.includes("?") ? "&" : "?";
+  let url = `${path}${qs ? `${separator}${qs}` : ""}`;
   while (url) {
     const data = await klaviyoFetch(url, apiKey);
     if (data.data) all.push(...data.data);
@@ -86,11 +98,11 @@ serve(async (req) => {
       const filterStr = `equals(messages.channel,'email'),greater-or-equal(created_at,${cutoff})`;
       
       console.log("[klaviyo-sync] Fetching campaigns...");
-      const allCampaigns = await fetchAllPages("/campaigns", apiKey, {
-        "filter": filterStr,
-        "page[size]": "50",
-        "fields[campaign]": "name,status,created_at,updated_at,send_time",
-      });
+      const allCampaigns = await fetchAllPages(
+        `/campaigns?fields[campaign]=name,status,created_at,updated_at,send_time,scheduled_at`,
+        apiKey,
+        { "filter": filterStr }
+      );
       const sentCampaigns = allCampaigns.filter((c: any) => {
         const status = c.attributes?.status;
         return status === "Sent" || status === "sent";
@@ -213,9 +225,9 @@ serve(async (req) => {
         klaviyoFetch("/segments?filter=equals(is_active,true)", apiKey),
       ]);
 
-      // Step 6: Compute cached stats (profile counts not available from list API, skip for now)
+      // Step 6: Compute cached stats — preserve existing cached_stats (e.g. event_schemas)
       const lists = listsData.data || [];
-      const activeProfiles = 0; // Klaviyo list API doesn't expose profile_count in fields
+      const activeProfiles = 0;
 
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const campaignsSentL30d = campaignData.filter((c: any) => {
@@ -225,7 +237,17 @@ serve(async (req) => {
 
       const totalRevenue = campaignData.reduce((sum: number, c: any) => sum + (c.revenue || 0), 0);
 
+      // Fetch existing cached_stats to preserve event_schemas written by klaviyo-fetch-schema
+      const { data: existingConn } = await supabase
+        .from("klaviyo_connections")
+        .select("cached_stats")
+        .eq("brand_id", brandId)
+        .single();
+
+      const existingStats = (existingConn?.cached_stats as Record<string, any>) || {};
+
       const cachedStats = {
+        ...existingStats,
         active_profiles: activeProfiles,
         campaigns_sent_l30d: campaignsSentL30d,
         campaigns_sent_l365d: campaignData.length,
