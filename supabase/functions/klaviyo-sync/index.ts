@@ -28,13 +28,25 @@ async function klaviyoFetch(path: string, apiKey: string, options: RequestInit =
   return data;
 }
 
-async function fetchAllPages(path: string, apiKey: string, filter?: string): Promise<any[]> {
+async function fetchAllPages(path: string, apiKey: string, params?: Record<string, string>): Promise<any[]> {
   const all: any[] = [];
-  let url = `${path}?page[size]=50${filter ? `&filter=${encodeURIComponent(filter)}` : ""}`;
+  const qs = new URLSearchParams(params || {});
+  let url = `${path}${qs.toString() ? `?${qs.toString()}` : ""}`;
   while (url) {
     const data = await klaviyoFetch(url, apiKey);
     if (data.data) all.push(...data.data);
-    url = data.links?.next ? data.links.next.replace(KLAVIYO_API_BASE, "") : null;
+    // Klaviyo returns full URLs in links.next
+    const nextLink = data.links?.next;
+    if (nextLink) {
+      try {
+        const nextUrl = new URL(nextLink);
+        url = `${nextUrl.pathname}${nextUrl.search}`.replace("/api", "");
+      } catch {
+        url = null as any;
+      }
+    } else {
+      url = null as any;
+    }
   }
   return all;
 }
