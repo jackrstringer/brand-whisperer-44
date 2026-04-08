@@ -54,7 +54,7 @@ function cleanUserMessage(content: string): string | null {
   return content;
 }
 
-import type { Campaign, ChatMessage, VariantOption } from "@/lib/types";
+import type { Campaign, ChatMessage, VariantOption, FlowConfig } from "@/lib/types";
 import VariantCards from "@/components/brand/VariantCards";
 import { captureEmailScreenshots } from "@/lib/visualQaCapture";
 import CommentOverlay, { type CommentThread, type CommentAuthor, type CommentElementInfo, COMMENT_CURSOR_SVG } from "@/components/campaign/CommentOverlay";
