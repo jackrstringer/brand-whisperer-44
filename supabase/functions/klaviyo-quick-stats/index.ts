@@ -7,7 +7,9 @@ const corsHeaders = {
 };
 
 const KLAVIYO_API_BASE = "https://a.klaviyo.com/api";
-const REVISION = "2024-02-15";
+
+// Use 2024-10-15 revision which returns meta.total for profiles
+const REVISION = "2024-10-15";
 
 async function klaviyoGet(path: string, apiKey: string): Promise<any> {
   const url = path.startsWith("http") ? path : `${KLAVIYO_API_BASE}${path}`;
@@ -80,39 +82,41 @@ Deno.serve(async (req) => {
 
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0] + "T00:00:00+00:00";
 
-    // Track errors per stat
     const errors: Record<string, string | null> = {
       active_profiles: null,
       campaigns_last_30d: null,
       revenue_last_30d: null,
     };
 
-    // Run all 3 calls in parallel
     const [profilesResult, campaignsResult, revenueResult] = await Promise.allSettled([
-      // Call 1: Active profiles count — meta.total is at response root, not nested under data
+      // Call 1: Active profiles — use page[size]=1, read meta.total (supported in 2024-10-15 revision)
       (async () => {
         const data = await klaviyoGet(`/profiles/?page[size]=1`, apiKey);
         console.log("[quick-stats] Profiles response keys:", Object.keys(data), "meta:", JSON.stringify(data?.meta));
-        const total = data?.meta?.total ?? null;
+        // Try meta.total first, then meta.page_info.count
+        const total = data?.meta?.total ?? data?.meta?.page_info?.count ?? null;
         if (total === null) {
-          throw new Error(`meta.total not found in profiles response. Keys: ${Object.keys(data).join(", ")}`);
+          throw new Error(`Could not extract profile count. Response keys: ${Object.keys(data).join(", ")}. Meta: ${JSON.stringify(data?.meta)}`);
         }
         return total;
       })(),
 
-      // Call 2: Campaigns sent in last 30 days — status must be capitalized 'Sent'
+      // Call 2: Campaigns sent in last 30 days — NO page[size] (campaigns rejects it, cursor-based only)
       (async () => {
         const data = await klaviyoGet(
-          `/campaigns/?filter=equals(messages.channel,'email'),equals(status,'Sent'),greater-or-equal(updated_at,${thirtyDaysAgo})&page[size]=1`,
+          `/campaigns/?filter=equals(messages.channel,'email'),equals(status,'Sent'),greater-or-equal(updated_at,${thirtyDaysAgo})`,
           apiKey
         );
         console.log("[quick-stats] Campaigns response keys:", Object.keys(data), "meta:", JSON.stringify(data?.meta));
-        return data?.meta?.total ?? null;
+        // Try meta.total first, fallback to counting data array
+        const total = data?.meta?.total ?? data?.meta?.page_info?.count ?? null;
+        if (total !== null) return total;
+        // Fallback: count items on this page (may undercount if paginated)
+        return data?.data?.length ?? 0;
       })(),
 
       // Call 3: Revenue in last 30 days — fetch all metrics, find Placed Order client-side
       (async () => {
-        // Fetch metrics with large page size and find Placed Order by name
         const metricsData = await klaviyoGet(`/metrics/?page[size]=100`, apiKey);
         const metrics = metricsData?.data || [];
         const placedOrderMetric = metrics.find((m: any) =>
@@ -125,14 +129,13 @@ Deno.serve(async (req) => {
         const metricId = placedOrderMetric.id;
         console.log("[quick-stats] Found Placed Order metric:", metricId);
 
-        // Then fetch aggregate revenue
+        // NO page_size in attributes — it's not a valid field for metric-aggregates
         const aggData = await klaviyoPost(`/metric-aggregates/`, apiKey, {
           data: {
             type: "metric-aggregate",
             attributes: {
               metric_id: metricId,
               interval: "month",
-              page_size: 1,
               measurements: ["sum_value"],
               filter: `greater-or-equal(datetime,${thirtyDaysAgo})`,
               timezone: "UTC",
@@ -140,7 +143,6 @@ Deno.serve(async (req) => {
           },
         });
 
-        // Sum all sum_value measurements
         const measurements = aggData?.data?.attributes?.data;
         if (!measurements || !Array.isArray(measurements)) return null;
         let total = 0;
@@ -155,7 +157,6 @@ Deno.serve(async (req) => {
       })(),
     ]);
 
-    // Extract values and capture errors
     const activeProfiles = profilesResult.status === "fulfilled" ? profilesResult.value : null;
     const campaignsL30d = campaignsResult.status === "fulfilled" ? campaignsResult.value : null;
     const revenueL30d = revenueResult.status === "fulfilled" ? revenueResult.value : null;
@@ -180,7 +181,6 @@ Deno.serve(async (req) => {
       fetched_at: new Date().toISOString(),
     };
 
-    // Save to klaviyo_connections
     await supabase
       .from("klaviyo_connections")
       .update({ quick_stats: quickStats })
