@@ -392,7 +392,7 @@ export async function generateCampaignCore(
   const [profileResult, brandResult, brandIntelResult] = await Promise.all([
     supabase.from("brand_profiles").select("*").eq("brand_id", brandId).single(),
     supabase.from("brands").select("user_id").eq("id", brandId).single(),
-    supabase.from("brand_intelligence").select("compiled_context, research_status").eq("brand_id", brandId).single(),
+    supabase.from("brand_intelligence").select("compiled_context, klaviyo_compiled, research_status").eq("brand_id", brandId).single(),
   ]);
 
   const profile = profileResult.data;
@@ -400,6 +400,10 @@ export async function generateCampaignCore(
 
   const brandIntelBlock = brandIntelResult.data?.compiled_context
     ? `\n\nBRAND INTELLIGENCE:\n${brandIntelResult.data.compiled_context}`
+    : '';
+
+  const klaviyoBlock = brandIntelResult.data?.klaviyo_compiled
+    ? `\n\nKLAVIYO PERFORMANCE INTELLIGENCE:\n${brandIntelResult.data.klaviyo_compiled}`
     : '';
 
   const brandInstructions = (profile as any).brand_instructions || "";
