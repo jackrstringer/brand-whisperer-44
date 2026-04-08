@@ -74,14 +74,20 @@ Top 5 performers by RPR, bottom 5 worst. Be analytical and specific.`;
       // Strip markdown fences if present
       const cleaned = content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
       report = JSON.parse(cleaned);
-    } catch (parseErr) {
-      // Fallback: extract first JSON object
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        console.error("[analyze-klaviyo] No JSON found in:", content.substring(0, 500));
+    } catch {
+      // Try to extract and fix JSON
+      try {
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) throw new Error("No JSON object found");
+        // Attempt to fix common issues: trailing commas, unescaped newlines in strings
+        let fixed = jsonMatch[0]
+          .replace(/,\s*([}\]])/g, "$1") // trailing commas
+          .replace(/[\x00-\x1F\x7F]/g, (ch) => ch === "\n" || ch === "\r" || ch === "\t" ? " " : ""); // control chars
+        report = JSON.parse(fixed);
+      } catch (e2) {
+        console.error("[analyze-klaviyo] JSON parse failed after repair:", content.substring(0, 1000));
         throw new Error("Failed to parse AI report as JSON");
       }
-      report = JSON.parse(jsonMatch[0]);
     }
 
     await supabase.from("brand_intelligence").update({
