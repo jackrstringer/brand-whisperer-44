@@ -28,9 +28,6 @@ export default function BrandProfile() {
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [assets, setAssets] = useState<BrandAsset[]>([]);
   const [guideHtml, setGuideHtml] = useState<string | null>(null);
-  const [intel, setIntel] = useState<any>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [iframeHeight, setIframeHeight] = useState(800);
 
   useEffect(() => {
     if (!brandId) return;
