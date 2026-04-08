@@ -50,7 +50,7 @@ const SYNC_PROGRESS: Record<SyncStatus, number> = {
 };
 
 const SYNC_STEPS: { status: SyncStatus; label: string }[] = [
-  { status: "syncing", label: "Fetching 365 days of campaigns..." },
+  { status: "syncing", label: "Fetching 30 days of campaigns..." },
   { status: "analyzing", label: "Analyzing performance data..." },
   { status: "compiling", label: "Building AI context..." },
 ];

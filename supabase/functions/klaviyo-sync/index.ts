@@ -222,11 +222,12 @@ serve(async (req) => {
         };
       });
 
-      // ── Step 6: Save raw data ──
-      await supabase.from("brand_intelligence").update({
+      // ── Step 6: Save raw data (upsert to create row if missing) ──
+      await supabase.from("brand_intelligence").upsert({
+        brand_id: brandId,
         klaviyo_raw: campaignData,
         klaviyo_last_synced_at: new Date().toISOString(),
-      }).eq("brand_id", brandId);
+      }, { onConflict: "brand_id" });
 
       // ── Step 7: Sync lists and active segments ──
       const [listsData, segmentsData] = await Promise.all([
@@ -257,7 +258,6 @@ serve(async (req) => {
         cached_segments: segmentsData.data || [],
         cached_stats: cachedStats,
         last_synced_at: new Date().toISOString(),
-        sync_status: "complete",
         sync_error: null,
       }).eq("brand_id", brandId);
 
