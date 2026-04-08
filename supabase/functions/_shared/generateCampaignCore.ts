@@ -862,11 +862,98 @@ RULES:
     userContent.push({ type: "text", text: part3 });
   }
 
+  // === FLOW MODE: Override system prompt and user content ===
+  let systemPrompt = referenceMode ? REFERENCE_MODE_SYSTEM : UNIVERSAL_EMAIL_RULES;
+
+  if (campaignMode === "flow" && flowConfig) {
+    systemPrompt = `You are an expert Klaviyo email developer building production-ready transactional email templates. You generate complete HTML with correct Liquid templating syntax. Rules:
+- Every dynamic value MUST use Liquid variables from the provided event schema
+- Every Liquid variable MUST have a | default: filter to prevent broken renders
+- Use {% for item in event.Items %} loops for product line items — never hardcode a single item
+- Include {{ organization.unsubscribe_link }} for marketing flows. Omit for order/shipping confirmation.
+- Always include {{ person.first_name | default: 'there' }} personalization in the greeting
+- Output complete HTML only
+
+${KLAVIYO_BEST_PRACTICES}
+
+${UNIVERSAL_EMAIL_RULES}`;
+
+    // Fetch the trigger's sample_payload and liquid_variables from klaviyo_connections
+    let eventSchema = flowConfig.event_schema || {};
+    let liquidVars = flowConfig.liquid_variables || [];
+
+    if (flowConfig.trigger_metric_id) {
+      try {
+        const { data: klavConn } = await supabase
+          .from("klaviyo_connections")
+          .select("cached_stats")
+          .eq("brand_id", brandId)
+          .single();
+        if (klavConn?.cached_stats) {
+          const stats = klavConn.cached_stats as any;
+          const metrics = stats?.event_schemas?.metrics || [];
+          const matchingMetric = metrics.find((m: any) => m.metric_id === flowConfig.trigger_metric_id);
+          if (matchingMetric) {
+            if (matchingMetric.sample_payload) eventSchema = matchingMetric.sample_payload;
+            if (matchingMetric.liquid_variables) liquidVars = matchingMetric.liquid_variables;
+          }
+        }
+      } catch (e) {
+        console.warn("[generateCampaignCore] Failed to fetch Klaviyo event schema:", e);
+      }
+    }
+
+    // Build flow-specific user content
+    const flowUserContent: any[] = [];
+
+    // Include brand reference images for style
+    if (imageBlocks.length > 0) {
+      flowUserContent.push({
+        type: "text",
+        text: "These are past campaigns from this brand — study them for design language, colors, fonts, and spacing only.",
+      });
+      flowUserContent.push(...imageBlocks);
+    }
+
+    // Brand rules
+    let flowBrandRules = `Brand design rules:\n${profile.system_prompt}`;
+    if (brandIntelBlock) flowBrandRules += brandIntelBlock;
+    if (klaviyoBlock) flowBrandRules += klaviyoBlock;
+    if (brandInstructions) flowBrandRules += `\n\nBrand-specific instructions:\n${brandInstructions}`;
+    if (globalRules) flowBrandRules += `\n\nGlobal rules:\n${globalRules}`;
+    if (designNotes) flowBrandRules += `\n\nDesign notes:\n${designNotes}`;
+    flowUserContent.push({ type: "text", text: flowBrandRules });
+
+    // Flow details
+    let flowDetails = `FLOW DETAILS:\nTrigger: ${flowConfig.trigger_metric_name || "Unknown"}\nEmail type: ${flowConfig.flow_type || "Transactional"}`;
+    if (flowNotes) flowDetails += `\n\n${flowNotes}`;
+    flowDetails += `\n\nEVENT DATA SCHEMA — use ONLY these Liquid variable names, exactly as shown:\n${JSON.stringify(eventSchema, null, 2)}`;
+    flowDetails += `\n\nAVAILABLE LIQUID VARIABLES:\n${liquidVars.join("\n")}`;
+    flowUserContent.push({ type: "text", text: flowDetails });
+
+    // Assets
+    if (hostedAssetEntries.length > 0) {
+      flowUserContent.push({ type: "text", text: `BRAND ASSETS:\n${assetCatalog}` });
+    }
+    if (productRequirements) {
+      flowUserContent.push({ type: "text", text: productRequirements });
+    }
+
+    flowUserContent.push({
+      type: "text",
+      text: "Generate a complete Klaviyo-ready transactional email HTML template for the above flow. Match the brand visual identity. All dynamic data must use the Liquid variables provided. Return only complete HTML.",
+    });
+
+    // Replace userContent for the generation call
+    userContent.length = 0;
+    userContent.push(...flowUserContent);
+  }
+
   // === PASS 1: Generate ===
   const response = await callAnthropic({
     model: GENERATION_MODEL,
     max_tokens: 16384,
-    system: referenceMode ? REFERENCE_MODE_SYSTEM : UNIVERSAL_EMAIL_RULES,
+    system: systemPrompt,
     messages: [{ role: "user", content: userContent }],
   }, ANTHROPIC_API_KEY);
 
