@@ -392,7 +392,7 @@ export async function generateCampaignCore(
   const [profileResult, brandResult, brandIntelResult] = await Promise.all([
     supabase.from("brand_profiles").select("*").eq("brand_id", brandId).single(),
     supabase.from("brands").select("user_id").eq("id", brandId).single(),
-    supabase.from("brand_intelligence").select("compiled_context, research_status").eq("brand_id", brandId).single(),
+    supabase.from("brand_intelligence").select("compiled_context, klaviyo_compiled, research_status").eq("brand_id", brandId).single(),
   ]);
 
   const profile = profileResult.data;
@@ -400,6 +400,10 @@ export async function generateCampaignCore(
 
   const brandIntelBlock = brandIntelResult.data?.compiled_context
     ? `\n\nBRAND INTELLIGENCE:\n${brandIntelResult.data.compiled_context}`
+    : '';
+
+  const klaviyoBlock = brandIntelResult.data?.klaviyo_compiled
+    ? `\n\nKLAVIYO PERFORMANCE INTELLIGENCE:\n${brandIntelResult.data.klaviyo_compiled}`
     : '';
 
   const brandInstructions = (profile as any).brand_instructions || "";
@@ -690,6 +694,7 @@ CRITICAL GRID RULES:
 
     let brandRulesText = `Brand design rules:\n${profile.system_prompt}`;
     if (brandIntelBlock) brandRulesText += brandIntelBlock;
+    if (klaviyoBlock) brandRulesText += klaviyoBlock;
     if (brandInstructions) brandRulesText += `\n\nBrand-specific instructions:\n${brandInstructions}`;
     if (globalRules) brandRulesText += `\n\nGlobal rules:\n${globalRules}`;
     if (designNotes) brandRulesText += `\n\nDesign notes for this campaign:\n${designNotes}`;
@@ -731,6 +736,7 @@ CRITICAL GRID RULES:
 
     brandValuesText += `\nFrom analyzing these campaigns, here are the specific rules to follow precisely:\n${profile.system_prompt}`;
     if (brandIntelBlock) brandValuesText += brandIntelBlock;
+    if (klaviyoBlock) brandValuesText += klaviyoBlock;
     brandValuesText += `\n\n=== BRAND DESIGN VALUES (use these EXACTLY) ===`;
     brandValuesText += `\nCard/container border-radius: ${brandValues.card_radius}px — apply to ALL cards, contrast sections, and containers`;
     brandValuesText += `\nButton border-radius: ${brandValues.button_radius}px`;
