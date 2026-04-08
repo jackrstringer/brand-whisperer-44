@@ -216,6 +216,7 @@ Deno.serve(async (req) => {
       })(),
 
       (async () => {
+        // Use Reporting API (matches Klaviyo UI) instead of metric-aggregates (which doesn't)
         const metricsData = await klaviyoGet(`/metrics/`, apiKey);
         const metrics = metricsData?.data || [];
         const placedOrderMetric = metrics.find((m: any) =>
@@ -228,29 +229,24 @@ Deno.serve(async (req) => {
         const metricId = placedOrderMetric.id;
         console.log("[quick-stats] Found Placed Order metric:", metricId);
 
-        const aggData = await klaviyoPost(`/metric-aggregates/`, apiKey, {
+        const reportData = await klaviyoPost(`/campaign-values-reports/`, apiKey, {
           data: {
-            type: "metric-aggregate",
+            type: "campaign-values-report",
             attributes: {
-              metric_id: metricId,
-              interval: "month",
-              measurements: ["sum_value"],
-              filter: `greater-or-equal(datetime,${thirtyDaysAgo}),less-than(datetime,${now})`,
-              timezone: "UTC",
+              statistics: ["conversion_value"],
+              timeframe: { key: "last_30_days" },
+              conversion_metric_id: metricId,
+              filter: `equals(send_channel,"email")`,
             },
           },
-        });
+        }, "2024-10-15");
 
-        const measurements = aggData?.data?.attributes?.data;
-        if (!measurements || !Array.isArray(measurements)) return null;
+        const results = reportData?.data?.attributes?.results || [];
         let total = 0;
-        for (const m of measurements) {
-          if (m.measurements?.sum_value) {
-            for (const v of m.measurements.sum_value) {
-              total += v || 0;
-            }
-          }
+        for (const r of results) {
+          total += r.statistics?.conversion_value ?? 0;
         }
+        console.log("[quick-stats] Revenue via Reporting API:", total, "from", results.length, "results");
         return total;
       })(),
     ]);
