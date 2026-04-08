@@ -90,53 +90,43 @@ Deno.serve(async (req) => {
     };
 
     const [profilesResult, campaignsResult, revenueResult] = await Promise.allSettled([
-      // Call 1: Active profiles — use Lists API with additional-fields[list]=profile_count
-      // Sum profile_count across all lists to get total active profiles
-      // Use revision 2024-05-15 which supports additional-fields[list]=profile_count
+      // Call 1: Active profiles — get largest list's profile count
+      // Klaviyo has no direct "total active profiles" endpoint.
+      // Fetch all lists and use the largest list's profile_count as the best proxy.
       (async () => {
-        const url = `${KLAVIYO_API_BASE}/lists/?additional-fields[list]=profile_count&fields[list]=name,profile_count`;
-        let res = await fetch(url, {
-          headers: {
-            "Authorization": `Klaviyo-API-Key ${apiKey}`,
-            "revision": "2026-01-15",
-            "Accept": "application/json",
-          },
-        });
-        if (res.status === 429) {
-          await new Promise(r => setTimeout(r, 2000));
-          res = await fetch(url, {
-            headers: {
-              "Authorization": `Klaviyo-API-Key ${apiKey}`,
-              "revision": "2026-01-15",
-              "Accept": "application/json",
-            },
-          });
-        }
-        if (!res.ok) {
-          const body = await res.text();
-          throw new Error(`Klaviyo ${res.status}: ${body}`);
-        }
-        const data = await res.json();
+        const data = await klaviyoGet(`/lists/`, apiKey);
         const lists = data?.data || [];
-        console.log("[quick-stats] Lists found:", lists.length, lists.map((l: any) => `${l.attributes?.name}: ${l.attributes?.profile_count}`));
+        console.log("[quick-stats] Lists found:", lists.length, 
+          lists.map((l: any) => `${l.attributes?.name}: profile_count=${l.attributes?.profile_count}`));
         
         if (lists.length === 0) {
           throw new Error("No lists found in Klaviyo account");
         }
         
-        // Find the largest list — this is typically the main subscriber list
-        let maxCount = 0;
-        let maxName = "";
-        for (const list of lists) {
-          const count = list.attributes?.profile_count ?? 0;
-          if (count > maxCount) {
-            maxCount = count;
-            maxName = list.attributes?.name || "Unknown";
+        // Check if profile_count is available in attributes
+        const hasProfileCount = lists.some((l: any) => l.attributes?.profile_count != null);
+        
+        if (hasProfileCount) {
+          // Use the largest list as proxy for total active profiles
+          let maxCount = 0;
+          for (const list of lists) {
+            const count = list.attributes?.profile_count ?? 0;
+            if (count > maxCount) maxCount = count;
           }
+          return maxCount;
         }
         
-        console.log("[quick-stats] Largest list:", maxName, "with", maxCount, "profiles");
-        return maxCount;
+        // profile_count not in default response — try fetching individual lists
+        // Just get the first list's profile count as a test
+        const firstListId = lists[0]?.id;
+        if (firstListId) {
+          const listData = await klaviyoGet(`/lists/${firstListId}/`, apiKey);
+          console.log("[quick-stats] Single list response:", JSON.stringify(listData?.data?.attributes));
+          const count = listData?.data?.attributes?.profile_count;
+          if (count != null) return count;
+        }
+        
+        throw new Error("Cannot determine profile count — profile_count not available in list attributes");
       })(),
 
       // Call 2: Campaigns sent in last 30 days — NO page[size] (campaigns rejects it, cursor-based only)
