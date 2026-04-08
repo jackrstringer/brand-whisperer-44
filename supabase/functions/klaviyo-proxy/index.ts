@@ -144,7 +144,7 @@ serve(async (req) => {
 
     if (action === "sync") {
       const [listsData, segmentsData] = await Promise.all([
-        klaviyoFetch("/lists?fields[list]=name,profile_count", apiKey),
+        klaviyoFetch("/lists", apiKey),
         klaviyoFetch("/segments?filter=equals(is_active,true)", apiKey),
       ]);
 

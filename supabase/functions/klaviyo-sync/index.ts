@@ -213,12 +213,9 @@ serve(async (req) => {
         klaviyoFetch("/segments?filter=equals(is_active,true)", apiKey),
       ]);
 
-      // Step 6: Compute cached stats
+      // Step 6: Compute cached stats (profile counts not available from list API, skip for now)
       const lists = listsData.data || [];
-      const activeProfiles = lists.reduce((max: number, l: any) => {
-        const count = l.attributes?.profile_count || 0;
-        return count > max ? count : max;
-      }, 0);
+      const activeProfiles = 0; // Klaviyo list API doesn't expose profile_count in fields
 
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const campaignsSentL30d = campaignData.filter((c: any) => {
