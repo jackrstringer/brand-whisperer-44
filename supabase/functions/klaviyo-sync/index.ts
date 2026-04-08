@@ -209,7 +209,7 @@ serve(async (req) => {
 
       // Step 5: Sync lists (with profile_count) and active segments only
       const [listsData, segmentsData] = await Promise.all([
-        klaviyoFetch("/lists?fields[list]=name,profile_count", apiKey),
+        klaviyoFetch("/lists", apiKey),
         klaviyoFetch("/segments?filter=equals(is_active,true)", apiKey),
       ]);
 
