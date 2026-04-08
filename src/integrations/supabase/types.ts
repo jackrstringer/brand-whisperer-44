@@ -439,6 +439,7 @@ export type Database = {
           brand_id: string
           cached_lists: Json | null
           cached_segments: Json | null
+          cached_stats: Json | null
           connected_at: string | null
           id: string
           klaviyo_account_id: string | null
@@ -452,6 +453,7 @@ export type Database = {
           brand_id: string
           cached_lists?: Json | null
           cached_segments?: Json | null
+          cached_stats?: Json | null
           connected_at?: string | null
           id?: string
           klaviyo_account_id?: string | null
@@ -465,6 +467,7 @@ export type Database = {
           brand_id?: string
           cached_lists?: Json | null
           cached_segments?: Json | null
+          cached_stats?: Json | null
           connected_at?: string | null
           id?: string
           klaviyo_account_id?: string | null
