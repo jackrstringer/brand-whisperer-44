@@ -520,17 +520,29 @@ export default function KlaviyoSetup({ brandId }: Props) {
       {/* Deep Analysis Progress / Complete */}
       <div className="rounded-lg border border-border bg-card p-4">
         {syncStatus === "complete" && (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm">
-              <Check className="w-4 h-4 text-foreground" />
-              <span className="font-medium">Analysis complete</span>
-              {quickStats?.fetched_at && (
-                <span className="text-muted-foreground">· Last updated {formatDistanceToNow(new Date(quickStats.fetched_at), { addSuffix: true })}</span>
-              )}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm">
+                <Check className="w-4 h-4" style={{ color: 'var(--success)' }} />
+                <span className="font-medium">Analysis complete</span>
+                {quickStats?.fetched_at && (
+                  <span className="text-muted-foreground">· Last updated {formatDistanceToNow(new Date(quickStats.fetched_at), { addSuffix: true })}</span>
+                )}
+              </div>
+              <Button variant="ghost" size="sm" onClick={retrySyncPerformance} className="h-7 text-xs">
+                <RefreshCw className="w-3 h-3 mr-1" />
+                Re-analyze
+              </Button>
             </div>
-            <Button variant="ghost" size="sm" onClick={retrySyncPerformance} className="h-7 text-xs">
-              <RefreshCw className="w-3 h-3 mr-1" />
-              Re-analyze
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(`/brands/${brandId}/intelligence`)}
+              className="w-full"
+            >
+              <Brain className="w-3.5 h-3.5 mr-1.5" />
+              View Deep Performance Report
+              <ExternalLink className="w-3 h-3 ml-auto" />
             </Button>
           </div>
         )}

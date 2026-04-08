@@ -53,6 +53,8 @@
     --sidebar-ring: var(--gray-3);
 
     --canvas: var(--gray-5);
+
+    --success: #22c55e;
   }
 
   /* No dark mode — monochrome only */
