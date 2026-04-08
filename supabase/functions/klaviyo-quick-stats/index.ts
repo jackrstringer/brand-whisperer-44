@@ -120,8 +120,12 @@ Deno.serve(async (req) => {
         );
         
         if (receivedMetric) {
-          const now = new Date().toISOString().split("T")[0] + "T23:59:59+00:00";
-          const yearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0] + "T00:00:00+00:00";
+          const nowDate = new Date();
+          const now = nowDate.toISOString().split("T")[0] + "T00:00:00+00:00";
+          const yearAgoDate = new Date(nowDate);
+          yearAgoDate.setFullYear(yearAgoDate.getFullYear() - 1);
+          yearAgoDate.setDate(yearAgoDate.getDate() + 1); // stay under 1 year
+          const yearAgo = yearAgoDate.toISOString().split("T")[0] + "T00:00:00+00:00";
           const aggData = await klaviyoPost(`/metric-aggregates/`, apiKey, {
             data: {
               type: "metric-aggregate",
