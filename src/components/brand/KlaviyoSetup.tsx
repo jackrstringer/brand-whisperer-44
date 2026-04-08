@@ -254,12 +254,11 @@ export default function KlaviyoSetup({ brandId }: Props) {
         if (errs) setStatsErrors(errs);
 
         // Step 2 is only "done" if at least one stat is non-null
-        const hasAnyValue = stats.active_profiles != null || stats.campaigns_last_30d != null || stats.revenue_last_30d != null;
+        const hasAnyValue = stats.active_profiles != null || stats.campaigns_last_30d != null || stats.email_revenue != null;
         if (hasAnyValue) {
           setConnectSteps(prev => prev.map((s, i) => i === 1 ? { ...s, status: "done" } : i === 2 ? { ...s, status: "active" } : s));
         } else {
-          // All null — mark as failed with first error
-          const firstError = errs?.active_profiles || errs?.campaigns_last_30d || errs?.revenue_last_30d || "All stats returned null";
+          const firstError = errs?.active_profiles || errs?.campaigns_last_30d || errs?.campaign_revenue || "All stats returned null";
           setConnectSteps(prev => prev.map((s, i) => i === 1 ? { ...s, status: "error", error: firstError } : i === 2 ? { ...s, status: "active" } : s));
         }
       }
