@@ -102,11 +102,7 @@ export default function KlaviyoSetup({ brandId }: Props) {
         body: { action: "sync", brandId },
       });
       if (error || data?.error) throw new Error(data?.error || error?.message);
-      setStats({
-        lists: (data.lists || []).length,
-        segments: (data.segments || []).length,
-        lastSynced: new Date().toISOString(),
-      });
+      await checkConnection();
       toast.success("Lists & segments synced");
     } catch (e: any) {
       toast.error(e.message);
