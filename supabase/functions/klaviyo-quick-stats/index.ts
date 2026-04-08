@@ -90,30 +90,73 @@ Deno.serve(async (req) => {
     };
 
     const [profilesResult, campaignsResult, revenueResult] = await Promise.allSettled([
-      // Call 1: Active profiles — paginate through to get total count
+      // Call 1: Active profiles — try multiple approaches
       (async () => {
-        // Klaviyo profiles endpoint doesn't return meta.total. 
-        // Use cursor pagination to count. Cap at 5 pages to stay fast.
-        let total = 0;
-        let url: string | null = `/profiles/`;
-        let pages = 0;
-        const MAX_PAGES = 5;
+        // Approach 1: Try segments — they often include profile_count
+        const segData = await klaviyoGet(`/segments/`, apiKey);
+        const segments = segData?.data || [];
+        console.log("[quick-stats] Segments found:", segments.length,
+          segments.map((s: any) => `${s.attributes?.name}: profile_count=${s.attributes?.profile_count}, is_active=${s.attributes?.is_active}`));
         
-        while (url && pages < MAX_PAGES) {
-          const data = await klaviyoGet(url, apiKey);
-          total += data?.data?.length || 0;
-          pages++;
-          
-          if (data?.links?.next) {
-            // Pass full URL — klaviyoGet handles http-prefixed URLs
-            url = data.links.next;
-          } else {
-            url = null;
+        // Look for profile_count in any segment
+        const hasCount = segments.some((s: any) => s.attributes?.profile_count != null);
+        if (hasCount) {
+          // Find largest active segment as proxy
+          let maxCount = 0;
+          for (const seg of segments) {
+            if (seg.attributes?.is_active !== false) {
+              const count = seg.attributes?.profile_count ?? 0;
+              if (count > maxCount) maxCount = count;
+            }
+          }
+          if (maxCount > 0) return maxCount;
+        }
+        
+        // Approach 2: Use metric aggregates — count unique "Received Email" profiles
+        // This gives us unique email recipients which ≈ active subscribers
+        const metricsData = await klaviyoGet(`/metrics/`, apiKey);
+        const receivedMetric = (metricsData?.data || []).find((m: any) =>
+          m.attributes?.name?.toLowerCase() === 'received email'
+        );
+        
+        if (receivedMetric) {
+          const nowDate = new Date();
+          const now = nowDate.toISOString().split("T")[0] + "T00:00:00+00:00";
+          const yearAgoDate = new Date(nowDate);
+          yearAgoDate.setFullYear(yearAgoDate.getFullYear() - 1);
+          yearAgoDate.setDate(yearAgoDate.getDate() + 1); // stay under 1 year
+          const yearAgo = yearAgoDate.toISOString().split("T")[0] + "T00:00:00+00:00";
+          const aggData = await klaviyoPost(`/metric-aggregates/`, apiKey, {
+            data: {
+              type: "metric-aggregate",
+              attributes: {
+                metric_id: receivedMetric.id,
+                interval: "month",
+                measurements: ["unique"],
+                filter: `greater-or-equal(datetime,${yearAgo}),less-than(datetime,${now})`,
+                timezone: "UTC",
+              },
+            },
+          });
+          const measurements = aggData?.data?.attributes?.data;
+          if (measurements && Array.isArray(measurements)) {
+            // unique is max across months (not sum, since same person can receive in multiple months)
+            let maxUnique = 0;
+            for (const m of measurements) {
+              if (m.measurements?.unique) {
+                for (const v of m.measurements.unique) {
+                  if ((v || 0) > maxUnique) maxUnique = v;
+                }
+              }
+            }
+            if (maxUnique > 0) {
+              console.log("[quick-stats] Active profiles via Received Email unique:", maxUnique);
+              return maxUnique;
+            }
           }
         }
         
-        console.log("[quick-stats] Profiles counted:", total, "across", pages, "pages, more:", !!url);
-        return total;
+        throw new Error("Could not determine active profile count via any method");
       })(),
 
       // Call 2: Campaigns sent in last 30 days — NO page[size] (campaigns rejects it, cursor-based only)
