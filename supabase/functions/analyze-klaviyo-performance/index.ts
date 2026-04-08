@@ -44,7 +44,7 @@ Return this exact JSON structure:
 
 Top 5 performers by RPR, bottom 5 worst. Be analytical and specific.`;
 
-    const response = await fetch("https://ai.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${lovableApiKey}`,

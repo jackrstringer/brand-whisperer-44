@@ -30,7 +30,7 @@ serve(async (req) => {
 
     await supabase.from("klaviyo_connections").update({ sync_status: "compiling" }).eq("brand_id", brandId);
 
-    const response = await fetch("https://ai.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${lovableApiKey}`,
