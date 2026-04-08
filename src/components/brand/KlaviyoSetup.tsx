@@ -213,14 +213,18 @@ export default function KlaviyoSetup({ brandId }: Props) {
         )}
 
         {/* Stats */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <div className="p-4 rounded-lg bg-card border border-border">
-            <p className="text-2xl font-semibold">{stats.lists}</p>
-            <p className="text-xs text-muted-foreground mt-1">Lists</p>
+            <p className="text-2xl font-semibold">{stats.activeProfiles.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground mt-1">Active Profiles</p>
           </div>
           <div className="p-4 rounded-lg bg-card border border-border">
-            <p className="text-2xl font-semibold">{stats.segments}</p>
-            <p className="text-xs text-muted-foreground mt-1">Segments</p>
+            <p className="text-2xl font-semibold">{stats.campaignsL30d}</p>
+            <p className="text-xs text-muted-foreground mt-1">Campaigns L30D</p>
+          </div>
+          <div className="p-4 rounded-lg bg-card border border-border">
+            <p className="text-2xl font-semibold">${stats.totalRevenue.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground mt-1">Revenue L365D</p>
           </div>
         </div>
 
