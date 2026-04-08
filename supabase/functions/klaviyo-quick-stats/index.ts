@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
         let res = await fetch(url, {
           headers: {
             "Authorization": `Klaviyo-API-Key ${apiKey}`,
-            "revision": "2024-05-15",
+            "revision": "2026-01-15",
             "Accept": "application/json",
           },
         });
