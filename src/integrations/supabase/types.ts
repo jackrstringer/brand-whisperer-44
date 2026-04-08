@@ -295,10 +295,12 @@ export type Database = {
         Row: {
           brand_id: string
           brief: string | null
+          campaign_mode: string
           created_at: string
           exclude_list_ids: string[] | null
           exclude_segment_ids: string[] | null
           extra_copy: string | null
+          flow_config: Json | null
           generation_duration_secs: number | null
           generation_mode: string
           generation_started_at: string | null
@@ -327,10 +329,12 @@ export type Database = {
         Insert: {
           brand_id: string
           brief?: string | null
+          campaign_mode?: string
           created_at?: string
           exclude_list_ids?: string[] | null
           exclude_segment_ids?: string[] | null
           extra_copy?: string | null
+          flow_config?: Json | null
           generation_duration_secs?: number | null
           generation_mode?: string
           generation_started_at?: string | null
@@ -359,10 +363,12 @@ export type Database = {
         Update: {
           brand_id?: string
           brief?: string | null
+          campaign_mode?: string
           created_at?: string
           exclude_list_ids?: string[] | null
           exclude_segment_ids?: string[] | null
           extra_copy?: string | null
+          flow_config?: Json | null
           generation_duration_secs?: number | null
           generation_mode?: string
           generation_started_at?: string | null
