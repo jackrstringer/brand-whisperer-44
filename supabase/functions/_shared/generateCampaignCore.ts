@@ -736,6 +736,7 @@ CRITICAL GRID RULES:
 
     brandValuesText += `\nFrom analyzing these campaigns, here are the specific rules to follow precisely:\n${profile.system_prompt}`;
     if (brandIntelBlock) brandValuesText += brandIntelBlock;
+    if (klaviyoBlock) brandValuesText += klaviyoBlock;
     brandValuesText += `\n\n=== BRAND DESIGN VALUES (use these EXACTLY) ===`;
     brandValuesText += `\nCard/container border-radius: ${brandValues.card_radius}px — apply to ALL cards, contrast sections, and containers`;
     brandValuesText += `\nButton border-radius: ${brandValues.button_radius}px`;
