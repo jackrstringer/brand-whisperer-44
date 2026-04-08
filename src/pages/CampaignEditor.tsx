@@ -663,6 +663,8 @@ export default function CampaignEditor() {
       send_list_ids: sendListIds.length > 0 ? sendListIds : null,
       send_segment_ids: sendSegmentIds.length > 0 ? sendSegmentIds : null,
       reference_campaign_ids: selectedReferences.length > 0 ? selectedReferences.map(r => r.id) : null,
+      campaign_mode: campaignMode,
+      flow_config: campaignMode === "flow" ? flowConfig : null,
     } as any).eq("id", campaignId);
 
     // Always use generate-campaign-multi for 3 variants
@@ -689,6 +691,9 @@ export default function CampaignEditor() {
             strength: r.strength,
             mode: r.mode,
           })) : undefined,
+          campaignMode,
+          flowConfig: campaignMode === "flow" ? flowConfig : undefined,
+          flowNotes: campaignMode === "flow" && flowNotes.trim() ? flowNotes.trim() : undefined,
         }),
       });
       if (!resp.ok && resp.status !== 202) throw new Error(`Generation failed: ${resp.status}`);
