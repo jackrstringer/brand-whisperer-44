@@ -110,6 +110,11 @@ export default function CampaignEditor() {
   const [extraCopy, setExtraCopy] = useState("");
   const [generating, setGenerating] = useState(false);
   const [visualQaRunning, setVisualQaRunning] = useState(false);
+  const [campaignMode, setCampaignMode] = useState<"campaign" | "flow">("campaign");
+  const [flowConfig, setFlowConfig] = useState<FlowConfig>({});
+  const [flowNotes, setFlowNotes] = useState("");
+  const [flowDetailTab, setFlowDetailTab] = useState<"chat" | "flow">("chat");
+  const [flowPreviewHtml, setFlowPreviewHtml] = useState<string | null>(null);
 
   const [chatInput, setChatInput] = useState("");
   const [sending, setSending] = useState(false);
