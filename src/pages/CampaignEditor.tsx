@@ -3582,9 +3582,20 @@ export default function CampaignEditor() {
             </button>
           )}
           {/* View Reference button — only post-generation when a reference was used */}
-          {campaign?.html && selectedReferences.length > 0 && (
+          {campaign?.html && (selectedReferences.length > 0 || (campaign?.reference_campaign_ids?.length ?? 0) > 0) && (
             <button
-              onClick={() => setShowReferenceDialog((prev) => !prev)}
+              onClick={async () => {
+                // Lazily restore references from DB if state is empty but DB has IDs
+                if (selectedReferences.length === 0 && campaign?.reference_campaign_ids?.length) {
+                  try {
+                    const { data: refData } = await supabase.from("reference_campaigns").select("*").in("id", campaign.reference_campaign_ids);
+                    if (refData?.length) {
+                      setSelectedReferences(refData.map((r: any) => ({ ...r, mode: campaign.reference_campaign_type === "dupe" ? "dupe" : "reference", strength: campaign.reference_strength ?? 5 })));
+                    }
+                  } catch {}
+                }
+                setShowReferenceDialog((prev) => !prev);
+              }}
               className="text-muted-foreground hover:text-foreground transition-colors"
               title={showReferenceDialog ? "Hide reference campaign" : "View reference campaign"}
             >
