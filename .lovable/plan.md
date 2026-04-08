@@ -1,71 +1,85 @@
 
 
-# Restructure Brand Subpages
+## Plan: Fix Klaviyo Sync — 30-Day Window + Proper Reporting API
 
-## Current State
-The sidebar has 4 sub-items per brand: Campaigns, Brand Settings, Intelligence, Brand Guide. Most content lives in the monolithic `BrandSettings.tsx` page with 7 tabs (Info, Intelligence, Assets, Products, Preferences, Integrations, Analysis).
+### Problem Summary
 
-## New Structure
-Each brand gets 7 sidebar sub-items, each mapping to a dedicated route/page:
+1. **365-day window is too wide** — causes massive API load and rate limiting
+2. **Wrong API for campaign stats** — current code makes 5 separate `/metric-aggregates` calls *per campaign* (N×5 requests). Klaviyo has a dedicated **Reporting API** (`POST /api/campaign-values-reports/`) that returns all stats for all campaigns in a **single request**
+3. **No channel filtering** — the `/campaigns` filter uses `messages.channel='email'` but doesn't exclude flows; Klaviyo campaigns endpoint already only returns campaigns (not flows), but the metric-aggregates approach was pulling data by campaign *name* which could overlap with flow names
+4. **Analyze prompt still says "365 days"** — needs to match the new 30-day window
 
-| Sidebar Item | Route | Content |
-|---|---|---|
-| Campaigns | `/brands/:id` | Existing `CampaignsList` (no change) |
-| Calendar | `/brands/:id/calendar` | New "Coming Soon" placeholder |
-| Segments | `/brands/:id/segments` | New "Coming Soon" placeholder |
-| Brand | `/brands/:id/brand` | Assets + Products + ShopifyProductGrid + Analysis (ReanalyzeBrand) + Brand Guide |
-| Intelligence | `/brands/:id/intelligence` | Existing `BrandIntelligenceWizard` (already exists, keep as-is) |
-| Integrations | `/brands/:id/integrations` | Klaviyo, Shopify, ClickUp setup components (moved from BrandSettings) |
-| Preferences | `/brands/:id/preferences` | Brand Info (name/industry/url) + Instructions + QA Checklist + Delete Brand |
+### Changes
 
-## Changes
+#### 1. `klaviyo-sync/index.ts` — Complete rewrite of data fetching strategy
 
-### 1. Update sidebar sub-items (`AppSidebar.tsx`)
-Replace `getBrandSubItems` to return 7 items with matching icons and paths. Add a `preferences` icon to `SidebarIcons.tsx` (sliders/toggle style).
+**Campaign fetch (Step 1):**
+- Change cutoff from 365 days to 30 days
+- Keep the existing `/campaigns` endpoint call (this endpoint only returns campaigns, not flows — which is correct)
 
-### 2. Create new page files
+**Replace Steps 2+3 (metric resolution + per-campaign aggregation loop) with a single Reporting API call:**
 
-**`src/pages/BrandCalendar.tsx`** — Simple "Coming Soon" placeholder page.
+```text
+POST /api/campaign-values-reports/
+{
+  data: {
+    type: "campaign-values-report",
+    attributes: {
+      statistics: [
+        "recipients", "delivered", "opens_unique", "open_rate",
+        "clicks_unique", "click_rate", "click_to_open_rate",
+        "unsubscribes", "unsubscribe_rate",
+        "conversion_uniques", "conversion_value",
+        "revenue_per_recipient"
+      ],
+      timeframe: { key: "last_30_days" },
+      conversion_metric_id: "<placed_order_metric_id>",
+      filter: "equals(send_channel,\"email\")"
+    }
+  }
+}
+```
 
-**`src/pages/BrandSegments.tsx`** — Simple "Coming Soon" placeholder page.
+This returns one row per campaign with all stats pre-calculated — eliminates the entire batch loop and all per-campaign metric-aggregate calls. The `send_channel` filter ensures only email campaigns, not SMS.
 
-**`src/pages/BrandIntegrations.tsx`** — New page pulling Klaviyo/Shopify/ClickUp setup out of BrandSettings.
+**Still need the Placed Order metric ID** — fetch all metrics once, find "Placed Order" client-side (same pattern as quick-stats).
 
-**`src/pages/BrandPreferences.tsx`** — New page with brand info fields (name, industry, URL), instructions textarea, QA checklist, and delete brand danger zone.
+**Message details** — still fetch `/campaigns/{id}/campaign-messages` for subject lines and preview text, but now in parallel for all campaigns (much faster with only 30 days of data).
 
-**`src/pages/BrandProfile.tsx`** — New "Brand" page combining AssetManager, ProductManager, ShopifyProductGrid, ReanalyzeBrand, and Brand Guide content.
+**Merge the reporting data with message details** into the final `campaignData` array.
 
-### 3. Refactor `BrandSettings.tsx` → remove it
-All its content is redistributed. Remove the file and its route.
+**Update cached_stats** to use `campaigns_sent_l30d` and `total_revenue_l30d` (drop the `_l365d` variants).
 
-### 4. Update `BrandIntelligence.tsx`
-Keep as-is — it already has the wizard. Just ensure the `onComplete` callback navigates correctly.
+#### 2. `analyze-klaviyo-performance/index.ts` — Update prompt
 
-### 5. Update routes (`App.tsx`)
-Remove `/brands/:id/settings` and `/brands/:id/guide`. Add:
-- `/brands/:id/calendar` → `BrandCalendar`
-- `/brands/:id/segments` → `BrandSegments`
-- `/brands/:id/brand` → `BrandProfile`
-- `/brands/:id/integrations` → `BrandIntegrations`
-- `/brands/:id/preferences` → `BrandPreferences`
+- Change "365 days" to "30 days" in the AI prompt text
+- No other changes
 
-### 6. Add `preferences` icon to `SidebarIcons.tsx`
-A sliders/toggle icon to match the design system.
+#### 3. `klaviyo-quick-stats/index.ts` — No changes
 
-### 7. Active path matching in sidebar
-The sidebar currently does exact `activePath === item.path` matching. This stays correct since each page has a unique route.
+The quick-stats function is already fetching 30-day data correctly.
 
-## Files Summary
+#### 4. No other files changed
 
-| File | Action |
-|---|---|
-| `src/components/AppSidebar.tsx` | Update `getBrandSubItems` to 7 items |
-| `src/components/sidebar/SidebarIcons.tsx` | Add `preferences` icon |
-| `src/pages/BrandCalendar.tsx` | Create — coming soon |
-| `src/pages/BrandSegments.tsx` | Create — coming soon |
-| `src/pages/BrandProfile.tsx` | Create — combines assets, products, analysis, guide |
-| `src/pages/BrandIntegrations.tsx` | Create — Klaviyo/Shopify/ClickUp |
-| `src/pages/BrandPreferences.tsx` | Create — info, instructions, QA, delete |
-| `src/pages/BrandSettings.tsx` | Delete |
-| `src/App.tsx` | Update routes |
+No UI changes, no migration needed, no changes to compile-klaviyo-context or klaviyo-proxy.
+
+### Technical Detail: Rate Limit Impact
+
+Current approach for 30 campaigns:
+- 30 campaigns × 5 metrics = **150 POST requests** to `/metric-aggregates` (burst: 3/s)
+- Plus 30 GET requests for message details
+- Total: ~180 requests, heavily throttled
+
+New approach:
+- 1 GET `/metrics` to find Placed Order metric ID
+- 1 POST `/campaign-values-reports/` for all stats (burst: 1/s, but only 1 call needed)
+- ~N GET requests for message details (parallelized in batches)
+- Total: ~32 requests for 30 campaigns
+
+### What This Does NOT Change
+- `klaviyo-quick-stats` — already working on 30-day window
+- `compile-klaviyo-context` — no changes needed
+- `KlaviyoSetup.tsx` — no UI changes
+- `klaviyo-proxy` — no changes
+- Any generation or campaign editor logic
 
