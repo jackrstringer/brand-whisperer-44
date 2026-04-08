@@ -91,9 +91,32 @@ Deno.serve(async (req) => {
 
     const [profilesResult, campaignsResult, revenueResult] = await Promise.allSettled([
       // Call 1: Active profiles — use Lists API with additional-fields[list]=profile_count
-      // Sum profile_count across all lists to approximate total active profiles
+      // Sum profile_count across all lists to get total active profiles
+      // Use revision 2024-05-15 which supports additional-fields[list]=profile_count
       (async () => {
-        const data = await klaviyoGet(`/lists/?additional-fields[list]=profile_count`, apiKey);
+        const url = `${KLAVIYO_API_BASE}/lists/?additional-fields[list]=profile_count`;
+        let res = await fetch(url, {
+          headers: {
+            "Authorization": `Klaviyo-API-Key ${apiKey}`,
+            "revision": "2024-05-15",
+            "Accept": "application/json",
+          },
+        });
+        if (res.status === 429) {
+          await new Promise(r => setTimeout(r, 2000));
+          res = await fetch(url, {
+            headers: {
+              "Authorization": `Klaviyo-API-Key ${apiKey}`,
+              "revision": "2024-05-15",
+              "Accept": "application/json",
+            },
+          });
+        }
+        if (!res.ok) {
+          const body = await res.text();
+          throw new Error(`Klaviyo ${res.status}: ${body}`);
+        }
+        const data = await res.json();
         const lists = data?.data || [];
         console.log("[quick-stats] Lists found:", lists.length, lists.map((l: any) => `${l.attributes?.name}: ${l.attributes?.profile_count}`));
         
