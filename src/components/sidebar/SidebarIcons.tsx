@@ -89,6 +89,14 @@ export const SidebarIcons = {
       <path d="M11.5 6l3 9" />
     </svg>
   ),
+  report: (c: string) => (
+    <svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke={c} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="2" width="11" height="13" rx="1.5" />
+      <path d="M6 6h5" />
+      <path d="M6 8.5h5" />
+      <path d="M6 11h3" />
+    </svg>
+  ),
   preferences: (c: string) => (
     <svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke={c} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
       <line x1="3" y1="5" x2="14" y2="5" />
