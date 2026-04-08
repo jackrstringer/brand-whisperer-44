@@ -13,6 +13,7 @@ import BrandCalendar from "./pages/BrandCalendar";
 import BrandSegments from "./pages/BrandSegments";
 import BrandProfile from "./pages/BrandProfile";
 import BrandIntelligence from "./pages/BrandIntelligence";
+import IntelligencePage from "./pages/IntelligencePage";
 import BrandIntegrations from "./pages/BrandIntegrations";
 import BrandPreferences from "./pages/BrandPreferences";
 import GlobalSettings from "./pages/GlobalSettings";
