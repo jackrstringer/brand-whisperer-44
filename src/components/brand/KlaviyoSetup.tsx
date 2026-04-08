@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import {
   Loader2, Check, RefreshCw, Unplug, Eye, EyeOff, ChevronDown,
   BarChart3, Trophy, Type, Brain, Users, Mail, DollarSign, AlertCircle, RotateCcw, ExternalLink,
+  ShoppingCart, Zap, TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
