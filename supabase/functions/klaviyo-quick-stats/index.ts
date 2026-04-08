@@ -81,6 +81,7 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0] + "T00:00:00+00:00";
+    const now = new Date().toISOString().split("T")[0] + "T23:59:59+00:00";
 
     const errors: Record<string, string | null> = {
       active_profiles: null,
