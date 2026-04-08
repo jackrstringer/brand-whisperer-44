@@ -295,6 +295,14 @@ GRID LAYOUT — REQUIRED STRUCTURE:
 - Never use: <table align="left" style="display:inline-block"> as a column technique.
 - Never add mobile-grid-col or any CSS class that sets display:block on grid columns.
 
+GRID GEOMETRY REPLICATION (CRITICAL):
+- When the reference (or skeleton) uses an NxM grid of equally-sized images, replicate that EXACT grid geometry.
+- Do NOT convert equal grids into asymmetric mosaic/magazine layouts.
+- Do NOT create "1 large + 2 small" or "L-shaped" arrangements unless the reference explicitly uses one.
+- A 2×2 grid = 2 <tr> rows, each with 2 <td> cells of equal width+height. A 3-column row = 1 <tr> with 3 <td> cells.
+- Count the images in each grid section of the reference. Your output must have the SAME count in the SAME arrangement.
+- All images in a grid row MUST share identical width AND height attributes.
+
 - Return only complete HTML, no commentary, no markdown fences.`;
 
 const QA_SYSTEM_PROMPT = `You are an email QA auditor. You will receive a generated HTML email and brand rules.
