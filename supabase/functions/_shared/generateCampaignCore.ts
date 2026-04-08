@@ -4,6 +4,7 @@
  */
 import { rehostHtmlImagesWithImageKit } from "./imagekit.ts";
 import { finalizeCampaignHtml } from "./finalizeCampaignHtml.ts";
+import { KLAVIYO_BEST_PRACTICES } from "./klaviyoBestPractices.ts";
 
 /**
  * Extract a structured layout skeleton from reference screenshots using Gemini Flash.
