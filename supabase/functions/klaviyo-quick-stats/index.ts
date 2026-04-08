@@ -89,16 +89,25 @@ Deno.serve(async (req) => {
     };
 
     const [profilesResult, campaignsResult, revenueResult] = await Promise.allSettled([
-      // Call 1: Active profiles — use page[size]=1, read meta.total (supported in 2024-10-15 revision)
+      // Call 1: Active profiles — use metric-aggregates on "Active on Site" or just count via profiles endpoint
       (async () => {
-        const data = await klaviyoGet(`/profiles/?page[size]=1`, apiKey);
+        // Klaviyo profiles endpoint doesn't return meta.total in most revisions.
+        // Paginate with small pages and count total via cursor exhaustion is too slow.
+        // Instead, use the /profiles/ endpoint without page[size] and check for meta.
+        const data = await klaviyoGet(`/profiles/`, apiKey);
         console.log("[quick-stats] Profiles response keys:", Object.keys(data), "meta:", JSON.stringify(data?.meta));
-        // Try meta.total first, then meta.page_info.count
-        const total = data?.meta?.total ?? data?.meta?.page_info?.count ?? null;
-        if (total === null) {
-          throw new Error(`Could not extract profile count. Response keys: ${Object.keys(data).join(", ")}. Meta: ${JSON.stringify(data?.meta)}`);
+        // Try multiple paths for total count
+        const total = data?.meta?.total ?? data?.meta?.page_info?.count ?? data?.meta?.page?.total ?? null;
+        if (total !== null) return total;
+        // Fallback: if we got data array, report the count of this page (undercount but better than null)
+        if (data?.data && Array.isArray(data.data)) {
+          const pageCount = data.data.length;
+          const hasMore = !!data?.links?.next;
+          console.log("[quick-stats] Profiles fallback: page has", pageCount, "items, hasMore:", hasMore);
+          // If there's a next page, we know there are more than pageCount profiles
+          return hasMore ? `${pageCount}+` : pageCount;
         }
-        return total;
+        throw new Error(`Could not extract profile count. Response keys: ${Object.keys(data).join(", ")}. Meta: ${JSON.stringify(data?.meta)}`);
       })(),
 
       // Call 2: Campaigns sent in last 30 days — NO page[size] (campaigns rejects it, cursor-based only)
