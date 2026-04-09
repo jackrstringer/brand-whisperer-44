@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.slice-image-on-demand]
 verify_jwt = false
+
+[functions.klaviyo-validate-template]
+verify_jwt = false
