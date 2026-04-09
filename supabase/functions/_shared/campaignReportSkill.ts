@@ -424,7 +424,7 @@ Include \`@media print\` CSS rules:
 - Campaign detail cards: stack all metric rows vertically at 480px
 - Bar charts: maintain percentage widths (they scale naturally)
 - All text must wrap cleanly at narrow widths
-- Touch targets: minimum 44x44px for all interactive elements
+- Generous tap targets for readability on small screens
 
 ---
 
