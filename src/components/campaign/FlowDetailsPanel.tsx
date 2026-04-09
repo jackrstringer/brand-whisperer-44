@@ -22,6 +22,7 @@ interface FlowDetailsPanelProps {
   html: string | null;
   flowConfig: FlowConfig | null | undefined;
   onPreviewHtml: (html: string | null) => void;
+  onRequestInsert?: (liquidPath: string) => void;
 }
 
 function relativeTime(dateStr: string | null | undefined): string {
@@ -55,7 +56,7 @@ function formatAddress(addr: any): string {
 }
 
 /* ── Event Summary Card ────────────────────────────────── */
-function EventSummaryCard({ event, showRaw, onToggleRaw }: { event: PreviewEvent; showRaw: boolean; onToggleRaw: () => void }) {
+function EventSummaryCard({ event, showRaw, onToggleRaw, onInsertField }: { event: PreviewEvent; showRaw: boolean; onToggleRaw: () => void; onInsertField?: (path: string) => void }) {
   const props = event.event_properties || {};
   const extra = props.extra || props.$extra || {};
   const lineItems: any[] = extra.line_items || props.Items || [];
@@ -78,6 +79,7 @@ function EventSummaryCard({ event, showRaw, onToggleRaw }: { event: PreviewEvent
         profileName={event.profile_name}
         profileEmail={event.profile_email}
         onClose={onToggleRaw}
+        onInsertField={onInsertField}
       />
     );
   }
@@ -193,6 +195,7 @@ export default function FlowDetailsPanel({
   html,
   flowConfig,
   onPreviewHtml,
+  onRequestInsert,
 }: FlowDetailsPanelProps) {
   const [previewEvents, setPreviewEvents] = useState<PreviewEvent[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
@@ -401,7 +404,7 @@ export default function FlowDetailsPanel({
             {/* Event summary card */}
             {activeEvent && (
               <div className="border border-border rounded-lg p-3 bg-card">
-                <EventSummaryCard event={activeEvent} showRaw={showRawData} onToggleRaw={() => setShowRawData(r => !r)} />
+                <EventSummaryCard event={activeEvent} showRaw={showRawData} onToggleRaw={() => setShowRawData(r => !r)} onInsertField={onRequestInsert} />
               </div>
             )}
 
