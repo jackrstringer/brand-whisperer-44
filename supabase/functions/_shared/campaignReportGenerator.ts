@@ -48,7 +48,7 @@ export async function generateCampaignReportHtml({
     apiKey: Deno.env.get("ANTHROPIC_API_KEY")!,
   });
 
-  const initialPrompt = `${CAMPAIGN_REPORT_SKILL}
+  const sourcePrompt = `${CAMPAIGN_REPORT_SKILL}
 
 BRAND CONTEXT:
 ${compiledContext || "No brand context available."}
@@ -66,11 +66,12 @@ Requirements:
 - Start with a single <style> block.
 - End with the exact literal marker <!-- END OF REPORT --> on its own line.`;
 
-  let html = await requestReportChunk(anthropic, initialPrompt);
+  let html = await requestReportChunk(anthropic, sourcePrompt);
   let validation = validateReportHtml(html);
 
   for (let attempt = 0; attempt < 4 && !validation.isComplete; attempt += 1) {
     const continuationPrompt = buildContinuationPrompt(
+      sourcePrompt,
       html,
       validation.missingMarkers,
     );
