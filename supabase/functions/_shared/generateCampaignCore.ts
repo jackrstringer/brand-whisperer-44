@@ -929,6 +929,11 @@ ${UNIVERSAL_EMAIL_RULES}`;
     if (flowNotes) flowDetails += `\n\n${flowNotes}`;
     flowDetails += `\n\nEVENT DATA SCHEMA — use ONLY these Liquid variable names, exactly as shown:\n${JSON.stringify(eventSchema, null, 2)}`;
     flowDetails += `\n\nAVAILABLE LIQUID VARIABLES:\n${liquidVars.join("\n")}`;
+    flowDetails += `\n\nCRITICAL LIQUID RULES:
+- NEVER use \$extra in any Liquid variable path. Klaviyo does NOT support \$extra — it will cause a parse error.
+- For order name/number use: {{ event.name | default: '#your order' }}
+- For any nested property, use dot notation WITHOUT dollar signs: event.property_name, NOT event.\$extra.property_name
+- Only reference variables that appear in the EVENT DATA SCHEMA above.`;
     flowUserContent.push({ type: "text", text: flowDetails });
 
     // Assets
