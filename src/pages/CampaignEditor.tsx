@@ -615,23 +615,37 @@ export default function CampaignEditor() {
   const generateCampaign = async () => {
     if (!brandId || !campaignId) return;
 
-    // If no brief provided, pick a random campaign idea
-    const RANDOM_BRIEFS = [
-      { brief: "Create a brand highlight email showcasing what makes this brand unique", goal: "highlight" },
-      { brief: "Design a promotional email featuring our best products", goal: "promotional" },
-      { brief: "Build a welcome email for new subscribers", goal: "welcome" },
-      { brief: "Create an engaging newsletter with brand updates", goal: "newsletter" },
-      { brief: "Design a seasonal campaign with current product highlights", goal: "seasonal" },
-      { brief: "Create a social proof email featuring customer favorites", goal: "social_proof" },
-      { brief: "Design a product launch announcement email", goal: "product_launch" },
-      { brief: "Build a re-engagement email to win back inactive subscribers", goal: "re-engagement" },
-    ];
-    const effectiveBrief = brief.trim() || (() => {
-      const pick = RANDOM_BRIEFS[Math.floor(Math.random() * RANDOM_BRIEFS.length)];
-      if (!goal) setGoal(pick.goal);
-      return pick.brief;
-    })();
-    const effectiveGoal = goal || "highlight";
+    // If no brief provided, derive one from context
+    let effectiveBrief = brief.trim();
+    if (!effectiveBrief) {
+      if (campaignMode === "flow") {
+        // In flow mode, derive brief from the flow type / trigger metric
+        const flowType = flowConfig?.flow_type || "";
+        const triggerName = flowConfig?.trigger_metric_name || "";
+        if (flowType || triggerName) {
+          const label = triggerName || flowType.replace(/_/g, " ");
+          effectiveBrief = `Create a ${label} flow email`;
+        } else {
+          effectiveBrief = "Create a transactional flow email";
+        }
+        if (!goal) setGoal(flowType || "flow");
+      } else {
+        const RANDOM_BRIEFS = [
+          { brief: "Create a brand highlight email showcasing what makes this brand unique", goal: "highlight" },
+          { brief: "Design a promotional email featuring our best products", goal: "promotional" },
+          { brief: "Build a welcome email for new subscribers", goal: "welcome" },
+          { brief: "Create an engaging newsletter with brand updates", goal: "newsletter" },
+          { brief: "Design a seasonal campaign with current product highlights", goal: "seasonal" },
+          { brief: "Create a social proof email featuring customer favorites", goal: "social_proof" },
+          { brief: "Design a product launch announcement email", goal: "product_launch" },
+          { brief: "Build a re-engagement email to win back inactive subscribers", goal: "re-engagement" },
+        ];
+        const pick = RANDOM_BRIEFS[Math.floor(Math.random() * RANDOM_BRIEFS.length)];
+        effectiveBrief = pick.brief;
+        if (!goal) setGoal(pick.goal);
+      }
+    }
+    const effectiveGoal = goal || (campaignMode === "flow" ? "flow" : "highlight");
     setGenerating(true);
     setGenStartTime(Date.now());
     setGenElapsed(0);
