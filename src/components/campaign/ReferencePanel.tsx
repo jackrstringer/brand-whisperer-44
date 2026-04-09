@@ -146,10 +146,19 @@ export default function ReferencePanel({
   const [zoomLevel, setZoomLevel] = useState(57);
 
   useEffect(() => {
-    supabase
+    let query = supabase
       .from("reference_campaigns")
       .select("*")
-      .eq("is_published", true)
+      .eq("is_published", true);
+    
+    // Filter by campaign_type matching the current mode
+    if (campaignMode === "flow") {
+      query = query.eq("campaign_type", "flow");
+    } else {
+      query = query.or("campaign_type.eq.campaign,campaign_type.is.null");
+    }
+    
+    query
       .order("sort_order", { ascending: true })
       .then(({ data }) => {
         if (data) {
@@ -158,7 +167,7 @@ export default function ReferencePanel({
           setCategories(cats);
         }
       });
-  }, []);
+  }, [campaignMode]);
 
   useEffect(() => {
     if (!brandId) return;
