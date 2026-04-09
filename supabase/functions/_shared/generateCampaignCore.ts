@@ -1080,6 +1080,7 @@ Use the above JSON to understand the exact data structure. Rules:
 
   // === PASS 2: QA Audit ===
   if (isCompleteHtml(html)) {
+    const qaStart = Date.now();
     try {
       const allQaItems = [...brandQaChecklist, ...globalQaChecklist];
       const customQaSection = allQaItems.length > 0
@@ -1120,6 +1121,12 @@ Use the above JSON to understand the exact data structure. Rules:
           qaData = { passes_qa: true, issues: [] };
         }
 
+        await logGenEvent(supabase, campaignId, "claude_qa", {
+          status: "completed",
+          duration_ms: Date.now() - qaStart,
+          result: { passes_qa: qaData.passes_qa, issue_count: qaData.issues?.length || 0, tokens: qaResult.usage },
+        });
+
         if (!qaData.passes_qa && Array.isArray(qaData.issues) && qaData.issues.length > 0) {
           let patchedHtml = html;
           for (const issue of qaData.issues) {
@@ -1139,9 +1146,15 @@ Use the above JSON to understand the exact data structure. Rules:
           }
         }
       } else {
+        await logGenEvent(supabase, campaignId, "claude_qa", {
+          status: "failed", error: `QA API returned ${qaResponse.status}`, duration_ms: Date.now() - qaStart,
+        });
         console.warn("QA pass failed, using first-pass HTML:", qaResponse.status);
       }
     } catch (qaErr) {
+      await logGenEvent(supabase, campaignId, "claude_qa", {
+        status: "failed", error: String(qaErr), duration_ms: Date.now() - qaStart,
+      });
       console.warn("QA pass error, using first-pass HTML:", qaErr);
     }
   }
