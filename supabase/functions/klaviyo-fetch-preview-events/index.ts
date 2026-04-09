@@ -53,23 +53,42 @@ Deno.serve(async (req) => {
     const eventsData = await eventsResp.json();
     const events = eventsData.data || [];
 
-    // Fetch profiles for each event
+    // Build profile lookup from included data
+    const includedProfiles = new Map<string, { email: string; name: string }>();
+    if (eventsData.included) {
+      for (const inc of eventsData.included) {
+        if (inc.type === "profile") {
+          const attrs = inc.attributes || {};
+          includedProfiles.set(inc.id, {
+            email: attrs.email || "",
+            name: [attrs.first_name, attrs.last_name].filter(Boolean).join(" "),
+          });
+        }
+      }
+    }
+
     const results = [];
     for (const event of events.slice(0, 10)) {
       const props = event.attributes?.event_properties || {};
-      const profileId = event.relationships?.profile?.data?.id || event.attributes?.profile_id;
-      
+      const profileId = event.relationships?.profile?.data?.id;
+
       let profileEmail = "";
       let profileName = "";
-      
-      if (profileId) {
+
+      // Try included profiles first
+      if (profileId && includedProfiles.has(profileId)) {
+        const p = includedProfiles.get(profileId)!;
+        profileEmail = p.email;
+        profileName = p.name;
+      } else if (profileId) {
+        // Fallback: fetch individually
         try {
           const profileResp = await fetch(
             `${KLAVIYO_API_BASE}/profiles/${profileId}/?fields[profile]=email,first_name,last_name`,
             {
               headers: {
                 "Authorization": `Klaviyo-API-Key ${apiKey}`,
-                "revision": "2024-02-15",
+                "revision": "2024-10-15",
                 "Accept": "application/json",
               },
             }
@@ -79,6 +98,8 @@ Deno.serve(async (req) => {
             const attrs = profileData.data?.attributes;
             profileEmail = attrs?.email || "";
             profileName = [attrs?.first_name, attrs?.last_name].filter(Boolean).join(" ");
+          } else {
+            await profileResp.text(); // consume body
           }
         } catch {}
       }
