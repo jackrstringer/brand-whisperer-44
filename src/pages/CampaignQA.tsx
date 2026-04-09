@@ -424,6 +424,36 @@ export default function CampaignQA() {
                   {result.images.passed && <p className="text-xs text-muted-foreground px-3 py-2">All images OK ✓</p>}
                 </CollapsibleContent>
               </Collapsible>
+
+              {/* Flow Validation */}
+              {result.flowValidation && (
+                <Collapsible defaultOpen={!result.flowValidation.passed}>
+                  <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg bg-card border border-border hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center gap-2">
+                      <StatusIcon passed={result.flowValidation.passed} />
+                      <span className="text-sm font-medium">Flow Validation</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {result.flowValidation.errorCount} errors, {result.flowValidation.warningCount} warnings
+                    </span>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-2 space-y-1">
+                    {result.flowValidation.issues.map((issue, i) => (
+                      <div key={i} className="px-3 py-2 text-xs rounded bg-background flex items-start gap-2">
+                        <Badge variant="outline" className={`text-[9px] px-1.5 shrink-0 mt-0.5 ${
+                          issue.severity === "error" ? "border-red-500/50 text-red-400" : "border-amber-500/50 text-amber-400"
+                        }`}>
+                          {issue.severity}
+                        </Badge>
+                        <span className="text-muted-foreground">{issue.message}</span>
+                      </div>
+                    ))}
+                    {result.flowValidation.passed && result.flowValidation.warningCount === 0 && (
+                      <p className="text-xs text-muted-foreground px-3 py-2">All flow checks passed ✓</p>
+                    )}
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
             </div>
           )}
 
