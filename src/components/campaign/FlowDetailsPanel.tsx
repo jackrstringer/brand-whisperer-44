@@ -74,12 +74,10 @@ function EventSummaryCard({ event, showRaw, onToggleRaw }: { event: PreviewEvent
     return (
       <div className="space-y-2 text-[11px]">
         <div className="flex justify-between items-center">
-          <span className="font-medium text-foreground">Raw Event Data</span>
+          <span className="font-medium text-foreground">Event Data</span>
           <button onClick={onToggleRaw} className="text-primary hover:underline text-[10px]">Summary view</button>
         </div>
-        <pre className="bg-muted/50 rounded p-2 text-[9px] text-muted-foreground overflow-auto max-h-[400px] whitespace-pre-wrap break-all">
-          {JSON.stringify(props, null, 2)}
-        </pre>
+        <JsonExplorer data={props} maxHeight="400px" />
       </div>
     );
   }
