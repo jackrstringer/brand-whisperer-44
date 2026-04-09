@@ -1071,7 +1071,8 @@ Use the above JSON to understand the exact data structure. Rules:
   if (!response.ok) {
     const errText = await response.text();
     await logGenEvent(supabase, campaignId, "claude_generate", {
-      status: "failed", error: `${response.status} - ${errText}`, duration_ms: Date.now() - pass1Start,
+      status: "failed", run_id: runId, event_key: genEventKey,
+      error: `${response.status} - ${errText}`, duration_ms: Date.now() - pass1Start,
     });
     throw new Error(`Anthropic API error: ${response.status} - ${errText}`);
   }
@@ -1082,7 +1083,7 @@ Use the above JSON to understand the exact data structure. Rules:
   let html = extractHtmlOnly(result.content?.[0]?.text || "");
 
   await logGenEvent(supabase, campaignId, "claude_generate", {
-    status: "completed",
+    status: "completed", run_id: runId, event_key: genEventKey,
     duration_ms: Date.now() - pass1Start,
     result: { html_length: html.length, stop_reason: pass1StopReason, input_tokens: pass1Tokens?.input_tokens, output_tokens: pass1Tokens?.output_tokens },
   });
