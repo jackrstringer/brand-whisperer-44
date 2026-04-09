@@ -423,7 +423,7 @@ Include \`@media print\` CSS rules:
 - Leaderboard table: hide "Preview Text" and "Revenue per Recipient" columns at 768px, further collapse at 480px
 - Campaign detail cards: stack all metric rows vertically at 480px
 - Bar charts: maintain percentage widths (they scale naturally)
-- Section nav: convert to horizontal scroll at 480px (no wrapping)
+- All text must wrap cleanly at narrow widths
 - Touch targets: minimum 44x44px for all interactive elements
 
 ---
