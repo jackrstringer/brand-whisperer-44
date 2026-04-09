@@ -593,20 +593,24 @@ export default function CampaignEditor() {
       }
 
       // AGENT 3: Render at exactly 390px — same as in-app preview (Gmail mobile)
+      const screenshotStart = Date.now();
       console.log(`[qa-loop] Iteration ${iteration + 1}: Rendering at 390px...`);
       const renderResp = await supabase.functions.invoke('capture-email-screenshot', {
         body: { html: htmlToCapture }
       });
       if (renderResp.error) throw new Error(`Renderer failed: ${renderResp.error.message}`);
       const { imageBase64, mimeType } = renderResp.data;
+      await logQa("qa_screenshot", { duration_ms: Date.now() - screenshotStart, result: { base64_length: imageBase64?.length, mimeType } });
 
       // AGENT 1: Slice the rendered output
+      const sliceStart = Date.now();
       console.log(`[qa-loop] Slicing output...`);
       const sliceResp = await supabase.functions.invoke('slice-image-on-demand', {
         body: { imageBase64, mimeType }
       });
       if (sliceResp.error) throw new Error(`Slicer failed: ${sliceResp.error.message}`);
       const outputSlices = sliceResp.data.slices;
+      await logQa("qa_slice", { duration_ms: Date.now() - sliceStart, result: { slice_count: outputSlices?.length } });
 
       // Get pre-stored reference slices from DB
       let referenceSlices: any[] = [];
