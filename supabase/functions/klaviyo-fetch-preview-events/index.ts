@@ -35,18 +35,21 @@ Deno.serve(async (req) => {
     const apiKey = connection.api_key;
 
     // Fetch recent events for this metric
-    const eventsResp = await fetch(
-      `${KLAVIYO_API_BASE}/events/?filter=equals(metric_id,"${metricId}")&fields[event]=event_properties,datetime,profile_id&page[size]=10&sort=-datetime`,
-      {
-        headers: {
-          "Authorization": `Klaviyo-API-Key ${apiKey}`,
-          "revision": "2024-02-15",
-          "Accept": "application/json",
-        },
-      }
-    );
+    const eventsUrl = `${KLAVIYO_API_BASE}/events/?filter=equals(metric_id,"${metricId}")&fields[event]=event_properties,datetime&page[size]=10&sort=-datetime&include=profile`;
+    console.log("[klaviyo-fetch-preview-events] Fetching:", eventsUrl);
+    const eventsResp = await fetch(eventsUrl, {
+      headers: {
+        "Authorization": `Klaviyo-API-Key ${apiKey}`,
+        "revision": "2024-10-15",
+        "Accept": "application/json",
+      },
+    });
 
-    if (!eventsResp.ok) throw new Error(`Failed to fetch events: ${eventsResp.status}`);
+    if (!eventsResp.ok) {
+      const errBody = await eventsResp.text();
+      console.error(`[klaviyo-fetch-preview-events] Klaviyo error ${eventsResp.status}:`, errBody);
+      throw new Error(`Failed to fetch events: ${eventsResp.status} - ${errBody}`);
+    }
     const eventsData = await eventsResp.json();
     const events = eventsData.data || [];
 
