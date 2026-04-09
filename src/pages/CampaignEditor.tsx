@@ -666,9 +666,13 @@ export default function CampaignEditor() {
       });
       if (qaResp.error) throw new Error(`QA failed: ${qaResp.error.message}`);
       const qaResult = qaResp.data;
+      // Capture reference slice URLs for debugging
+      const refSliceUrls = (referenceSlices || []).map((s: any) => ({ index: s.index, label: s.label, url: s.url }));
       await logQa("qa_compare", {
+        event_key: `qa_compare_iter${iteration}`,
         duration_ms: Date.now() - qaCompareStart,
-        result: { overall_score: qaResult.overall_score, structural_fidelity: qaResult.structural_fidelity, issue_count: (qaResult.issues || []).length, summary: qaResult.summary },
+        payload: { reference_slice_count: referenceSlices?.length, reference_slices: refSliceUrls.slice(0, 20), reference_ids: selectedReferences?.map((r: any) => ({ id: r.id, title: r.title })) },
+        result: { overall_score: qaResult.overall_score, structural_fidelity: qaResult.structural_fidelity, issue_count: (qaResult.issues || []).length, summary: qaResult.summary, issues: qaResult.issues },
       });
 
       const criticalIssues = (qaResult.issues || []).filter((i: any) => i.severity === 'critical');
@@ -692,7 +696,7 @@ export default function CampaignEditor() {
         if (patchesApplied > 0) {
           await supabase.from('campaigns').update({ html: patchedHtml } as any).eq('id', campaignId);
           setCampaign(prev => prev ? { ...prev, html: patchedHtml } as Campaign : prev);
-          return runVisualQa({ ...campaignData, html: patchedHtml } as Campaign, iteration + 1);
+          return runVisualQa({ ...campaignData, html: patchedHtml, _qaRunId: qaRunId } as any, iteration + 1);
         }
 
         // Slow path: send back to Agent 2 for targeted edit
@@ -726,14 +730,14 @@ export default function CampaignEditor() {
             .from('campaigns').select('*').eq('id', campaignId).single();
           if (updated?.html) {
             setCampaign(updated as Campaign);
-            return runVisualQa(updated as Campaign, iteration + 1);
+            return runVisualQa({ ...updated, _qaRunId: qaRunId } as any, iteration + 1);
           }
         }
       }
 
       // Final outcome
       if (needsFix && iteration >= MAX_ITERATIONS - 1) {
-        await logQa("qa_result", { result: { passed: false, score: qaResult.overall_score, iterations: iteration + 1, critical_issues: criticalIssues.length } });
+        await logQa("qa_result", { event_key: "qa_result", result: { passed: false, score: qaResult.overall_score, iterations: iteration + 1, critical_issues: criticalIssues.length } });
         await supabase.from('campaigns')
           .update({ visual_qa_status: 'needs_review', visual_qa_score: qaResult.overall_score } as any)
           .eq('id', campaignId);
@@ -743,7 +747,7 @@ export default function CampaignEditor() {
           created_at: new Date().toISOString()
         }]);
       } else {
-        await logQa("qa_result", { result: { passed: true, score: qaResult.overall_score, iterations: iteration + 1 } });
+        await logQa("qa_result", { event_key: "qa_result", result: { passed: true, score: qaResult.overall_score, iterations: iteration + 1 } });
         await supabase.from('campaigns')
           .update({ visual_qa_status: 'passed', visual_qa_score: qaResult.overall_score } as any)
           .eq('id', campaignId);
