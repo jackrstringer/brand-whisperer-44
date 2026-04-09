@@ -1630,20 +1630,19 @@ NEVER use width:100% with border-radius:50% — oval result guaranteed.
 
 CRITICAL — THE WRAPPER TABLE MUST ALSO HAVE AN EXPLICIT WIDTH:
 
-Email preview environments inject CSS like `table { width: 100% !important }` to
-prevent layout overflow. If the <table> wrapping your circle <td> has NO explicit
-width attribute, this injected rule stretches it to 100% of its parent container.
-The circle <td> inside then expands to fill that stretched table — turning your
-32px×32px circle into a 120px×32px oval.
+Email clients and preview environments may inject CSS that stretches tables without
+explicit width attributes to 100% of their parent container. If the table wrapping
+your circle td has NO explicit width attribute, the circle td inside expands to fill
+that stretched table — turning your 32x32px circle into a 120x32px oval.
 
-WRONG (no width on wrapper table — gets stretched to 100% by email clients):
+WRONG (no width on wrapper table — gets stretched by email clients):
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
     <tr>
       <td width="32" height="32" style="width:32px;height:32px;border-radius:50%;">...</td>
     </tr>
   </table>
 
-CORRECT (explicit width on wrapper table — immune to injected CSS):
+CORRECT (explicit width on wrapper table — immune to stretching):
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="32" style="width:32px;margin:0 auto;">
     <tr>
       <td width="32" height="32" style="width:32px;height:32px;border-radius:50%;">...</td>

@@ -26,12 +26,12 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("SCREENSHOTONE_API_KEY");
     if (!apiKey) throw new Error("SCREENSHOTONE_API_KEY not configured");
 
-    // CRITICAL: always 470px wide, device_scale_factor 1 — matches in-app preview exactly
+    // CRITICAL: always 390px wide (iPhone 14/15 Gmail mobile viewport), device_scale_factor 1
     // Use POST to avoid URL length limits (campaign HTML is typically 15-50KB)
     const body = {
       access_key: apiKey,
       html: html,
-      viewport_width: 470,
+      viewport_width: 390,
       viewport_height: 10000,
       full_page: true,
       format: "png",

@@ -6,7 +6,7 @@
  * preventing wrapper rows from being misidentified as grids.
  */
 
-const EMAIL_WIDTH = 470;
+const EMAIL_WIDTH = 390;
 const MIN_GRID_SLOT_WIDTH = 100; // Safety: abort if computed width is unreasonably small
 const MAX_GRID_COLUMNS = 4; // Safety: real email grids are 2-4 columns
 const MIN_GRID_COLUMNS = 2;
