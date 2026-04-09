@@ -1579,6 +1579,44 @@ Testing checklist:
     do not become invisible in dark mode (use opaque backgrounds)
 
 
+────────────────────────────────────────────────────────────────────────────────
+6.7 CIRCLES, ICONS, AND GRAPHIC ELEMENTS
+────────────────────────────────────────────────────────────────────────────────
+
+CIRCLES ARE THE #1 CSS RENDERING BUG IN EMAIL:
+
+A circle requires IDENTICAL width and height. border-radius:50% on an element
+where width ≠ height produces an oval, not a circle. This is extremely common
+and looks immediately broken.
+
+CORRECT circle pattern in email (always use a fixed-size <td>):
+  <td width="40" height="40" align="center" valign="middle"
+      style="width:40px;height:40px;border-radius:50%;background-color:#000;">
+    <svg ...>...</svg>
+  </td>
+
+NEVER use width:100% with border-radius:50% — oval result guaranteed.
+
+PROGRESS STEP INDICATORS (e.g. Order Placed → Shipping → Delivery):
+  Use a single <tr> with fixed equal-size <td> cells for each circle.
+  Connect steps with a thin horizontal line using border-top on a spacer <td>.
+  Each step circle: exactly 32×32px or 40×40px — never auto width.
+
+EXACT SVG for filled circle with checkmark (use this pattern verbatim):
+  <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="16" cy="16" r="16" fill="#1a1a1a"/>
+    <polyline points="9,16 14,21 23,11" stroke="#ffffff" stroke-width="2.5"
+              fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+
+EXACT SVG for empty circle (inactive step):
+  <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="16" cy="16" r="15" fill="none" stroke="#cccccc" stroke-width="1.5"/>
+  </svg>
+
+NEVER use emoji for icons. NEVER use external icon font URLs. ALWAYS use inline SVG.
+
+
 ════════════════════════════════════════════════════════════════════════════════
 SECTION 7: COMMON MISTAKES — NEVER MAKE THESE
 ════════════════════════════════════════════════════════════════════════════════

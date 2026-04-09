@@ -262,6 +262,24 @@ NO EMOJIS — EVER:
 - Checkmarks, arrows, and decorative icons: use inline SVG with appropriate brand colors
 - Keep SVGs small and simple (single path elements) for email client compatibility
 
+CIRCLES AND CIRCULAR ELEMENTS (critical — this breaks constantly):
+- A circle requires IDENTICAL width and height. If width ≠ height, border-radius:50% produces an oval, not a circle.
+- ALWAYS set both width and height explicitly and equally: width:40px; height:40px; border-radius:50%
+- NEVER use width:100% with border-radius:50% — the element will be as wide as the container and oval-shaped
+- For circular icon containers in email, use a fixed-size <td> with exact equal dimensions:
+  <td width="40" height="40" align="center" valign="middle"
+      style="width:40px;height:40px;border-radius:50%;background-color:#000;">
+    <svg ...>...</svg>
+  </td>
+- Progress step indicators: use a <table> row with equal fixed-size cells. Each step circle must have
+  identical explicit width and height (e.g. 32px × 32px). Connect steps with a thin horizontal line
+  using a separate <td> with border-top, not a CSS line element.
+- Inline SVG checkmark for a filled circle with check:
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="10" cy="10" r="10" fill="#000"/>
+    <polyline points="5,10 9,14 15,7" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/>
+  </svg>
+
 FOOTER (required on every email):
 - Must include: brand name, unsubscribe link placeholder, address placeholder
 - Style: small text (11-12px), muted color, centered, generous top padding (40-60px)
