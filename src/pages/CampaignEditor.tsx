@@ -308,6 +308,7 @@ export default function CampaignEditor() {
     }
   }, [brandId]);
 
+  useEffect(() => {
     if (!campaignId || !brandId) return;
     const load = async () => {
       const { data: c } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
