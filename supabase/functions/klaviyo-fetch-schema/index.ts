@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
     const metricsResp = await fetch(`${KLAVIYO_API_BASE}/metrics`, {
       headers: {
         "Authorization": `Klaviyo-API-Key ${apiKey}`,
-        "revision": "2024-02-15",
+        "revision": "2024-10-15",
         "Accept": "application/json",
       },
     });
@@ -84,7 +84,7 @@ Deno.serve(async (req) => {
           {
             headers: {
               "Authorization": `Klaviyo-API-Key ${apiKey}`,
-              "revision": "2024-02-15",
+              "revision": "2024-10-15",
               "Accept": "application/json",
             },
           }
