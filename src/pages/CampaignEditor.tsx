@@ -538,6 +538,22 @@ export default function CampaignEditor() {
     const MAX_ITERATIONS = 3;
     if (!campaignData.html || !campaignId) return;
     setVisualQaRunning(true);
+    
+    // Helper to log QA events (admin-only, fails silently for non-admins)
+    const logQa = async (step: string, data: any) => {
+      try {
+        await supabase.from("generation_events").insert({
+          campaign_id: campaignId,
+          step,
+          status: data.status || "completed",
+          payload: data.payload || null,
+          result: data.result || null,
+          error: data.error || null,
+          duration_ms: data.duration_ms || null,
+          completed_at: data.status === "started" ? null : new Date().toISOString(),
+        });
+      } catch {}
+    };
 
     try {
       // For flow emails, render Liquid with real Klaviyo event data before screenshotting
