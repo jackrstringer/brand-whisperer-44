@@ -1026,6 +1026,12 @@ Use the above JSON to understand the exact data structure. Rules:
   }
 
   // === PASS 1: Generate ===
+  const pass1Start = Date.now();
+  await logGenEvent(supabase, campaignId, "claude_generate", {
+    status: "started",
+    payload: { model: GENERATION_MODEL, image_count: imageBlocks.length, reference_mode: referenceMode, campaign_mode: campaignMode },
+  });
+
   const response = await callAnthropic({
     model: GENERATION_MODEL,
     max_tokens: 16384,
@@ -1035,12 +1041,22 @@ Use the above JSON to understand the exact data structure. Rules:
 
   if (!response.ok) {
     const errText = await response.text();
+    await logGenEvent(supabase, campaignId, "claude_generate", {
+      status: "failed", error: `${response.status} - ${errText}`, duration_ms: Date.now() - pass1Start,
+    });
     throw new Error(`Anthropic API error: ${response.status} - ${errText}`);
   }
 
   const result = await response.json();
   const pass1StopReason = result.stop_reason;
+  const pass1Tokens = result.usage;
   let html = extractHtmlOnly(result.content?.[0]?.text || "");
+
+  await logGenEvent(supabase, campaignId, "claude_generate", {
+    status: "completed",
+    duration_ms: Date.now() - pass1Start,
+    result: { html_length: html.length, stop_reason: pass1StopReason, input_tokens: pass1Tokens?.input_tokens, output_tokens: pass1Tokens?.output_tokens },
+  });
 
   // If Pass 1 truncated, retry once with leaner instruction
   if (!isCompleteHtml(html) || pass1StopReason === "max_tokens") {
