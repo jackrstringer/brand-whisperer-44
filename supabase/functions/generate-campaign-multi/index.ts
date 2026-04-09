@@ -38,18 +38,21 @@ Deno.serve(async (req) => {
     const { brandId, campaignId, references } = body;
     if (!brandId || !campaignId) throw new Error("brandId and campaignId required");
 
+    // Generate a unique run_id for this generation attempt
+    const runId = crypto.randomUUID();
+
     // Determine variant strategy:
     // - If multiple references provided (2-3), each variant uses a different reference
     // - If 0-1 references, use creative direction seeds for variety
     const multiRefMode = Array.isArray(references) && references.length > 1;
     const variantCount = multiRefMode ? references.length : 3;
 
-    console.log(`[multi] Starting ${variantCount}-variant generation for campaign ${campaignId} (${multiRefMode ? `${references.length} references` : "creative seeds"})`);
+    console.log(`[multi] Starting ${variantCount}-variant generation for campaign ${campaignId} run=${runId} (${multiRefMode ? `${references.length} references` : "creative seeds"})`);
 
     // Log generation start
     await logGenEvent(supabase, campaignId, "generation_start", {
-      status: "started",
-      payload: { variant_count: variantCount, multi_ref_mode: multiRefMode, brief: body.brief?.slice(0, 200), goal: body.goal, campaign_mode: body.campaignMode },
+      status: "started", run_id: runId, event_key: "generation_start",
+      payload: { variant_count: variantCount, multi_ref_mode: multiRefMode, brief: body.brief?.slice(0, 200), goal: body.goal, campaign_mode: body.campaignMode, reference_ids: Array.isArray(references) ? references.map((r: any) => ({ id: r.id, title: r.title })) : [] },
     });
 
     // Mark as generating
@@ -78,6 +81,7 @@ Deno.serve(async (req) => {
                 references: undefined, // Don't pass array to core
                 _isSubGeneration: true,
                 _variantIndex: index,
+                _runId: runId,
               };
             } else {
               // Creative direction mode: same reference (if any), different seeds
@@ -94,6 +98,7 @@ Deno.serve(async (req) => {
                   : body.designNotes || "",
                 _isSubGeneration: true,
                 _variantIndex: index,
+                _runId: runId,
               };
             }
 
@@ -102,19 +107,22 @@ Deno.serve(async (req) => {
                 const variantStart = Date.now();
                 console.log(`[multi] Starting variant ${index}: ${label}`);
                 await logGenEvent(supabase, campaignId, "variant_start", {
-                  status: "started", payload: { index, label },
+                  status: "started", run_id: runId, event_key: `variant_${index}_start`,
+                  payload: { index, label },
                 });
                 const result = await generateCampaignCore(variantParams, supabase);
                 const variantDuration = Date.now() - variantStart;
                 console.log(`[multi] Variant ${index} (${label}) complete, html length: ${result.html?.length || 0}`);
-                await logGenEvent(supabase, campaignId, "variant_complete", {
-                  status: "completed", duration_ms: variantDuration, result: { index, label, html_length: result.html?.length || 0 },
+                await logGenEvent(supabase, campaignId, "variant_start", {
+                  status: "completed", run_id: runId, event_key: `variant_${index}_start`,
+                  duration_ms: variantDuration, result: { index, label, html_length: result.html?.length || 0 },
                 });
                 return { index, label, html: result.html, error: null };
               } catch (err: any) {
                 console.error(`[multi] Variant ${index} error:`, err);
-                await logGenEvent(supabase, campaignId, "variant_error", {
-                  status: "failed", error: err.message, payload: { index, label },
+                await logGenEvent(supabase, campaignId, "variant_start", {
+                  status: "failed", run_id: runId, event_key: `variant_${index}_start`,
+                  error: err.message, payload: { index, label },
                 });
                 return { index, label, html: null, error: err.message };
               }
