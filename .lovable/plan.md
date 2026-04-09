@@ -1,85 +1,33 @@
 
 
-## Fix: Active Profiles Count Shows 6,284 Instead of 63,000
+## Fix: Campaign Performance Report Generation
 
-### Two Bugs, Not One
+### Problem
+Three issues causing the report to fail or appear truncated:
 
-**Bug A: Wrong segment definition** (already identified)
-The `consent_status: { subscription: "subscribed" }` sub-filter restricts to explicitly opted-in profiles only. Needs to be removed so the condition is just "can receive email marketing" with no sub-qualification.
+1. **Bug (runtime crash)**: `buildContinuationPrompt` is called with 3 arguments (`sourcePrompt, html, missingMarkers`) but the function signature only accepts 2 parameters (`existingHtml, missingMarkers`). So `missingMarkers` receives the HTML string, causing `missingMarkers.join is not a function`.
 
-**Bug B: Polling exits on first non-zero count (the unidentified bug)**
-Line 136 of `klaviyo-quick-stats`:
-```typescript
-if (count !== null && count !== undefined && count > 0) {
-  return count;
-}
-```
+2. **Token limit too low**: `max_tokens: 8192` is nowhere near enough for a 5-section report. Claude Opus supports 32K output tokens — we should use that.
 
-When Klaviyo creates or re-evaluates a segment, `profile_count` is computed **asynchronously**. Klaviyo doesn't jump from 0 to 63,000 instantly — it incrementally processes profiles. The polling loop returns the **first non-zero intermediate result** (e.g. 6,284 after 3 seconds) instead of waiting for the count to stabilize at the true total.
+3. **Edge function timeout**: The function runs the full pipeline synchronously before responding. Claude Opus generating 32K tokens of HTML + Perplexity competitor research can easily take 2-3 minutes, exceeding the gateway timeout. Need to use `EdgeRuntime.waitUntil()` (fire-and-forget pattern already used elsewhere in the codebase) to return immediately and let generation run in the background.
 
-This is why even if we fix the segment definition, we'd likely still get a wrong (low) number — the function grabs whatever partial count Klaviyo has computed so far and calls it done.
+### Plan
 
-### The Fix
+#### 1. Fix `campaignReportGenerator.ts`
+- Fix `buildContinuationPrompt` signature to accept 3 params: `(sourcePrompt, existingHtml, missingMarkers)`
+- Increase `max_tokens` from 8192 to 32000
+- Increase the per-chunk timeout from 120s to 300s
+- Keep the continuation loop (up to 4 retries) as a safety net
 
-#### 1. `klaviyo-quick-stats/index.ts` — Fix segment definition
+#### 2. Make `generate-campaign-report/index.ts` async
+- Return `{ success: true }` immediately after setting status to "generating"
+- Use `EdgeRuntime.waitUntil()` to run the full pipeline in the background (same pattern as `generate-campaign-multi` and `research-brand`)
+- The frontend already polls via `useCampaignReport` — no frontend changes needed
 
-Remove `consent_status` block entirely:
-```json
-{
-  "type": "profile-marketing-consent",
-  "consent": {
-    "channel": "email",
-    "can_receive_marketing": true
-  }
-}
-```
+#### 3. Deploy and verify
+- Deploy the updated edge function
+- Test with curl to confirm it returns immediately without 500
 
-#### 2. `klaviyo-quick-stats/index.ts` — Fix polling to wait for count stabilization
-
-Replace the "return on first non-zero" logic with a stabilization check: poll until the count stops changing between consecutive reads, or until timeout.
-
-```typescript
-let lastCount = -1;
-let stableRounds = 0;
-
-for (let attempt = 0; attempt < 10; attempt++) {
-  if (attempt > 0) await new Promise(r => setTimeout(r, 3000));
-
-  const countData = await klaviyoGet(
-    `/segments/${segmentId}/?additional-fields[segment]=profile_count`,
-    apiKey, SEGMENT_REVISION
-  );
-  const count = countData?.data?.attributes?.profile_count;
-
-  if (count !== null && count !== undefined && count > 0) {
-    if (count === lastCount) {
-      stableRounds++;
-      if (stableRounds >= 2) return count; // same value 3 reads in a row = stable
-    } else {
-      stableRounds = 0;
-    }
-    lastCount = count;
-  }
-}
-// If we exhausted attempts, return whatever we last saw (better than null)
-return lastCount > 0 ? lastCount : null;
-```
-
-This waits for the count to be the same across 3 consecutive polls (9 seconds of stability) before accepting it. For a segment that already exists and is fully computed, it returns on the 3rd poll (~6 seconds). For a newly created segment, it gives Klaviyo up to 30 seconds to finish processing.
-
-#### 3. Clear stale segment ID (data update)
-
-The stored segment `Uh57bW` was created with the wrong definition. We need to:
-- NULL out `active_profiles_segment_id` in the DB so the function creates a fresh segment
-- Add cleanup logic: if the function finds an existing segment by name search, delete it before creating the correct one
-
-#### 4. No other files change
-
-### Summary
-
-| # | What | Why |
-|---|------|-----|
-| 1 | Remove `consent_status` from segment definition | Current definition only counts explicitly subscribed (6K), not all contactable (63K) |
-| 2 | Poll for count stabilization instead of first non-zero | Klaviyo computes `profile_count` asynchronously; first non-zero value is a partial/intermediate result |
-| 3 | Clear stored segment ID + delete old segment | Force recreation with correct definition |
+### No frontend changes needed
+The Intelligence page, Shadow DOM rendering, polling hook, and download button all work correctly already. The only issue is the edge function crashing and timing out.
 
