@@ -994,6 +994,51 @@ ${UNIVERSAL_EMAIL_RULES}`;
       }
     }
 
+    // Fetch product feeds for recommendation grids
+    let productFeedsBlock = "";
+    try {
+      const { data: klavConnFeeds } = await supabase
+        .from("klaviyo_connections")
+        .select("cached_stats")
+        .eq("brand_id", brandId)
+        .single();
+      const productFeeds = (klavConnFeeds?.cached_stats as any)?.product_feeds || [];
+      if (productFeeds.length > 0) {
+        productFeedsBlock = `
+═══ KLAVIYO PRODUCT FEEDS AVAILABLE IN THIS ACCOUNT ═══
+${productFeeds.map((f: any) => `- "${f.name}" (type: ${f.feed_type})`).join("\n")}
+
+If the reference email contains a product recommendation grid, cross-sell block, or any product section beyond the main cart/order items, use Klaviyo's product feed Liquid syntax to populate it. Do NOT hardcode product data or use event properties for recommendation blocks.
+
+Correct Liquid syntax for a product feed grid:
+{%- for item in feeds.FeedNameHere|slice:3 -%}
+  {%- catalog_lookup item.item_id as catalog_item -%}
+  <td>
+    <a href="{{ catalog_item.url }}">
+      <img src="{{ catalog_item.image_full_url | default: 'https://via.placeholder.com/180' }}" width="180" />
+    </a>
+    <p>{{ catalog_item.title | default: 'Product' }}</p>
+    <p>{{ catalog_item.price | default: '' }}</p>
+  </td>
+{%- endfor -%}
+
+Replace FeedNameHere with the most appropriate feed from the list above based on the flow type:
+- Abandoned checkout → prefer feeds named "Recently Viewed" or "Best Sellers"
+- Post-purchase → prefer feeds named "May Also Like" or "Best Sellers"
+- Browse abandonment → prefer feeds named "Recently Viewed"
+- If no matching feed exists, use whichever feed is available
+- If no feeds exist at all, omit the recommendation section entirely rather than hardcoding products
+═══ END PRODUCT FEEDS ═══`;
+      } else {
+        productFeedsBlock = `
+═══ KLAVIYO PRODUCT FEEDS ═══
+None configured in this account yet. Do not include recommendation product grids in this email — only use event data for product display.
+═══ END PRODUCT FEEDS ═══`;
+      }
+    } catch (e) {
+      console.warn("[generateCampaignCore] Failed to fetch product feeds:", e);
+    }
+
     // Build flow-specific user content
     const flowUserContent: any[] = [];
 
@@ -1054,7 +1099,7 @@ Use the above JSON to understand the exact data structure. Rules:
 - Always add | default: '' to every variable
 - Use exactly the property names shown in the JSON above — do not invent paths
 - Do NOT use $-prefixed keys in Liquid (e.g. use event.extra NOT event.$extra)
-═══ END EVENT DATA ═══`;
+═══ END EVENT DATA ═══${productFeedsBlock}`;
     flowUserContent.push({ type: "text", text: flowDetails });
 
     // Assets

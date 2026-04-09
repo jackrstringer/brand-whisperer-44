@@ -133,11 +133,43 @@ Deno.serve(async (req) => {
     // Sort by priority
     metricResults.sort((a, b) => a.priority - b.priority);
 
+    // Fetch product feeds for recommendation grids
+    let productFeeds: { id: string; name: string; feed_type: string }[] = [];
+    try {
+      const feedsResp = await fetch(
+        `${KLAVIYO_API_BASE}/product-feeds/?page[size]=50`,
+        {
+          headers: {
+            "Authorization": `Klaviyo-API-Key ${apiKey}`,
+            "revision": "2024-02-15",
+            "Accept": "application/json",
+          },
+        }
+      );
+      if (feedsResp.ok) {
+        const feedsData = await feedsResp.json();
+        productFeeds = (feedsData.data || []).map((f: any) => ({
+          id: f.id,
+          name: f.attributes?.name || "",
+          feed_type: f.attributes?.feed_type || "",
+        }));
+      } else {
+        console.warn("Product feeds fetch returned", feedsResp.status);
+        await feedsResp.text(); // consume body
+      }
+    } catch (e) {
+      console.warn("Failed to fetch product feeds:", e);
+    }
+
     // Store in klaviyo_connections for caching
     const now = new Date().toISOString();
     const cachedStats = (connection.cached_stats || {}) as Record<string, unknown>;
     await supabase.from("klaviyo_connections").update({
-      cached_stats: { ...cachedStats, event_schemas: { metrics: metricResults, synced_at: now } },
+      cached_stats: {
+        ...cachedStats,
+        event_schemas: { metrics: metricResults, synced_at: now },
+        product_feeds: productFeeds,
+      },
     }).eq("brand_id", brandId);
 
     return new Response(JSON.stringify({
