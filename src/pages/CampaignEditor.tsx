@@ -4451,6 +4451,9 @@ export default function CampaignEditor() {
                         setPreviewHtml(null);
                       }
                     }}
+                    onRequestInsert={(liquidPath) => {
+                      setChatInput(`Include {{ ${liquidPath} }} in the email`);
+                    }}
                   />
                 ) : (
                 <>
