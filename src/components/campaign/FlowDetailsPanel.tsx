@@ -1,8 +1,8 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, CheckCircle, AlertTriangle, RotateCcw } from "lucide-react";
+import { Loader2, CheckCircle, AlertTriangle, ChevronLeft, ChevronRight, Package, MapPin, User, ShoppingCart } from "lucide-react";
 import type { FlowConfig } from "@/lib/types";
 
 interface PreviewEvent {
@@ -34,6 +34,96 @@ function relativeTime(dateStr: string | null | undefined): string {
   return `${days}d ago`;
 }
 
+function formatCurrency(val: any): string {
+  const n = parseFloat(val);
+  if (isNaN(n)) return String(val ?? "");
+  return `$${n.toFixed(2)}`;
+}
+
+function formatAddress(addr: any): string {
+  if (!addr || typeof addr !== "object") return "";
+  const parts = [
+    [addr.first_name, addr.last_name].filter(Boolean).join(" "),
+    addr.address1,
+    addr.address2,
+    [addr.city, addr.province_code, addr.zip].filter(Boolean).join(", "),
+    addr.country,
+  ].filter(Boolean);
+  return parts.join("\n");
+}
+
+/* ── Event Summary Card ────────────────────────────────── */
+function EventSummaryCard({ event }: { event: PreviewEvent }) {
+  const props = event.event_properties || {};
+  const extra = props.extra || props.$extra || {};
+  const lineItems: any[] = extra.line_items || props.Items || [];
+  const shipping = extra.shipping_address || {};
+  const orderNumber = extra.order_number || extra.name || props.OrderId || "";
+  const orderDate = extra.created_at || event.datetime;
+  const total = extra.total_price || props.value || props.$value || event.order_value;
+
+  return (
+    <div className="space-y-3 text-[11px]">
+      {/* Customer */}
+      <div className="flex items-start gap-2">
+        <User className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+        <div>
+          <div className="font-medium text-foreground">{event.profile_name || "Unknown"}</div>
+          <div className="text-muted-foreground">{event.profile_email}</div>
+        </div>
+      </div>
+
+      {/* Order info */}
+      <div className="flex items-start gap-2">
+        <ShoppingCart className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+        <div className="flex-1">
+          <div className="flex justify-between">
+            <span className="font-medium text-foreground">
+              {orderNumber ? `Order #${String(orderNumber).replace("#", "")}` : "Order"}
+            </span>
+            <span className="text-muted-foreground">{formatCurrency(total)}</span>
+          </div>
+          {orderDate && (
+            <div className="text-muted-foreground">{new Date(orderDate).toLocaleDateString()}</div>
+          )}
+        </div>
+      </div>
+
+      {/* Line items */}
+      {lineItems.length > 0 && (
+        <div className="flex items-start gap-2">
+          <Package className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+          <div className="flex-1 space-y-1">
+            {lineItems.slice(0, 5).map((item: any, i: number) => (
+              <div key={i} className="flex justify-between gap-2">
+                <span className="text-foreground truncate">
+                  {item.name || item.ProductName || "Item"}{" "}
+                  {(item.quantity ?? 1) > 1 && <span className="text-muted-foreground">×{item.quantity}</span>}
+                </span>
+                <span className="text-muted-foreground shrink-0">
+                  {formatCurrency(item.price || item.ItemPrice)}
+                </span>
+              </div>
+            ))}
+            {lineItems.length > 5 && (
+              <div className="text-muted-foreground">+{lineItems.length - 5} more items</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Shipping */}
+      {shipping.address1 && (
+        <div className="flex items-start gap-2">
+          <MapPin className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
+          <div className="text-muted-foreground whitespace-pre-line">{formatAddress(shipping)}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Main Panel ────────────────────────────────────────── */
 export default function FlowDetailsPanel({
   brandId,
   campaignId,
@@ -43,9 +133,10 @@ export default function FlowDetailsPanel({
 }: FlowDetailsPanelProps) {
   const [previewEvents, setPreviewEvents] = useState<PreviewEvent[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [renderingPreview, setRenderingPreview] = useState(false);
-  
+  const [autoLoaded, setAutoLoaded] = useState(false);
+  const renderingRef = useRef(false);
 
   // Extract liquid variables from HTML
   const liquidVars = useMemo(() => {
@@ -53,7 +144,6 @@ export default function FlowDetailsPanel({
     const vars: { variable: string; source: string; example: string }[] = [];
     const seen = new Set<string>();
 
-    // Match {{ event.X }}, {{ person.X }}, {{ organization.X }}
     const varRegex = /\{\{\s*([^}|]+?)(?:\s*\|[^}]*)?\s*\}\}/g;
     let match;
     while ((match = varRegex.exec(html)) !== null) {
@@ -66,7 +156,6 @@ export default function FlowDetailsPanel({
       else if (path.startsWith("person.")) source = "Profile";
       else if (path.startsWith("organization.")) source = "Organization";
 
-      // Try to get example value from flow_config
       let example = "";
       if (flowConfig?.event_schema && path.startsWith("event.")) {
         const subPath = path.slice(6);
@@ -81,7 +170,6 @@ export default function FlowDetailsPanel({
       vars.push({ variable: `{{ ${path} }}`, source, example });
     }
 
-    // Match {% for item in event.Items %}
     const forRegex = /\{%\s*for\s+(\w+)\s+in\s+([^%]+?)\s*%\}/g;
     while ((match = forRegex.exec(html)) !== null) {
       const arrayPath = match[2].trim();
@@ -99,8 +187,8 @@ export default function FlowDetailsPanel({
     return vars;
   }, [html, flowConfig]);
 
-  const loadPreviewEvents = useCallback(async () => {
-    if (!flowConfig?.trigger_metric_id) return;
+  const loadPreviewEvents = useCallback(async (): Promise<PreviewEvent[]> => {
+    if (!flowConfig?.trigger_metric_id) return [];
     setLoadingEvents(true);
     try {
       const session = (await supabase.auth.getSession()).data.session;
@@ -118,18 +206,21 @@ export default function FlowDetailsPanel({
       );
       if (!resp.ok) throw new Error("Failed");
       const data = await resp.json();
-      setPreviewEvents(Array.isArray(data) ? data : []);
+      const events = Array.isArray(data) ? data : [];
+      setPreviewEvents(events);
+      return events;
     } catch (err) {
       console.error("Failed to load preview events:", err);
+      return [];
     } finally {
       setLoadingEvents(false);
     }
   }, [brandId, flowConfig?.trigger_metric_id]);
 
   const renderPreview = useCallback(async (event: PreviewEvent) => {
-    if (!html) return;
+    if (!html || renderingRef.current) return;
+    renderingRef.current = true;
     setRenderingPreview(true);
-    setSelectedEventId(event.event_id);
     try {
       const session = (await supabase.auth.getSession()).data.session;
       const resp = await fetch(
@@ -156,18 +247,34 @@ export default function FlowDetailsPanel({
       console.error("Failed to render preview:", err);
     } finally {
       setRenderingPreview(false);
+      renderingRef.current = false;
     }
   }, [html, onPreviewHtml]);
 
-  const revertPreview = useCallback(() => {
-    onPreviewHtml(null);
-    setSelectedEventId(null);
-  }, [onPreviewHtml]);
+  // Auto-load events and render first one when html + trigger_metric_id are available
+  useEffect(() => {
+    if (autoLoaded || !html || !flowConfig?.trigger_metric_id) return;
+    setAutoLoaded(true);
 
-  const selectedEvent = previewEvents.find(e => e.event_id === selectedEventId);
+    (async () => {
+      const events = await loadPreviewEvents();
+      if (events.length > 0) {
+        setSelectedIndex(0);
+        await renderPreview(events[0]);
+      }
+    })();
+  }, [html, flowConfig?.trigger_metric_id, autoLoaded, loadPreviewEvents, renderPreview]);
+
+  const goTo = useCallback(async (newIndex: number) => {
+    if (newIndex < 0 || newIndex >= previewEvents.length) return;
+    setSelectedIndex(newIndex);
+    await renderPreview(previewEvents[newIndex]);
+  }, [previewEvents, renderPreview]);
+
+  const activeEvent = previewEvents[selectedIndex] || null;
 
   return (
-    <div className="space-y-5 p-4 overflow-y-auto flex-1">
+    <div className="space-y-4 p-4 overflow-y-auto flex-1">
       {/* Connection status banner */}
       {flowConfig?.klaviyo_synced_at ? (
         <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/20 text-[11px] text-green-500">
@@ -181,10 +288,76 @@ export default function FlowDetailsPanel({
         </div>
       )}
 
+      {/* Preview Navigator */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-medium">Preview Data</h3>
+
+        {loadingEvents ? (
+          <div className="flex items-center justify-center gap-2 py-4 text-[11px] text-muted-foreground">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading events…
+          </div>
+        ) : previewEvents.length === 0 ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadPreviewEvents()}
+            disabled={!flowConfig?.trigger_metric_id}
+            className="w-full"
+          >
+            Load Recent Events
+          </Button>
+        ) : (
+          <>
+            {/* Arrow navigator */}
+            <div className="flex items-center justify-between px-1">
+              <button
+                onClick={() => goTo(selectedIndex - 1)}
+                disabled={selectedIndex === 0 || renderingPreview}
+                className="p-1 rounded hover:bg-muted disabled:opacity-30 transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-[11px] text-muted-foreground">
+                {renderingPreview ? (
+                  <Loader2 className="w-3 h-3 animate-spin inline" />
+                ) : (
+                  `${selectedIndex + 1} of ${previewEvents.length}`
+                )}
+              </span>
+              <button
+                onClick={() => goTo(selectedIndex + 1)}
+                disabled={selectedIndex === previewEvents.length - 1 || renderingPreview}
+                className="p-1 rounded hover:bg-muted disabled:opacity-30 transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Event summary card */}
+            {activeEvent && (
+              <div className="border border-border rounded-lg p-3 bg-card">
+                <EventSummaryCard event={activeEvent} />
+              </div>
+            )}
+
+            {/* Refresh */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => loadPreviewEvents()}
+              disabled={loadingEvents}
+              className="w-full text-xs"
+            >
+              Refresh Events
+            </Button>
+          </>
+        )}
+      </div>
+
       {/* Liquid Variables Table */}
       {liquidVars.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-sm font-medium">Dynamic Fields in This Email</h3>
+          <h3 className="text-sm font-medium">Dynamic Fields</h3>
           <div className="border border-border rounded-lg overflow-hidden">
             <table className="w-full text-[11px]">
               <thead>
@@ -207,86 +380,6 @@ export default function FlowDetailsPanel({
           </div>
         </div>
       )}
-
-      {/* Preview with Real Events */}
-      <div className="space-y-2">
-        <h3 className="text-sm font-medium">Preview with Real Data</h3>
-
-        {selectedEventId && selectedEvent && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-[11px]">
-            <span className="text-primary font-medium">Previewing</span>
-            <span className="text-muted-foreground truncate">
-              {selectedEvent.event_properties?.OrderId || selectedEvent.profile_email}
-            </span>
-            <button
-              onClick={revertPreview}
-              className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <RotateCcw className="w-3 h-3" />
-              Reset
-            </button>
-          </div>
-        )}
-
-        {previewEvents.length === 0 ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadPreviewEvents}
-            disabled={loadingEvents || !flowConfig?.trigger_metric_id}
-            className="w-full"
-          >
-            {loadingEvents ? (
-              <>
-                <Loader2 className="w-3 h-3 animate-spin mr-1" /> Loading...
-              </>
-            ) : (
-              "Load Recent Events"
-            )}
-          </Button>
-        ) : (
-          <div className="space-y-1">
-            {previewEvents.map((event) => {
-              const orderVal = event.order_value ? `$${event.order_value.toFixed(2)}` : "";
-              const orderId = event.event_properties?.OrderId || "";
-              return (
-                <button
-                  key={event.event_id}
-                  onClick={() => renderPreview(event)}
-                  disabled={renderingPreview}
-                  className={`w-full text-left px-3 py-2 rounded-lg border transition-colors text-[11px] ${
-                    selectedEventId === event.event_id
-                      ? "border-primary bg-primary/5"
-                      : "border-border bg-card hover:border-primary/30"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">
-                      {orderId || event.profile_email || "Event"}
-                    </span>
-                    <span className="text-muted-foreground">
-                      {relativeTime(event.datetime)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground mt-0.5">
-                    {event.profile_email && <span>{event.profile_email}</span>}
-                    {orderVal && <span>· {orderVal}</span>}
-                  </div>
-                </button>
-              );
-            })}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={loadPreviewEvents}
-              disabled={loadingEvents}
-              className="w-full text-xs"
-            >
-              {loadingEvents ? <Loader2 className="w-3 h-3 animate-spin" /> : "Refresh"}
-            </Button>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
