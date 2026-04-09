@@ -368,17 +368,21 @@ Technical requirements — apply these always:
 
 GRID LAYOUT — REQUIRED STRUCTURE:
 - Multi-column image grids MUST use direct <td> siblings inside a single <tr>. Never use display:inline-block tables side by side.
+- CRITICAL: ALL grid columns MUST have EQUAL width. For a 390px viewport with N columns: each td width = floor((390 - gutter) / N). A 2-column grid = 193px per cell. A 3-column grid = 128px per cell.
+- NEVER create asymmetric grids (e.g., one column 70% and another 30%). ALL columns in a grid row must be the same width.
 - Correct 2-column example (390px viewport, 4px gutter → 193px per cell):
   <tr>
     <td width="193" valign="top" style="padding:0 2px 0 0;">
-      <img src="..." width="193" height="193" style="display:block;width:100%;height:193px;">
+      <img src="..." width="193" height="193" style="display:block;width:100%;height:193px;object-fit:cover;">
     </td>
     <td width="193" valign="top" style="padding:0 0 0 2px;">
-      <img src="..." width="193" height="193" style="display:block;width:100%;height:193px;">
+      <img src="..." width="193" height="193" style="display:block;width:100%;height:193px;object-fit:cover;">
     </td>
   </tr>
+- For card grids with labels below images, use nested tables inside equal-width <td> cells.
 - Never use: <table align="left" style="display:inline-block"> as a column technique.
 - Never add mobile-grid-col or any CSS class that sets display:block on grid columns.
+- NEVER use percentage widths on grid <td> elements. Always use explicit pixel values.
 
 GRID GEOMETRY REPLICATION (CRITICAL):
 - When the reference (or skeleton) uses an NxM grid of equally-sized images, replicate that EXACT grid geometry.
