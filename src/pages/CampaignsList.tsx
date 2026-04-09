@@ -147,9 +147,21 @@ export default function CampaignsList() {
       goal: campaign.goal,
       extra_copy: campaign.extra_copy ?? null,
       speed_mode: campaign.speed_mode ?? "normal",
+      campaign_mode: campaign.campaign_mode ?? "campaign",
+      generation_mode: campaign.generation_mode ?? "standard",
+      flow_config: campaign.flow_config ?? null,
       reference_campaign_ids: campaign.reference_campaign_ids,
+      reference_campaign_id: campaign.reference_campaign_id ?? null,
+      reference_campaign_type: campaign.reference_campaign_type ?? null,
+      reference_strength: campaign.reference_strength ?? null,
       product_ids: Array.isArray(campaign.product_ids) && campaign.product_ids.length > 0 ? campaign.product_ids : null,
       pinned_asset_urls: Array.isArray(campaign.pinned_asset_urls) && campaign.pinned_asset_urls.length > 0 ? campaign.pinned_asset_urls : null,
+      subject_line: campaign.subject_line ?? null,
+      preview_text: campaign.preview_text ?? null,
+      send_list_ids: campaign.send_list_ids ?? null,
+      send_segment_ids: campaign.send_segment_ids ?? null,
+      exclude_list_ids: campaign.exclude_list_ids ?? null,
+      exclude_segment_ids: campaign.exclude_segment_ids ?? null,
     };
     const { data, error } = await supabase
       .from("campaigns")
@@ -188,9 +200,21 @@ export default function CampaignsList() {
         goal: campaign.goal,
         extra_copy: campaign.extra_copy ?? null,
         speed_mode: campaign.speed_mode ?? "normal",
+        campaign_mode: campaign.campaign_mode ?? "campaign",
+        generation_mode: campaign.generation_mode ?? "standard",
+        flow_config: campaign.flow_config ?? null,
         reference_campaign_ids: campaign.reference_campaign_ids,
+        reference_campaign_id: campaign.reference_campaign_id ?? null,
+        reference_campaign_type: campaign.reference_campaign_type ?? null,
+        reference_strength: campaign.reference_strength ?? null,
         product_ids: Array.isArray(campaign.product_ids) && campaign.product_ids.length > 0 ? campaign.product_ids : null,
         pinned_asset_urls: Array.isArray(campaign.pinned_asset_urls) && campaign.pinned_asset_urls.length > 0 ? campaign.pinned_asset_urls : null,
+        subject_line: campaign.subject_line ?? null,
+        preview_text: campaign.preview_text ?? null,
+        send_list_ids: campaign.send_list_ids ?? null,
+        send_segment_ids: campaign.send_segment_ids ?? null,
+        exclude_list_ids: campaign.exclude_list_ids ?? null,
+        exclude_segment_ids: campaign.exclude_segment_ids ?? null,
       };
       const { data, error } = await supabase.from("campaigns").insert(cloneData).select().single();
       if (!error && data) cloned.push(data as Campaign);

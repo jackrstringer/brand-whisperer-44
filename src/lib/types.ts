@@ -36,6 +36,7 @@ export interface Campaign {
   html: string | null;
   html_history: any;
   status: string;
+  reference_campaign_id?: string | null;
   reference_campaign_ids: string[] | null;
   reference_campaign_type?: string | null;
   reference_strength?: number | null;
@@ -43,7 +44,20 @@ export interface Campaign {
   pinned_asset_urls?: string[] | null;
   speed_mode?: "normal" | "fast" | null;
   campaign_mode?: "campaign" | "flow";
+  generation_mode?: string;
   flow_config?: FlowConfig | null;
+  subject_line?: string | null;
+  preview_text?: string | null;
+  send_list_ids?: string[] | null;
+  send_segment_ids?: string[] | null;
+  exclude_list_ids?: string[] | null;
+  exclude_segment_ids?: string[] | null;
+  generation_started_at?: string | null;
+  generation_duration_secs?: number | null;
+  visual_qa_score?: number | null;
+  visual_qa_status?: string | null;
+  variant_htmls?: any;
+  cached_flow_preview?: any;
   created_at: string;
   updated_at: string;
   _remediationAttempted?: boolean;
