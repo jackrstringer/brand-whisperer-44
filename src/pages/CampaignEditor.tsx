@@ -392,9 +392,17 @@ export default function CampaignEditor() {
             }
           } catch {}
         }
-        // Pre-render flow HTML with real Klaviyo data so we never show raw Liquid
-        if ((campaign as any).campaign_mode === "flow" && campaign.html && (campaign as any).flow_config?.trigger_metric_id) {
-          preRenderFlowHtml(campaign.html, (campaign as any).flow_config as FlowConfig);
+        // For flow campaigns: use cached preview instantly, or fetch in background
+        if ((campaign as any).campaign_mode === "flow" && campaign.html) {
+          const cached = (c as any).cached_flow_preview;
+          if (cached?.rendered_html && cached?.source_html_hash === campaign.html.length) {
+            // Instant display from cache
+            setFlowPreviewHtml(cached.rendered_html);
+            setPreviewHtml(cached.rendered_html);
+          } else if ((campaign as any).flow_config?.trigger_metric_id) {
+            // No cache or HTML changed — fetch in background
+            preRenderFlowHtml(campaign.html, (campaign as any).flow_config as FlowConfig);
+          }
         }
       }
       const { data: msgs } = await supabase
