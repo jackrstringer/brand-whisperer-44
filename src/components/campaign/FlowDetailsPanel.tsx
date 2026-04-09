@@ -22,6 +22,7 @@ interface FlowDetailsPanelProps {
   html: string | null;
   flowConfig: FlowConfig | null | undefined;
   onPreviewHtml: (html: string | null) => void;
+  onRequestInsert?: (liquidPath: string) => void;
 }
 
 function relativeTime(dateStr: string | null | undefined): string {
