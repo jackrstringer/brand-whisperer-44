@@ -1,128 +1,70 @@
 
+No — the current Run Details view is not trustworthy yet. From the code, there are 4 concrete problems:
 
-# Admin Generation Timeline — Detailed Run Inspector
+1. The permanent spinners are a logging bug. `started` and `completed` are being written as separate rows, so the original `started` rows never resolve and stay “loading forever.”
+2. The screen is missing the actual evidence. Right now QA logs mostly counts/summaries:
+   - `qa_screenshot` logs only `base64_length` / mime type
+   - `qa_slice` logs only `slice_count`
+   - `qa_compare` logs only score/count/summary  
+   So there is nothing real for the UI to show for screenshot, slices, or comparison.
+3. The view is not scoped to one run. It loads all `generation_events` for the campaign, so older and newer generations can be mixed together.
+4. The QA agent is framed incorrectly. `visual-qa` does not explicitly say “the reference is layout only; different brand/copy/products are expected,” so it can produce misleading summaries like the Sundays vs skincare complaint.
 
-## What This Does
-Adds an admin-only "Run Details" button to the campaign editor header bar. Clicking it opens a full-screen dialog showing a chronological timeline of everything that happened during the campaign's last generation run: every pipeline step, what was sent, what came back, screenshots, slices, prompts, errors, and timing.
+## Plan
 
-## Current State
-- Pipeline steps use `console.log` in edge functions — no structured storage
-- The client-side QA loop (`runVisualQa`) tracks steps ephemerally in memory
-- No way to inspect what happened after the fact
-- Edge function logs exist in Supabase analytics but are unstructured text
+1. Audit the latest real run for the current campaign
+   - Read the stored event rows and backend logs for the currently open campaign.
+   - Verify exactly which reference(s), preview event data, slices, and QA inputs were actually used.
+   - Confirm whether the bad summary came from prompt framing, wrong reference selection, or both.
 
-## Architecture
+2. Make run logging truthful
+   - Add `run_id` and `event_key` to `generation_events`.
+   - Change logging so a step starts once and then updates to `completed`/`failed` instead of inserting a second row.
+   - Backfill legacy rows so older runs stop showing fake “still loading” entries.
 
-### 1. New `generation_events` table
+3. Capture real debug artifacts
+   - Persist the actual screenshot, output slices, reference slices, and rendered flow preview used for QA.
+   - Log exact reference IDs/titles, selected reference mode, campaign brief, flow preview metadata, and the raw issue list.
+   - Store images in backend storage and save URLs on the event record.
 
-```sql
-CREATE TABLE generation_events (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  campaign_id uuid NOT NULL,
-  step text NOT NULL,          -- e.g. 'generation_start', 'variant_0_claude_call', 'screenshot', 'slice', 'qa_compare', 'qa_patch', 'qa_edit', 'qa_result'
-  status text NOT NULL DEFAULT 'started',  -- 'started', 'completed', 'failed'
-  started_at timestamptz DEFAULT now(),
-  completed_at timestamptz,
-  duration_ms integer,
-  payload jsonb,               -- inputs: prompt snippets, image URLs, config
-  result jsonb,                -- outputs: response data, scores, issues
-  error text,
-  created_at timestamptz DEFAULT now()
-);
+4. Fix the Run Details UI
+   - Default to the latest run, with a run switcher for older runs.
+   - Pair/collapse legacy started/completed duplicates.
+   - Add dedicated sections for:
+     - full screenshot
+     - reference slices
+     - output slices
+     - side-by-side QA comparison
+     - raw prompt/result/issue data
+   - Add click-to-expand/lightbox views instead of only tiny thumbnails.
+   - If an artifact is missing, show an explicit red error state instead of a blank section.
 
--- RLS: admin read-only, service_role write
-ALTER TABLE generation_events ENABLE ROW LEVEL SECURITY;
+5. Fix the QA framing bug
+   - Rewrite `visual-qa` so the reference is treated as architectural only.
+   - Explicitly tell the model that brand, copy, products, and order details may differ and should not be flagged as failures.
+   - Pass brand/campaign/reference context into the QA call so the model knows what it is auditing.
 
-CREATE POLICY "Admins can view generation events"
-  ON generation_events FOR SELECT TO authenticated
-  USING (has_role(auth.uid(), 'admin'));
+6. Remove wrong-reference ambiguity
+   - Stop relying on current UI state alone for QA.
+   - Persist the exact reference set used at generation time and use that stored set for the run.
+   - Show those references in the Run Details header so you can verify them immediately.
 
-CREATE POLICY "Service role full access"
-  ON generation_events FOR ALL TO service_role
-  USING (true) WITH CHECK (true);
-```
+7. Verify end-to-end
+   - Test a fresh flow run and a fresh standard campaign run.
+   - Leave/re-enter the editor and confirm the same run data is still visible.
+   - Confirm old steps no longer remain stuck in `started`.
+   - Confirm the QA section shows the actual images/slices used.
+   - Confirm the summary no longer complains that the generated brand differs from the reference brand.
 
-### 2. Instrument the Pipeline
+## Files likely affected
+- `supabase/migrations/...`
+- `supabase/functions/generate-campaign-multi/index.ts`
+- `supabase/functions/_shared/generateCampaignCore.ts`
+- `supabase/functions/visual-qa/index.ts`
+- `src/pages/CampaignEditor.tsx`
+- `src/components/campaign/GenerationTimeline.tsx`
 
-Add event logging calls at each major step. Uses the existing `supabase` service-role client already available in edge functions.
-
-**In `generate-campaign-multi/index.ts`:**
-- `generation_start` — campaign ID, variant count, mode, references
-- `variant_N_start` / `variant_N_complete` / `variant_N_error` — per-variant with timing, html length, error
-
-**In `generateCampaignCore.ts`:**
-- `skeleton_extract` — reference skeleton analysis (input images, output JSON)
-- `claude_generate` — the main Claude call (prompt length, model, token usage, response length)
-- `image_rehost` — ImageKit rehosting results
-- `finalize_html` — finalization step
-- `klaviyo_validate` — template validation attempts (for flow emails)
-
-**In `CampaignEditor.tsx` (QA loop):**
-- `qa_flow_render` — Liquid rendering with event data
-- `qa_screenshot` — screenshot capture (image dimensions, base64 length)
-- `qa_slice` — slicing results (slice count, slice URLs/dimensions)
-- `qa_compare` — Claude QA comparison (reference slices count, output slices count, score, issues)
-- `qa_patch` — find/replace patches applied
-- `qa_edit` — Agent 2 edit call
-- `qa_result` — final outcome (passed/needs_review/error, score, iteration count)
-
-Each event is a single insert. For long-running steps, we insert on start (status: 'started') and update on completion (status: 'completed', duration_ms, result). This gives real-time visibility even while generation is running.
-
-### 3. Logging Helper
-
-A lightweight helper used by both edge functions and the client:
-
-```typescript
-// Edge function version (service role client)
-async function logGenEvent(supabase, campaignId, step, data) {
-  await supabase.from('generation_events').insert({
-    campaign_id: campaignId,
-    step,
-    status: data.status || 'completed',
-    payload: data.payload || null,
-    result: data.result || null,
-    error: data.error || null,
-    duration_ms: data.duration_ms || null,
-    completed_at: data.status === 'started' ? null : new Date().toISOString(),
-  });
-}
-```
-
-### 4. Admin UI — Run Details Dialog
-
-**Button placement:** In the campaign editor top bar, after the view settings popover and before "Export HTML". Only visible when `isAdmin` is true. Uses a `Bug` or `Activity` icon.
-
-**Dialog content:** A full-width dialog (`max-w-4xl`) with:
-- **Header:** Campaign name, generation timestamp, total duration
-- **Timeline:** Vertical timeline of events, each showing:
-  - Step name + status badge (started/completed/failed)
-  - Timing (started_at, duration)
-  - Expandable payload section (collapsible JSON viewer for prompts, configs)
-  - Expandable result section (scores, issues, HTML snippets)
-  - For screenshot/slice steps: inline image thumbnails (clickable to expand)
-  - Error messages highlighted in red
-- **Filters:** Toggle to show/hide payload details, filter by step type
-
-**Data loading:** On dialog open, fetches all `generation_events` for the campaign ordered by `created_at ASC`. No realtime needed — this is a post-hoc inspection tool.
-
-### 5. Files Modified
-
-| File | Change |
-|------|--------|
-| **New migration** | Create `generation_events` table with RLS |
-| `supabase/functions/generate-campaign-multi/index.ts` | Add event logging for generation lifecycle |
-| `supabase/functions/_shared/generateCampaignCore.ts` | Add event logging for Claude calls, rehosting, finalization |
-| `src/pages/CampaignEditor.tsx` | Add `useIsAdmin`, admin button, QA loop event logging, dialog |
-| `src/components/campaign/GenerationTimeline.tsx` | **New** — Timeline UI component |
-
-### 6. Security
-- Table uses RLS: only admins can read, only service_role can write
-- Client-side QA logging uses the authenticated user's token — inserts will go through service_role via edge function proxy, OR we add an authenticated admin INSERT policy
-- Actually simpler: add an admin INSERT policy too so the client-side QA loop can log directly
-
-```sql
-CREATE POLICY "Admins can insert generation events"
-  ON generation_events FOR INSERT TO authenticated
-  WITH CHECK (has_role(auth.uid(), 'admin'));
-```
-
+## Technical details
+- Keep the strict “no fake success” rule: if artifact capture or event logging fails, mark that step failed and show the real error.
+- Store prompt text blocks directly, but store images as URLs rather than giant base64 blobs in the database.
+- Legacy runs need either migration backfill or UI pairing heuristics so past timelines become readable too, not just future ones.
