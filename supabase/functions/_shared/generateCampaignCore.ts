@@ -433,6 +433,7 @@ export interface GenerateCampaignParams {
   reference?: any;
   _isSubGeneration?: boolean;
   _variantIndex?: number;
+  _runId?: string;
   campaignMode?: "campaign" | "flow";
   flowConfig?: any;
   flowNotes?: string;
