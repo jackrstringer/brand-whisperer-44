@@ -78,6 +78,10 @@ export function AppSidebar() {
     navigate("/settings");
   };
 
+  const handleLibraryClick = () => {
+    navigate("/admin/library");
+  };
+
   const handleSignOut = async () => {
     await signOut();
     navigate("/login");
@@ -92,6 +96,8 @@ export function AppSidebar() {
     onHomeClick: handleHomeClick,
     onSettingsClick: handleSettingsClick,
     onSignOut: handleSignOut,
+    onLibraryClick: handleLibraryClick,
+    isAdmin,
   };
 
   if (collapsed) {
