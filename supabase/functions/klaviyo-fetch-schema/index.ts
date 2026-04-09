@@ -148,14 +148,27 @@ Deno.serve(async (req) => {
   }
 });
 
+// Internal Klaviyo metadata keys that are NOT valid Liquid variables
+const INTERNAL_KEYS = new Set(["$extra", "$attribution", "$flow", "$message", "$variation", "$timezone", "$anonymous", "$browser", "$browser_version", "$city", "$country", "$device_type", "$ip", "$latitude", "$longitude", "$os", "$platform", "$region", "$source", "$timestamp", "$timezone_offset", "extra"]);
+const ALLOWED_DOLLAR_KEYS = new Set(["$value", "$event_id"]);
+
+function isInternalKey(key: string): boolean {
+  if (INTERNAL_KEYS.has(key)) return true;
+  // Skip any $-prefixed key that isn't in the allowed set
+  if (key.startsWith("$") && !ALLOWED_DOLLAR_KEYS.has(key)) return true;
+  return false;
+}
+
 function extractLiquidVars(obj: any, prefix = "event"): string[] {
   const vars: string[] = [];
   for (const [key, value] of Object.entries(obj)) {
+    if (isInternalKey(key)) continue;
     const path = `${prefix}.${key}`;
     if (Array.isArray(value)) {
       vars.push(path);
       if (value[0] && typeof value[0] === "object") {
         for (const itemKey of Object.keys(value[0])) {
+          if (isInternalKey(itemKey)) continue;
           vars.push(`${path}[].${itemKey}`);
         }
       }
