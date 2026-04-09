@@ -23,6 +23,8 @@ interface Props {
   onHomeClick: () => void;
   onSettingsClick: () => void;
   onSignOut: () => void;
+  onLibraryClick?: () => void;
+  isAdmin?: boolean;
 }
 
 function PeekSubItem({ item, isActive, delay, onClick }: {
