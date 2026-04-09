@@ -368,26 +368,19 @@ Display format: "\`82\` / 100" with the number in a larger font weight. Include 
 - Responsive breakpoints: 768px (tablet), 480px (mobile)
 - Font stack: \`-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif\`
 
-### Interactive Elements
+### NO JavaScript — Static Only
 
-**Leaderboard anchor links:**
-- Each leaderboard row is a clickable element
-- Clicking a row triggers smooth scroll to the corresponding detail card in Section 2
-- Use \`id\` attributes on detail cards: \`id="campaign-[rank]"\` (e.g., \`id="campaign-1"\`)
-- Leaderboard rows use \`<a href="#campaign-1">\` or JavaScript scroll behavior
-- On hover: leaderboard row background changes to a light indigo tint (\`#eef2ff\`), cursor becomes pointer
+This report is rendered inside a React app via dangerouslySetInnerHTML. Do NOT include:
+- Any \`<script>\` tags or inline JavaScript
+- Any \`onclick\` handlers
+- Any anchor links (\`href="#..."\`)
+- Any sticky or fixed positioning
+- Any \`window.print()\` or print buttons
+- Any interactive elements that require JavaScript
 
-**Section navigation:**
-- Sticky section nav bar appears after the header: Section 1 | Section 2 | Section 3 | Section 4 | Section 5
-- Each nav item is an anchor link to the corresponding section
-- Active section is highlighted (accent color underline or background)
-- Nav scrolls with the page but sticks to top below the main header
+The report is a long, static, scrollable document. All navigation is handled by the parent app. Think of it like a long PDF — every section flows naturally top to bottom with no interaction required.
 
-**Download / Print button:**
-- Position: top-right of the main header
-- Label: "Export PDF"
-- On click: calls \`window.print()\`
-- Style: white button with accent text on dark header
+Hover styles (CSS :hover) are fine. Purely visual CSS transitions are fine. Anything requiring JavaScript is not.
 
 ### CSS Bar Charts
 
@@ -500,9 +493,8 @@ Before finalizing the report, verify:
 - [ ] Impact score badges use correct color tiers
 - [ ] @media print CSS included
 - [ ] Mobile responsive breakpoints implemented
-- [ ] Leaderboard anchor links functional
-- [ ] Section navigation sticky bar present
-- [ ] Export PDF button triggers window.print()
+- [ ] No JavaScript or script tags anywhere in the document
+- [ ] No anchor links, sticky elements, or onclick handlers
 - [ ] No placeholder text anywhere in the document
 - [ ] Executive summary paragraph contains specific numbers from the data
 - [ ] Every recommendation is brand-specific (not generic)
