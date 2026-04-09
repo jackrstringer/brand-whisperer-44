@@ -1,56 +1,128 @@
 
 
-# Fix Visual QA Pipeline: Remove Fake Passes, Add Hard Caps
+# Admin Generation Timeline — Detailed Run Inspector
 
-## Problem Summary
+## What This Does
+Adds an admin-only "Run Details" button to the campaign editor header bar. Clicking it opens a full-screen dialog showing a chronological timeline of everything that happened during the campaign's last generation run: every pipeline step, what was sent, what came back, screenshots, slices, prompts, errors, and timing.
 
-The visual QA pipeline has three categories of failure:
+## Current State
+- Pipeline steps use `console.log` in edge functions — no structured storage
+- The client-side QA loop (`runVisualQa`) tracks steps ephemerally in memory
+- No way to inspect what happened after the fact
+- Edge function logs exist in Supabase analytics but are unstructured text
 
-1. **Silent success fallbacks** — When Claude returns a 400 error (image too large) or JSON fails to parse, the system lies and returns `passes_visual_qa: true`. The client-side catch block also tells the user "campaign is still usable" on any error.
+## Architecture
 
-2. **No image dimension safety cap** — Screenshots can be 10,000px+ tall. When sent to Claude (even as slices), the total payload or individual slice dimensions can exceed Anthropic's limits, triggering the 400 that gets silently swallowed.
+### 1. New `generation_events` table
 
-3. **Stale width references** — The visual-qa prompt still says "470px viewport" in multiple places despite the renderer now using 390px. The capture-email-screenshot log message also says 470px.
+```sql
+CREATE TABLE generation_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id uuid NOT NULL,
+  step text NOT NULL,          -- e.g. 'generation_start', 'variant_0_claude_call', 'screenshot', 'slice', 'qa_compare', 'qa_patch', 'qa_edit', 'qa_result'
+  status text NOT NULL DEFAULT 'started',  -- 'started', 'completed', 'failed'
+  started_at timestamptz DEFAULT now(),
+  completed_at timestamptz,
+  duration_ms integer,
+  payload jsonb,               -- inputs: prompt snippets, image URLs, config
+  result jsonb,                -- outputs: response data, scores, issues
+  error text,
+  created_at timestamptz DEFAULT now()
+);
 
-## Changes
+-- RLS: admin read-only, service_role write
+ALTER TABLE generation_events ENABLE ROW LEVEL SECURITY;
 
-### 1. Remove all fake-pass paths from `visual-qa/index.ts`
+CREATE POLICY "Admins can view generation events"
+  ON generation_events FOR SELECT TO authenticated
+  USING (has_role(auth.uid(), 'admin'));
 
-- **Line 215-228**: Delete the `if (anthropicResp.status === 400)` block that returns `passes_visual_qa: true`. Let it fall through to the `throw` on line 229 so the error propagates honestly.
-- **Lines 240-253**: Delete the catch block that returns `passes_visual_qa: true` on JSON parse failure. Replace with a proper error response (`status: 500`, `error: "Failed to parse QA response"`).
-- Update the prompt to say 390px instead of 470px (lines 25, 32, 53).
+CREATE POLICY "Service role full access"
+  ON generation_events FOR ALL TO service_role
+  USING (true) WITH CHECK (true);
+```
 
-### 2. Remove "still usable" lie from `CampaignEditor.tsx`
+### 2. Instrument the Pipeline
 
-- **Line 700-706**: Change the catch block to set `visual_qa_status: 'error'` in the database and show the actual error message to the user instead of "campaign is still usable."
+Add event logging calls at each major step. Uses the existing `supabase` service-role client already available in edge functions.
 
-### 3. Cap screenshot height in `capture-email-screenshot/index.ts`
+**In `generate-campaign-multi/index.ts`:**
+- `generation_start` — campaign ID, variant count, mode, references
+- `variant_N_start` / `variant_N_complete` / `variant_N_error` — per-variant with timing, html length, error
 
-- Change `viewport_height` from 10000 to 7500. This keeps the full-page screenshot under Claude's 8000px single-image dimension limit.
-- Fix the log message on line 45 that still says "470px" — change to "390px".
+**In `generateCampaignCore.ts`:**
+- `skeleton_extract` — reference skeleton analysis (input images, output JSON)
+- `claude_generate` — the main Claude call (prompt length, model, token usage, response length)
+- `image_rehost` — ImageKit rehosting results
+- `finalize_html` — finalization step
+- `klaviyo_validate` — template validation attempts (for flow emails)
 
-### 4. Add slice dimension safety in `slice-image-on-demand` or `visual-qa`
+**In `CampaignEditor.tsx` (QA loop):**
+- `qa_flow_render` — Liquid rendering with event data
+- `qa_screenshot` — screenshot capture (image dimensions, base64 length)
+- `qa_slice` — slicing results (slice count, slice URLs/dimensions)
+- `qa_compare` — Claude QA comparison (reference slices count, output slices count, score, issues)
+- `qa_patch` — find/replace patches applied
+- `qa_edit` — Agent 2 edit call
+- `qa_result` — final outcome (passed/needs_review/error, score, iteration count)
 
-- Before sending slices to Claude in `visual-qa/index.ts`, check each slice image's dimensions. If any individual slice exceeds 1800px in height, downscale it (or skip and report error). This prevents the 400 from ever happening for sliced images.
-- Use the existing `capImageDimensions` pattern (referenced in memory) or add inline downscaling via ImageKit URL transforms for ImageKit-hosted slice URLs.
+Each event is a single insert. For long-running steps, we insert on start (status: 'started') and update on completion (status: 'completed', duration_ms, result). This gives real-time visibility even while generation is running.
 
-### 5. Remove fake-pass paths from `klaviyo-validate-template/index.ts`
+### 3. Logging Helper
 
-- Remove the three places that return `{ valid: true, skipped: true }`:
-  - No Klaviyo connection (line 36-39) — change to `{ valid: false, skipped: true, error: "No Klaviyo connection" }`
-  - Network error (line 59-62) — change to `{ valid: false, error: "Network error connecting to Klaviyo" }`
-  - Catch-all (line 96-99) — change to return `status: 500` with the actual error
+A lightweight helper used by both edge functions and the client:
 
-### Files Modified
+```typescript
+// Edge function version (service role client)
+async function logGenEvent(supabase, campaignId, step, data) {
+  await supabase.from('generation_events').insert({
+    campaign_id: campaignId,
+    step,
+    status: data.status || 'completed',
+    payload: data.payload || null,
+    result: data.result || null,
+    error: data.error || null,
+    duration_ms: data.duration_ms || null,
+    completed_at: data.status === 'started' ? null : new Date().toISOString(),
+  });
+}
+```
+
+### 4. Admin UI — Run Details Dialog
+
+**Button placement:** In the campaign editor top bar, after the view settings popover and before "Export HTML". Only visible when `isAdmin` is true. Uses a `Bug` or `Activity` icon.
+
+**Dialog content:** A full-width dialog (`max-w-4xl`) with:
+- **Header:** Campaign name, generation timestamp, total duration
+- **Timeline:** Vertical timeline of events, each showing:
+  - Step name + status badge (started/completed/failed)
+  - Timing (started_at, duration)
+  - Expandable payload section (collapsible JSON viewer for prompts, configs)
+  - Expandable result section (scores, issues, HTML snippets)
+  - For screenshot/slice steps: inline image thumbnails (clickable to expand)
+  - Error messages highlighted in red
+- **Filters:** Toggle to show/hide payload details, filter by step type
+
+**Data loading:** On dialog open, fetches all `generation_events` for the campaign ordered by `created_at ASC`. No realtime needed — this is a post-hoc inspection tool.
+
+### 5. Files Modified
 
 | File | Change |
 |------|--------|
-| `supabase/functions/visual-qa/index.ts` | Remove 2 fake-pass blocks, fix 470→390 in prompt, add slice dimension cap |
-| `supabase/functions/capture-email-screenshot/index.ts` | Cap viewport_height to 7500, fix log message |
-| `supabase/functions/klaviyo-validate-template/index.ts` | Remove 3 fake-pass blocks |
-| `src/pages/CampaignEditor.tsx` | Change catch to set error status + show real error |
+| **New migration** | Create `generation_events` table with RLS |
+| `supabase/functions/generate-campaign-multi/index.ts` | Add event logging for generation lifecycle |
+| `supabase/functions/_shared/generateCampaignCore.ts` | Add event logging for Claude calls, rehosting, finalization |
+| `src/pages/CampaignEditor.tsx` | Add `useIsAdmin`, admin button, QA loop event logging, dialog |
+| `src/components/campaign/GenerationTimeline.tsx` | **New** — Timeline UI component |
 
-### Deployment
+### 6. Security
+- Table uses RLS: only admins can read, only service_role can write
+- Client-side QA logging uses the authenticated user's token — inserts will go through service_role via edge function proxy, OR we add an authenticated admin INSERT policy
+- Actually simpler: add an admin INSERT policy too so the client-side QA loop can log directly
 
-All 3 edge functions (`visual-qa`, `capture-email-screenshot`, `klaviyo-validate-template`) will be redeployed after changes.
+```sql
+CREATE POLICY "Admins can insert generation events"
+  ON generation_events FOR INSERT TO authenticated
+  WITH CHECK (has_role(auth.uid(), 'admin'));
+```
 
