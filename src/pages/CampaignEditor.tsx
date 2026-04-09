@@ -3076,6 +3076,19 @@ export default function CampaignEditor() {
     }
   }, true);
 
+  // Show toolbar on click for data-liquid-protected (dynamic) elements
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    while(t && t !== document.body){
+      if(t.hasAttribute && t.hasAttribute('data-liquid-protected')){
+        clearTimeout(ftbBlurTimer);
+        showFtb(t);
+        return;
+      }
+      t = t.parentElement;
+    }
+  }, true);
+
   // Hide toolbar on blur (delayed to allow toolbar button clicks)
   document.addEventListener('blur', function(e){
     if(e.target && e.target.isContentEditable){
