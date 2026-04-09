@@ -240,10 +240,10 @@ export default function CampaignsList() {
             return (
               <div
                 key={c.id}
-                className={`flex items-center justify-between p-4 rounded-lg border transition-colors cursor-pointer ${
+                className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all duration-200 ease-out ${
                   isSelected
-                    ? "border-primary bg-primary/5"
-                    : "border-border bg-card hover:border-primary/30"
+                    ? "border-primary bg-primary/5 scale-[1.005]"
+                    : "border-border bg-card hover:border-primary/30 hover:bg-primary/[0.03] hover:scale-[1.005] hover:shadow-sm"
                 }`}
                 onClick={(e) => {
                   if (e.shiftKey || e.metaKey || e.ctrlKey || selectedIds.size > 0) {
