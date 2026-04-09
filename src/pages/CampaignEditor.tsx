@@ -259,8 +259,8 @@ export default function CampaignEditor() {
   const [iframeContentHeight, setIframeContentHeight] = useState(800);
   const [previewFallbackUrls, setPreviewFallbackUrls] = useState<string[]>([]);
 
-  // Helper: pre-render flow HTML with real Klaviyo event data
-  const preRenderFlowHtml = useCallback(async (html: string, fc: FlowConfig) => {
+  // Helper: pre-render flow HTML with real Klaviyo event data and cache it
+  const preRenderFlowHtml = useCallback(async (html: string, fc: FlowConfig, saveToCampaignId?: string) => {
     if (!fc?.trigger_metric_id || !brandId) return;
     try {
       const session = (await supabase.auth.getSession()).data.session;
@@ -302,11 +302,22 @@ export default function CampaignEditor() {
       if (renderData.rendered_html) {
         setFlowPreviewHtml(renderData.rendered_html);
         setPreviewHtml(renderData.rendered_html);
+        // Cache the rendered preview + event data to DB for instant future loads
+        const cachePayload = {
+          rendered_html: renderData.rendered_html,
+          event_data: ev,
+          source_html_hash: html.length, // simple change detection
+          cached_at: new Date().toISOString(),
+        };
+        const cid = saveToCampaignId || campaignId;
+        if (cid) {
+          supabase.from("campaigns").update({ cached_flow_preview: cachePayload } as any).eq("id", cid).then(() => {});
+        }
       }
     } catch (err) {
       console.warn("[flow-prerender] Could not pre-render flow preview:", err);
     }
-  }, [brandId]);
+  }, [brandId, campaignId]);
 
   useEffect(() => {
     if (!campaignId || !brandId) return;
