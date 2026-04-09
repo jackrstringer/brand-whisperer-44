@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, CheckCircle, AlertTriangle, ChevronLeft, ChevronRight, Package, MapPin, User, ShoppingCart } from "lucide-react";
 import type { FlowConfig } from "@/lib/types";
+import JsonExplorer from "@/components/campaign/JsonExplorer";
 
 interface PreviewEvent {
   event_id: string;
