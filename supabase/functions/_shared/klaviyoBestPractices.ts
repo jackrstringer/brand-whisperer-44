@@ -976,8 +976,21 @@ Current date in email:
 Estimated delivery (if you have a delivery timestamp):
   {{ event.EstimatedDeliveryDate | date: '%A, %B %d' }}
 
-Always wrap dates in a default in case the property is missing:
-  {{ event.EstimatedDeliveryDate | date: '%B %d, %Y' | default: 'soon' }}
+CRITICAL — NEVER chain | default: after | date:
+  WRONG: {{ event.extra.processed_at | date: '%b %d' | default: 'Today' }}
+  WHY: Klaviyo's | date filter returns an empty string '' when the value is nil.
+       | default: then receives '' as input — Klaviyo treats '' as a provided
+       value and throws "The default filter requires 2 arguments, but 1 was given".
+
+  CORRECT — use a conditional instead:
+  {% if event.extra.processed_at %}{{ event.extra.processed_at | date: '%b %d' }}{% else %}Today{% endif %}
+
+  This rule applies to ALL chained filters that could return empty string:
+  Never: | date: '...' | default: '...'
+  Never: | upcase | default: '...'
+  Never: | strip | default: '...'
+  Always use {% if %}...{% else %}...{% endif %} when a date or transformed
+  value needs a fallback.
 
 ────────────────────────────────────────────────────────────────────────────────
 2.8 CHARACTER LIMITS — SUBJECT LINES AND PREVIEW TEXT
