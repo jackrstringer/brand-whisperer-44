@@ -102,7 +102,7 @@ The report is organized into exactly five sections. Each section is a full-width
 **1. Top 10 Campaigns Leaderboard**
 - A ranked list of the top 10 campaigns by normalized impact score (highest first)
 - Each row: Rank | Campaign name/subject line | Send date | Delivered | Open rate | Click rate | Revenue | Normalized impact score (as colored badge)
-- Clicking a row in the leaderboard scrolls the page to that campaign's detail card in Section 2 (use anchor links)
+- Rows are static — no anchor links or click behavior
 - Campaigns below 500 delivered are excluded
 - Use horizontal CSS bar chart inside each row to visually represent the normalized score (bar width = normalized score as a percentage of 100px max width)
 
