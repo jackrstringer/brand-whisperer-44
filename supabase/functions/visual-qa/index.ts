@@ -98,18 +98,31 @@ Deno.serve(async (req) => {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
-    const { campaignId, html, outputSlices, referenceSlices } = await req.json();
+    const { campaignId, html, renderedHtml, outputSlices, referenceSlices, previewDataUsed } = await req.json();
     if (!html || !outputSlices?.length) {
       throw new Error("html and outputSlices are required");
     }
 
     const hasReferences = Array.isArray(referenceSlices) && referenceSlices.length > 0;
     console.log(
-      `[visual-qa] Starting QA for campaign ${campaignId}, ${outputSlices.length} output slices, ${hasReferences ? referenceSlices.length + " reference slices" : "no references"}`
+      `[visual-qa] Starting QA for campaign ${campaignId}, ${outputSlices.length} output slices, ${hasReferences ? referenceSlices.length + " reference slices" : "no references"}, previewDataUsed=${!!previewDataUsed}`
     );
 
     // Build Claude vision content array
     const content: any[] = [];
+
+    // Tell Claude whether this is a flow email rendered with real data
+    if (previewDataUsed) {
+      content.push({
+        type: "text",
+        text: `IMPORTANT: The output screenshots below have been rendered with REAL Klaviyo event data (real customer name, real order number, real product images). This is exactly what the customer will see. QA this as a real email — verify that dynamic data has populated correctly, product images are showing, names are rendering, and nothing looks broken or placeholder-like.`,
+      });
+    } else {
+      content.push({
+        type: "text",
+        text: `NOTE: This is a standard campaign email (not a flow/transactional). Screenshots show the email as designed.`,
+      });
+    }
 
     // Reference slices (skip index 0 full-overview, use detail slices only)
     if (hasReferences) {

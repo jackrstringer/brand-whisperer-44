@@ -464,10 +464,45 @@ export default function CampaignEditor() {
     setVisualQaRunning(true);
 
     try {
+      // For flow emails, render Liquid with real Klaviyo event data before screenshotting
+      let htmlToCapture = campaignData.html;
+      const flowConfig = campaignData.flow_config as any;
+
+      if (campaignData.campaign_mode === 'flow' && flowConfig?.trigger_metric_id) {
+        try {
+          console.log('[qa-loop] Flow email detected — fetching real preview event...');
+          const previewEventsResp = await supabase.functions.invoke('klaviyo-fetch-preview-events', {
+            body: {
+              brand_id: campaignData.brand_id,
+              metric_id: flowConfig.trigger_metric_id
+            }
+          });
+
+          if (!previewEventsResp.error && previewEventsResp.data?.events?.length > 0) {
+            const previewEvent = previewEventsResp.data.events[0];
+            const liquidRenderResp = await supabase.functions.invoke('klaviyo-render-preview', {
+              body: {
+                html: campaignData.html,
+                event_properties: previewEvent.event_properties,
+                profile_name: previewEvent.profile_name || 'there',
+                profile_email: previewEvent.profile_email || ''
+              }
+            });
+
+            if (!liquidRenderResp.error && liquidRenderResp.data?.rendered_html) {
+              htmlToCapture = liquidRenderResp.data.rendered_html;
+              console.log('[qa-loop] Using Liquid-rendered HTML with real Klaviyo event data');
+            }
+          }
+        } catch (err) {
+          console.warn('[qa-loop] Could not fetch preview event, falling back to raw HTML:', err);
+        }
+      }
+
       // AGENT 3: Render at exactly 470px — same as in-app preview
       console.log(`[qa-loop] Iteration ${iteration + 1}: Rendering at 470px...`);
       const renderResp = await supabase.functions.invoke('capture-email-screenshot', {
-        body: { html: campaignData.html }
+        body: { html: htmlToCapture }
       });
       if (renderResp.error) throw new Error(`Renderer failed: ${renderResp.error.message}`);
       const { imageBase64, mimeType } = renderResp.data;
@@ -494,7 +529,14 @@ export default function CampaignEditor() {
       // AGENT 4: QA comparison
       console.log(`[qa-loop] Running QA...`);
       const qaResp = await supabase.functions.invoke('visual-qa', {
-        body: { campaignId, html: campaignData.html, outputSlices, referenceSlices }
+        body: {
+          campaignId,
+          html: campaignData.html,
+          renderedHtml: htmlToCapture,
+          outputSlices,
+          referenceSlices,
+          previewDataUsed: htmlToCapture !== campaignData.html
+        }
       });
       if (qaResp.error) throw new Error(`QA failed: ${qaResp.error.message}`);
       const qaResult = qaResp.data;
