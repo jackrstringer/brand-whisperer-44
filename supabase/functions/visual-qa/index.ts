@@ -31,6 +31,7 @@ CHECK FOR THESE SPECIFIC ISSUES:
 10. PLACEHOLDER DIMENSIONS: Flag any image with width under 100px or height under 100px that is not a logo or icon. These are placeholder values that will break the layout.
 11. GRID STRUCTURE: Flag any multi-column grid that uses display:inline-block tables instead of direct <td> siblings inside a single <tr>. Flag any CSS class (e.g. mobile-grid-col) that sets display:block on grid columns. These techniques cause vertical stacking at the 470px viewport.
 12. GEOMETRIC ACCURACY: Inspect every circular element — progress indicators, icon containers, status badges. Any element that appears oval or egg-shaped when it should be circular is CRITICAL. Flag with category "geometry", severity "critical". Also flag connecting lines that pass through circles instead of running between them.
+13. DYNAMIC DATA POPULATION (flow emails only): When preview data has been used, verify that all dynamic fields have populated correctly — customer name appears as a real name (not a Liquid tag), order numbers are real, product images are loading and showing actual products, prices are formatted correctly. If you see any raw Liquid syntax like {{ event.extra.order_number }} visible in the rendered output, that is a CRITICAL error — it means a variable failed to render.
 
 STRUCTURAL COMPARISON (when reference screenshots are provided):
 Compare the generated output against the reference screenshots and score structural fidelity:
@@ -98,18 +99,31 @@ Deno.serve(async (req) => {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
-    const { campaignId, html, outputSlices, referenceSlices } = await req.json();
+    const { campaignId, html, renderedHtml, outputSlices, referenceSlices, previewDataUsed } = await req.json();
     if (!html || !outputSlices?.length) {
       throw new Error("html and outputSlices are required");
     }
 
     const hasReferences = Array.isArray(referenceSlices) && referenceSlices.length > 0;
     console.log(
-      `[visual-qa] Starting QA for campaign ${campaignId}, ${outputSlices.length} output slices, ${hasReferences ? referenceSlices.length + " reference slices" : "no references"}`
+      `[visual-qa] Starting QA for campaign ${campaignId}, ${outputSlices.length} output slices, ${hasReferences ? referenceSlices.length + " reference slices" : "no references"}, previewDataUsed=${!!previewDataUsed}`
     );
 
     // Build Claude vision content array
     const content: any[] = [];
+
+    // Tell Claude whether this is a flow email rendered with real data
+    if (previewDataUsed) {
+      content.push({
+        type: "text",
+        text: `IMPORTANT: The output screenshots below have been rendered with REAL Klaviyo event data (real customer name, real order number, real product images). This is exactly what the customer will see. QA this as a real email — verify that dynamic data has populated correctly, product images are showing, names are rendering, and nothing looks broken or placeholder-like.`,
+      });
+    } else {
+      content.push({
+        type: "text",
+        text: `NOTE: This is a standard campaign email (not a flow/transactional). Screenshots show the email as designed.`,
+      });
+    }
 
     // Reference slices (skip index 0 full-overview, use detail slices only)
     if (hasReferences) {
