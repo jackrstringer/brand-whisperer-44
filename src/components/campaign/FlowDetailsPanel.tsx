@@ -45,7 +45,7 @@ export default function FlowDetailsPanel({
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [renderingPreview, setRenderingPreview] = useState(false);
-  const [isPreviewActive, setIsPreviewActive] = useState(false);
+  
 
   // Extract liquid variables from HTML
   const liquidVars = useMemo(() => {
@@ -152,7 +152,6 @@ export default function FlowDetailsPanel({
       if (!resp.ok) throw new Error("Failed");
       const data = await resp.json();
       onPreviewHtml(data.rendered_html);
-      setIsPreviewActive(true);
     } catch (err) {
       console.error("Failed to render preview:", err);
     } finally {
@@ -162,7 +161,6 @@ export default function FlowDetailsPanel({
 
   const revertPreview = useCallback(() => {
     onPreviewHtml(null);
-    setIsPreviewActive(false);
     setSelectedEventId(null);
   }, [onPreviewHtml]);
 
@@ -214,10 +212,10 @@ export default function FlowDetailsPanel({
       <div className="space-y-2">
         <h3 className="text-sm font-medium">Preview with Real Data</h3>
 
-        {isPreviewActive && selectedEvent && (
+        {selectedEventId && selectedEvent && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-[11px]">
-            <span className="text-primary font-medium">Previewing with real event data</span>
-            <span className="text-muted-foreground">
+            <span className="text-primary font-medium">Previewing</span>
+            <span className="text-muted-foreground truncate">
               {selectedEvent.event_properties?.OrderId || selectedEvent.profile_email}
             </span>
             <button
@@ -225,7 +223,7 @@ export default function FlowDetailsPanel({
               className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
             >
               <RotateCcw className="w-3 h-3" />
-              Revert
+              Reset
             </button>
           </div>
         )}

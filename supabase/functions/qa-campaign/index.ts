@@ -20,7 +20,7 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
     if (authError || !user) throw new Error("Unauthorized");
 
-    const { html, subjectLine, previewText, brandId } = await req.json();
+    const { html, subjectLine, previewText, brandId, flowConfig } = await req.json();
     if (!html) throw new Error("html is required");
 
     // Get brand info for domain checking
@@ -69,8 +69,6 @@ serve(async (req) => {
       const src = srcMatch?.[1] || "unknown";
       if (!altMatch) {
         imageIssues.push({ src, issue: "Missing alt attribute" });
-      } else if (altMatch[1].trim() === "") {
-        // Empty alt is acceptable for decorative images, skip
       }
     }
 
@@ -79,7 +77,6 @@ serve(async (req) => {
     let slPtIssues: any[] = [];
 
     if (lovableApiKey) {
-      // Strip HTML tags for text-only analysis
       const textContent = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
         .replace(/<[^>]+>/g, " ")
         .replace(/&nbsp;/g, " ")
@@ -150,8 +147,14 @@ If no issues found, return empty arrays.`;
       });
     }
 
-    // 5. Compile results
-    const result = {
+    // 5. Flow/Transactional Validation (when flowConfig is provided)
+    let flowValidation: any = null;
+    if (flowConfig) {
+      flowValidation = runFlowValidation(html, flowConfig);
+    }
+
+    // 6. Compile results
+    const result: any = {
       links: {
         items: links,
         passed: links.every(l => l.status === "valid" || l.status === "placeholder"),
@@ -174,7 +177,11 @@ If no issues found, return empty arrays.`;
       overallPassed: false,
     };
 
-    result.overallPassed = result.links.passed && result.spelling.passed && result.subjectPreview.passed && result.images.passed;
+    if (flowValidation) {
+      result.flowValidation = flowValidation;
+    }
+
+    result.overallPassed = result.links.passed && result.spelling.passed && result.subjectPreview.passed && result.images.passed && (!flowValidation || flowValidation.passed);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -187,3 +194,108 @@ If no issues found, return empty arrays.`;
     });
   }
 });
+
+/** Run flow-specific validation: variable checking, syntax, best practices */
+function runFlowValidation(html: string, flowConfig: any) {
+  const allowedVars: string[] = flowConfig.liquid_variables || [];
+  const eventSchema = flowConfig.event_schema || {};
+  const issues: { type: string; severity: "error" | "warning"; message: string; variable?: string }[] = [];
+
+  // Build a set of allowed variable paths for quick lookup
+  const allowedSet = new Set(allowedVars);
+  // Also add person.* and organization.* as always-valid
+  const alwaysValid = new Set(["person.first_name", "person.last_name", "person.email", "person.full_name", "organization.unsubscribe_link", "organization.url", "organization.name"]);
+
+  // 1. Extract all {{ event.* }} and {{ person.* }} references from HTML
+  const varRegex = /\{\{\s*([^}|]+?)(?:\s*\|[^}]*)?\s*\}\}/g;
+  const usedVars = new Set<string>();
+  let m;
+  while ((m = varRegex.exec(html)) !== null) {
+    usedVars.add(m[1].trim());
+  }
+
+  // 2. Extract {% for item in event.X %} array references
+  const forRegex = /\{%\s*for\s+(\w+)\s+in\s+([^%]+?)\s*%\}/g;
+  const loopVars = new Map<string, string>(); // itemVar -> arrayPath
+  while ((m = forRegex.exec(html)) !== null) {
+    loopVars.set(m[1].trim(), m[2].trim());
+  }
+
+  // 3. Validate each used variable
+  for (const v of usedVars) {
+    // Skip always-valid vars
+    if (alwaysValid.has(v)) continue;
+
+    // Check if it's a loop item variable (e.g., item.ProductName where item comes from {% for item in event.Items %})
+    let isLoopVar = false;
+    for (const [itemVar, arrayPath] of loopVars) {
+      if (v.startsWith(itemVar + ".")) {
+        isLoopVar = true;
+        const prop = v.slice(itemVar.length + 1);
+        const arrayRef = `${arrayPath}[].${prop}`;
+        if (allowedSet.size > 0 && !allowedSet.has(arrayRef)) {
+          issues.push({ type: "unknown_variable", severity: "error", message: `Unknown loop variable: {{ ${v} }} — "${prop}" not found in ${arrayPath}[] schema`, variable: v });
+        }
+        break;
+      }
+    }
+    if (isLoopVar) continue;
+
+    // Check event.* variables against the allowlist
+    if (v.startsWith("event.")) {
+      if (allowedSet.size > 0 && !allowedSet.has(v)) {
+        issues.push({ type: "unknown_variable", severity: "error", message: `Unknown variable: {{ ${v} }} — not found in event schema`, variable: v });
+      }
+    }
+  }
+
+  // 4. Check for $extra usage (always invalid in Klaviyo Liquid)
+  if (html.includes("$extra")) {
+    issues.push({ type: "invalid_syntax", severity: "error", message: "Template uses $extra paths which Klaviyo cannot parse. Use top-level event properties instead." });
+  }
+
+  // 5. Check for unclosed control flow tags
+  const forCount = (html.match(/\{%\s*for\s/g) || []).length;
+  const endforCount = (html.match(/\{%\s*endfor\s*%\}/g) || []).length;
+  if (forCount !== endforCount) {
+    issues.push({ type: "syntax_error", severity: "error", message: `Mismatched for/endfor tags: ${forCount} {% for %} but ${endforCount} {% endfor %}` });
+  }
+
+  const ifCount = (html.match(/\{%\s*if\s/g) || []).length;
+  const endifCount = (html.match(/\{%\s*endif\s*%\}/g) || []).length;
+  if (ifCount !== endifCount) {
+    issues.push({ type: "syntax_error", severity: "error", message: `Mismatched if/endif tags: ${ifCount} {% if %} but ${endifCount} {% endif %}` });
+  }
+
+  // 6. Check for missing | default: filters on event variables
+  const noDefaultRegex = /\{\{\s*(event\.[^}|]+?)\s*\}\}/g;
+  const varsWithoutDefault: string[] = [];
+  while ((m = noDefaultRegex.exec(html)) !== null) {
+    const varPath = m[1].trim();
+    // Don't flag array paths used in for loops
+    if (!loopVars.has(varPath)) {
+      varsWithoutDefault.push(varPath);
+    }
+  }
+  if (varsWithoutDefault.length > 0) {
+    const unique = [...new Set(varsWithoutDefault)];
+    issues.push({ type: "missing_default", severity: "warning", message: `${unique.length} event variable(s) without | default: filter: ${unique.slice(0, 5).map(v => `{{ ${v} }}`).join(", ")}${unique.length > 5 ? "..." : ""}` });
+  }
+
+  // 7. Check for unsubscribe link presence (best practice)
+  if (!html.includes("unsubscribe")) {
+    issues.push({ type: "best_practice", severity: "warning", message: "No unsubscribe link found — required for marketing emails, recommended for transactional" });
+  }
+
+  // 8. Check for person.first_name personalization
+  if (!html.includes("person.first_name")) {
+    issues.push({ type: "best_practice", severity: "warning", message: "No {{ person.first_name }} personalization found — consider adding a greeting" });
+  }
+
+  return {
+    issues,
+    passed: issues.filter(i => i.severity === "error").length === 0,
+    errorCount: issues.filter(i => i.severity === "error").length,
+    warningCount: issues.filter(i => i.severity === "warning").length,
+  };
+}

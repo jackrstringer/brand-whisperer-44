@@ -10,6 +10,13 @@ import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SegmentSelector from "@/components/brand/SegmentSelector";
 
+interface FlowValidationResult {
+  issues: { type: string; severity: "error" | "warning"; message: string; variable?: string }[];
+  passed: boolean;
+  errorCount: number;
+  warningCount: number;
+}
+
 interface QAResult {
   links: {
     items: { url: string; status: string; inDomain: boolean }[];
@@ -30,6 +37,7 @@ interface QAResult {
     issues: { src: string; issue: string }[];
     passed: boolean;
   };
+  flowValidation?: FlowValidationResult;
   overallPassed: boolean;
 }
 
@@ -107,12 +115,24 @@ export default function CampaignQA() {
     if (!campaign?.html) return;
     setRunning(true);
     try {
+      // Build flow config for flow/transactional campaigns
+      let flowConfigBody = undefined;
+      if (campaign.campaign_mode === "flow" && campaign.flow_config) {
+        const fc = campaign.flow_config as any;
+        flowConfigBody = {
+          event_schema: fc.event_schema || {},
+          liquid_variables: fc.liquid_variables || [],
+          trigger_metric_name: fc.trigger_metric_name || "",
+        };
+      }
+
       const { data, error } = await supabase.functions.invoke("qa-campaign", {
         body: {
           html: campaign.html,
           subjectLine: subjectLine,
           previewText: previewText,
           brandId,
+          flowConfig: flowConfigBody,
         },
       });
       if (error || data?.error) throw new Error(data?.error || error?.message);
@@ -404,6 +424,36 @@ export default function CampaignQA() {
                   {result.images.passed && <p className="text-xs text-muted-foreground px-3 py-2">All images OK ✓</p>}
                 </CollapsibleContent>
               </Collapsible>
+
+              {/* Flow Validation */}
+              {result.flowValidation && (
+                <Collapsible defaultOpen={!result.flowValidation.passed}>
+                  <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-lg bg-card border border-border hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center gap-2">
+                      <StatusIcon passed={result.flowValidation.passed} />
+                      <span className="text-sm font-medium">Flow Validation</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {result.flowValidation.errorCount} errors, {result.flowValidation.warningCount} warnings
+                    </span>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="pt-2 space-y-1">
+                    {result.flowValidation.issues.map((issue, i) => (
+                      <div key={i} className="px-3 py-2 text-xs rounded bg-background flex items-start gap-2">
+                        <Badge variant="outline" className={`text-[9px] px-1.5 shrink-0 mt-0.5 ${
+                          issue.severity === "error" ? "border-red-500/50 text-red-400" : "border-amber-500/50 text-amber-400"
+                        }`}>
+                          {issue.severity}
+                        </Badge>
+                        <span className="text-muted-foreground">{issue.message}</span>
+                      </div>
+                    ))}
+                    {result.flowValidation.passed && result.flowValidation.warningCount === 0 && (
+                      <p className="text-xs text-muted-foreground px-3 py-2">All flow checks passed ✓</p>
+                    )}
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
             </div>
           )}
 

@@ -148,14 +148,27 @@ Deno.serve(async (req) => {
   }
 });
 
+// Internal Klaviyo metadata keys that are NOT valid Liquid variables
+const INTERNAL_KEYS = new Set(["$extra", "$attribution", "$flow", "$message", "$variation", "$timezone", "$anonymous", "$browser", "$browser_version", "$city", "$country", "$device_type", "$ip", "$latitude", "$longitude", "$os", "$platform", "$region", "$source", "$timestamp", "$timezone_offset", "extra"]);
+const ALLOWED_DOLLAR_KEYS = new Set(["$value", "$event_id"]);
+
+function isInternalKey(key: string): boolean {
+  if (INTERNAL_KEYS.has(key)) return true;
+  // Skip any $-prefixed key that isn't in the allowed set
+  if (key.startsWith("$") && !ALLOWED_DOLLAR_KEYS.has(key)) return true;
+  return false;
+}
+
 function extractLiquidVars(obj: any, prefix = "event"): string[] {
   const vars: string[] = [];
   for (const [key, value] of Object.entries(obj)) {
+    if (isInternalKey(key)) continue;
     const path = `${prefix}.${key}`;
     if (Array.isArray(value)) {
       vars.push(path);
       if (value[0] && typeof value[0] === "object") {
         for (const itemKey of Object.keys(value[0])) {
+          if (isInternalKey(itemKey)) continue;
           vars.push(`${path}[].${itemKey}`);
         }
       }
@@ -211,12 +224,19 @@ function getStandardSchemaForMetric(name: string) {
         "Categories": ["Apparel"],
         "ItemNames": ["Classic Tee", "Denim Jacket"],
         "Items": [
-          { "ProductName": "Classic Tee", "Quantity": 2, "ItemPrice": 29.00, "ImageURL": "https://store.com/img/tee.jpg", "ProductURL": "https://store.com/tee", "SKU": "TEE-001" },
-          { "ProductName": "Denim Jacket", "Quantity": 1, "ItemPrice": 66.00, "ImageURL": "https://store.com/img/jacket.jpg", "ProductURL": "https://store.com/jacket", "SKU": "JKT-001" },
+          { "ProductName": "Classic Tee", "Quantity": 2, "ItemPrice": 29.00, "ImageURL": "https://store.com/img/tee.jpg", "ProductURL": "https://store.com/tee", "SKU": "TEE-001", "Variant": "Large / Black" },
+          { "ProductName": "Denim Jacket", "Quantity": 1, "ItemPrice": 66.00, "ImageURL": "https://store.com/img/jacket.jpg", "ProductURL": "https://store.com/jacket", "SKU": "JKT-001", "Variant": "Medium / Blue" },
         ],
-        "BillingAddress": { "FirstName": "Sarah", "LastName": "Smith", "City": "Los Angeles", "Region": "CA", "Country": "US" },
+        "BillingAddress": { "FirstName": "Sarah", "LastName": "Smith", "Address1": "123 Main St", "City": "Los Angeles", "Region": "CA", "Zip": "90001", "Country": "US" },
+        "ShippingAddress": { "FirstName": "Sarah", "LastName": "Smith", "Address1": "123 Main St", "City": "Los Angeles", "Region": "CA", "Zip": "90001", "Country": "US" },
+        "Subtotal": 124.00,
+        "Tax": 9.30,
+        "Shipping": 5.99,
+        "Discount": 0,
+        "DiscountCodes": [],
+        "Currency": "USD",
       },
-      liquid_variables: ["event.$value", "event.OrderId", "event.Categories", "event.ItemNames", "event.Items", "event.Items[].ProductName", "event.Items[].Quantity", "event.Items[].ItemPrice", "event.Items[].ImageURL", "event.Items[].ProductURL", "event.Items[].SKU", "event.BillingAddress.FirstName"],
+      liquid_variables: ["event.$value", "event.OrderId", "event.Categories", "event.ItemNames", "event.Items", "event.Items[].ProductName", "event.Items[].Quantity", "event.Items[].ItemPrice", "event.Items[].ImageURL", "event.Items[].ProductURL", "event.Items[].SKU", "event.Items[].Variant", "event.BillingAddress.FirstName", "event.BillingAddress.LastName", "event.BillingAddress.City", "event.BillingAddress.Region", "event.ShippingAddress.FirstName", "event.ShippingAddress.LastName", "event.ShippingAddress.City", "event.ShippingAddress.Region", "event.Subtotal", "event.Tax", "event.Shipping", "event.Discount", "event.DiscountCodes", "event.Currency"],
     },
     "Ordered Product": {
       sample_payload: {
