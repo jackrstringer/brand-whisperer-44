@@ -1,33 +1,78 @@
 
 
-## Fix: Campaign Performance Report Generation
+## Plan: Fix Flow Email Liquid Syntax, Add Flow QA Pass, Fix Preview Switching
 
-### Problem
-Three issues causing the report to fail or appear truncated:
+### Problem Summary
 
-1. **Bug (runtime crash)**: `buildContinuationPrompt` is called with 3 arguments (`sourcePrompt, html, missingMarkers`) but the function signature only accepts 2 parameters (`existingHtml, missingMarkers`). So `missingMarkers` receives the HTML string, causing `missingMarkers.join is not a function`.
+Three issues:
 
-2. **Token limit too low**: `max_tokens: 8192` is nowhere near enough for a 5-section report. Claude Opus supports 32K output tokens — we should use that.
+1. **`$extra` paths in generated HTML**: The `extractLiquidVars` function blindly walks the real Klaviyo event payload, which includes a `$extra` property containing the raw Shopify order data. This produces variable paths like `event.$extra.line_items`, `event.$extra.total_price` — which Klaviyo's Liquid engine cannot parse. The standard Klaviyo variables use the flattened top-level keys (`event.Items`, `event.OrderId`), not `$extra`.
 
-3. **Edge function timeout**: The function runs the full pipeline synchronously before responding. Claude Opus generating 32K tokens of HTML + Perplexity competitor research can easily take 2-3 minutes, exceeding the gateway timeout. Need to use `EdgeRuntime.waitUntil()` (fire-and-forget pattern already used elsewhere in the codebase) to return immediately and let generation run in the background.
+2. **No flow/transactional QA check**: The existing `qa-campaign` function only checks links, images, spelling, and subject line length. It has no awareness of Liquid syntax validity or whether the variables used actually exist in the event schema.
 
-### Plan
+3. **Preview event switching requires "Revert" first**: `renderPreview` sets `isPreviewActive = true` after the first selection, but clicking another event still works — the issue is that the `html` prop passed to `renderPreview` is the *original* template HTML, not the currently-displayed preview. This is correct. The real UX issue is that clicking another event should just work directly without needing to revert — which it already does functionally, but the UI makes it feel like you need to revert first because of the active preview banner placement.
 
-#### 1. Fix `campaignReportGenerator.ts`
-- Fix `buildContinuationPrompt` signature to accept 3 params: `(sourcePrompt, existingHtml, missingMarkers)`
-- Increase `max_tokens` from 8192 to 32000
-- Increase the per-chunk timeout from 120s to 300s
-- Keep the continuation loop (up to 4 retries) as a safety net
+---
 
-#### 2. Make `generate-campaign-report/index.ts` async
-- Return `{ success: true }` immediately after setting status to "generating"
-- Use `EdgeRuntime.waitUntil()` to run the full pipeline in the background (same pattern as `generate-campaign-multi` and `research-brand`)
-- The frontend already polls via `useCampaignReport` — no frontend changes needed
+### Changes
 
-#### 3. Deploy and verify
-- Deploy the updated edge function
-- Test with curl to confirm it returns immediately without 500
+#### 1. Fix `extractLiquidVars` to filter out `$extra` and internal `$` properties
 
-### No frontend changes needed
-The Intelligence page, Shadow DOM rendering, polling hook, and download button all work correctly already. The only issue is the edge function crashing and timing out.
+**File**: `supabase/functions/klaviyo-fetch-schema/index.ts`
+
+- In `extractLiquidVars`, skip any key that starts with `$extra`, `$attribution`, or other internal Klaviyo `$`-prefixed keys (except `$value` and `$event_id` which are valid Liquid variables).
+- This ensures the variable contract only contains paths that Klaviyo's Liquid engine actually supports.
+
+#### 2. Enrich standard schemas with Shopify-accurate fields
+
+**File**: `supabase/functions/klaviyo-fetch-schema/index.ts`
+
+- Update the "Placed Order" standard schema to include shipping address, subtotal, tax, currency, and other commonly-used fields that Klaviyo actually supports (e.g., `event.Items[].Variant`, `event.ShippingAddress.FirstName`).
+- These are the real Klaviyo-supported top-level properties, not the raw Shopify `$extra` data.
+
+#### 3. Add flow-specific QA pass to `qa-campaign`
+
+**File**: `supabase/functions/qa-campaign/index.ts`
+
+- Accept optional `flowConfig` parameter (with `event_schema` and `liquid_variables`).
+- When present, run an additional QA section:
+  - **Variable validation**: Extract all `{{ event.* }}` and `{% for ... in event.* %}` references from the HTML. Flag any variable that doesn't exist in the `liquid_variables` allowlist.
+  - **Liquid syntax check**: Flag common syntax errors — unclosed `{% for %}` without `{% endfor %}`, missing `| default:` filters, `$extra` usage, malformed tag patterns.
+  - **Klaviyo best practice check**: Verify unsubscribe link presence for marketing flows, `person.first_name` personalization, proper `{% if %}` guards around optional blocks.
+- Return results in a new `flow_validation` section of the QA response.
+
+#### 4. Wire flow QA into the campaign editor
+
+**File**: `src/pages/CampaignEditor.tsx`
+
+- When triggering QA on a flow/transactional campaign, pass `flowConfig` (including `event_schema` and `liquid_variables`) to the `qa-campaign` edge function.
+- Display flow validation results in the QA results panel alongside existing checks.
+
+#### 5. Fix preview event switching UX
+
+**File**: `src/components/campaign/FlowDetailsPanel.tsx`
+
+- Remove the requirement to revert before selecting a new event. When clicking a different event, call `renderPreview` directly — it already uses the original `html` prop as the template source, so switching is safe.
+- Move the "Previewing with real event data" banner inline with the event list rather than above it, so it doesn't create a visual barrier.
+- Remove `setIsPreviewActive` gating — any event click should render immediately.
+
+---
+
+### Technical Details
+
+**`$extra` filtering logic** (in `extractLiquidVars`):
+```text
+Skip keys matching: $extra, $attribution, $flow, $message, $variation
+Allow keys matching: $value, $event_id
+```
+
+**Flow QA validation checks**:
+- Extract all `{{ ... }}` variable paths from HTML
+- Compare each against the `liquid_variables` allowlist
+- Flag unknown variables as errors with the specific path
+- Check for unclosed control flow tags
+- Check all variables have `| default:` filters
+
+**Preview switching fix**:
+- `renderPreview` already accepts the event and uses the original `html` — just remove the visual/UX friction that makes it seem like revert is required first.
 
