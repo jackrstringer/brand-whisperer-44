@@ -2374,7 +2374,7 @@ export default function CampaignEditor() {
   function isDynamic(el){
     var n = el;
     while(n && n !== document.body){
-      if(n.hasAttribute && (n.hasAttribute('data-liquid') || n.hasAttribute('data-liquid-loop'))) return true;
+      if(n.hasAttribute && (n.hasAttribute('data-liquid') || n.hasAttribute('data-liquid-loop') || n.hasAttribute('data-liquid-attr'))) return true;
       n = n.parentElement;
     }
     return false;
@@ -2388,7 +2388,7 @@ export default function CampaignEditor() {
     }
     return null;
   }
-  var isFlowPreview = !!document.querySelector('[data-liquid]');
+  var isFlowPreview = !!document.querySelector('[data-liquid]') || !!document.querySelector('[data-liquid-attr]');
   document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label').forEach(function(el){
     
     var hasBlock = Array.from(el.children).some(function(c){ return blocks.indexOf(c.tagName)>=0; });
@@ -2457,6 +2457,7 @@ export default function CampaignEditor() {
     clone.querySelectorAll('.img-swap-arrow,.img-swap-cats').forEach(function(el){ el.remove(); });
     clone.querySelectorAll('.img-selected').forEach(function(el){ el.classList.remove('img-selected'); });
     clone.querySelectorAll('[data-liquid-protected]').forEach(function(el){ el.removeAttribute('data-liquid-protected'); });
+    clone.querySelectorAll('[data-liquid-attr]').forEach(function(el){ el.removeAttribute('data-liquid-attr'); });
     clone.querySelectorAll('style').forEach(function(s){
       if(s.textContent && (s.textContent.indexOf('[contenteditable]')>=0 || s.textContent.indexOf('section-drag')>=0 || s.textContent.indexOf('.ctx-menu')>=0 || s.textContent.indexOf('.ftb')>=0)) s.remove();
     });

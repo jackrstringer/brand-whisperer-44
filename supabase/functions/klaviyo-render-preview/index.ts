@@ -41,28 +41,61 @@ function remapDollarKeys(obj: any): any {
  * We skip variables that are already inside a data-liquid span (idempotent).
  */
 function injectLiquidMarkers(html: string): string {
-  // 1. Mark {{ variable }} expressions (not inside existing data-liquid spans)
-  // Match {{ path | filters }} but not {%
-  let result = html.replace(
-    /\{\{\s*([^}|]+?)(?:\s*\|[^}]*)?\s*\}\}/g,
-    (match, varPath) => {
-      const path = varPath.trim();
-      // Skip if already wrapped
-      return `<span data-liquid="${path}">${match}</span>`;
-    }
-  );
+  // We must ONLY wrap {{ }} that appear in TEXT CONTENT (between > and <),
+  // never inside HTML attributes (between < and >). A naive global regex
+  // breaks src="{{ url }}", href="{{ link }}", etc.
 
-  // 2. Mark {% for item in array %} loops
-  // We wrap the loop body in a data-liquid-loop span so the editor can propagate styles
+  // Strategy: split the HTML into segments of "inside tag" vs "text content",
+  // and only inject markers in text content segments.
+  let result = "";
+  let i = 0;
+  while (i < html.length) {
+    if (html[i] === "<") {
+      // Inside an HTML tag — copy verbatim until we hit >
+      const closeIdx = html.indexOf(">", i);
+      if (closeIdx === -1) {
+        result += html.slice(i);
+        break;
+      }
+      let tagContent = html.slice(i, closeIdx + 1);
+      // If this tag has {{ }} in its attributes (e.g. href, src),
+      // add a data-liquid-attr marker so the iframe can detect it as dynamic
+      if (/\{\{[^}]+\}\}/.test(tagContent) && /^<[a-zA-Z]/.test(tagContent)) {
+        // Add data-liquid-attr to the opening tag
+        tagContent = tagContent.replace(/^(<[a-zA-Z][^\s>]*)/, '$1 data-liquid-attr="true"');
+      }
+      result += tagContent;
+      i = closeIdx + 1;
+    } else {
+      // Text content — find next < or end
+      const nextTag = html.indexOf("<", i);
+      const textEnd = nextTag === -1 ? html.length : nextTag;
+      let textSegment = html.slice(i, textEnd);
+
+      // Wrap {{ variable }} expressions in this text segment
+      textSegment = textSegment.replace(
+        /\{\{\s*([^}|]+?)(?:\s*\|[^}]*)?\s*\}\}/g,
+        (_match, varPath) => {
+          const path = varPath.trim();
+          return `<span data-liquid="${path}">${_match}</span>`;
+        }
+      );
+
+      result += textSegment;
+      i = textEnd;
+    }
+  }
+
+  // Mark {% for %} loop bodies (these are always in text content already,
+  // but we do a second pass for the loop wrappers)
   result = result.replace(
     /(\{%[-\s]*for\s+(\w+)\s+in\s+([^%]+?)\s*[-]?%\})/g,
-    (match, fullTag, loopVar, arrayPath) => {
+    (_match, fullTag, _loopVar, arrayPath) => {
       const cleanPath = arrayPath.trim();
-      return `${fullTag}<span data-liquid-loop="${cleanPath}" data-liquid-var="${loopVar}" style="display:contents">`;
+      return `${fullTag}<span data-liquid-loop="${cleanPath}" data-liquid-var="${_loopVar}" style="display:contents">`;
     }
   );
 
-  // Close the loop wrapper before {% endfor %}
   result = result.replace(
     /(\{%[-\s]*endfor\s*[-]?%\})/g,
     '</span>$1'
