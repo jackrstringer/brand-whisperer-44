@@ -1115,5 +1115,77 @@ Use the above JSON to understand the exact data structure. Rules:
   // Unified finalization
   html = finalizeCampaignHtml(html);
 
+  // === KLAVIYO TEMPLATE VALIDATION (flow emails only) ===
+  if (campaignMode === "flow" && brandId) {
+    let validationHtml = html;
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const validationResp = await fetch(
+          `${Deno.env.get("SUPABASE_URL")}/functions/v1/klaviyo-validate-template`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            },
+            body: JSON.stringify({ brand_id: brandId, html: validationHtml }),
+          },
+        );
+
+        const validation = await validationResp.json();
+
+        if (validation.valid || validation.skipped) {
+          html = validationHtml;
+          console.log(`[klaviyo-validate] Template valid on attempt ${attempt + 1}`);
+          break;
+        }
+
+        console.log(`[klaviyo-validate] Attempt ${attempt + 1} failed: ${validation.error}`);
+
+        if (attempt < 2) {
+          // Ask Claude to fix the specific Klaviyo error
+          const fixResp = await callAnthropic(
+            {
+              model: "claude-sonnet-4-6-20251101",
+              max_tokens: 16384,
+              system: `You are an expert Klaviyo email developer. Fix the Liquid template error below.
+Return ONLY the corrected complete HTML — no explanation, no markdown fences.
+CRITICAL: Klaviyo uses Django templates, not Shopify Liquid.
+- Use {% elif %} not {% elsif %}
+- Never use | default: '' (empty string)
+- Never chain | default: after | date:
+- Use {% if not %} not {% unless %}`,
+              messages: [
+                {
+                  role: "user",
+                  content: `Klaviyo rejected this template with error: "${validation.error}"\n\nFix the error and return the complete corrected HTML:\n\n${validationHtml}`,
+                },
+              ],
+            },
+            ANTHROPIC_API_KEY,
+          );
+
+          if (fixResp.ok) {
+            const fixResult = await fixResp.json();
+            let fixedHtml = fixResult.content?.[0]?.text || validationHtml;
+            fixedHtml = fixedHtml
+              .replace(/^```html?\s*\n?/i, "")
+              .replace(/\n?```\s*$/i, "")
+              .trim();
+            fixedHtml = finalizeCampaignHtml(fixedHtml);
+            validationHtml = fixedHtml;
+          } else {
+            console.warn("[klaviyo-validate] Claude fix call failed:", fixResp.status);
+            break;
+          }
+        }
+      } catch (valErr) {
+        console.warn("[klaviyo-validate] Validation loop error, using current HTML:", valErr);
+        break;
+      }
+    }
+  }
+
   return { html };
 }
