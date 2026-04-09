@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
       access_key: apiKey,
       html: html,
       viewport_width: 390,
-      viewport_height: 7500,
+      viewport_height: 10000,
       full_page: true,
       format: "png",
       block_ads: true,
