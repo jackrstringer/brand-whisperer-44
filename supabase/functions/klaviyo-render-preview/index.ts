@@ -1,9 +1,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { Liquid } from "https://esm.sh/liquidjs@10";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const engine = new Liquid({ strictVariables: false, strictFilters: false });
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -12,9 +15,7 @@ Deno.serve(async (req) => {
     const { html, event_properties, profile_name, profile_email } = await req.json();
     if (!html) throw new Error("html is required");
 
-    // Simple Liquid-like substitution (without full liquidjs dependency)
-    let rendered = html;
-    const context: Record<string, any> = {
+    const context = {
       event: event_properties || {},
       person: {
         first_name: profile_name?.split(" ")[0] || "there",
@@ -26,43 +27,7 @@ Deno.serve(async (req) => {
       },
     };
 
-    // Replace {{ variable | default: 'fallback' }} patterns
-    rendered = rendered.replace(/\{\{\s*([^}|]+?)(?:\s*\|\s*default:\s*['"]([^'"]*)['"]\s*)?\s*\}\}/g, (
-      _match: string, path: string, defaultVal: string
-    ) => {
-      const value = resolvePath(context, path.trim());
-      if (value !== undefined && value !== null && value !== "") return String(value);
-      return defaultVal || "";
-    });
-
-    // Handle {% for item in event.Items %} ... {% endfor %} loops
-    rendered = rendered.replace(
-      /\{%\s*for\s+(\w+)\s+in\s+([^%]+?)\s*%\}([\s\S]*?)\{%\s*endfor\s*%\}/g,
-      (_match: string, itemVar: string, arrayPath: string, body: string) => {
-        const arr = resolvePath(context, arrayPath.trim());
-        if (!Array.isArray(arr)) return "";
-        return arr.map((item: any) => {
-          let result = body;
-          // Replace {{ itemVar.prop }} patterns
-          result = result.replace(/\{\{\s*([^}|]+?)(?:\s*\|\s*default:\s*['"]([^'"]*)['"]\s*)?\s*\}\}/g, (
-            _m: string, p: string, def: string
-          ) => {
-            const trimmed = p.trim();
-            if (trimmed.startsWith(itemVar + ".")) {
-              const subPath = trimmed.slice(itemVar.length + 1);
-              const val = resolvePath(item, subPath);
-              if (val !== undefined && val !== null && val !== "") return String(val);
-              return def || "";
-            }
-            // Fall through to main context
-            const val = resolvePath(context, trimmed);
-            if (val !== undefined && val !== null && val !== "") return String(val);
-            return def || "";
-          });
-          return result;
-        }).join("");
-      }
-    );
+    const rendered = await engine.parseAndRender(html, context);
 
     return new Response(JSON.stringify({ rendered_html: rendered }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -75,13 +40,3 @@ Deno.serve(async (req) => {
     });
   }
 });
-
-function resolvePath(obj: any, path: string): any {
-  const parts = path.split(".");
-  let current = obj;
-  for (const part of parts) {
-    if (current === null || current === undefined) return undefined;
-    current = current[part];
-  }
-  return current;
-}
