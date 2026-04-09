@@ -937,19 +937,24 @@ ${UNIVERSAL_EMAIL_RULES}`;
     if (flowNotes) flowDetails += `\n\n${flowNotes}`;
 
     flowDetails += `\n\n═══ REAL EVENT DATA — use these exact paths in your Liquid template ═══
+Note: Dollar-sign prefixed keys like $extra have been remapped to clean names (extra, value, event_id).
 ${JSON.stringify(eventSchema, null, 2)}
 
 Use the above JSON to understand the exact data structure. Rules:
 - Top-level keys: {{ event.KeyName }}
-- The extra object: {{ event.extra.field_name }}
+- The extra object contains the full Shopify order: {{ event.extra.field_name }}
 - Line items loop: {%- for line_item in event.extra.line_items -%}...{%- endfor -%}
-- Product image: {{ line_item.image }}
+- Product image: {{ line_item.product.images[0].src }} (nested under product)
 - Product name: {{ line_item.name }}
 - Product price: {{ line_item.price }}
 - Shipping address: {{ event.extra.shipping_address.first_name }}
+- Billing address: {{ event.extra.billing_address.first_name }}
 - Order number: {{ event.extra.order_number }}
+- Order total: {{ event.extra.total_price }}
+- Order value (top-level): {{ event.value }}
 - Always add | default: '' to every variable
 - Use exactly the property names shown in the JSON above — do not invent paths
+- Do NOT use $-prefixed keys in Liquid (e.g. use event.extra NOT event.$extra)
 ═══ END EVENT DATA ═══`;
     flowUserContent.push({ type: "text", text: flowDetails });
 
