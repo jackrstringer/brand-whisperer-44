@@ -102,7 +102,7 @@ The report is organized into exactly five sections. Each section is a full-width
 **1. Top 10 Campaigns Leaderboard**
 - A ranked list of the top 10 campaigns by normalized impact score (highest first)
 - Each row: Rank | Campaign name/subject line | Send date | Delivered | Open rate | Click rate | Revenue | Normalized impact score (as colored badge)
-- Clicking a row in the leaderboard scrolls the page to that campaign's detail card in Section 2 (use anchor links)
+- Rows are static — no anchor links or click behavior
 - Campaigns below 500 delivered are excluded
 - Use horizontal CSS bar chart inside each row to visually represent the normalized score (bar width = normalized score as a percentage of 100px max width)
 
@@ -321,52 +321,63 @@ You are a senior email strategist briefing a sophisticated DTC brand operator. T
 
 ### Overall Structure
 
-- Single self-contained HTML file with all CSS embedded in a \`<style>\` tag in the \`<head>\`
+- Output ONLY a \`<style>\` block followed by content markup — NO \`<html>\`, \`<head>\`, or \`<body>\` tags
+- The report is rendered inside a Shadow DOM in a React application
 - No external dependencies — no CDN links, no external fonts, no JavaScript libraries
-- Vanilla JavaScript only, embedded in a \`<script>\` tag at the end of the \`<body>\`
-- Must render correctly in an iframe and as a PDF export
-- File must be fully functional when opened as a standalone local file (no server required)
+- All styles are naturally scoped by the Shadow DOM container
+- The report is a long, static, scrollable document — like a beautifully typeset PDF
 
-### Color Scheme
+### Color Scheme — Monochrome Minimalism
 
-- If brand colors are available in the dataset: inherit the primary brand color as the accent color
-- Default color scheme (use when no brand colors are available):
-  - Header background: \`#0f1523\` (dark navy)
-  - Header text: \`#ffffff\`
-  - Page background: \`#f5f6fa\`
-  - Card background: \`#ffffff\`
-  - Card border: \`#e5e7eb\`
-  - Accent color: \`#6366f1\` (indigo)
-  - Accent hover: \`#4f46e5\`
-  - Body text: \`#1f2937\`
-  - Muted text: \`#6b7280\`
-  - Section header background: \`#f9fafb\`
-  - Section header border: \`#e5e7eb\`
+The report MUST use this exact monochrome palette. Do NOT use any color accents (no indigo, no blue, no colored backgrounds). The only exception is the impact score tier badges.
+
+- Page background: \`#FAFAFA\`
+- Card/section background: \`#FFFFFF\`
+- Card border: \`#E8E8E8\`
+- Primary text (headings, bold data): \`#2B2B2B\`
+- Secondary text (body): \`#686868\`
+- Muted text (labels, captions): \`#9B9B9B\`
+- Dividers/lines: \`#CDCDCD\`
+- Light fill (bar chart backgrounds, alternating rows): \`#F2F2F2\`
+- Section header: plain text on white — no colored header bars, no background fills on section headers
 
 ### Impact Score Badge Colors
 
-Apply these classes/styles based on the campaign's normalized score:
-- **80–100:** Background \`#dcfce7\`, text \`#15803d\`, border \`#86efac\` — GREEN (Elite)
-- **60–79:** Background \`#dbeafe\`, text \`#1d4ed8\`, border \`#93c5fd\` — BLUE (Strong)
-- **40–59:** Background \`#fef9c3\`, text \`#a16207\`, border \`#fde047\` — YELLOW (Average)
-- **Below 40:** Background \`#fee2e2\`, text \`#dc2626\`, border \`#fca5a5\` — RED (Weak)
+These are the ONLY colored elements in the entire report:
+- **80–100:** Background \`#dcfce7\`, text \`#15803d\` — GREEN (Elite)
+- **60–79:** Background \`#F2F2F2\`, text \`#2B2B2B\` — STRONG (displayed with a subtle border \`#CDCDCD\`)
+- **40–59:** Background \`#fef9c3\`, text \`#a16207\` — YELLOW (Average)
+- **Below 40:** Background \`#fee2e2\`, text \`#dc2626\` — RED (Weak)
 
 Display format: "\`82\` / 100" with the number in a larger font weight. Include a label below: "Elite" / "Strong" / "Average" / "Weak".
 
 ### Sale/Non-Sale Badge
 
-- **Promotional:** Background \`#fef3c7\`, text \`#d97706\` — amber, label "PROMO"
-- **Non-Sale:** Background \`#ede9fe\`, text \`#7c3aed\` — purple, label "ORGANIC"
+- **Promotional:** Background \`#F2F2F2\`, text \`#686868\`, border \`#E8E8E8\`, label "PROMO"
+- **Non-Sale:** Background \`#2B2B2B\`, text \`#FFFFFF\`, label "ORGANIC"
 
 ### Layout Standards
 
-- Max content width: 1200px, centered
-- Section blocks: full-width colored header bar + content padding 32px
-- Cards: border-radius 12px, box-shadow \`0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,-0.06)\`
+- Max content width: 900px, centered with auto margins
+- Generous whitespace: section padding 48px vertical, 0 horizontal
+- Section separators: a single 1px \`#E8E8E8\` line between major sections
+- Cards: border-radius 12px, border 1px solid \`#E8E8E8\`, NO box-shadows anywhere in the report
 - Stat cards: display as a 4-column grid on desktop, 2-column on tablet, 1-column on mobile
-- Campaign detail cards: full width, with a left accent border colored by impact score tier
+- Campaign detail cards: full width, with a subtle left border (3px solid \`#2B2B2B\` for top performers, \`#CDCDCD\` for others)
 - Responsive breakpoints: 768px (tablet), 480px (mobile)
-- Font stack: \`-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif\`
+
+### Typography
+
+- Headings (h1, h2, h3): \`'Instrument Serif', Georgia, serif\` — weight 400, letter-spacing -0.02em
+- Body text: \`'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif\`
+- h1 (report title): 36px
+- h2 (section titles): 28px
+- h3 (subsection titles): 20px
+- Body text: 15px, line-height 1.7, color \`#686868\`
+- Data values (metrics, scores): 14px, font-weight 600, color \`#2B2B2B\`, font-family DM Sans
+- Labels/captions: 12px, color \`#9B9B9B\`, text-transform uppercase, letter-spacing 0.05em
+- Subject lines in detail cards: 16px, font-weight 500, color \`#2B2B2B\`
+- Import fonts at the top of the \`<style>\` block: \`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Instrument+Serif&display=swap');\`
 
 ### NO JavaScript — Static Only
 
@@ -412,8 +423,8 @@ Include \`@media print\` CSS rules:
 - Leaderboard table: hide "Preview Text" and "Revenue per Recipient" columns at 768px, further collapse at 480px
 - Campaign detail cards: stack all metric rows vertically at 480px
 - Bar charts: maintain percentage widths (they scale naturally)
-- Section nav: convert to horizontal scroll at 480px (no wrapping)
-- Touch targets: minimum 44x44px for all interactive elements
+- All text must wrap cleanly at narrow widths
+- Generous tap targets for readability on small screens
 
 ---
 
@@ -463,7 +474,7 @@ If \`total_revenue\` is null or zero for a campaign, set revenue_per_recipient t
 
 ## SECTION 8: METHODOLOGY FOOTNOTE
 
-At the bottom of the HTML report, include a collapsible "Methodology" section (collapsed by default, expandable with a click) containing:
+At the bottom of the HTML report, include a "Methodology" section (always visible, not collapsible) containing:
 
 1. **Impact score formula** — display the full formula with variable definitions
 2. **Threshold note** — "Campaigns with fewer than 500 delivered recipients were excluded from all rankings and impact score calculations."
@@ -488,7 +499,7 @@ Before finalizing the report, verify:
 - [ ] All 5 recommendations reference specific data points from this report
 - [ ] Competitor disclaimer appears as styled box at top of Section 4
 - [ ] All competitor estimates labeled as estimated
-- [ ] Methodology footnote present and collapsible
+- [ ] Methodology footnote present and visible
 - [ ] HTML is self-contained (no external dependencies)
 - [ ] Impact score badges use correct color tiers
 - [ ] @media print CSS included

@@ -190,13 +190,15 @@ async function generateReportHtml(
         max_tokens: 8192,
         system: `You are a senior email marketing strategist generating a comprehensive performance analysis report. You have access to the CAMPAIGN_REPORT_SKILL which defines exactly how to structure this report, score campaigns, and write insights. Follow it precisely. Output only valid, complete HTML — no markdown, no explanation.
 
-CRITICAL RENDERING CONSTRAINTS — the report will be rendered inside a Shadow DOM in a React application, NOT as a standalone HTML page:
+CRITICAL RENDERING CONSTRAINTS — the report will be rendered inside a Shadow DOM in a React application:
 - Do NOT include <html>, <head>, or <body> tags. Output only a <style> block followed by the content markup.
+- Do NOT include any <script> tags, onclick handlers, or JavaScript of any kind.
+- Do NOT include any anchor links (href="#..."), sticky/fixed positioning, or interactive elements.
 - Do NOT include any window.print() button or download button — the parent app provides those.
-- Do NOT use fixed or sticky positioning — everything must be normal document flow.
-- For any in-page anchor links, use this pattern: <a href="#section-id" onclick="this.getRootNode().getElementById('section-id').scrollIntoView({behavior:'smooth'});return false;">
-- All styles must be scoped within the output (they will be naturally scoped by Shadow DOM).
-- The report should read like a long-form PDF document with clear section breaks.`,
+- The report is a long, static, beautifully typeset document — like a PDF. No interaction required.
+- All styles must be scoped within the output (naturally scoped by Shadow DOM).
+- Import Google Fonts (DM Sans + Instrument Serif) via @import at the top of the <style> block.
+- Use the monochrome color palette defined in the skill document. No colorful accents except impact score badges.`,
         messages: [
           {
             role: 'user',
