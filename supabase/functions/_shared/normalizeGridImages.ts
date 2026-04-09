@@ -4,6 +4,9 @@
  *
  * Uses depth-aware parsing to only process direct child <td> cells of a <tr>,
  * preventing wrapper rows from being misidentified as grids.
+ *
+ * Handles both simple grid cells (td > img) and card-style grid cells
+ * (td > nested table with img + label) which are common in "shop by category" grids.
  */
 
 const EMAIL_WIDTH = 390;
@@ -138,13 +141,53 @@ function findDirectChildTds(trInnerHtml: string): string[] {
 }
 
 /**
- * Check if a <td> contains a nested <table> (meaning it's a layout wrapper, not a grid cell).
+ * Check if a <td> contains a nested <table> (meaning it's a layout wrapper, not a simple grid cell).
  */
 function tdContainsNestedTable(tdHtml: string): boolean {
-  // Look for <table inside the td content (after the opening <td> tag)
   const innerStart = tdHtml.indexOf(">") + 1;
   const inner = tdHtml.substring(innerStart);
   return /<table\b/i.test(inner);
+}
+
+/**
+ * Check if a <td> contains a "card-style" nested table:
+ * a simple nested table that has an image plus optional label text.
+ * These are common in "shop by category" grids and should be treated as grid cells.
+ * 
+ * A card-style table typically has 1-3 rows, no deeply nested tables inside,
+ * and contains exactly one <img>.
+ */
+function tdContainsCardTable(tdHtml: string): boolean {
+  const innerStart = tdHtml.indexOf(">") + 1;
+  const inner = tdHtml.substring(innerStart);
+
+  // Must contain a nested table
+  if (!/<table\b/i.test(inner)) return false;
+
+  // Must contain an image somewhere
+  if (!/<img\b/i.test(inner)) return false;
+
+  // Count nested tables — card cells should have exactly 1 nested table
+  const tableCount = (inner.match(/<table\b/gi) || []).length;
+  if (tableCount > 2) return false; // Too complex for a card
+
+  // Count <tr> rows inside the nested table — cards have 1-3 rows
+  const trCount = (inner.match(/<tr\b/gi) || []).length;
+  if (trCount > 4) return false; // Too many rows, likely a layout wrapper
+
+  // Should have exactly 1 image (the card image)
+  const imgCount = (inner.match(/<img\b/gi) || []).length;
+  if (imgCount > 2) return false; // Multiple images suggest it's not a simple card
+
+  return true;
+}
+
+/**
+ * Find the first <img> tag inside a td, even if nested inside tables.
+ */
+function findFirstImgInTd(tdHtml: string): string | null {
+  const match = tdHtml.match(/<img\b[^>]*>/i);
+  return match ? match[0] : null;
 }
 
 /**
@@ -197,24 +240,31 @@ export function normalizeGridImages(html: string): string {
     // Use depth-aware parsing to find only DIRECT child <td> elements
     const directTds = findDirectChildTds(innerHtml);
 
-    // Filter to only <td>s that contain an <img> tag AND do not contain nested tables
-    const imageTds = directTds.filter(
-      (td) => /<img\b/i.test(td) && !tdContainsNestedTable(td)
-    );
+    // Filter to <td>s that contain images — either simple cells or card-style nested tables
+    const imageTds = directTds.filter((td) => {
+      const hasImg = /<img\b/i.test(td);
+      if (!hasImg) return false;
 
-    // Must be a real grid: 2-4 direct image cells, no nested tables
+      const hasNestedTable = tdContainsNestedTable(td);
+      if (!hasNestedTable) return true; // Simple cell with image — always a grid candidate
+
+      // Has nested table — only treat as grid cell if it's a card-style table
+      return tdContainsCardTable(td);
+    });
+
+    // Must be a real grid: 2-4 direct image cells
     if (imageTds.length < MIN_GRID_COLUMNS || imageTds.length > MAX_GRID_COLUMNS) {
       continue;
     }
 
     const columns = imageTds.length;
 
-    // Extract img tags only from the direct image cells (not from nested content)
+    // Extract img tags from the grid cells (including from nested card tables)
     const images: ParsedImage[] = [];
     for (const td of imageTds) {
-      const imgMatch = td.match(/<img\b[^>]*>/i);
-      if (imgMatch) {
-        images.push(parseImgTag(imgMatch[0]));
+      const imgTag = findFirstImgInTd(td);
+      if (imgTag) {
+        images.push(parseImgTag(imgTag));
       }
     }
 
@@ -362,13 +412,27 @@ export function normalizeGridImages(html: string): string {
     for (const tdFull of imageTds) {
       if (!normalizedTr.includes(tdFull)) continue;
       let normalizedTd = tdFull;
-      if (/\bwidth\s*=/i.test(normalizedTd)) {
-        normalizedTd = normalizedTd.replace(
-          /\bwidth\s*=\s*["']?\d+["']?/i,
-          `width="${targetW}"`
-        );
+      
+      // Update width attribute on the <td> opening tag only (not nested elements)
+      const tdOpenMatch = normalizedTd.match(/^<td\b[^>]*>/i);
+      if (tdOpenMatch) {
+        let tdOpen = tdOpenMatch[0];
+        const originalTdOpen = tdOpen;
+        
+        if (/\bwidth\s*=/i.test(tdOpen)) {
+          tdOpen = tdOpen.replace(
+            /\bwidth\s*=\s*["']?\d+["']?/i,
+            `width="${targetW}"`
+          );
+        }
+        // Update inline style width on the td tag
+        tdOpen = tdOpen.replace(/width:\s*\d+px/gi, `width:${targetW}px`);
+        
+        if (tdOpen !== originalTdOpen) {
+          normalizedTd = normalizedTd.replace(originalTdOpen, tdOpen);
+        }
       }
-      normalizedTd = normalizedTd.replace(/width:\s*\d+px/gi, `width:${targetW}px`);
+      
       normalizedTr = normalizedTr.replace(tdFull, normalizedTd);
     }
 
