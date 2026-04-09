@@ -56,7 +56,7 @@ function formatAddress(addr: any): string {
 }
 
 /* ── Event Summary Card ────────────────────────────────── */
-function EventSummaryCard({ event, showRaw, onToggleRaw }: { event: PreviewEvent; showRaw: boolean; onToggleRaw: () => void }) {
+function EventSummaryCard({ event, showRaw, onToggleRaw, onInsertField }: { event: PreviewEvent; showRaw: boolean; onToggleRaw: () => void; onInsertField?: (path: string) => void }) {
   const props = event.event_properties || {};
   const extra = props.extra || props.$extra || {};
   const lineItems: any[] = extra.line_items || props.Items || [];
