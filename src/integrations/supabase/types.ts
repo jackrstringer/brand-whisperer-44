@@ -303,6 +303,41 @@ export type Database = {
         }
         Relationships: []
       }
+      campaign_reports: {
+        Row: {
+          brand_id: string
+          campaign_count: number | null
+          created_at: string | null
+          date_range_days: number | null
+          id: string
+          report_html: string | null
+        }
+        Insert: {
+          brand_id: string
+          campaign_count?: number | null
+          created_at?: string | null
+          date_range_days?: number | null
+          id?: string
+          report_html?: string | null
+        }
+        Update: {
+          brand_id?: string
+          campaign_count?: number | null
+          created_at?: string | null
+          date_range_days?: number | null
+          id?: string
+          report_html?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_reports_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaigns: {
         Row: {
           brand_id: string
