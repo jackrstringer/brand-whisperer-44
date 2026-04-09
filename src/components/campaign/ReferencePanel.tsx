@@ -119,6 +119,7 @@ interface ReferencePanelProps {
   campaignId: string;
   selectedReferences: SelectedReference[];
   onSelectReferences: (refs: SelectedReference[]) => void;
+  campaignMode?: "campaign" | "flow";
 }
 
 const MODE_CONFIG: Record<ReferenceMode, { label: string; strength: number; description: string }> = {
@@ -133,6 +134,7 @@ export default function ReferencePanel({
   campaignId,
   selectedReferences,
   onSelectReferences,
+  campaignMode = "campaign",
 }: ReferencePanelProps) {
   const { user } = useAuth();
   const [tab, setTab] = useState<TabValue>("library");
