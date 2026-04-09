@@ -46,6 +46,12 @@ Deno.serve(async (req) => {
 
     console.log(`[multi] Starting ${variantCount}-variant generation for campaign ${campaignId} (${multiRefMode ? `${references.length} references` : "creative seeds"})`);
 
+    // Log generation start
+    await logGenEvent(supabase, campaignId, "generation_start", {
+      status: "started",
+      payload: { variant_count: variantCount, multi_ref_mode: multiRefMode, brief: body.brief?.slice(0, 200), goal: body.goal, campaign_mode: body.campaignMode },
+    });
+
     // Mark as generating
     await supabase.from("campaigns").update({
       status: "generating",
