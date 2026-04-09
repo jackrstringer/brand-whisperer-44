@@ -230,17 +230,17 @@ IMAGES:
 
 GRID LAYOUT — REQUIRED STRUCTURE:
 - Multi-column image grids MUST use direct <td> siblings inside a single <tr>. Never use display:inline-block tables side by side.
-- Correct 2-column example:
+- Correct 2-column example (390px viewport, 4px gutter → 193px per cell):
   <tr>
-    <td width="295" valign="top" style="padding:0 2px 0 0;">
-      <img src="..." width="295" height="295" style="display:block;width:100%;height:295px;">
+    <td width="193" valign="top" style="padding:0 2px 0 0;">
+      <img src="..." width="193" height="193" style="display:block;width:100%;height:193px;">
     </td>
-    <td width="295" valign="top" style="padding:0 0 0 2px;">
-      <img src="..." width="295" height="295" style="display:block;width:100%;height:295px;">
+    <td width="193" valign="top" style="padding:0 0 0 2px;">
+      <img src="..." width="193" height="193" style="display:block;width:100%;height:193px;">
     </td>
   </tr>
 - Never use: <table align="left" style="display:inline-block"> as a column technique. This stacks vertically at any viewport narrower than the combined column widths.
-- Never add mobile-grid-col or any CSS class that sets display:block on grid columns. The email renders at 470px — mobile stacking rules will fire and destroy the layout.
+- Never add mobile-grid-col or any CSS class that sets display:block on grid columns. The email renders at 390px — mobile stacking rules will fire and destroy the layout.
 
 CONTRAST CARDS:
 - Never full-width color blocks cutting the email in half
@@ -302,13 +302,13 @@ Technical requirements — apply these always:
 
 GRID LAYOUT — REQUIRED STRUCTURE:
 - Multi-column image grids MUST use direct <td> siblings inside a single <tr>. Never use display:inline-block tables side by side.
-- Correct 2-column example:
+- Correct 2-column example (390px viewport, 4px gutter → 193px per cell):
   <tr>
-    <td width="295" valign="top" style="padding:0 2px 0 0;">
-      <img src="..." width="295" height="295" style="display:block;width:100%;height:295px;">
+    <td width="193" valign="top" style="padding:0 2px 0 0;">
+      <img src="..." width="193" height="193" style="display:block;width:100%;height:193px;">
     </td>
-    <td width="295" valign="top" style="padding:0 0 0 2px;">
-      <img src="..." width="295" height="295" style="display:block;width:100%;height:295px;">
+    <td width="193" valign="top" style="padding:0 0 0 2px;">
+      <img src="..." width="193" height="193" style="display:block;width:100%;height:193px;">
     </td>
   </tr>
 - Never use: <table align="left" style="display:inline-block"> as a column technique.
@@ -820,20 +820,20 @@ CRITICAL GRID RULES:
 === OBJECT-FIT RULE (CRITICAL — like Figma's "Fill" mode) ===
 When placing ANY image into a layout slot, you MUST think like a designer using Figma's "Fill" mode:
 1. DETERMINE the slot's aspect ratio from the reference (square = 1:1, wide banner ≈ 2.4:1, portrait ≈ 2:3, etc.)
-2. CALCULATE pixel dimensions for a 470px-wide email viewport:
-   - Full-width hero: w-470 (height varies by reference)
-   - 2-column grid (with 10px gap): each slot ≈ w-220
-   - 3-column grid: each slot ≈ w-145
-   - Single centered product: w-300 to w-400
+2. CALCULATE pixel dimensions for a 390px-wide email viewport (Gmail mobile, iPhone 14/15):
+   - Full-width hero: w-390 (height varies by reference)
+   - 2-column grid (with 4px gutter): each slot = w-193
+   - 3-column grid (with 4px gutters): each slot = w-128
+   - Single centered product: w-260 to w-340
 3. APPLY fo-auto smart crop: append ?tr=w-{W},h-{H},fo-auto to the ik.imagekit.io URL
 4. SET matching width and height attributes on the <img> tag AND its container <td>
 
 Common slot patterns to recognize in references:
-- 2×2 square grid → each image: ?tr=w-220,h-220,fo-auto
-- Full-width hero banner → ?tr=w-470,h-300,fo-auto (or taller if reference is tall)
-- 2-column product cards → ?tr=w-220,h-280,fo-auto
-- Single centered product → ?tr=w-300,h-400,fo-auto
-- Wide lifestyle banner → ?tr=w-470,h-200,fo-auto
+- 2×2 square grid → each image: ?tr=w-193,h-193,fo-auto
+- Full-width hero banner → ?tr=w-390,h-250,fo-auto (or taller if reference is tall)
+- 2-column product cards → ?tr=w-193,h-240,fo-auto
+- Single centered product → ?tr=w-260,h-350,fo-auto
+- Wide lifestyle banner → ?tr=w-390,h-165,fo-auto
 
 EVERY image in a grid MUST use IDENTICAL transform dimensions. No exceptions.
 If you place 4 images in a 2×2 grid, ALL 4 must have the exact same ?tr= params.
