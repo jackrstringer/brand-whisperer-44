@@ -98,6 +98,8 @@ export default function CampaignEditor() {
   const { brandId, campaignId } = useParams<{ brandId: string; campaignId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isAdmin } = useIsAdmin();
+  const [showTimeline, setShowTimeline] = useState(false);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null); // temporary hover preview
   const [selectedReferences, setSelectedReferences] = useState<SelectedReference[]>([]);
