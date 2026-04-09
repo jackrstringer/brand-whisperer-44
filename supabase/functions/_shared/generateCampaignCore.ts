@@ -1055,8 +1055,9 @@ Use the above JSON to understand the exact data structure. Rules:
 
   // === PASS 1: Generate ===
   const pass1Start = Date.now();
+  const genEventKey = `v${variantIdx}_claude_generate`;
   await logGenEvent(supabase, campaignId, "claude_generate", {
-    status: "started",
+    status: "started", run_id: runId, event_key: genEventKey,
     payload: { model: GENERATION_MODEL, image_count: imageBlocks.length, reference_mode: referenceMode, campaign_mode: campaignMode },
   });
 
