@@ -499,7 +499,7 @@ Before finalizing the report, verify:
 - [ ] All 5 recommendations reference specific data points from this report
 - [ ] Competitor disclaimer appears as styled box at top of Section 4
 - [ ] All competitor estimates labeled as estimated
-- [ ] Methodology footnote present and collapsible
+- [ ] Methodology footnote present and visible
 - [ ] HTML is self-contained (no external dependencies)
 - [ ] Impact score badges use correct color tiers
 - [ ] @media print CSS included
