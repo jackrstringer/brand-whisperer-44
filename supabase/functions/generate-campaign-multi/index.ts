@@ -99,12 +99,23 @@ Deno.serve(async (req) => {
 
             return (async () => {
               try {
+                const variantStart = Date.now();
                 console.log(`[multi] Starting variant ${index}: ${label}`);
+                await logGenEvent(supabase, campaignId, "variant_start", {
+                  status: "started", payload: { index, label },
+                });
                 const result = await generateCampaignCore(variantParams, supabase);
+                const variantDuration = Date.now() - variantStart;
                 console.log(`[multi] Variant ${index} (${label}) complete, html length: ${result.html?.length || 0}`);
+                await logGenEvent(supabase, campaignId, "variant_complete", {
+                  status: "completed", duration_ms: variantDuration, result: { index, label, html_length: result.html?.length || 0 },
+                });
                 return { index, label, html: result.html, error: null };
               } catch (err: any) {
                 console.error(`[multi] Variant ${index} error:`, err);
+                await logGenEvent(supabase, campaignId, "variant_error", {
+                  status: "failed", error: err.message, payload: { index, label },
+                });
                 return { index, label, html: null, error: err.message };
               }
             })();
