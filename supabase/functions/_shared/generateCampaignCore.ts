@@ -1152,7 +1152,7 @@ Use the above JSON to understand the exact data structure. Rules:
         }
 
         await logGenEvent(supabase, campaignId, "claude_qa", {
-          status: "completed",
+          status: "completed", run_id: runId, event_key: `v${variantIdx}_claude_qa`,
           duration_ms: Date.now() - qaStart,
           result: { passes_qa: qaData.passes_qa, issue_count: qaData.issues?.length || 0, tokens: qaResult.usage },
         });
@@ -1177,13 +1177,15 @@ Use the above JSON to understand the exact data structure. Rules:
         }
       } else {
         await logGenEvent(supabase, campaignId, "claude_qa", {
-          status: "failed", error: `QA API returned ${qaResponse.status}`, duration_ms: Date.now() - qaStart,
+          status: "failed", run_id: runId, event_key: `v${variantIdx}_claude_qa`,
+          error: `QA API returned ${qaResponse.status}`, duration_ms: Date.now() - qaStart,
         });
         console.warn("QA pass failed, using first-pass HTML:", qaResponse.status);
       }
     } catch (qaErr) {
       await logGenEvent(supabase, campaignId, "claude_qa", {
-        status: "failed", error: String(qaErr), duration_ms: Date.now() - qaStart,
+        status: "failed", run_id: runId, event_key: `v${variantIdx}_claude_qa`,
+        error: String(qaErr), duration_ms: Date.now() - qaStart,
       });
       console.warn("QA pass error, using first-pass HTML:", qaErr);
     }
@@ -1198,7 +1200,8 @@ Use the above JSON to understand the exact data structure. Rules:
   const finalizeStart = Date.now();
   html = finalizeCampaignHtml(html);
   await logGenEvent(supabase, campaignId, "finalize_html", {
-    status: "completed", duration_ms: Date.now() - finalizeStart, result: { html_length: html.length },
+    status: "completed", run_id: runId, event_key: `v${variantIdx}_finalize`,
+    duration_ms: Date.now() - finalizeStart, result: { html_length: html.length },
   });
 
   // === KLAVIYO TEMPLATE VALIDATION (flow emails only) ===
