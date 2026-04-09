@@ -6,6 +6,29 @@ import { rehostHtmlImagesWithImageKit } from "./imagekit.ts";
 import { finalizeCampaignHtml } from "./finalizeCampaignHtml.ts";
 import { KLAVIYO_BEST_PRACTICES } from "./klaviyoBestPractices.ts";
 
+/** Lightweight structured event logger for generation pipeline steps */
+export async function logGenEvent(
+  supabase: any,
+  campaignId: string,
+  step: string,
+  data: { status?: string; payload?: any; result?: any; error?: string; duration_ms?: number }
+) {
+  try {
+    await supabase.from("generation_events").insert({
+      campaign_id: campaignId,
+      step,
+      status: data.status || "completed",
+      payload: data.payload || null,
+      result: data.result || null,
+      error: data.error || null,
+      duration_ms: data.duration_ms || null,
+      completed_at: data.status === "started" ? null : new Date().toISOString(),
+    });
+  } catch (e) {
+    console.warn("[logGenEvent] Failed to log event:", e);
+  }
+}
+
 /**
  * Extract a structured layout skeleton from reference screenshots using Gemini Flash.
  * Returns a JSON string describing section types, grid geometry, and image slot counts.
