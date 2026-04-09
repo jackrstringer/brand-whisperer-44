@@ -705,6 +705,7 @@ export default function CampaignEditor() {
 
       // Final outcome
       if (needsFix && iteration >= MAX_ITERATIONS - 1) {
+        await logQa("qa_result", { result: { passed: false, score: qaResult.overall_score, iterations: iteration + 1, critical_issues: criticalIssues.length } });
         await supabase.from('campaigns')
           .update({ visual_qa_status: 'needs_review', visual_qa_score: qaResult.overall_score } as any)
           .eq('id', campaignId);
@@ -714,6 +715,7 @@ export default function CampaignEditor() {
           created_at: new Date().toISOString()
         }]);
       } else {
+        await logQa("qa_result", { result: { passed: true, score: qaResult.overall_score, iterations: iteration + 1 } });
         await supabase.from('campaigns')
           .update({ visual_qa_status: 'passed', visual_qa_score: qaResult.overall_score } as any)
           .eq('id', campaignId);
