@@ -887,6 +887,10 @@ export default function CampaignEditor() {
       ...(syncedVariants !== variantHtmls ? { variant_htmls: syncedVariants } : {}),
     } as any).eq("id", campaignId);
     setCampaign(c => c ? { ...c, html: nextVariant.html, status: "ready" } : c);
+    // Re-render flow preview for the new variant
+    if (campaignMode === "flow" && flowConfig?.trigger_metric_id) {
+      preRenderFlowHtml(nextVariant.html, flowConfig);
+    }
   }, [campaign?.html, campaignId, syncActiveVariantHtml, variantHtmls]);
 
   const saveVariantAsNewCampaign = useCallback(async (index: number) => {
