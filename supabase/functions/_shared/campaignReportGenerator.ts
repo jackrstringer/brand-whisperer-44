@@ -101,34 +101,26 @@ async function requestReportChunk(
   anthropic: Anthropic,
   prompt: string,
 ): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 300_000);
-
-  try {
-    const message = await anthropic.messages.create(
+  const stream = anthropic.messages.stream({
+    model: "claude-opus-4-6",
+    max_tokens: 32000,
+    system: SYSTEM_PROMPT,
+    messages: [
       {
-        model: "claude-opus-4-6",
-        max_tokens: 32000,
-        system: SYSTEM_PROMPT,
-        messages: [
-          {
-            role: "user",
-            content: prompt,
-          },
-        ],
+        role: "user",
+        content: prompt,
       },
-      { signal: controller.signal },
-    );
+    ],
+  });
 
-    const html = sanitizeHtmlFragment(extractTextContent(message));
-    console.log("generate-campaign-report chunk", {
-      stopReason: message.stop_reason,
-      length: html.length,
-    });
-    return html;
-  } finally {
-    clearTimeout(timeout);
-  }
+  const message = await stream.finalMessage();
+
+  const html = sanitizeHtmlFragment(extractTextContent(message));
+  console.log("generate-campaign-report chunk", {
+    stopReason: message.stop_reason,
+    length: html.length,
+  });
+  return html;
 }
 
 function extractTextContent(message: any): string {
