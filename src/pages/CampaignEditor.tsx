@@ -624,6 +624,7 @@ export default function CampaignEditor() {
       }
 
       // AGENT 4: QA comparison
+      const qaCompareStart = Date.now();
       console.log(`[qa-loop] Running QA...`);
       const qaResp = await supabase.functions.invoke('visual-qa', {
         body: {
@@ -637,6 +638,10 @@ export default function CampaignEditor() {
       });
       if (qaResp.error) throw new Error(`QA failed: ${qaResp.error.message}`);
       const qaResult = qaResp.data;
+      await logQa("qa_compare", {
+        duration_ms: Date.now() - qaCompareStart,
+        result: { overall_score: qaResult.overall_score, structural_fidelity: qaResult.structural_fidelity, issue_count: (qaResult.issues || []).length, summary: qaResult.summary },
+      });
 
       const criticalIssues = (qaResult.issues || []).filter((i: any) => i.severity === 'critical');
       const hasCriticalIssues = criticalIssues.length > 0;
