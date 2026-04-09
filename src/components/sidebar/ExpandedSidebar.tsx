@@ -35,6 +35,7 @@ export function ExpandedSidebar({
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [moonH, setMoonH] = useState(false);
   const [settingsH, setSettingsH] = useState(false);
+  const [libraryH, setLibraryH] = useState(false);
 
   const handleBgClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).dataset.bg === "true" || e.target === e.currentTarget)
@@ -132,6 +133,22 @@ export function ExpandedSidebar({
           display: "flex", flexDirection: "column", gap: 12,
         }}
       >
+        {isAdmin && onLibraryClick && (
+          <div
+            onMouseEnter={() => setLibraryH(true)}
+            onMouseLeave={() => setLibraryH(false)}
+            onClick={(e) => { e.stopPropagation(); onLibraryClick(); }}
+            style={{
+              cursor: "pointer", padding: 4, width: "fit-content",
+              display: "flex", alignItems: "center", gap: 8,
+              transition: "transform 0.15s",
+              transform: libraryH ? "scale(1.05)" : "scale(1)",
+            }}
+          >
+            {SidebarIcons.library(libraryH ? "#2B2B2B" : "#9B9B9B")}
+            <span style={{ fontSize: 12, color: libraryH ? "#2B2B2B" : "#9B9B9B", transition: "color 0.15s" }}>Library</span>
+          </div>
+        )}
         <div
           onMouseEnter={() => setMoonH(true)}
           onMouseLeave={() => setMoonH(false)}
