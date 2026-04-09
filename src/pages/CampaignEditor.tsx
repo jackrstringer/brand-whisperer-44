@@ -4441,7 +4441,7 @@ export default function CampaignEditor() {
                   <FlowDetailsPanel
                     brandId={brandId}
                     campaignId={campaignId}
-                    html={flowPreviewHtml || campaign?.html || null}
+                    html={campaign?.html || null}
                     flowConfig={flowConfig}
                     onPreviewHtml={(html) => {
                       setFlowPreviewHtml(html);

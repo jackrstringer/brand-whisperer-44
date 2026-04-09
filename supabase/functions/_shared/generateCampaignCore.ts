@@ -919,7 +919,15 @@ ${UNIVERSAL_EMAIL_RULES}`;
     if (referenceImageBlocks.length > 0) {
       flowUserContent.push({
         type: "text",
-        text: "This is the reference layout — follow its structure, section count, column layout, image sizing, and proportions. Apply the brand's colors, fonts, and copy on top. Adapt for transactional content (product line items, order details) but keep the overall visual skeleton close.",
+        text: `REFERENCE LAYOUT — EXACT STRUCTURAL CLONE REQUIRED.
+Replicate this reference's structure EXACTLY:
+- SAME number of sections, in the SAME order
+- SAME column layouts and image slot positions
+- SAME visual rhythm and spacing proportions
+- ONLY adapt: swap in brand colors/fonts, replace static content slots with Liquid-templated transactional data (line items loop, order details, shipping info)
+- Do NOT add or remove sections. Do NOT rearrange. The skeleton stays identical.
+- If the reference has a hero image, keep a hero image. If it has a 2-column product grid, keep a 2-column product grid.
+- Match padding, margins, and whitespace ratios as closely as possible.`,
       });
       flowUserContent.push(...referenceImageBlocks);
     }
