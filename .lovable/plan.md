@@ -1,90 +1,46 @@
 
 
-## Plan: Improve Flow Email Design Quality, Auto-Load Previews, Arrow Navigation UX
+## Plan: Copy Liquid Syntax Instead of Values + Full Field Browser
 
-### Problem Summary
-
-1. **Weak reference adherence in flow mode**: The flow prompt says "follow its structure... Adapt for transactional content" — too loose. The user expects dupe-level fidelity.
-2. **No auto-populated preview data**: After generation, the email shows raw Liquid tags until the user manually clicks "Load Recent Events" and picks one.
-3. **Preview UX is a list of clickable cards**: User wants Klaviyo-style left/right arrow navigation with a clean formatted data summary instead of raw JSON.
-4. **Bug**: `html` prop passed to FlowDetailsPanel is `flowPreviewHtml || campaign?.html` — after first preview render, subsequent renders use already-resolved HTML as the template, breaking switching.
-
----
+### Problem
+1. **Copy copies values, not Liquid syntax** — clicking copy on "Order #30758" copies `30758` instead of `{{ event.extra.order_number }}`. Users need the Liquid path to paste into the AI chat or use in templates.
+2. **Only "known" fields are shown** — the viewer cherry-picks specific fields. Users need to browse ALL fields in the event payload and grab any Liquid path they want.
+3. **No "Include this" action** — users should be able to click a field and send it to the AI chat as an instruction.
 
 ### Changes
 
-#### 1. Strengthen reference adherence in flow mode
+#### 1. Refactor `EventDataViewer` — every field shows its Liquid path
 
-**File**: `supabase/functions/_shared/generateCampaignCore.ts` (~line 919-925)
+**File**: `src/components/campaign/EventDataViewer.tsx`
 
-Replace the weak flow reference instruction with dupe-level language:
+- Add a `liquidPath` prop to `KVRow` (e.g., `event.extra.order_number`). The copy button copies `{{ liquidPath }}` instead of the raw value.
+- Show the Liquid path as a subtle monospace label below the value on hover or always visible.
+- Add a second action button: "Insert" (or a small + icon) that calls an `onInsertField(liquidPath)` callback passed down from the parent. This will be used to send a message like "Include {{ event.extra.order_number }} in the email" to the AI chat.
+- Update `LineItemCard` similarly — fields inside line items get paths like `event.extra.line_items[].name`, `event.extra.line_items[].price`, etc.
 
-```
-REFERENCE LAYOUT — EXACT STRUCTURAL CLONE REQUIRED.
-Replicate this reference's structure EXACTLY:
-- SAME number of sections, in the SAME order
-- SAME column layouts and image slot positions
-- SAME visual rhythm and spacing proportions
-- ONLY adapt: swap in brand colors/fonts, replace static content slots with
-  Liquid-templated transactional data (line items loop, order details, shipping info)
-- Do NOT add or remove sections. Do NOT rearrange. The skeleton stays identical.
-```
+#### 2. Add "All Fields" section — recursive field browser
 
-This brings flow mode in line with dupe mode's structural fidelity while still allowing transactional content adaptation.
+**File**: `src/components/campaign/EventDataViewer.tsx`
 
-#### 2. Auto-load preview events and render first one on generation complete
+- Add a new collapsible section at the bottom: "All Available Fields".
+- Recursively walk the entire `eventProperties` object (including `extra.*` nested objects/arrays).
+- For each leaf value, display: the Liquid path, the current value (truncated), and a copy button that copies `{{ path }}`.
+- For arrays (like `line_items`), show the path with `[]` notation and display the first item's fields as examples.
+- This gives users full autonomy to discover and grab ANY field from the payload.
 
-**File**: `src/components/campaign/FlowDetailsPanel.tsx`
-
-- Add `useEffect` that auto-calls `loadPreviewEvents` on mount when `flowConfig.trigger_metric_id` exists and `html` is present.
-- After events load, auto-render the first event's preview immediately (call `renderPreview(events[0])`).
-- This means the email always shows with real data populated — never raw Liquid tags.
-
-**File**: `src/pages/CampaignEditor.tsx` (~line 4444)
-
-- Fix the html prop bug: always pass `campaign?.html || null` as the template source to FlowDetailsPanel, never the rendered preview HTML. The rendered HTML is only for display.
-
-#### 3. Arrow navigation UX with formatted event data
+#### 3. Wire "Insert" action to parent
 
 **File**: `src/components/campaign/FlowDetailsPanel.tsx`
 
-Replace the vertical list of event cards with:
+- Pass an `onInsertField` callback to `EventDataViewer`.
+- When clicked, it calls a new `onRequestInsert` prop that bubbles up to `CampaignEditor`, which can prepopulate the chat input with something like: `Include {{ event.extra.shipping_address.city }} in the email`.
 
-- A compact navigator bar: `< 1 of 10 >` with left/right arrow buttons
-- Clicking arrows calls `renderPreview` with the next/previous event
-- Below the navigator, show a clean formatted summary card for the active event:
-  - **Customer**: name, email
-  - **Order**: order number, date, total
-  - **Items**: product names with quantities (compact list, not raw JSON)
-  - **Shipping**: formatted address
-- This replaces the scrollable list of event buttons entirely
-- Keep the liquid variables table as-is (it's useful)
+**File**: `src/pages/CampaignEditor.tsx`
 
----
+- Accept the `onRequestInsert` callback from `FlowDetailsPanel` and set the chat input value accordingly.
 
-### Technical Details
-
-**html prop fix** (CampaignEditor.tsx line 4444):
-```
-html={campaign?.html || null}
-```
-Not `flowPreviewHtml || campaign?.html` — the template source must always be the original Liquid HTML.
-
-**Auto-load flow** (FlowDetailsPanel):
-```text
-useEffect → loadPreviewEvents() when html + trigger_metric_id exist
-  → on events loaded, auto-render events[0]
-  → selectedIndex = 0
-```
-
-**Arrow navigator state**:
-- `selectedIndex: number` replaces `selectedEventId: string | null`
-- Left arrow: `setSelectedIndex(i => Math.max(0, i - 1))` + render
-- Right arrow: `setSelectedIndex(i => Math.min(events.length - 1, i + 1))` + render
-
-**Event data formatter** — extract and display cleanly:
-- `event.extra.order_number` → Order #307583
-- `event.extra.shipping_address` → formatted multi-line address
-- `event.extra.line_items[]` → product name + qty + price rows
-- `event.value` or `event.extra.total_price` → formatted total
+### UX Summary
+- Every field row: shows value + Liquid path + two buttons: **Copy syntax** (copies `{{ path }}`), **Insert** (sends to chat)
+- "All Available Fields" section at bottom recursively lists every field in the payload with its Liquid path
+- Existing visual sections (Customer, Order, Items, Totals, etc.) remain but now copy syntax instead of values
 
