@@ -102,7 +102,7 @@ async function requestReportChunk(
   prompt: string,
 ): Promise<string> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120_000);
+  const timeout = setTimeout(() => controller.abort(), 300_000);
 
   try {
     const message = await anthropic.messages.create(
