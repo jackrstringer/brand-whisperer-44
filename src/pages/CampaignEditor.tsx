@@ -3988,6 +3988,12 @@ export default function CampaignEditor() {
             </PopoverContent>
           </Popover>
 
+          {isAdmin && campaignId && (
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowTimeline(true)} title="Run Details (Admin)">
+              <Activity className="w-3.5 h-3.5" />
+            </Button>
+          )}
+
           {campaign?.html && (
             <>
               <Button variant="outline" size="sm" onClick={exportHtml} className="active:scale-[0.98] transition-all">
