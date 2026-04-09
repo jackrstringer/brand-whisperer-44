@@ -2953,9 +2953,13 @@ export default function CampaignEditor() {
       el.style.textAlign = next;
       currentAlign = next;
       alignBtn.innerHTML = alignSvgs[next];
-      syncHtmlImmediate();
+      if(isDynEl && liquidPath){
+        window.parent.postMessage({ type: 'flowStyleEdit', liquidPath: liquidPath, property: 'textAlign', value: next }, '*');
+      } else {
+        syncHtmlImmediate();
+      }
       restoreSelection();
-      el.focus();
+      if(!isDynEl) el.focus();
     });
     bar.appendChild(alignBtn);
 
