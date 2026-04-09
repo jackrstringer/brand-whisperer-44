@@ -332,6 +332,56 @@ export default function CampaignEditor() {
             }
           } catch {}
         }
+        // Pre-render flow HTML with real Klaviyo data so we never show raw Liquid
+        if ((campaign as any).campaign_mode === "flow" && campaign.html && (campaign as any).flow_config?.trigger_metric_id) {
+          try {
+            const session = (await supabase.auth.getSession()).data.session;
+            const evResp = await fetch(
+              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/klaviyo-fetch-preview-events`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                  "Authorization": `Bearer ${session?.access_token}`,
+                },
+                body: JSON.stringify({ brandId, metricId: (campaign as any).flow_config.trigger_metric_id }),
+              }
+            );
+            if (evResp.ok) {
+              const events = await evResp.json();
+              if (Array.isArray(events) && events.length > 0) {
+                const ev = events[0];
+                const renderResp = await fetch(
+                  `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/klaviyo-render-preview`,
+                  {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                      "Authorization": `Bearer ${session?.access_token}`,
+                    },
+                    body: JSON.stringify({
+                      html: campaign.html,
+                      event_properties: ev.event_properties,
+                      profile_name: ev.profile_name,
+                      profile_email: ev.profile_email,
+                    }),
+                  }
+                );
+                if (renderResp.ok) {
+                  const renderData = await renderResp.json();
+                  if (renderData.rendered_html) {
+                    setFlowPreviewHtml(renderData.rendered_html);
+                    setPreviewHtml(renderData.rendered_html);
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.warn("[flow-prerender] Could not pre-render flow preview:", err);
+          }
+        }
       }
       const { data: msgs } = await supabase
         .from("chat_messages")
