@@ -363,6 +363,11 @@ export default function CampaignEditor() {
         setCampaignMode((campaign as any).campaign_mode === "flow" ? "flow" : "campaign");
         if ((campaign as any).flow_config) setFlowConfig((campaign as any).flow_config as FlowConfig);
         if ((campaign as any).campaign_mode === "flow") setFlowDetailTab("flow");
+        // If returning to a generating campaign, restore the timer from generation_started_at
+        if (campaign.status === "generating" && (c as any).generation_started_at) {
+          setGenStartTime(new Date((c as any).generation_started_at).getTime());
+          setGenerating(true);
+        }
         // speedMode is always "normal" now
         const history = campaign.html_history;
         setCanUndo(Array.isArray(history) && history.length > 0);
@@ -4437,8 +4442,24 @@ export default function CampaignEditor() {
             {isGenerating ? (
               <div className="max-w-[600px] mx-auto space-y-4 p-8 mt-12">
                 <div className="text-center mb-6">
-                  <p className="text-lg font-medium text-foreground tabular-nums">{formatTimer(genElapsed)}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{visualQaRunning ? "Running visual QA..." : "Generating campaign..."}</p>
+                  {(() => {
+                    const EXPECTED_DURATION = 140; // 2:20 average
+                    const progress = Math.min((genElapsed / EXPECTED_DURATION) * 100, 98);
+                    return (
+                      <>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          {visualQaRunning ? "Running visual QA..." : "Generating campaign..."}
+                        </p>
+                        <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-primary rounded-full transition-all duration-1000 ease-linear"
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                        <p className="text-[11px] text-muted-foreground/60 mt-2 tabular-nums font-mono">{formatTimer(genElapsed)}</p>
+                      </>
+                    );
+                  })()}
                 </div>
                 <Skeleton className="h-8 w-3/4" />
                 <Skeleton className="h-48 w-full" />
