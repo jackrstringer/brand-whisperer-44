@@ -924,40 +924,21 @@ ${UNIVERSAL_EMAIL_RULES}`;
     if (designNotes) flowBrandRules += `\n\nDesign notes:\n${designNotes}`;
     flowUserContent.push({ type: "text", text: flowBrandRules });
 
-    // Build a strict variable reference table from the schema
-    const varReference = liquidVars.map((v: string) => {
-      // Resolve a sample value from the event schema for context
-      const parts = v.replace(/^event\./, '').replace(/\[\]/, '.0');
-      let sample: any = eventSchema;
-      for (const p of parts.split('.')) {
-        if (sample == null) break;
-        sample = sample[p];
-      }
-      const sampleStr = sample !== undefined && sample !== null && typeof sample !== 'object'
-        ? ` (e.g. "${sample}")`
-        : Array.isArray(sample) ? ` (array with ${sample.length} items)`
-        : typeof sample === 'object' && sample ? ` (object)`
-        : '';
-      return `  {{ ${v} }}${sampleStr}`;
-    }).join('\n');
-
-    let flowDetails = `FLOW DETAILS:\nTrigger: ${flowConfig.trigger_metric_name || "Unknown"}\nEmail type: ${flowConfig.flow_type || "Transactional"}`;
-    if (flowNotes) flowDetails += `\n\n${flowNotes}`;
-
-    flowDetails += `\n\n═══ LIQUID VARIABLE CONTRACT ═══
-The following is the COMPLETE and EXHAUSTIVE list of Liquid variables available for this trigger event.
-You MUST copy variable names EXACTLY as written below — character for character, including any $ prefixes.
-Do NOT invent, guess, or infer any variable names that are not in this list.
-If a variable is not listed here, it DOES NOT EXIST and must not appear in the HTML.
-
-AVAILABLE VARIABLES:
-${varReference}
-
-For loops over item arrays, use: {%- for item in event.Items -%} ... {{ item.ProductName }} ... {%- endfor -%}
-
-RAW EVENT SCHEMA (for understanding data structure only — do NOT extract variable names from this, use the list above):
+    flowDetails += `\n\n═══ REAL EVENT DATA — use these exact paths in your Liquid template ═══
 ${JSON.stringify(eventSchema, null, 2)}
-═══ END VARIABLE CONTRACT ═══`;
+
+Use the above JSON to understand the exact data structure. Rules:
+- Top-level keys: {{ event.KeyName }}
+- The extra object: {{ event.extra.field_name }}
+- Line items loop: {%- for line_item in event.extra.line_items -%}...{%- endfor -%}
+- Product image: {{ line_item.image }}
+- Product name: {{ line_item.name }}
+- Product price: {{ line_item.price }}
+- Shipping address: {{ event.extra.shipping_address.first_name }}
+- Order number: {{ event.extra.order_number }}
+- Always add | default: '' to every variable
+- Use exactly the property names shown in the JSON above — do not invent paths
+═══ END EVENT DATA ═══`;
     flowUserContent.push({ type: "text", text: flowDetails });
 
     // Assets

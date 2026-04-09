@@ -149,17 +149,17 @@ Deno.serve(async (req) => {
 });
 
 // Internal Klaviyo metadata keys that are NOT valid Liquid variables
-const INTERNAL_KEYS = new Set(["$extra", "$attribution", "$flow", "$message", "$variation", "$timezone", "$anonymous", "$browser", "$browser_version", "$city", "$country", "$device_type", "$ip", "$latitude", "$longitude", "$os", "$platform", "$region", "$source", "$timestamp", "$timezone_offset", "extra"]);
+const INTERNAL_KEYS = new Set(["$extra", "$attribution", "$flow", "$message", "$variation", "$timezone", "$anonymous", "$browser", "$browser_version", "$city", "$country", "$device_type", "$ip", "$latitude", "$longitude", "$os", "$platform", "$region", "$source", "$timestamp", "$timezone_offset"]);
 const ALLOWED_DOLLAR_KEYS = new Set(["$value", "$event_id"]);
 
 function isInternalKey(key: string): boolean {
   if (INTERNAL_KEYS.has(key)) return true;
-  // Skip any $-prefixed key that isn't in the allowed set
   if (key.startsWith("$") && !ALLOWED_DOLLAR_KEYS.has(key)) return true;
   return false;
 }
 
-function extractLiquidVars(obj: any, prefix = "event"): string[] {
+function extractLiquidVars(obj: any, prefix = "event", depth = 0): string[] {
+  if (depth > 8) return []; // prevent infinite recursion
   const vars: string[] = [];
   for (const [key, value] of Object.entries(obj)) {
     if (isInternalKey(key)) continue;
@@ -167,13 +167,11 @@ function extractLiquidVars(obj: any, prefix = "event"): string[] {
     if (Array.isArray(value)) {
       vars.push(path);
       if (value[0] && typeof value[0] === "object") {
-        for (const itemKey of Object.keys(value[0])) {
-          if (isInternalKey(itemKey)) continue;
-          vars.push(`${path}[].${itemKey}`);
-        }
+        // Recurse into the first array element to discover nested paths
+        vars.push(...extractLiquidVars(value[0], `${path}[]`, depth + 1));
       }
     } else if (value && typeof value === "object") {
-      vars.push(...extractLiquidVars(value, path));
+      vars.push(...extractLiquidVars(value, path, depth + 1));
     } else {
       vars.push(path);
     }
