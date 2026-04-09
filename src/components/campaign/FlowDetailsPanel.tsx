@@ -152,7 +152,6 @@ export default function FlowDetailsPanel({
       if (!resp.ok) throw new Error("Failed");
       const data = await resp.json();
       onPreviewHtml(data.rendered_html);
-      setIsPreviewActive(true);
     } catch (err) {
       console.error("Failed to render preview:", err);
     } finally {
@@ -162,7 +161,6 @@ export default function FlowDetailsPanel({
 
   const revertPreview = useCallback(() => {
     onPreviewHtml(null);
-    setIsPreviewActive(false);
     setSelectedEventId(null);
   }, [onPreviewHtml]);
 
