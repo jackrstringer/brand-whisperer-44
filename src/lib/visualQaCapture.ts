@@ -1,6 +1,6 @@
 import html2canvas from "html2canvas";
 
-const RENDER_WIDTH = 470;
+const RENDER_WIDTH = 390;
 const MAX_SLICE_HEIGHT = 1200;
 
 /**

@@ -2474,9 +2474,9 @@ export default function CampaignEditor() {
     }
   };
 
-  const zoomScale = screenZoom / 100;
-  const renderedWidth = Math.round(viewportWidth * zoomScale);
-  const renderedHeight = Math.round(iframeContentHeight * zoomScale);
+  const zoomScale = 1;
+  const renderedWidth = renderWidth;
+  const renderedHeight = iframeContentHeight;
 
   // When iframeOwnedHtmlRef is set, the iframe owns the live HTML — freeze displayHtml to prevent iframe reload
   const baseHtml = previewHtml || (activeVersionIndex !== null ? allVersions[activeVersionIndex] : campaign?.html);
