@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, Send, Undo2, Redo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, EyeOff, RotateCcw, Link2, Loader2, Copy, SlidersHorizontal, MessageCircle } from "lucide-react";
+import { ArrowLeft, Download, Send, Undo2, Redo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, EyeOff, RotateCcw, Link2, Loader2, Copy, SlidersHorizontal, MessageCircle, Activity } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -59,6 +59,8 @@ import VariantCards from "@/components/brand/VariantCards";
 import { captureEmailScreenshots } from "@/lib/visualQaCapture";
 import CommentOverlay, { type CommentThread, type CommentAuthor, type CommentElementInfo, COMMENT_CURSOR_SVG } from "@/components/campaign/CommentOverlay";
 import html2canvas from "html2canvas";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
+import GenerationTimeline from "@/components/campaign/GenerationTimeline";
 
 async function uploadChatImages(files: File[], brandId: string, campaignId: string): Promise<string[]> {
   const urls: string[] = [];
@@ -96,6 +98,8 @@ export default function CampaignEditor() {
   const { brandId, campaignId } = useParams<{ brandId: string; campaignId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isAdmin } = useIsAdmin();
+  const [showTimeline, setShowTimeline] = useState(false);
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string | null>(null); // temporary hover preview
   const [selectedReferences, setSelectedReferences] = useState<SelectedReference[]>([]);
@@ -534,6 +538,22 @@ export default function CampaignEditor() {
     const MAX_ITERATIONS = 3;
     if (!campaignData.html || !campaignId) return;
     setVisualQaRunning(true);
+    
+    // Helper to log QA events (admin-only, fails silently for non-admins)
+    const logQa = async (step: string, data: any) => {
+      try {
+        await supabase.from("generation_events").insert({
+          campaign_id: campaignId,
+          step,
+          status: data.status || "completed",
+          payload: data.payload || null,
+          result: data.result || null,
+          error: data.error || null,
+          duration_ms: data.duration_ms || null,
+          completed_at: data.status === "started" ? null : new Date().toISOString(),
+        });
+      } catch {}
+    };
 
     try {
       // For flow emails, render Liquid with real Klaviyo event data before screenshotting
@@ -573,20 +593,24 @@ export default function CampaignEditor() {
       }
 
       // AGENT 3: Render at exactly 390px — same as in-app preview (Gmail mobile)
+      const screenshotStart = Date.now();
       console.log(`[qa-loop] Iteration ${iteration + 1}: Rendering at 390px...`);
       const renderResp = await supabase.functions.invoke('capture-email-screenshot', {
         body: { html: htmlToCapture }
       });
       if (renderResp.error) throw new Error(`Renderer failed: ${renderResp.error.message}`);
       const { imageBase64, mimeType } = renderResp.data;
+      await logQa("qa_screenshot", { duration_ms: Date.now() - screenshotStart, result: { base64_length: imageBase64?.length, mimeType } });
 
       // AGENT 1: Slice the rendered output
+      const sliceStart = Date.now();
       console.log(`[qa-loop] Slicing output...`);
       const sliceResp = await supabase.functions.invoke('slice-image-on-demand', {
         body: { imageBase64, mimeType }
       });
       if (sliceResp.error) throw new Error(`Slicer failed: ${sliceResp.error.message}`);
       const outputSlices = sliceResp.data.slices;
+      await logQa("qa_slice", { duration_ms: Date.now() - sliceStart, result: { slice_count: outputSlices?.length } });
 
       // Get pre-stored reference slices from DB
       let referenceSlices: any[] = [];
@@ -600,6 +624,7 @@ export default function CampaignEditor() {
       }
 
       // AGENT 4: QA comparison
+      const qaCompareStart = Date.now();
       console.log(`[qa-loop] Running QA...`);
       const qaResp = await supabase.functions.invoke('visual-qa', {
         body: {
@@ -613,6 +638,10 @@ export default function CampaignEditor() {
       });
       if (qaResp.error) throw new Error(`QA failed: ${qaResp.error.message}`);
       const qaResult = qaResp.data;
+      await logQa("qa_compare", {
+        duration_ms: Date.now() - qaCompareStart,
+        result: { overall_score: qaResult.overall_score, structural_fidelity: qaResult.structural_fidelity, issue_count: (qaResult.issues || []).length, summary: qaResult.summary },
+      });
 
       const criticalIssues = (qaResult.issues || []).filter((i: any) => i.severity === 'critical');
       const hasCriticalIssues = criticalIssues.length > 0;
@@ -676,6 +705,7 @@ export default function CampaignEditor() {
 
       // Final outcome
       if (needsFix && iteration >= MAX_ITERATIONS - 1) {
+        await logQa("qa_result", { result: { passed: false, score: qaResult.overall_score, iterations: iteration + 1, critical_issues: criticalIssues.length } });
         await supabase.from('campaigns')
           .update({ visual_qa_status: 'needs_review', visual_qa_score: qaResult.overall_score } as any)
           .eq('id', campaignId);
@@ -685,6 +715,7 @@ export default function CampaignEditor() {
           created_at: new Date().toISOString()
         }]);
       } else {
+        await logQa("qa_result", { result: { passed: true, score: qaResult.overall_score, iterations: iteration + 1 } });
         await supabase.from('campaigns')
           .update({ visual_qa_status: 'passed', visual_qa_score: qaResult.overall_score } as any)
           .eq('id', campaignId);
@@ -3984,6 +4015,12 @@ export default function CampaignEditor() {
             </PopoverContent>
           </Popover>
 
+          {isAdmin && campaignId && (
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowTimeline(true)} title="Run Details (Admin)">
+              <Activity className="w-3.5 h-3.5" />
+            </Button>
+          )}
+
           {campaign?.html && (
             <>
               <Button variant="outline" size="sm" onClick={exportHtml} className="active:scale-[0.98] transition-all">
@@ -5000,6 +5037,14 @@ export default function CampaignEditor() {
 
 
 
+    {isAdmin && campaignId && (
+      <GenerationTimeline
+        open={showTimeline}
+        onOpenChange={setShowTimeline}
+        campaignId={campaignId}
+        campaignName={campaign?.name}
+      />
+    )}
   </>
   );
 }

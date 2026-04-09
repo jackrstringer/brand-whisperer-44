@@ -6,6 +6,29 @@ import { rehostHtmlImagesWithImageKit } from "./imagekit.ts";
 import { finalizeCampaignHtml } from "./finalizeCampaignHtml.ts";
 import { KLAVIYO_BEST_PRACTICES } from "./klaviyoBestPractices.ts";
 
+/** Lightweight structured event logger for generation pipeline steps */
+export async function logGenEvent(
+  supabase: any,
+  campaignId: string,
+  step: string,
+  data: { status?: string; payload?: any; result?: any; error?: string; duration_ms?: number }
+) {
+  try {
+    await supabase.from("generation_events").insert({
+      campaign_id: campaignId,
+      step,
+      status: data.status || "completed",
+      payload: data.payload || null,
+      result: data.result || null,
+      error: data.error || null,
+      duration_ms: data.duration_ms || null,
+      completed_at: data.status === "started" ? null : new Date().toISOString(),
+    });
+  } catch (e) {
+    console.warn("[logGenEvent] Failed to log event:", e);
+  }
+}
+
 /**
  * Extract a structured layout skeleton from reference screenshots using Gemini Flash.
  * Returns a JSON string describing section types, grid geometry, and image slot counts.
@@ -1003,6 +1026,12 @@ Use the above JSON to understand the exact data structure. Rules:
   }
 
   // === PASS 1: Generate ===
+  const pass1Start = Date.now();
+  await logGenEvent(supabase, campaignId, "claude_generate", {
+    status: "started",
+    payload: { model: GENERATION_MODEL, image_count: imageBlocks.length, reference_mode: referenceMode, campaign_mode: campaignMode },
+  });
+
   const response = await callAnthropic({
     model: GENERATION_MODEL,
     max_tokens: 16384,
@@ -1012,12 +1041,22 @@ Use the above JSON to understand the exact data structure. Rules:
 
   if (!response.ok) {
     const errText = await response.text();
+    await logGenEvent(supabase, campaignId, "claude_generate", {
+      status: "failed", error: `${response.status} - ${errText}`, duration_ms: Date.now() - pass1Start,
+    });
     throw new Error(`Anthropic API error: ${response.status} - ${errText}`);
   }
 
   const result = await response.json();
   const pass1StopReason = result.stop_reason;
+  const pass1Tokens = result.usage;
   let html = extractHtmlOnly(result.content?.[0]?.text || "");
+
+  await logGenEvent(supabase, campaignId, "claude_generate", {
+    status: "completed",
+    duration_ms: Date.now() - pass1Start,
+    result: { html_length: html.length, stop_reason: pass1StopReason, input_tokens: pass1Tokens?.input_tokens, output_tokens: pass1Tokens?.output_tokens },
+  });
 
   // If Pass 1 truncated, retry once with leaner instruction
   if (!isCompleteHtml(html) || pass1StopReason === "max_tokens") {
@@ -1041,6 +1080,7 @@ Use the above JSON to understand the exact data structure. Rules:
 
   // === PASS 2: QA Audit ===
   if (isCompleteHtml(html)) {
+    const qaStart = Date.now();
     try {
       const allQaItems = [...brandQaChecklist, ...globalQaChecklist];
       const customQaSection = allQaItems.length > 0
@@ -1081,6 +1121,12 @@ Use the above JSON to understand the exact data structure. Rules:
           qaData = { passes_qa: true, issues: [] };
         }
 
+        await logGenEvent(supabase, campaignId, "claude_qa", {
+          status: "completed",
+          duration_ms: Date.now() - qaStart,
+          result: { passes_qa: qaData.passes_qa, issue_count: qaData.issues?.length || 0, tokens: qaResult.usage },
+        });
+
         if (!qaData.passes_qa && Array.isArray(qaData.issues) && qaData.issues.length > 0) {
           let patchedHtml = html;
           for (const issue of qaData.issues) {
@@ -1100,9 +1146,15 @@ Use the above JSON to understand the exact data structure. Rules:
           }
         }
       } else {
+        await logGenEvent(supabase, campaignId, "claude_qa", {
+          status: "failed", error: `QA API returned ${qaResponse.status}`, duration_ms: Date.now() - qaStart,
+        });
         console.warn("QA pass failed, using first-pass HTML:", qaResponse.status);
       }
     } catch (qaErr) {
+      await logGenEvent(supabase, campaignId, "claude_qa", {
+        status: "failed", error: String(qaErr), duration_ms: Date.now() - qaStart,
+      });
       console.warn("QA pass error, using first-pass HTML:", qaErr);
     }
   }
@@ -1113,7 +1165,11 @@ Use the above JSON to understand the exact data structure. Rules:
   }
 
   // Unified finalization
+  const finalizeStart = Date.now();
   html = finalizeCampaignHtml(html);
+  await logGenEvent(supabase, campaignId, "finalize_html", {
+    status: "completed", duration_ms: Date.now() - finalizeStart, result: { html_length: html.length },
+  });
 
   // === KLAVIYO TEMPLATE VALIDATION (flow emails only) ===
   if (campaignMode === "flow" && brandId) {
