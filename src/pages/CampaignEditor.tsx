@@ -2780,6 +2780,11 @@ export default function CampaignEditor() {
     sizeSelect.addEventListener('focus', function(){ clearTimeout(ftbBlurTimer); });
     sizeSelect.addEventListener('click', function(e){ e.stopPropagation(); clearTimeout(ftbBlurTimer); });
     sizeSelect.addEventListener('change', function(){
+      if(isDynEl && liquidPath){
+        el.style.fontSize = sizeSelect.value + 'px';
+        window.parent.postMessage({ type: 'flowStyleEdit', liquidPath: liquidPath, property: 'fontSize', value: sizeSelect.value + 'px' }, '*');
+        return;
+      }
       restoreSelection();
       el.focus();
       var sel = window.getSelection();
@@ -2946,22 +2951,31 @@ export default function CampaignEditor() {
     padWrap.appendChild(padPanel);
     bar.appendChild(padWrap);
 
-    bar.appendChild(makeSep());
+    if(!isDynEl){
+      bar.appendChild(makeSep());
 
-    // Ideate button — stroke-only gradient border
-    var ideateBtn = document.createElement('button');
-    ideateBtn.className = 'ftb-ideate';
-    ideateBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg> Ideate';
-    ideateBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
-    ideateBtn.addEventListener('click', function(e){
-      e.stopPropagation();
-      // Capture innerHTML to preserve inline styling (highlights, colors, etc.)
-      var innerHTML = el.innerHTML;
-      var outerHTML = el.outerHTML;
-      var styles = el.getAttribute('style') || '';
-      window.parent.postMessage({ type: 'ideateElement', text: el.textContent.trim(), tagName: el.tagName, innerHTML: innerHTML, outerHTML: outerHTML, elementStyle: styles }, '*');
-    });
-    bar.appendChild(ideateBtn);
+      // Ideate button — stroke-only gradient border
+      var ideateBtn = document.createElement('button');
+      ideateBtn.className = 'ftb-ideate';
+      ideateBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg> Ideate';
+      ideateBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+      ideateBtn.addEventListener('click', function(e){
+        e.stopPropagation();
+        var innerHTML = el.innerHTML;
+        var outerHTML = el.outerHTML;
+        var styles = el.getAttribute('style') || '';
+        window.parent.postMessage({ type: 'ideateElement', text: el.textContent.trim(), tagName: el.tagName, innerHTML: innerHTML, outerHTML: outerHTML, elementStyle: styles }, '*');
+      });
+      bar.appendChild(ideateBtn);
+    } else {
+      // Show a "Dynamic" label instead of ideate for protected elements
+      bar.appendChild(makeSep());
+      var dynLabel = document.createElement('span');
+      dynLabel.className = 'ftb-tag';
+      dynLabel.style.color = 'rgba(200,241,53,0.7)';
+      dynLabel.textContent = '⚡ Dynamic';
+      bar.appendChild(dynLabel);
+    }
 
     document.body.appendChild(bar);
     ftbEl = bar;
