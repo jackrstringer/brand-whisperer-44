@@ -53,61 +53,120 @@ function formatAddress(addr: any): string {
 }
 
 /* ── Event Summary Card ────────────────────────────────── */
-function EventSummaryCard({ event }: { event: PreviewEvent }) {
+function EventSummaryCard({ event, showRaw, onToggleRaw }: { event: PreviewEvent; showRaw: boolean; onToggleRaw: () => void }) {
   const props = event.event_properties || {};
   const extra = props.extra || props.$extra || {};
   const lineItems: any[] = extra.line_items || props.Items || [];
   const shipping = extra.shipping_address || {};
+  const billing = extra.billing_address || {};
   const orderNumber = extra.order_number || extra.name || props.OrderId || "";
   const orderDate = extra.created_at || event.datetime;
   const total = extra.total_price || props.value || props.$value || event.order_value;
+  const subtotal = extra.subtotal_price;
+  const discount = extra.total_discounts;
+  const shippingCost = extra.shipping_lines?.[0]?.price;
+  const financialStatus = extra.financial_status;
+  const fulfillmentStatus = extra.fulfillment_status;
+  const itemCount = lineItems.reduce((sum: number, item: any) => sum + (item.quantity ?? 1), 0);
+
+  if (showRaw) {
+    return (
+      <div className="space-y-2 text-[11px]">
+        <div className="flex justify-between items-center">
+          <span className="font-medium text-foreground">Raw Event Data</span>
+          <button onClick={onToggleRaw} className="text-primary hover:underline text-[10px]">Summary view</button>
+        </div>
+        <pre className="bg-muted/50 rounded p-2 text-[9px] text-muted-foreground overflow-auto max-h-[400px] whitespace-pre-wrap break-all">
+          {JSON.stringify(props, null, 2)}
+        </pre>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3 text-[11px]">
       {/* Customer */}
       <div className="flex items-start gap-2">
         <User className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
-        <div>
-          <div className="font-medium text-foreground">{event.profile_name || "Unknown"}</div>
-          <div className="text-muted-foreground">{event.profile_email}</div>
+        <div className="min-w-0 flex-1">
+          <div className="font-medium text-foreground truncate">{event.profile_name || "Unknown"}</div>
+          <div className="text-muted-foreground truncate">{event.profile_email}</div>
         </div>
       </div>
 
       {/* Order info */}
       <div className="flex items-start gap-2">
         <ShoppingCart className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
-        <div className="flex-1">
-          <div className="flex justify-between">
-            <span className="font-medium text-foreground">
+        <div className="flex-1 min-w-0">
+          <div className="flex justify-between gap-1">
+            <span className="font-medium text-foreground truncate">
               {orderNumber ? `Order #${String(orderNumber).replace("#", "")}` : "Order"}
             </span>
-            <span className="text-muted-foreground">{formatCurrency(total)}</span>
+            <span className="text-foreground font-medium shrink-0">{formatCurrency(total)}</span>
           </div>
-          {orderDate && (
-            <div className="text-muted-foreground">{new Date(orderDate).toLocaleDateString()}</div>
+          <div className="flex items-center gap-2 text-muted-foreground">
+            {orderDate && <span>{new Date(orderDate).toLocaleDateString()}</span>}
+            {itemCount > 0 && <span>· {itemCount} item{itemCount !== 1 ? "s" : ""}</span>}
+          </div>
+          {(financialStatus || fulfillmentStatus) && (
+            <div className="flex gap-1.5 mt-1">
+              {financialStatus && (
+                <span className="px-1.5 py-0.5 rounded bg-muted text-[9px] text-muted-foreground capitalize">{financialStatus}</span>
+              )}
+              {fulfillmentStatus && (
+                <span className="px-1.5 py-0.5 rounded bg-muted text-[9px] text-muted-foreground capitalize">{fulfillmentStatus}</span>
+              )}
+            </div>
           )}
         </div>
       </div>
 
-      {/* Line items */}
+      {/* Line items - each on its own line */}
       {lineItems.length > 0 && (
         <div className="flex items-start gap-2">
           <Package className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
-          <div className="flex-1 space-y-1">
-            {lineItems.slice(0, 5).map((item: any, i: number) => (
-              <div key={i} className="flex justify-between gap-2">
-                <span className="text-foreground truncate">
-                  {item.name || item.ProductName || "Item"}{" "}
-                  {(item.quantity ?? 1) > 1 && <span className="text-muted-foreground">×{item.quantity}</span>}
-                </span>
-                <span className="text-muted-foreground shrink-0">
-                  {formatCurrency(item.price || item.ItemPrice)}
-                </span>
+          <div className="flex-1 min-w-0 space-y-1.5">
+            {lineItems.slice(0, 8).map((item: any, i: number) => (
+              <div key={i} className="border-b border-border/50 pb-1.5 last:border-0 last:pb-0">
+                <div className="flex justify-between gap-1">
+                  <span className="text-foreground font-medium break-words leading-tight" style={{ wordBreak: "break-word" }}>
+                    {item.name || item.ProductName || "Item"}
+                  </span>
+                  <span className="text-muted-foreground shrink-0 ml-1">
+                    {formatCurrency(item.price || item.ItemPrice)}
+                  </span>
+                </div>
+                <div className="flex gap-2 text-muted-foreground text-[10px]">
+                  {(item.quantity ?? 1) > 1 && <span>Qty: {item.quantity}</span>}
+                  {item.sku && <span>SKU: {item.sku}</span>}
+                  {item.variant_title && <span>{item.variant_title}</span>}
+                </div>
               </div>
             ))}
-            {lineItems.length > 5 && (
-              <div className="text-muted-foreground">+{lineItems.length - 5} more items</div>
+            {lineItems.length > 8 && (
+              <div className="text-muted-foreground text-[10px]">+{lineItems.length - 8} more items</div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Order totals */}
+      {(subtotal || discount || shippingCost) && (
+        <div className="flex items-start gap-2">
+          <div className="w-3.5 shrink-0" />
+          <div className="flex-1 min-w-0 border-t border-border pt-1.5 space-y-0.5 text-muted-foreground">
+            {subtotal && (
+              <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
+            )}
+            {discount && parseFloat(discount) > 0 && (
+              <div className="flex justify-between"><span>Discount</span><span>-{formatCurrency(discount)}</span></div>
+            )}
+            {shippingCost && (
+              <div className="flex justify-between"><span>Shipping</span><span>{formatCurrency(shippingCost)}</span></div>
+            )}
+            <div className="flex justify-between font-medium text-foreground">
+              <span>Total</span><span>{formatCurrency(total)}</span>
+            </div>
           </div>
         </div>
       )}
@@ -116,9 +175,14 @@ function EventSummaryCard({ event }: { event: PreviewEvent }) {
       {shipping.address1 && (
         <div className="flex items-start gap-2">
           <MapPin className="w-3.5 h-3.5 text-muted-foreground mt-0.5 shrink-0" />
-          <div className="text-muted-foreground whitespace-pre-line">{formatAddress(shipping)}</div>
+          <div className="text-muted-foreground whitespace-pre-line min-w-0 break-words">{formatAddress(shipping)}</div>
         </div>
       )}
+
+      {/* View raw toggle */}
+      <button onClick={onToggleRaw} className="text-primary hover:underline text-[10px] w-full text-center pt-1">
+        View raw event data
+      </button>
     </div>
   );
 }
@@ -136,6 +200,7 @@ export default function FlowDetailsPanel({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [renderingPreview, setRenderingPreview] = useState(false);
   const [autoLoaded, setAutoLoaded] = useState(false);
+  const [showRawData, setShowRawData] = useState(false);
   const renderingRef = useRef(false);
 
   // Extract liquid variables from HTML
@@ -268,6 +333,7 @@ export default function FlowDetailsPanel({
   const goTo = useCallback(async (newIndex: number) => {
     if (newIndex < 0 || newIndex >= previewEvents.length) return;
     setSelectedIndex(newIndex);
+    setShowRawData(false);
     await renderPreview(previewEvents[newIndex]);
   }, [previewEvents, renderPreview]);
 
@@ -336,7 +402,7 @@ export default function FlowDetailsPanel({
             {/* Event summary card */}
             {activeEvent && (
               <div className="border border-border rounded-lg p-3 bg-card">
-                <EventSummaryCard event={activeEvent} />
+                <EventSummaryCard event={activeEvent} showRaw={showRawData} onToggleRaw={() => setShowRawData(r => !r)} />
               </div>
             )}
 
