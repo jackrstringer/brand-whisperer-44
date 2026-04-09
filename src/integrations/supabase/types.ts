@@ -502,9 +502,11 @@ export type Database = {
           created_at: string | null
           duration_ms: number | null
           error: string | null
+          event_key: string | null
           id: string
           payload: Json | null
           result: Json | null
+          run_id: string | null
           started_at: string | null
           status: string
           step: string
@@ -515,9 +517,11 @@ export type Database = {
           created_at?: string | null
           duration_ms?: number | null
           error?: string | null
+          event_key?: string | null
           id?: string
           payload?: Json | null
           result?: Json | null
+          run_id?: string | null
           started_at?: string | null
           status?: string
           step: string
@@ -528,9 +532,11 @@ export type Database = {
           created_at?: string | null
           duration_ms?: number | null
           error?: string | null
+          event_key?: string | null
           id?: string
           payload?: Json | null
           result?: Json | null
+          run_id?: string | null
           started_at?: string | null
           status?: string
           step?: string
