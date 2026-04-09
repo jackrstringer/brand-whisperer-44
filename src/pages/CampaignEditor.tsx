@@ -259,7 +259,55 @@ export default function CampaignEditor() {
   const [iframeContentHeight, setIframeContentHeight] = useState(800);
   const [previewFallbackUrls, setPreviewFallbackUrls] = useState<string[]>([]);
 
-  useEffect(() => {
+  // Helper: pre-render flow HTML with real Klaviyo event data
+  const preRenderFlowHtml = useCallback(async (html: string, fc: FlowConfig) => {
+    if (!fc?.trigger_metric_id || !brandId) return;
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const evResp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/klaviyo-fetch-preview-events`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ brandId, metricId: fc.trigger_metric_id }),
+        }
+      );
+      if (!evResp.ok) return;
+      const events = await evResp.json();
+      if (!Array.isArray(events) || events.length === 0) return;
+      const ev = events[0];
+      const renderResp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/klaviyo-render-preview`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            html,
+            event_properties: ev.event_properties,
+            profile_name: ev.profile_name,
+            profile_email: ev.profile_email,
+          }),
+        }
+      );
+      if (!renderResp.ok) return;
+      const renderData = await renderResp.json();
+      if (renderData.rendered_html) {
+        setFlowPreviewHtml(renderData.rendered_html);
+        setPreviewHtml(renderData.rendered_html);
+      }
+    } catch (err) {
+      console.warn("[flow-prerender] Could not pre-render flow preview:", err);
+    }
+  }, [brandId]);
+
     if (!campaignId || !brandId) return;
     const load = async () => {
       const { data: c } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
