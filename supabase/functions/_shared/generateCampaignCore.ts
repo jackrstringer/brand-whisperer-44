@@ -1099,7 +1099,7 @@ Use the above JSON to understand the exact data structure. Rules:
 - Always add | default: '' to every variable
 - Use exactly the property names shown in the JSON above — do not invent paths
 - Do NOT use $-prefixed keys in Liquid (e.g. use event.extra NOT event.$extra)
-═══ END EVENT DATA ═══`;
+═══ END EVENT DATA ═══${productFeedsBlock}`;
     flowUserContent.push({ type: "text", text: flowDetails });
 
     // Assets
