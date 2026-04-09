@@ -30,9 +30,8 @@ Deno.serve(async (req) => {
       .single();
 
     if (connErr || !conn) {
-      // No Klaviyo connection — skip validation silently
       return new Response(
-        JSON.stringify({ valid: true, skipped: true }),
+        JSON.stringify({ valid: false, skipped: true, error: "No Klaviyo connection found for this brand" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -61,10 +60,10 @@ Deno.serve(async (req) => {
         }),
       });
     } catch (networkErr: unknown) {
-      console.warn("[klaviyo-validate] Network error:", networkErr);
+      console.error("[klaviyo-validate] Network error:", networkErr);
       return new Response(
-        JSON.stringify({ valid: true, skipped: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        JSON.stringify({ valid: false, error: `Network error connecting to Klaviyo: ${String(networkErr)}` }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -107,10 +106,9 @@ Deno.serve(async (req) => {
     );
   } catch (err: unknown) {
     console.error("[klaviyo-validate] Error:", err);
-    // Never block generation
     return new Response(
-      JSON.stringify({ valid: true, skipped: true }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      JSON.stringify({ valid: false, error: `Validation error: ${String(err)}` }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 });

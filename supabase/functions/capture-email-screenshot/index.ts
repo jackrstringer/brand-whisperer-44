@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
       access_key: apiKey,
       html: html,
       viewport_width: 390,
-      viewport_height: 10000,
+      viewport_height: 7500,
       full_page: true,
       format: "png",
       block_ads: true,
@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
       device_scale_factor: 1,
     };
 
-    console.log("[capture-email-screenshot] Rendering at 470px viewport via POST...");
+    console.log("[capture-email-screenshot] Rendering at 390px viewport via POST...");
 
     const resp = await fetch("https://api.screenshotone.com/take", {
       method: "POST",
