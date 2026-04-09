@@ -333,6 +333,7 @@ export default function FlowDetailsPanel({
   const goTo = useCallback(async (newIndex: number) => {
     if (newIndex < 0 || newIndex >= previewEvents.length) return;
     setSelectedIndex(newIndex);
+    setShowRawData(false);
     await renderPreview(previewEvents[newIndex]);
   }, [previewEvents, renderPreview]);
 
