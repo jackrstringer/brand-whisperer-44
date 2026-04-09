@@ -2374,7 +2374,7 @@ export default function CampaignEditor() {
   function isDynamic(el){
     var n = el;
     while(n && n !== document.body){
-      if(n.hasAttribute && (n.hasAttribute('data-liquid') || n.hasAttribute('data-liquid-loop'))) return true;
+      if(n.hasAttribute && (n.hasAttribute('data-liquid') || n.hasAttribute('data-liquid-loop') || n.hasAttribute('data-liquid-attr'))) return true;
       n = n.parentElement;
     }
     return false;
