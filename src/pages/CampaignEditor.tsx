@@ -1809,8 +1809,80 @@ export default function CampaignEditor() {
         return;
       }
 
+      // flowStyleEdit — apply style change to source Liquid HTML and re-render
+      if (e.data?.type === 'flowStyleEdit') {
+        const { liquidPath, property, value } = e.data;
+        if (!liquidPath || !property || !value || !campaign?.html || !campaignId) return;
+
+        // Find all occurrences of {{ liquidPath }} or {{ liquidPath | ... }} in source HTML
+        // and apply the style to their parent element
+        const sourceHtml = campaign.html;
+        // Build regex to find the liquid variable usage
+        const escapedPath = liquidPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Match elements containing this liquid variable
+        const varPattern = new RegExp(`\\{\\{\\s*${escapedPath}(?:\\s*\\|[^}]*)?\\s*\\}\\}`, 'g');
+        
+        // For loop variables like "item.name", also check the loop context
+        // Convert camelCase CSS property to kebab-case
+        const cssProperty = property.replace(/([A-Z])/g, '-$1').toLowerCase();
+        
+        // Strategy: find each {{ var }} and add/update inline style on its nearest styled ancestor
+        let newHtml = sourceHtml;
+        // Simple approach: wrap or update style on elements containing the var
+        // Find HTML tags that contain the liquid variable and update their style
+        newHtml = newHtml.replace(
+          new RegExp(`(<[^>]*)(>[^<]*\\{\\{\\s*${escapedPath}(?:\\s*\\|[^}]*)?\\s*\\}\\}[^<]*<)`, 'g'),
+          (match, openTag, rest) => {
+            // Check if there's already an inline style
+            if (/style\s*=\s*"[^"]*"/.test(openTag)) {
+              // Update existing style
+              return openTag.replace(
+                /style\s*=\s*"([^"]*)"/,
+                (styleMatch: string, existingStyles: string) => {
+                  // Remove existing property if present
+                  const filtered = existingStyles
+                    .split(';')
+                    .filter((s: string) => s.trim() && !s.trim().startsWith(cssProperty))
+                    .join(';');
+                  const newStyles = filtered ? `${filtered};${cssProperty}:${value}` : `${cssProperty}:${value}`;
+                  return `style="${newStyles}"`;
+                }
+              ) + rest;
+            } else {
+              // Add new style attribute
+              return openTag + ` style="${cssProperty}:${value}"` + rest;
+            }
+          }
+        );
+
+        if (newHtml !== sourceHtml) {
+          const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
+          history.push(sourceHtml);
+          setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
+          setCanUndo(true);
+          setRedoStack([]);
+
+          // Save to DB
+          if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
+          pendingSaveRef.current = { html: newHtml, history, campaignId };
+          inlineEditTimerRef.current = setTimeout(async () => {
+            pendingSaveRef.current = null;
+            await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
+          }, 400);
+
+          // Re-render the preview with current event data by triggering FlowDetailsPanel
+          // The FlowDetailsPanel will pick up the new campaign.html and re-render
+        }
+        return;
+      }
+
       if (e.data?.type !== "textEdited" || !e.data?.html) return;
       if (!campaignId || !campaign) return;
+
+      // CRITICAL: Skip textEdited saves when viewing a flow preview (rendered Liquid)
+      // The rendered preview contains resolved values — saving it would destroy the Liquid templates
+      if (flowPreviewHtml) return;
+
       const newHtml = e.data.html as string;
       const currentHtml = iframeOwnedHtmlRef.current || campaign.html || "";
       if (newHtml === currentHtml) return;
@@ -1871,7 +1943,7 @@ export default function CampaignEditor() {
         supabase.from("campaigns").update(payload).eq("id", cid);
       }
     };
-  }, [campaignId, campaign, variantHtmls, activeVariantIndex, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace, writeDraft, draftKey]);
+  }, [campaignId, campaign, variantHtmls, activeVariantIndex, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace, writeDraft, draftKey, flowPreviewHtml]);
 
   // Ideate/Swap for selected elements (single or multi)
   const triggerSelectedElementIdeate = useCallback(() => {
@@ -2298,13 +2370,38 @@ export default function CampaignEditor() {
 (function(){
   /* --- TEXT EDITING --- */
   var blocks = ['TABLE','TR','TD','TH','DIV','UL','OL','IMG'];
+  /* Check if element or ancestor has data-liquid (dynamic content) */
+  function isDynamic(el){
+    var n = el;
+    while(n && n !== document.body){
+      if(n.hasAttribute && (n.hasAttribute('data-liquid') || n.hasAttribute('data-liquid-loop'))) return true;
+      n = n.parentElement;
+    }
+    return false;
+  }
+  /* Find the nearest data-liquid attribute path for an element */
+  function getLiquidPath(el){
+    var n = el;
+    while(n && n !== document.body){
+      if(n.hasAttribute && n.hasAttribute('data-liquid')) return n.getAttribute('data-liquid');
+      n = n.parentElement;
+    }
+    return null;
+  }
+  var isFlowPreview = !!document.querySelector('[data-liquid]');
   document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label').forEach(function(el){
     
     var hasBlock = Array.from(el.children).some(function(c){ return blocks.indexOf(c.tagName)>=0; });
     if(hasBlock) return;
     if(!el.textContent.trim()) return;
-    el.contentEditable = 'true';
-    el.style.cursor = 'text';
+    if(isDynamic(el)){
+      /* Dynamic elements: not text-editable, but still clickable for toolbar */
+      el.setAttribute('data-liquid-protected', 'true');
+      el.style.cursor = 'default';
+    } else {
+      el.contentEditable = 'true';
+      el.style.cursor = 'text';
+    }
   });
   document.addEventListener('paste', function(e){
     if(!e.target.isContentEditable) return;
@@ -2359,6 +2456,7 @@ export default function CampaignEditor() {
     clone.querySelectorAll('.region-select-overlay').forEach(function(el){ el.remove(); });
     clone.querySelectorAll('.img-swap-arrow,.img-swap-cats').forEach(function(el){ el.remove(); });
     clone.querySelectorAll('.img-selected').forEach(function(el){ el.classList.remove('img-selected'); });
+    clone.querySelectorAll('[data-liquid-protected]').forEach(function(el){ el.removeAttribute('data-liquid-protected'); });
     clone.querySelectorAll('style').forEach(function(s){
       if(s.textContent && (s.textContent.indexOf('[contenteditable]')>=0 || s.textContent.indexOf('section-drag')>=0 || s.textContent.indexOf('.ctx-menu')>=0 || s.textContent.indexOf('.ftb')>=0)) s.remove();
     });
@@ -2718,7 +2816,8 @@ export default function CampaignEditor() {
   function showFtb(el){
     removeFtb();
     ftbTarget = el;
-
+    var isDynEl = el.hasAttribute('data-liquid-protected') || isDynamic(el);
+    var liquidPath = getLiquidPath(el);
     var bar = document.createElement('div');
     bar.className = 'ftb';
 
@@ -2754,6 +2853,11 @@ export default function CampaignEditor() {
     sizeSelect.addEventListener('focus', function(){ clearTimeout(ftbBlurTimer); });
     sizeSelect.addEventListener('click', function(e){ e.stopPropagation(); clearTimeout(ftbBlurTimer); });
     sizeSelect.addEventListener('change', function(){
+      if(isDynEl && liquidPath){
+        el.style.fontSize = sizeSelect.value + 'px';
+        window.parent.postMessage({ type: 'flowStyleEdit', liquidPath: liquidPath, property: 'fontSize', value: sizeSelect.value + 'px' }, '*');
+        return;
+      }
       restoreSelection();
       el.focus();
       var sel = window.getSelection();
@@ -2850,9 +2954,13 @@ export default function CampaignEditor() {
       el.style.textAlign = next;
       currentAlign = next;
       alignBtn.innerHTML = alignSvgs[next];
-      syncHtmlImmediate();
+      if(isDynEl && liquidPath){
+        window.parent.postMessage({ type: 'flowStyleEdit', liquidPath: liquidPath, property: 'textAlign', value: next }, '*');
+      } else {
+        syncHtmlImmediate();
+      }
       restoreSelection();
-      el.focus();
+      if(!isDynEl) el.focus();
     });
     bar.appendChild(alignBtn);
 
@@ -2920,22 +3028,31 @@ export default function CampaignEditor() {
     padWrap.appendChild(padPanel);
     bar.appendChild(padWrap);
 
-    bar.appendChild(makeSep());
+    if(!isDynEl){
+      bar.appendChild(makeSep());
 
-    // Ideate button — stroke-only gradient border
-    var ideateBtn = document.createElement('button');
-    ideateBtn.className = 'ftb-ideate';
-    ideateBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg> Ideate';
-    ideateBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
-    ideateBtn.addEventListener('click', function(e){
-      e.stopPropagation();
-      // Capture innerHTML to preserve inline styling (highlights, colors, etc.)
-      var innerHTML = el.innerHTML;
-      var outerHTML = el.outerHTML;
-      var styles = el.getAttribute('style') || '';
-      window.parent.postMessage({ type: 'ideateElement', text: el.textContent.trim(), tagName: el.tagName, innerHTML: innerHTML, outerHTML: outerHTML, elementStyle: styles }, '*');
-    });
-    bar.appendChild(ideateBtn);
+      // Ideate button — stroke-only gradient border
+      var ideateBtn = document.createElement('button');
+      ideateBtn.className = 'ftb-ideate';
+      ideateBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z"/></svg> Ideate';
+      ideateBtn.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); });
+      ideateBtn.addEventListener('click', function(e){
+        e.stopPropagation();
+        var innerHTML = el.innerHTML;
+        var outerHTML = el.outerHTML;
+        var styles = el.getAttribute('style') || '';
+        window.parent.postMessage({ type: 'ideateElement', text: el.textContent.trim(), tagName: el.tagName, innerHTML: innerHTML, outerHTML: outerHTML, elementStyle: styles }, '*');
+      });
+      bar.appendChild(ideateBtn);
+    } else {
+      // Show a "Dynamic" label instead of ideate for protected elements
+      bar.appendChild(makeSep());
+      var dynLabel = document.createElement('span');
+      dynLabel.className = 'ftb-tag';
+      dynLabel.style.color = 'rgba(200,241,53,0.7)';
+      dynLabel.textContent = '⚡ Dynamic';
+      bar.appendChild(dynLabel);
+    }
 
     document.body.appendChild(bar);
     ftbEl = bar;
@@ -2961,6 +3078,19 @@ export default function CampaignEditor() {
     if(e.target && e.target.isContentEditable){
       clearTimeout(ftbBlurTimer);
       showFtb(e.target);
+    }
+  }, true);
+
+  // Show toolbar on click for data-liquid-protected (dynamic) elements
+  document.addEventListener('click', function(e){
+    var t = e.target;
+    while(t && t !== document.body){
+      if(t.hasAttribute && t.hasAttribute('data-liquid-protected')){
+        clearTimeout(ftbBlurTimer);
+        showFtb(t);
+        return;
+      }
+      t = t.parentElement;
     }
   }, true);
 
