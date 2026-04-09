@@ -924,6 +924,9 @@ ${UNIVERSAL_EMAIL_RULES}`;
     if (designNotes) flowBrandRules += `\n\nDesign notes:\n${designNotes}`;
     flowUserContent.push({ type: "text", text: flowBrandRules });
 
+    let flowDetails = `FLOW DETAILS:\nTrigger: ${flowConfig.trigger_metric_name || "Unknown"}\nEmail type: ${flowConfig.flow_type || "Transactional"}`;
+    if (flowNotes) flowDetails += `\n\n${flowNotes}`;
+
     flowDetails += `\n\n═══ REAL EVENT DATA — use these exact paths in your Liquid template ═══
 ${JSON.stringify(eventSchema, null, 2)}
 
