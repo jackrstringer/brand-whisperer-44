@@ -2743,7 +2743,8 @@ export default function CampaignEditor() {
   function showFtb(el){
     removeFtb();
     ftbTarget = el;
-
+    var isDynEl = el.hasAttribute('data-liquid-protected') || isDynamic(el);
+    var liquidPath = getLiquidPath(el);
     var bar = document.createElement('div');
     bar.className = 'ftb';
 
