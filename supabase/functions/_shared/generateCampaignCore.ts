@@ -6,24 +6,49 @@ import { rehostHtmlImagesWithImageKit } from "./imagekit.ts";
 import { finalizeCampaignHtml } from "./finalizeCampaignHtml.ts";
 import { KLAVIYO_BEST_PRACTICES } from "./klaviyoBestPractices.ts";
 
-/** Lightweight structured event logger for generation pipeline steps */
+/** Lightweight structured event logger for generation pipeline steps.
+ *  Uses upsert on (campaign_id, run_id, event_key) so a "started" row
+ *  gets updated to "completed"/"failed" instead of creating a duplicate. */
 export async function logGenEvent(
   supabase: any,
   campaignId: string,
   step: string,
-  data: { status?: string; payload?: any; result?: any; error?: string; duration_ms?: number }
+  data: {
+    status?: string; payload?: any; result?: any; error?: string;
+    duration_ms?: number; run_id?: string; event_key?: string;
+  }
 ) {
   try {
-    await supabase.from("generation_events").insert({
+    const runId = data.run_id || undefined;
+    const eventKey = data.event_key || `${step}_${Date.now()}`;
+    const status = data.status || "completed";
+    const isTerminal = status !== "started";
+
+    const row: Record<string, any> = {
       campaign_id: campaignId,
       step,
-      status: data.status || "completed",
+      status,
+      run_id: runId,
+      event_key: eventKey,
       payload: data.payload || null,
-      result: data.result || null,
       error: data.error || null,
-      duration_ms: data.duration_ms || null,
-      completed_at: data.status === "started" ? null : new Date().toISOString(),
-    });
+    };
+
+    if (isTerminal) {
+      row.completed_at = new Date().toISOString();
+      row.duration_ms = data.duration_ms || null;
+      row.result = data.result || null;
+    }
+
+    if (runId && eventKey) {
+      // Upsert: if this event_key already exists for this run, update it
+      await supabase.from("generation_events").upsert(row, {
+        onConflict: "campaign_id,run_id,event_key",
+        ignoreDuplicates: false,
+      });
+    } else {
+      await supabase.from("generation_events").insert(row);
+    }
   } catch (e) {
     console.warn("[logGenEvent] Failed to log event:", e);
   }
