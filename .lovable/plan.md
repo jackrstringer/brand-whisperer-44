@@ -1,64 +1,55 @@
 
 
-## Audit Results — Issues Found
+## Problem
 
-### CRITICAL Issues (will break at runtime)
+In flow mode, the campaign HTML contains Liquid templates (e.g. `{{ event.extra.line_items[0].name }}`). When a preview event is selected, the `klaviyo-render-preview` edge function resolves these templates into actual values and the result is displayed in the iframe. Two critical issues:
 
-**1. Missing database migration for `visual_qa_status` and `visual_qa_score`**
-The `runVisualQa` function writes `visual_qa_status` and `visual_qa_score` to the `campaigns` table (lines 564-574), but the migration to add these columns was never executed. Every QA pass/fail write will silently fail.
+1. **Editing destroys Liquid templates**: When the user clicks into any text element, the iframe's `contentEditable` + `syncHtml()` mechanism serializes the *rendered* DOM (with resolved values) and sends it back via `textEdited`. This overwrites `campaign.html` with the baked-in values, permanently losing the Liquid templates. After that, switching preview events has no effect — the templates are gone.
 
-**Fix:** Run migration:
-```sql
-ALTER TABLE campaigns
-  ADD COLUMN IF NOT EXISTS visual_qa_status text DEFAULT 'pending',
-  ADD COLUMN IF NOT EXISTS visual_qa_score integer;
-```
+2. **No formatting propagation**: If a user changes font size on a product title, it only affects that one DOM element, not all instances of the same Liquid field (e.g., all `{{ item.name }}` inside a `{% for %}` loop).
 
-**2. Missing `config.toml` entries for new edge functions**
-`capture-email-screenshot` and `slice-image-on-demand` are not registered in `supabase/config.toml`. Only `slice-reference` has `verify_jwt = false`. Without entries, these functions will require JWT verification by default, which means `supabase.functions.invoke()` calls from the client will need a valid auth token (which they should have — but explicit `verify_jwt = false` is safer and matches the pattern used by `slice-reference`).
+## Solution
 
-**Fix:** Add to `config.toml`:
-```toml
-[functions.capture-email-screenshot]
-verify_jwt = false
+### 1. Protect dynamic content from text editing (iframe script changes)
 
-[functions.slice-image-on-demand]
-verify_jwt = false
-```
+In the iframe's initialization script (the giant inline `<script>` block in `srcdocHtml`):
 
-**3. ScreenshotOne HTML passed via GET query params — will exceed URL length limits**
-The `capture-email-screenshot` function passes the full email HTML as a URL query parameter:
-```typescript
-const params = new URLSearchParams({ html: html, ... });
-const resp = await fetch(`https://api.screenshotone.com/take?${params}`);
-```
-Campaign HTML is typically 15-50KB. URL length limits are ~8KB in most servers, ~2KB in some browsers. This will fail for any real email. ScreenshotOne supports POST requests — the HTML should be sent as a POST body instead.
+- **Before** setting `contentEditable` on elements, check if the element's text was produced by a Liquid variable. The `klaviyo-render-preview` function will be updated to wrap rendered dynamic content in a marker: `<span data-liquid="event.extra.line_items[0].name">Actual Value</span>`.
+- Elements (or ancestors) with `data-liquid` attributes get `contentEditable = false` — users can click them but cannot type/delete text.
+- The floating toolbar (ftb) still appears for these elements, but with the **Ideate** button hidden and text input disabled. Font size, color, alignment, bold/italic/underline, and padding controls remain functional.
 
-**Fix:** Switch to POST request to ScreenshotOne API.
+### 2. Apply formatting to the source HTML, not the rendered preview
 
-### MODERATE Issues
+When a formatting change is made on a `data-liquid` element:
 
-**4. Model name `claude-sonnet-4-6-20251101` in visual-qa**
-This model identifier is used in the `visual-qa` function. If Anthropic hasn't released this exact model ID, the API call will return a 400/404 error. Should verify this is a valid model, or fall back to `claude-sonnet-4-20250514` which is known to work (used in `sliceEmailImage.ts`).
+- Instead of calling `syncHtml()` (which would bake rendered values into `campaign.html`), the iframe sends a **new message type**: `{ type: 'flowStyleEdit', liquidPath: 'item.name', property: 'fontSize', value: '14px' }`.
+- The parent handler in `CampaignEditor.tsx` receives this message and applies the style change to the **source Liquid HTML** (`campaign.html`), finding all elements that contain the matching `{{ liquid_path }}` pattern and adding/updating the inline style.
+- The updated source HTML is saved to the database, and the preview is re-rendered with the current event data.
 
-**5. Edge functions not deployed**
-The three new/updated edge functions (`capture-email-screenshot`, `slice-image-on-demand`, `visual-qa`) need to be deployed. They exist as code but may not be live yet.
+### 3. Update `klaviyo-render-preview` to mark dynamic content
 
-### MINOR Issues
+Modify the edge function to wrap rendered Liquid output with `data-liquid` markers so the iframe can identify which elements contain dynamic content. This is done by preprocessing the HTML before Liquid rendering:
 
-**6. `runVisualQa` triggers on `status === "ready"` (line 744)**
-The previous conversation removed the `ready`/`variants_ready` status concept — campaigns should just be "draft" or unmarked. But the polling logic still checks for `status === "ready"` and triggers QA on it. This is a minor inconsistency but won't break anything since the status check is just a polling condition.
+- Find `{{ variable }}` patterns and wrap them: `<span data-liquid="variable">{{ variable }}</span>`
+- For `{% for item in event.extra.line_items %}` blocks, add `data-liquid-loop="event.extra.line_items"` to the loop container.
 
-**7. No graceful timeout on the QA loop**
-The full QA loop (render → slice → QA, up to 3x) runs entirely client-side with no timeout. If ScreenshotOne or Claude is slow, the user could be waiting 2-5 minutes with just "Running visual QA..." shown. Not a bug, but worth noting.
+### 4. Prevent `textEdited` saves during flow preview mode
 
----
+In the `textEdited` handler in `CampaignEditor.tsx` (line ~1812):
 
-### Proposed Fix Plan
+- If `flowPreviewHtml` is set (meaning we're viewing a rendered preview), **skip** saving the serialized HTML back to `campaign.html`. The rendered preview is display-only; only explicit style edits (via the new `flowStyleEdit` message) should modify the source.
 
-1. Run the database migration to add `visual_qa_status` and `visual_qa_score` columns
-2. Update `config.toml` with `verify_jwt = false` for both new functions
-3. Fix `capture-email-screenshot` to use POST instead of GET for the ScreenshotOne API
-4. Verify/fix the Claude model ID in `visual-qa`
-5. Deploy all three edge functions
+## Files to modify
+
+1. **`supabase/functions/klaviyo-render-preview/index.ts`** — Add `data-liquid` marker injection before Liquid rendering
+2. **`src/pages/CampaignEditor.tsx`** — Three changes:
+   - Iframe inline script: skip `contentEditable` for `data-liquid` elements, send `flowStyleEdit` messages for formatting, disable text input on dynamic fields
+   - `textEdited` handler: skip save when `flowPreviewHtml` is active
+   - New `flowStyleEdit` handler: apply style changes to source HTML and re-render preview
+3. **No database changes needed**
+
+## Complexity notes
+
+- The `{% for %}` loop case is the trickiest — the source HTML has one template but renders N items. The marker approach handles this by tagging each rendered item with `data-liquid="item.name"` (the loop variable path), so a style change to any one propagates to the template in the source HTML.
+- Static text elements remain fully editable as before — this only restricts elements containing resolved Liquid variables.
 
