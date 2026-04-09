@@ -45,7 +45,7 @@ export default function FlowDetailsPanel({
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [renderingPreview, setRenderingPreview] = useState(false);
-  const [isPreviewActive, setIsPreviewActive] = useState(false);
+  
 
   // Extract liquid variables from HTML
   const liquidVars = useMemo(() => {
