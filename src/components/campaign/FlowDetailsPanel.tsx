@@ -79,6 +79,7 @@ function EventSummaryCard({ event, showRaw, onToggleRaw }: { event: PreviewEvent
         profileName={event.profile_name}
         profileEmail={event.profile_email}
         onClose={onToggleRaw}
+        onInsertField={onInsertField}
       />
     );
   }
