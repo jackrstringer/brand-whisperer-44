@@ -102,13 +102,13 @@ async function requestReportChunk(
   prompt: string,
 ): Promise<string> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120_000);
+  const timeout = setTimeout(() => controller.abort(), 300_000);
 
   try {
     const message = await anthropic.messages.create(
       {
         model: "claude-opus-4-6",
-        max_tokens: 8192,
+        max_tokens: 32000,
         system: SYSTEM_PROMPT,
         messages: [
           {
@@ -159,6 +159,7 @@ function validateReportHtml(html: string): ReportValidationResult {
 }
 
 function buildContinuationPrompt(
+  sourcePrompt: string,
   existingHtml: string,
   missingMarkers: string[],
 ): string {

@@ -1,109 +1,17 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { generateCampaignReportHtml } from "../_shared/campaignReportGenerator.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
-  try {
-    const { brand_id } = await req.json();
-    if (!brand_id) throw new Error("brand_id is required");
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
-
-    await runPipeline(supabase, brand_id);
-
-    return new Response(JSON.stringify({ success: true }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
-
-// ─── Pipeline Orchestrator ───
-
-async function runPipeline(supabase: any, brandId: string) {
-  const { data: bi, error: biError } = await supabase
-    .from("brand_intelligence")
-    .select("klaviyo_raw, ai_research, compiled_context")
-    .eq("brand_id", brandId)
-    .single();
-
-  if (biError || !bi) {
-    throw new Error(`Failed to load brand_intelligence: ${biError?.message}`);
-  }
-
-  await supabase
-    .from("brand_intelligence")
-    .update({
-      campaign_report_status: "generating",
-      campaign_report_error: null,
-    })
-    .eq("brand_id", brandId);
-
-  try {
-    const scoredCampaigns = scoreCampaigns(bi.klaviyo_raw || []);
-    const competitorResearchResults = await researchCompetitors(bi.ai_research);
-    const html = await generateCampaignReportHtml({
-      compiledContext: bi.compiled_context,
-      scoredCampaigns,
-      competitorResearch: competitorResearchResults,
-    });
-
-    await supabase
-      .from("brand_intelligence")
-      .update({
-        campaign_report_html: html,
-        campaign_report_status: "complete",
-        campaign_report_generated_at: new Date().toISOString(),
-        campaign_report_error: null,
-      })
-      .eq("brand_id", brandId);
-  } catch (err: any) {
-    await supabase
-      .from("brand_intelligence")
-      .update({
-        campaign_report_status: "failed",
-        campaign_report_error: err.message,
-      })
-      .eq("brand_id", brandId);
-    throw err;
-  }
-}
-
-// ─── Campaign Scoring ───
-
 const SALE_KEYWORDS = [
-  "off",
-  "%",
-  "sale",
-  "deal",
-  "save",
-  "discount",
-  "free shipping",
-  "bogo",
-  "bundle",
-  "flash",
-  "limited time",
-  "ends tonight",
-  "last chance",
-  "today only",
-  "hours only",
+  "off", "%", "sale", "deal", "save", "discount", "free shipping",
+  "bogo", "bundle", "flash", "limited time", "ends tonight",
+  "last chance", "today only", "hours only",
 ];
 
 function isSaleCampaign(subjectLine: string): boolean {
@@ -145,8 +53,6 @@ function scoreCampaigns(campaigns: any[]): any[] {
     }))
     .sort((a, b) => b.impactScore - a.impactScore);
 }
-
-// ─── Competitor Research ───
 
 async function researchCompetitor(name: string): Promise<string> {
   const key = Deno.env.get("PERPLEXITY_API_KEY");
@@ -195,3 +101,83 @@ async function researchCompetitors(aiResearch: any): Promise<string> {
     .map((name, i) => `### ${name}\n${results[i]}`)
     .join("\n\n");
 }
+
+async function runPipeline(supabase: any, brandId: string) {
+  const { data: bi, error: biError } = await supabase
+    .from("brand_intelligence")
+    .select("klaviyo_raw, ai_research, compiled_context")
+    .eq("brand_id", brandId)
+    .single();
+
+  if (biError || !bi) {
+    throw new Error(`Failed to load brand_intelligence: ${biError?.message}`);
+  }
+
+  await supabase
+    .from("brand_intelligence")
+    .update({
+      campaign_report_status: "generating",
+      campaign_report_error: null,
+    })
+    .eq("brand_id", brandId);
+
+  try {
+    const scoredCampaigns = scoreCampaigns(bi.klaviyo_raw || []);
+    const competitorResearchResults = await researchCompetitors(bi.ai_research);
+    const html = await generateCampaignReportHtml({
+      compiledContext: bi.compiled_context,
+      scoredCampaigns,
+      competitorResearch: competitorResearchResults,
+    });
+
+    await supabase
+      .from("brand_intelligence")
+      .update({
+        campaign_report_html: html,
+        campaign_report_status: "complete",
+        campaign_report_generated_at: new Date().toISOString(),
+        campaign_report_error: null,
+      })
+      .eq("brand_id", brandId);
+
+    console.log(`[campaign-report] Complete for brand ${brandId}, html length: ${html.length}`);
+  } catch (err: any) {
+    console.error(`[campaign-report] Failed for brand ${brandId}:`, err.message);
+    await supabase
+      .from("brand_intelligence")
+      .update({
+        campaign_report_status: "failed",
+        campaign_report_error: err.message,
+      })
+      .eq("brand_id", brandId);
+  }
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    const { brand_id } = await req.json();
+    if (!brand_id) throw new Error("brand_id is required");
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // Fire-and-forget: run pipeline in background, return immediately
+    (globalThis as any).EdgeRuntime.waitUntil(runPipeline(supabase, brand_id));
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 202,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
