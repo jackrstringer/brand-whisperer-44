@@ -1628,9 +1628,35 @@ CORRECT circle pattern in email (always use a fixed-size <td>):
 
 NEVER use width:100% with border-radius:50% — oval result guaranteed.
 
+CRITICAL — THE WRAPPER TABLE MUST ALSO HAVE AN EXPLICIT WIDTH:
+
+Email preview environments inject CSS like `table { width: 100% !important }` to
+prevent layout overflow. If the <table> wrapping your circle <td> has NO explicit
+width attribute, this injected rule stretches it to 100% of its parent container.
+The circle <td> inside then expands to fill that stretched table — turning your
+32px×32px circle into a 120px×32px oval.
+
+WRONG (no width on wrapper table — gets stretched to 100% by email clients):
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+    <tr>
+      <td width="32" height="32" style="width:32px;height:32px;border-radius:50%;">...</td>
+    </tr>
+  </table>
+
+CORRECT (explicit width on wrapper table — immune to injected CSS):
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="32" style="width:32px;margin:0 auto;">
+    <tr>
+      <td width="32" height="32" style="width:32px;height:32px;border-radius:50%;">...</td>
+    </tr>
+  </table>
+
+This applies to EVERY table that wraps a circular element. The width attribute
+on the table AND the td AND the inline style must ALL be set to the same value.
+Three matching values. No exceptions.
+
 PROGRESS STEP INDICATORS (e.g. Order Placed → Shipping → Delivery):
-  Use a single <tr> with fixed equal-size <td> cells for each circle.
-  Connect steps with a thin horizontal line using border-top on a spacer <td>.
+  Each step circle must be wrapped in its own table with explicit width="32"
+  (or whatever your circle diameter is). Without this, the circle stretches.
   Each step circle: exactly 32×32px or 40×40px — never auto width.
 
 EXACT SVG for filled circle with checkmark (use this pattern verbatim):
