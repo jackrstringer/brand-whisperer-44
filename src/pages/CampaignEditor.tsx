@@ -2457,6 +2457,7 @@ export default function CampaignEditor() {
     clone.querySelectorAll('.img-swap-arrow,.img-swap-cats').forEach(function(el){ el.remove(); });
     clone.querySelectorAll('.img-selected').forEach(function(el){ el.classList.remove('img-selected'); });
     clone.querySelectorAll('[data-liquid-protected]').forEach(function(el){ el.removeAttribute('data-liquid-protected'); });
+    clone.querySelectorAll('[data-liquid-attr]').forEach(function(el){ el.removeAttribute('data-liquid-attr'); });
     clone.querySelectorAll('style').forEach(function(s){
       if(s.textContent && (s.textContent.indexOf('[contenteditable]')>=0 || s.textContent.indexOf('section-drag')>=0 || s.textContent.indexOf('.ctx-menu')>=0 || s.textContent.indexOf('.ftb')>=0)) s.remove();
     });
