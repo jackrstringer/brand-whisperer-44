@@ -1,78 +1,90 @@
 
 
-## Plan: Fix Flow Email Liquid Syntax, Add Flow QA Pass, Fix Preview Switching
+## Plan: Improve Flow Email Design Quality, Auto-Load Previews, Arrow Navigation UX
 
 ### Problem Summary
 
-Three issues:
-
-1. **`$extra` paths in generated HTML**: The `extractLiquidVars` function blindly walks the real Klaviyo event payload, which includes a `$extra` property containing the raw Shopify order data. This produces variable paths like `event.$extra.line_items`, `event.$extra.total_price` — which Klaviyo's Liquid engine cannot parse. The standard Klaviyo variables use the flattened top-level keys (`event.Items`, `event.OrderId`), not `$extra`.
-
-2. **No flow/transactional QA check**: The existing `qa-campaign` function only checks links, images, spelling, and subject line length. It has no awareness of Liquid syntax validity or whether the variables used actually exist in the event schema.
-
-3. **Preview event switching requires "Revert" first**: `renderPreview` sets `isPreviewActive = true` after the first selection, but clicking another event still works — the issue is that the `html` prop passed to `renderPreview` is the *original* template HTML, not the currently-displayed preview. This is correct. The real UX issue is that clicking another event should just work directly without needing to revert — which it already does functionally, but the UI makes it feel like you need to revert first because of the active preview banner placement.
+1. **Weak reference adherence in flow mode**: The flow prompt says "follow its structure... Adapt for transactional content" — too loose. The user expects dupe-level fidelity.
+2. **No auto-populated preview data**: After generation, the email shows raw Liquid tags until the user manually clicks "Load Recent Events" and picks one.
+3. **Preview UX is a list of clickable cards**: User wants Klaviyo-style left/right arrow navigation with a clean formatted data summary instead of raw JSON.
+4. **Bug**: `html` prop passed to FlowDetailsPanel is `flowPreviewHtml || campaign?.html` — after first preview render, subsequent renders use already-resolved HTML as the template, breaking switching.
 
 ---
 
 ### Changes
 
-#### 1. Fix `extractLiquidVars` to filter out `$extra` and internal `$` properties
+#### 1. Strengthen reference adherence in flow mode
 
-**File**: `supabase/functions/klaviyo-fetch-schema/index.ts`
+**File**: `supabase/functions/_shared/generateCampaignCore.ts` (~line 919-925)
 
-- In `extractLiquidVars`, skip any key that starts with `$extra`, `$attribution`, or other internal Klaviyo `$`-prefixed keys (except `$value` and `$event_id` which are valid Liquid variables).
-- This ensures the variable contract only contains paths that Klaviyo's Liquid engine actually supports.
+Replace the weak flow reference instruction with dupe-level language:
 
-#### 2. Enrich standard schemas with Shopify-accurate fields
+```
+REFERENCE LAYOUT — EXACT STRUCTURAL CLONE REQUIRED.
+Replicate this reference's structure EXACTLY:
+- SAME number of sections, in the SAME order
+- SAME column layouts and image slot positions
+- SAME visual rhythm and spacing proportions
+- ONLY adapt: swap in brand colors/fonts, replace static content slots with
+  Liquid-templated transactional data (line items loop, order details, shipping info)
+- Do NOT add or remove sections. Do NOT rearrange. The skeleton stays identical.
+```
 
-**File**: `supabase/functions/klaviyo-fetch-schema/index.ts`
+This brings flow mode in line with dupe mode's structural fidelity while still allowing transactional content adaptation.
 
-- Update the "Placed Order" standard schema to include shipping address, subtotal, tax, currency, and other commonly-used fields that Klaviyo actually supports (e.g., `event.Items[].Variant`, `event.ShippingAddress.FirstName`).
-- These are the real Klaviyo-supported top-level properties, not the raw Shopify `$extra` data.
-
-#### 3. Add flow-specific QA pass to `qa-campaign`
-
-**File**: `supabase/functions/qa-campaign/index.ts`
-
-- Accept optional `flowConfig` parameter (with `event_schema` and `liquid_variables`).
-- When present, run an additional QA section:
-  - **Variable validation**: Extract all `{{ event.* }}` and `{% for ... in event.* %}` references from the HTML. Flag any variable that doesn't exist in the `liquid_variables` allowlist.
-  - **Liquid syntax check**: Flag common syntax errors — unclosed `{% for %}` without `{% endfor %}`, missing `| default:` filters, `$extra` usage, malformed tag patterns.
-  - **Klaviyo best practice check**: Verify unsubscribe link presence for marketing flows, `person.first_name` personalization, proper `{% if %}` guards around optional blocks.
-- Return results in a new `flow_validation` section of the QA response.
-
-#### 4. Wire flow QA into the campaign editor
-
-**File**: `src/pages/CampaignEditor.tsx`
-
-- When triggering QA on a flow/transactional campaign, pass `flowConfig` (including `event_schema` and `liquid_variables`) to the `qa-campaign` edge function.
-- Display flow validation results in the QA results panel alongside existing checks.
-
-#### 5. Fix preview event switching UX
+#### 2. Auto-load preview events and render first one on generation complete
 
 **File**: `src/components/campaign/FlowDetailsPanel.tsx`
 
-- Remove the requirement to revert before selecting a new event. When clicking a different event, call `renderPreview` directly — it already uses the original `html` prop as the template source, so switching is safe.
-- Move the "Previewing with real event data" banner inline with the event list rather than above it, so it doesn't create a visual barrier.
-- Remove `setIsPreviewActive` gating — any event click should render immediately.
+- Add `useEffect` that auto-calls `loadPreviewEvents` on mount when `flowConfig.trigger_metric_id` exists and `html` is present.
+- After events load, auto-render the first event's preview immediately (call `renderPreview(events[0])`).
+- This means the email always shows with real data populated — never raw Liquid tags.
+
+**File**: `src/pages/CampaignEditor.tsx` (~line 4444)
+
+- Fix the html prop bug: always pass `campaign?.html || null` as the template source to FlowDetailsPanel, never the rendered preview HTML. The rendered HTML is only for display.
+
+#### 3. Arrow navigation UX with formatted event data
+
+**File**: `src/components/campaign/FlowDetailsPanel.tsx`
+
+Replace the vertical list of event cards with:
+
+- A compact navigator bar: `< 1 of 10 >` with left/right arrow buttons
+- Clicking arrows calls `renderPreview` with the next/previous event
+- Below the navigator, show a clean formatted summary card for the active event:
+  - **Customer**: name, email
+  - **Order**: order number, date, total
+  - **Items**: product names with quantities (compact list, not raw JSON)
+  - **Shipping**: formatted address
+- This replaces the scrollable list of event buttons entirely
+- Keep the liquid variables table as-is (it's useful)
 
 ---
 
 ### Technical Details
 
-**`$extra` filtering logic** (in `extractLiquidVars`):
+**html prop fix** (CampaignEditor.tsx line 4444):
+```
+html={campaign?.html || null}
+```
+Not `flowPreviewHtml || campaign?.html` — the template source must always be the original Liquid HTML.
+
+**Auto-load flow** (FlowDetailsPanel):
 ```text
-Skip keys matching: $extra, $attribution, $flow, $message, $variation
-Allow keys matching: $value, $event_id
+useEffect → loadPreviewEvents() when html + trigger_metric_id exist
+  → on events loaded, auto-render events[0]
+  → selectedIndex = 0
 ```
 
-**Flow QA validation checks**:
-- Extract all `{{ ... }}` variable paths from HTML
-- Compare each against the `liquid_variables` allowlist
-- Flag unknown variables as errors with the specific path
-- Check for unclosed control flow tags
-- Check all variables have `| default:` filters
+**Arrow navigator state**:
+- `selectedIndex: number` replaces `selectedEventId: string | null`
+- Left arrow: `setSelectedIndex(i => Math.max(0, i - 1))` + render
+- Right arrow: `setSelectedIndex(i => Math.min(events.length - 1, i + 1))` + render
 
-**Preview switching fix**:
-- `renderPreview` already accepts the event and uses the original `html` — just remove the visual/UX friction that makes it seem like revert is required first.
+**Event data formatter** — extract and display cleanly:
+- `event.extra.order_number` → Order #307583
+- `event.extra.shipping_address` → formatted multi-line address
+- `event.extra.line_items[]` → product name + qty + price rows
+- `event.value` or `event.extra.total_price` → formatted total
 
