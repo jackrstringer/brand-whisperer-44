@@ -200,6 +200,7 @@ export default function FlowDetailsPanel({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [renderingPreview, setRenderingPreview] = useState(false);
   const [autoLoaded, setAutoLoaded] = useState(false);
+  const [showRawData, setShowRawData] = useState(false);
   const renderingRef = useRef(false);
 
   // Extract liquid variables from HTML
