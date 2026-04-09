@@ -1809,8 +1809,80 @@ export default function CampaignEditor() {
         return;
       }
 
+      // flowStyleEdit — apply style change to source Liquid HTML and re-render
+      if (e.data?.type === 'flowStyleEdit') {
+        const { liquidPath, property, value } = e.data;
+        if (!liquidPath || !property || !value || !campaign?.html || !campaignId) return;
+
+        // Find all occurrences of {{ liquidPath }} or {{ liquidPath | ... }} in source HTML
+        // and apply the style to their parent element
+        const sourceHtml = campaign.html;
+        // Build regex to find the liquid variable usage
+        const escapedPath = liquidPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Match elements containing this liquid variable
+        const varPattern = new RegExp(`\\{\\{\\s*${escapedPath}(?:\\s*\\|[^}]*)?\\s*\\}\\}`, 'g');
+        
+        // For loop variables like "item.name", also check the loop context
+        // Convert camelCase CSS property to kebab-case
+        const cssProperty = property.replace(/([A-Z])/g, '-$1').toLowerCase();
+        
+        // Strategy: find each {{ var }} and add/update inline style on its nearest styled ancestor
+        let newHtml = sourceHtml;
+        // Simple approach: wrap or update style on elements containing the var
+        // Find HTML tags that contain the liquid variable and update their style
+        newHtml = newHtml.replace(
+          new RegExp(`(<[^>]*)(>[^<]*\\{\\{\\s*${escapedPath}(?:\\s*\\|[^}]*)?\\s*\\}\\}[^<]*<)`, 'g'),
+          (match, openTag, rest) => {
+            // Check if there's already an inline style
+            if (/style\s*=\s*"[^"]*"/.test(openTag)) {
+              // Update existing style
+              return openTag.replace(
+                /style\s*=\s*"([^"]*)"/,
+                (styleMatch: string, existingStyles: string) => {
+                  // Remove existing property if present
+                  const filtered = existingStyles
+                    .split(';')
+                    .filter((s: string) => s.trim() && !s.trim().startsWith(cssProperty))
+                    .join(';');
+                  const newStyles = filtered ? `${filtered};${cssProperty}:${value}` : `${cssProperty}:${value}`;
+                  return `style="${newStyles}"`;
+                }
+              ) + rest;
+            } else {
+              // Add new style attribute
+              return openTag + ` style="${cssProperty}:${value}"` + rest;
+            }
+          }
+        );
+
+        if (newHtml !== sourceHtml) {
+          const history = Array.isArray(campaign.html_history) ? [...campaign.html_history] : [];
+          history.push(sourceHtml);
+          setCampaign(c => c ? { ...c, html: newHtml, html_history: history } : c);
+          setCanUndo(true);
+          setRedoStack([]);
+
+          // Save to DB
+          if (inlineEditTimerRef.current) clearTimeout(inlineEditTimerRef.current);
+          pendingSaveRef.current = { html: newHtml, history, campaignId };
+          inlineEditTimerRef.current = setTimeout(async () => {
+            pendingSaveRef.current = null;
+            await supabase.from("campaigns").update({ html: newHtml, html_history: history }).eq("id", campaignId);
+          }, 400);
+
+          // Re-render the preview with current event data by triggering FlowDetailsPanel
+          // The FlowDetailsPanel will pick up the new campaign.html and re-render
+        }
+        return;
+      }
+
       if (e.data?.type !== "textEdited" || !e.data?.html) return;
       if (!campaignId || !campaign) return;
+
+      // CRITICAL: Skip textEdited saves when viewing a flow preview (rendered Liquid)
+      // The rendered preview contains resolved values — saving it would destroy the Liquid templates
+      if (flowPreviewHtml) return;
+
       const newHtml = e.data.html as string;
       const currentHtml = iframeOwnedHtmlRef.current || campaign.html || "";
       if (newHtml === currentHtml) return;
