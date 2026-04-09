@@ -159,6 +159,7 @@ function validateReportHtml(html: string): ReportValidationResult {
 }
 
 function buildContinuationPrompt(
+  sourcePrompt: string,
   existingHtml: string,
   missingMarkers: string[],
 ): string {
