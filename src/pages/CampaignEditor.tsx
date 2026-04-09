@@ -458,159 +458,141 @@ export default function CampaignEditor() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  const runVisualQa = useCallback(async (campaignData: Campaign) => {
+  const runVisualQa = useCallback(async (campaignData: Campaign, iteration = 0) => {
+    const MAX_ITERATIONS = 3;
     if (!campaignData.html || !campaignId) return;
     setVisualQaRunning(true);
-    setMessages((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: "Running visual QA check...", created_at: new Date().toISOString() },
-    ]);
 
     try {
-      const { slices } = await captureEmailScreenshots(campaignData.html);
-      console.log(`[visual-qa] Captured ${slices.length} slices`);
+      // AGENT 3: Render at exactly 470px — same as in-app preview
+      console.log(`[qa-loop] Iteration ${iteration + 1}: Rendering at 470px...`);
+      const renderResp = await supabase.functions.invoke('capture-email-screenshot', {
+        body: { html: campaignData.html }
+      });
+      if (renderResp.error) throw new Error(`Renderer failed: ${renderResp.error.message}`);
+      const { imageBase64, mimeType } = renderResp.data;
 
-      // Collect reference image URLs for structural comparison
-      const referenceImageUrls: string[] = [];
-      for (const ref of selectedReferences) {
-        if (ref.image_urls?.length) {
-          referenceImageUrls.push(...ref.image_urls);
-        } else if (ref.thumbnail_url) {
-          referenceImageUrls.push(ref.thumbnail_url);
-        }
+      // AGENT 1: Slice the rendered output
+      console.log(`[qa-loop] Slicing output...`);
+      const sliceResp = await supabase.functions.invoke('slice-image-on-demand', {
+        body: { imageBase64, mimeType }
+      });
+      if (sliceResp.error) throw new Error(`Slicer failed: ${sliceResp.error.message}`);
+      const outputSlices = sliceResp.data.slices;
+
+      // Get pre-stored reference slices from DB
+      let referenceSlices: any[] = [];
+      if (selectedReferences?.length > 0) {
+        const { data: refCampaign } = await supabase
+          .from('reference_campaigns')
+          .select('image_slice_urls')
+          .eq('id', selectedReferences[0].id)
+          .single();
+        referenceSlices = (refCampaign as any)?.image_slice_urls || [];
       }
 
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/visual-qa`;
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-        },
-        body: JSON.stringify({
-          campaignId,
-          html: campaignData.html,
-          slices,
-          referenceImageUrls: referenceImageUrls.length > 0 ? referenceImageUrls : undefined,
-        }),
+      // AGENT 4: QA comparison
+      console.log(`[qa-loop] Running QA...`);
+      const qaResp = await supabase.functions.invoke('visual-qa', {
+        body: { campaignId, html: campaignData.html, outputSlices, referenceSlices }
       });
+      if (qaResp.error) throw new Error(`QA failed: ${qaResp.error.message}`);
+      const qaResult = qaResp.data;
 
-      if (!resp.ok) throw new Error(`Visual QA failed: ${resp.status}`);
+      const criticalIssues = (qaResult.issues || []).filter((i: any) => i.severity === 'critical');
+      const hasCriticalIssues = criticalIssues.length > 0;
+      const hasStructuralFailure = qaResult.structural_fidelity != null && qaResult.structural_fidelity < 5;
+      const needsFix = hasCriticalIssues || hasStructuralFailure;
 
-      const result = await resp.json();
-      const issueCount = result.issues?.length || 0;
-      const structuralFidelity = result.structural_fidelity;
-      const hasStructuralFailure = structuralFidelity != null && structuralFidelity < 5;
+      if (needsFix && iteration < MAX_ITERATIONS - 1) {
+        console.log(`[qa-loop] ${criticalIssues.length} critical issues — attempting fix (iteration ${iteration + 1})`);
 
-      // Auto-remediation: if structural fidelity is critically low, attempt one fix pass
-      if (hasStructuralFailure && !campaignData._remediationAttempted) {
-        console.log(`[visual-qa] Structural fidelity ${structuralFidelity}/10 — triggering auto-remediation`);
-        setMessages((prev) => [
-          ...prev,
-          { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `⚠️ Structural fidelity ${structuralFidelity}/10 — refining layout to match reference...`, created_at: new Date().toISOString() },
-        ]);
+        // Fast path: apply direct find/replace patches
+        let patchedHtml = campaignData.html;
+        let patchesApplied = 0;
+        for (const issue of criticalIssues) {
+          if (issue.find && issue.replace && patchedHtml.includes(issue.find)) {
+            patchedHtml = patchedHtml.replace(issue.find, issue.replace);
+            patchesApplied++;
+          }
+        }
 
-        try {
-          // Build remediation instructions from QA issues
-          const structuralIssues = (result.issues || [])
-            .filter((i: any) => i.severity === "critical" || i.category === "structural_mismatch")
-            .map((i: any) => i.description)
-            .join("\n- ");
+        if (patchesApplied > 0) {
+          await supabase.from('campaigns').update({ html: patchedHtml } as any).eq('id', campaignId);
+          setCampaign(prev => prev ? { ...prev, html: patchedHtml } as Campaign : prev);
+          return runVisualQa({ ...campaignData, html: patchedHtml } as Campaign, iteration + 1);
+        }
 
-          const remediationPrompt = `The visual QA system found critical structural problems with this email compared to the reference design:\n- ${structuralIssues || result.summary}\n\nPlease fix the HTML to better match the reference campaign's structure (section count, grid column counts, layout ordering). Do NOT change the content/copy, only fix the structural layout.`;
+        // Slow path: send back to Agent 2 for targeted edit
+        const issueDescriptions = criticalIssues
+          .map((i: any) => `[${i.category}] ${i.description}`)
+          .join('\n- ');
 
-          const session = (await supabase.auth.getSession()).data.session;
-          const editResp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edit-campaign`, {
-            method: "POST",
+        const session = (await supabase.auth.getSession()).data.session;
+        const editResp = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edit-campaign`,
+          {
+            method: 'POST',
             headers: {
-              "Content-Type": "application/json",
-              "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-              "Authorization": `Bearer ${session?.access_token}`,
+              'Content-Type': 'application/json',
+              'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              'Authorization': `Bearer ${session?.access_token}`,
             },
             body: JSON.stringify({
               campaignId,
               brandId: campaignData.brand_id,
-              message: remediationPrompt,
-              currentHtml: campaignData.html,
+              message: `Fix these critical QA issues:\n- ${issueDescriptions}\n\nDo NOT change copy or colors. Fix only the structural/geometric problems listed.`,
+              currentHtml: patchedHtml,
               silent: true,
-            }),
-          });
-
-          if (editResp.ok) {
-            // Read the SSE stream for the remediated HTML
-            const reader = editResp.body?.getReader();
-            const decoder = new TextDecoder();
-            let remediatedHtml = "";
-            if (reader) {
-              let done = false;
-              while (!done) {
-                const { value, done: d } = await reader.read();
-                done = d;
-                if (value) {
-                  const chunk = decoder.decode(value, { stream: true });
-                  const lines = chunk.split("\n");
-                  for (const line of lines) {
-                    if (line.startsWith("data: ")) {
-                      try {
-                        const parsed = JSON.parse(line.slice(6));
-                        if (parsed.type === "html_patch" && parsed.html) {
-                          remediatedHtml = parsed.html;
-                        }
-                      } catch {}
-                    }
-                  }
-                }
-              }
-            }
-
-            if (remediatedHtml) {
-              // Refresh campaign from DB after remediation
-              const { data: updated } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
-              if (updated) {
-                setCampaign(updated as Campaign);
-                setMessages((prev) => [
-                  ...prev,
-                  { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `✓ Layout refined to better match reference (score: ${result.overall_score}/10). ${result.summary || ""}`, created_at: new Date().toISOString() },
-                ]);
-                toast.success("Layout refined to match reference");
-                setVisualQaRunning(false);
-                return;
-              }
-            }
+            })
           }
-        } catch (remErr) {
-          console.error("[visual-qa] Remediation failed:", remErr);
-        }
+        );
 
-        // If remediation failed, still show the issues
-        setMessages((prev) => [
-          ...prev,
-          { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Visual QA: score ${result.overall_score}/10, structural fidelity ${structuralFidelity}/10 — ${issueCount} issue${issueCount !== 1 ? "s" : ""} found. ${result.summary || ""}`, created_at: new Date().toISOString() },
-        ]);
-      } else if (issueCount > 0) {
-        const fidelityNote = structuralFidelity != null ? `, structural fidelity ${structuralFidelity}/10` : "";
-        setMessages((prev) => [
-          ...prev,
-          { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Visual QA: score ${result.overall_score}/10${fidelityNote} — ${issueCount} issue${issueCount !== 1 ? "s" : ""} found. ${result.summary || ""}`, created_at: new Date().toISOString() },
-        ]);
-      } else {
-        const fidelityNote = structuralFidelity != null ? ` Structural fidelity: ${structuralFidelity}/10.` : "";
-        setMessages((prev) => [
-          ...prev,
-          { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Visual QA passed ✓ Score: ${result.overall_score}/10.${fidelityNote} ${result.summary || ""}`, created_at: new Date().toISOString() },
-        ]);
+        if (editResp.ok) {
+          await new Promise(r => setTimeout(r, 2000));
+          const { data: updated } = await supabase
+            .from('campaigns').select('*').eq('id', campaignId).single();
+          if (updated?.html) {
+            setCampaign(updated as Campaign);
+            return runVisualQa(updated as Campaign, iteration + 1);
+          }
+        }
       }
-    } catch (err) {
-      console.error("[visual-qa] Error:", err);
-      setMessages((prev) => [
-        ...prev,
-        { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: "Visual QA check failed — campaign is still usable.", created_at: new Date().toISOString() },
-      ]);
+
+      // Final outcome
+      if (needsFix && iteration >= MAX_ITERATIONS - 1) {
+        await supabase.from('campaigns')
+          .update({ visual_qa_status: 'needs_review', visual_qa_score: qaResult.overall_score } as any)
+          .eq('id', campaignId);
+        setMessages(prev => [...prev, {
+          id: crypto.randomUUID(), campaign_id: campaignId, role: 'system',
+          content: `⚠️ QA found ${criticalIssues.length} issue(s) after ${MAX_ITERATIONS} fix attempts. Review before sending. Score: ${qaResult.overall_score}/10`,
+          created_at: new Date().toISOString()
+        }]);
+      } else {
+        await supabase.from('campaigns')
+          .update({ visual_qa_status: 'passed', visual_qa_score: qaResult.overall_score } as any)
+          .eq('id', campaignId);
+        const msg = iteration > 0
+          ? `✓ QA passed after ${iteration + 1} refinement(s). Score: ${qaResult.overall_score}/10. ${qaResult.summary || ''}`
+          : `✓ Visual QA passed. Score: ${qaResult.overall_score}/10. ${qaResult.summary || ''}`;
+        setMessages(prev => [...prev, {
+          id: crypto.randomUUID(), campaign_id: campaignId, role: 'system',
+          content: msg, created_at: new Date().toISOString()
+        }]);
+      }
+
+    } catch (err: any) {
+      console.error('[qa-loop] Error:', err);
+      setMessages(prev => [...prev, {
+        id: crypto.randomUUID(), campaign_id: campaignId, role: 'system',
+        content: 'Visual QA check failed — campaign is still usable.',
+        created_at: new Date().toISOString()
+      }]);
     } finally {
       setVisualQaRunning(false);
     }
-  }, [campaignId, selectedReferences]);
+  }, [campaignId, selectedReferences, supabase]);
 
   const generateCampaign = async () => {
     if (!brandId || !campaignId) return;
