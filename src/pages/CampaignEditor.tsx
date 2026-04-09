@@ -2482,9 +2482,11 @@ export default function CampaignEditor() {
   const baseHtml = previewHtml || (activeVersionIndex !== null ? allVersions[activeVersionIndex] : campaign?.html);
   const displayHtml = iframeOwnedHtmlRef.current ? (lastStableHtmlRef.current || baseHtml) : baseHtml;
   if (!iframeOwnedHtmlRef.current) lastStableHtmlRef.current = displayHtml || null;
-  const htmlForPreview = displayHtml
-    ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls)
-    : "";
+  // For flow campaigns: hide raw Liquid until we have a rendered preview
+  const isFlowAwaitingPreview = campaignMode === "flow" && campaign?.html && !flowPreviewHtml && !generating;
+  const htmlForPreview = isFlowAwaitingPreview
+    ? "" // Don't show raw Liquid — wait for cached/rendered preview
+    : (displayHtml ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls) : "");
 
 
   const srcdocHtml = htmlForPreview
