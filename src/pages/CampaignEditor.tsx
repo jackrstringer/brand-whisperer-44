@@ -841,6 +841,10 @@ export default function CampaignEditor() {
           ...prev,
           { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Campaign generated in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
         ]);
+        // Pre-render flow preview immediately
+        if (campaignMode === "flow" && data.html && flowConfig?.trigger_metric_id) {
+          preRenderFlowHtml(data.html, flowConfig);
+        }
         if (data.html) runVisualQa(data as Campaign);
       } else if (data.status === "error") {
         // Only act on error if we haven't already completed
