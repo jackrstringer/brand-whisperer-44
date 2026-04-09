@@ -372,6 +372,8 @@ export type Database = {
           subject_line: string | null
           updated_at: string
           variant_htmls: Json | null
+          visual_qa_score: number | null
+          visual_qa_status: string | null
         }
         Insert: {
           brand_id: string
@@ -406,6 +408,8 @@ export type Database = {
           subject_line?: string | null
           updated_at?: string
           variant_htmls?: Json | null
+          visual_qa_score?: number | null
+          visual_qa_status?: string | null
         }
         Update: {
           brand_id?: string
@@ -440,6 +444,8 @@ export type Database = {
           subject_line?: string | null
           updated_at?: string
           variant_htmls?: Json | null
+          visual_qa_score?: number | null
+          visual_qa_status?: string | null
         }
         Relationships: [
           {
