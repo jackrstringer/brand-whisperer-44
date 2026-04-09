@@ -2298,13 +2298,38 @@ export default function CampaignEditor() {
 (function(){
   /* --- TEXT EDITING --- */
   var blocks = ['TABLE','TR','TD','TH','DIV','UL','OL','IMG'];
+  /* Check if element or ancestor has data-liquid (dynamic content) */
+  function isDynamic(el){
+    var n = el;
+    while(n && n !== document.body){
+      if(n.hasAttribute && (n.hasAttribute('data-liquid') || n.hasAttribute('data-liquid-loop'))) return true;
+      n = n.parentElement;
+    }
+    return false;
+  }
+  /* Find the nearest data-liquid attribute path for an element */
+  function getLiquidPath(el){
+    var n = el;
+    while(n && n !== document.body){
+      if(n.hasAttribute && n.hasAttribute('data-liquid')) return n.getAttribute('data-liquid');
+      n = n.parentElement;
+    }
+    return null;
+  }
+  var isFlowPreview = !!document.querySelector('[data-liquid]');
   document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label').forEach(function(el){
     
     var hasBlock = Array.from(el.children).some(function(c){ return blocks.indexOf(c.tagName)>=0; });
     if(hasBlock) return;
     if(!el.textContent.trim()) return;
-    el.contentEditable = 'true';
-    el.style.cursor = 'text';
+    if(isDynamic(el)){
+      /* Dynamic elements: not text-editable, but still clickable for toolbar */
+      el.setAttribute('data-liquid-protected', 'true');
+      el.style.cursor = 'default';
+    } else {
+      el.contentEditable = 'true';
+      el.style.cursor = 'text';
+    }
   });
   document.addEventListener('paste', function(e){
     if(!e.target.isContentEditable) return;
