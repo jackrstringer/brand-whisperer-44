@@ -13,7 +13,7 @@ const SYSTEM_PROMPT = `You are an expert email QA auditor with PIXEL-LEVEL atten
 
 You will receive:
 1. Screenshot slices of a REFERENCE email (the design the output was supposed to match structurally)
-2. Screenshot slices of the GENERATED OUTPUT email (exactly as it appears at 470px width)
+2. Screenshot slices of the GENERATED OUTPUT email (exactly as it appears at 390px width)
 3. The full HTML source code of the generated output
 
 Your job is to compare what you SEE in the output screenshots against the reference, flag any visual issues, and score how faithfully the output replicates the reference's structure.
@@ -29,7 +29,7 @@ CHECK FOR THESE SPECIFIC ISSUES:
 8. COLORS: Do colors look cohesive? No jarring contrasts or unreadable text?
 9. GRID IMAGE DIMENSIONS: For every multi-column image row, verify all images share identical width and height attributes, have a fixed pixel height in their inline style (never height:auto), and have matching ?tr=w-{W},h-{H},fo-auto on ImageKit URLs. Flag any height:auto on a grid image as critical.
 10. PLACEHOLDER DIMENSIONS: Flag any image with width under 100px or height under 100px that is not a logo or icon. These are placeholder values that will break the layout.
-11. GRID STRUCTURE: Flag any multi-column grid that uses display:inline-block tables instead of direct <td> siblings inside a single <tr>. Flag any CSS class (e.g. mobile-grid-col) that sets display:block on grid columns. These techniques cause vertical stacking at the 470px viewport.
+11. GRID STRUCTURE: Flag any multi-column grid that uses display:inline-block tables instead of direct <td> siblings inside a single <tr>. Flag any CSS class (e.g. mobile-grid-col) that sets display:block on grid columns. These techniques cause vertical stacking at the 390px viewport.
 12. GEOMETRIC ACCURACY: Inspect every circular element — progress indicators, icon containers, status badges. Any element that appears oval or egg-shaped when it should be circular is CRITICAL. Flag with category "geometry", severity "critical". Also flag connecting lines that pass through circles instead of running between them.
 13. DYNAMIC DATA POPULATION (flow emails only): When preview data has been used, verify that all dynamic fields have populated correctly — customer name appears as a real name (not a Liquid tag), order numbers are real, product images are loading and showing actual products, prices are formatted correctly. If you see any raw Liquid syntax like {{ event.extra.order_number }} visible in the rendered output, that is a CRITICAL error — it means a variable failed to render.
 
@@ -50,7 +50,7 @@ GRID GEOMETRY (CRITICAL): If the reference shows an NxN grid of equally-sized im
 
 If NO reference screenshots are provided, set structural_fidelity to null.
 
-IMPORTANT: You are looking at the email at 470px viewport width. Side-by-side layouts MUST remain side-by-side — they should NOT stack. If you see grids or two-column sections stacking into single columns, that is a CRITICAL issue.
+IMPORTANT: You are looking at the email at 390px viewport width. Side-by-side layouts MUST remain side-by-side — they should NOT stack. If you see grids or two-column sections stacking into single columns, that is a CRITICAL issue.
 
 Return ONLY a JSON object:
 {
@@ -76,6 +76,22 @@ Rules:
 - If the email looks great AND matches the reference structure, return passes_visual_qa: true with empty issues array and a high score.
 - If the structure fundamentally deviates from the reference (wrong number of sections, grids collapsed, missing major elements), set passes_visual_qa: false and structural_fidelity < 5.`;
 
+/** Cap a base64 image to max dimensions by checking PNG header. Returns true if oversized. */
+function isBase64ImageOversized(base64Data: string, maxDim: number): boolean {
+  try {
+    // Decode first 24 bytes to read PNG header
+    const raw = atob(base64Data.substring(0, 48));
+    if (raw.length < 24) return false;
+    // PNG signature check
+    if (raw.charCodeAt(0) !== 0x89 || raw.charCodeAt(1) !== 0x50) return false;
+    const width = (raw.charCodeAt(16) << 24) | (raw.charCodeAt(17) << 16) | (raw.charCodeAt(18) << 8) | raw.charCodeAt(19);
+    const height = (raw.charCodeAt(20) << 24) | (raw.charCodeAt(21) << 16) | (raw.charCodeAt(22) << 8) | raw.charCodeAt(23);
+    return width > maxDim || height > maxDim;
+  } catch {
+    return false;
+  }
+}
+
 /** Fetch a URL and return its content as base64. */
 async function fetchAsBase64(url: string): Promise<string> {
   const r = await fetch(url);
@@ -88,6 +104,19 @@ async function fetchAsBase64(url: string): Promise<string> {
     binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize));
   }
   return btoa(binary);
+}
+
+/** Cap an ImageKit URL to max dimensions using URL transforms. */
+function capImageKitUrl(url: string, maxDim: number): string {
+  if (!url.includes("ik.imagekit.io")) return url;
+  // Add or replace tr parameter
+  const trParam = `tr=w-${maxDim},h-${maxDim},c-at_max`;
+  if (url.includes("?tr=")) {
+    return url.replace(/\?tr=[^&]+/, `?${trParam}`);
+  } else if (url.includes("?")) {
+    return url + `&${trParam}`;
+  }
+  return url + `?${trParam}`;
 }
 
 Deno.serve(async (req) => {
@@ -104,6 +133,7 @@ Deno.serve(async (req) => {
       throw new Error("html and outputSlices are required");
     }
 
+    const MAX_SLICE_DIM = 1800;
     const hasReferences = Array.isArray(referenceSlices) && referenceSlices.length > 0;
     console.log(
       `[visual-qa] Starting QA for campaign ${campaignId}, ${outputSlices.length} output slices, ${hasReferences ? referenceSlices.length + " reference slices" : "no references"}, previewDataUsed=${!!previewDataUsed}`
@@ -135,12 +165,25 @@ Deno.serve(async (req) => {
         });
         for (const slice of detailReferenceSlices) {
           const isDataUrl = typeof slice.url === "string" && slice.url.startsWith("data:");
-          const mediaType = isDataUrl
+          let mediaType = isDataUrl
             ? slice.url.split(";")[0].split(":")[1]
             : "image/jpeg";
-          const imageData = isDataUrl
-            ? slice.url.split(",")[1]
-            : await fetchAsBase64(slice.url);
+          let imageData: string;
+
+          if (isDataUrl) {
+            imageData = slice.url.split(",")[1];
+          } else {
+            // Cap URL dimensions for ImageKit URLs
+            const cappedUrl = capImageKitUrl(slice.url, MAX_SLICE_DIM);
+            imageData = await fetchAsBase64(cappedUrl);
+          }
+
+          // Check if oversized after fetch
+          if (isBase64ImageOversized(imageData, MAX_SLICE_DIM)) {
+            console.warn(`[visual-qa] Reference slice ${slice.index} exceeds ${MAX_SLICE_DIM}px, skipping`);
+            continue;
+          }
+
           content.push({
             type: "image",
             source: { type: "base64", media_type: mediaType, data: imageData },
@@ -160,12 +203,24 @@ Deno.serve(async (req) => {
     });
     for (const slice of outputSlices) {
       const isDataUrl = typeof slice.url === "string" && slice.url.startsWith("data:");
-      const mediaType = isDataUrl
+      let mediaType = isDataUrl
         ? slice.url.split(";")[0].split(":")[1]
         : "image/jpeg";
-      const imageData = isDataUrl
-        ? slice.url.split(",")[1]
-        : await fetchAsBase64(slice.url);
+      let imageData: string;
+
+      if (isDataUrl) {
+        imageData = slice.url.split(",")[1];
+      } else {
+        const cappedUrl = capImageKitUrl(slice.url, MAX_SLICE_DIM);
+        imageData = await fetchAsBase64(cappedUrl);
+      }
+
+      // Check if oversized after fetch
+      if (isBase64ImageOversized(imageData, MAX_SLICE_DIM)) {
+        console.warn(`[visual-qa] Output slice ${slice.index} exceeds ${MAX_SLICE_DIM}px, skipping`);
+        continue;
+      }
+
       content.push({
         type: "image",
         source: { type: "base64", media_type: mediaType, data: imageData },
@@ -211,22 +266,7 @@ Deno.serve(async (req) => {
     if (!anthropicResp.ok) {
       const errText = await anthropicResp.text();
       console.error("[visual-qa] Claude error:", anthropicResp.status, errText);
-      // If 400 (e.g. image too large), return a graceful fallback instead of 500
-      if (anthropicResp.status === 400) {
-        console.warn("[visual-qa] Returning fallback pass due to Claude 400 error");
-        return new Response(
-          JSON.stringify({
-            passes_visual_qa: true,
-            structural_fidelity: null,
-            issues: [],
-            overall_score: 7,
-            summary: "Visual QA skipped: image dimensions exceeded API limits",
-            fallback: true,
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      throw new Error(`Claude API returned ${anthropicResp.status}`);
+      throw new Error(`Claude API returned ${anthropicResp.status}: ${errText.substring(0, 500)}`);
     }
 
     const result = await anthropicResp.json();
@@ -235,20 +275,13 @@ Deno.serve(async (req) => {
     let qaResult: any;
     try {
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error("No JSON found");
+      if (!jsonMatch) throw new Error("No JSON found in Claude response");
       qaResult = JSON.parse(jsonMatch[0]);
-    } catch {
-      console.error("[visual-qa] Failed to parse Claude response:", rawText);
+    } catch (parseErr: any) {
+      console.error("[visual-qa] Failed to parse Claude response:", rawText.substring(0, 1000));
       return new Response(
-        JSON.stringify({
-          passes_visual_qa: true,
-          structural_fidelity: null,
-          issues: [],
-          overall_score: 7,
-          summary: "Visual QA parse failed, assuming pass",
-          raw: rawText,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: `Failed to parse QA response: ${parseErr.message}`, raw: rawText.substring(0, 500) }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 

@@ -699,9 +699,12 @@ export default function CampaignEditor() {
 
     } catch (err: any) {
       console.error('[qa-loop] Error:', err);
+      await supabase.from('campaigns')
+        .update({ visual_qa_status: 'error' } as any)
+        .eq('id', campaignId);
       setMessages(prev => [...prev, {
         id: crypto.randomUUID(), campaign_id: campaignId, role: 'system',
-        content: 'Visual QA check failed — campaign is still usable.',
+        content: `⚠️ Visual QA failed with error: ${err?.message || String(err)}`,
         created_at: new Date().toISOString()
       }]);
     } finally {
