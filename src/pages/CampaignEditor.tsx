@@ -1943,7 +1943,7 @@ export default function CampaignEditor() {
         supabase.from("campaigns").update(payload).eq("id", cid);
       }
     };
-  }, [campaignId, campaign, variantHtmls, activeVariantIndex, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace, writeDraft, draftKey]);
+  }, [campaignId, campaign, variantHtmls, activeVariantIndex, handleUndo, handleRedo, sendBackgroundEdit, handleColorReplace, writeDraft, draftKey, flowPreviewHtml]);
 
   // Ideate/Swap for selected elements (single or multi)
   const triggerSelectedElementIdeate = useCallback(() => {
