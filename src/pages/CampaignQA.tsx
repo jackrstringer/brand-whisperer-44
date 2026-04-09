@@ -115,12 +115,24 @@ export default function CampaignQA() {
     if (!campaign?.html) return;
     setRunning(true);
     try {
+      // Build flow config for flow/transactional campaigns
+      let flowConfigBody = undefined;
+      if (campaign.campaign_mode === "flow" && campaign.flow_config) {
+        const fc = campaign.flow_config as any;
+        flowConfigBody = {
+          event_schema: fc.event_schema || {},
+          liquid_variables: fc.liquid_variables || [],
+          trigger_metric_name: fc.trigger_metric_name || "",
+        };
+      }
+
       const { data, error } = await supabase.functions.invoke("qa-campaign", {
         body: {
           html: campaign.html,
           subjectLine: subjectLine,
           previewText: previewText,
           brandId,
+          flowConfig: flowConfigBody,
         },
       });
       if (error || data?.error) throw new Error(data?.error || error?.message);
