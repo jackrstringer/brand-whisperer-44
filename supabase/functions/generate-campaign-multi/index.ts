@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
-import { generateCampaignCore } from "../_shared/generateCampaignCore.ts";
+import { generateCampaignCore, logGenEvent } from "../_shared/generateCampaignCore.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

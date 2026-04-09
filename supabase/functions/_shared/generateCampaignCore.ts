@@ -1165,7 +1165,11 @@ Use the above JSON to understand the exact data structure. Rules:
   }
 
   // Unified finalization
+  const finalizeStart = Date.now();
   html = finalizeCampaignHtml(html);
+  await logGenEvent(supabase, campaignId, "finalize_html", {
+    status: "completed", duration_ms: Date.now() - finalizeStart, result: { html_length: html.length },
+  });
 
   // === KLAVIYO TEMPLATE VALIDATION (flow emails only) ===
   if (campaignMode === "flow" && brandId) {
