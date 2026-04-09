@@ -4425,7 +4425,6 @@ export default function CampaignEditor() {
                       style={{
                         width: renderWidth,
                         height: iframeContentHeight,
-                        transform: `scale(${zoomScale})`,
                         transformOrigin: "top left",
                         pointerEvents: commentMode ? 'none' : undefined,
                       }}
