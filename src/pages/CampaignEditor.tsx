@@ -821,6 +821,10 @@ export default function CampaignEditor() {
           { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `${successCount}/3 variants generated in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
         ]);
 
+        // Pre-render flow preview immediately so user never sees raw Liquid
+        if (campaignMode === "flow" && data.html && flowConfig?.trigger_metric_id) {
+          preRenderFlowHtml(data.html, flowConfig);
+        }
         // Run visual QA on the primary variant
         if (data.html) {
           runVisualQa(data as Campaign);
