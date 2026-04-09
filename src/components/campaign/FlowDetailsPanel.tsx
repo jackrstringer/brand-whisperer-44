@@ -73,13 +73,12 @@ function EventSummaryCard({ event, showRaw, onToggleRaw }: { event: PreviewEvent
 
   if (showRaw) {
     return (
-      <div className="space-y-2 text-[11px]">
-        <div className="flex justify-between items-center">
-          <span className="font-medium text-foreground">Event Data</span>
-          <button onClick={onToggleRaw} className="text-primary hover:underline text-[10px]">Summary view</button>
-        </div>
-        <JsonExplorer data={props} maxHeight="400px" />
-      </div>
+      <EventDataViewer
+        eventProperties={props}
+        profileName={event.profile_name}
+        profileEmail={event.profile_email}
+        onClose={onToggleRaw}
+      />
     );
   }
 
