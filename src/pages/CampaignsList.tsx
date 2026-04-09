@@ -256,9 +256,11 @@ export default function CampaignsList() {
               >
                 <div className="flex items-center gap-4 min-w-0">
                   <span className="text-sm font-medium truncate">{c.name}</span>
-                  <Badge className={statusColors[c.status] || statusColors.draft}>
-                    {c.status}
-                  </Badge>
+                  {(c.status === "draft" || c.status === "generating" || c.status === "error") && (
+                    <Badge className={statusColors[c.status] || statusColors.draft}>
+                      {c.status}
+                    </Badge>
+                  )}
                   {showTimers && <GenTimer campaign={c} />}
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
