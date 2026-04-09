@@ -450,9 +450,11 @@ export async function generateCampaignCore(
   const {
     brandId, campaignId, brief, goal, copy, productIds,
     pinnedAssetUrls: pinnedUrls, matchProductColors, designNotes,
-    shopifyProducts, reference, _isSubGeneration,
+    shopifyProducts, reference, _isSubGeneration, _runId,
     campaignMode, flowConfig, flowNotes,
   } = params;
+  const variantIdx = params._variantIndex ?? 0;
+  const runId = _runId;
 
   const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
   if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
