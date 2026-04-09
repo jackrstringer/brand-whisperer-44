@@ -10,6 +10,13 @@ import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import SegmentSelector from "@/components/brand/SegmentSelector";
 
+interface FlowValidationResult {
+  issues: { type: string; severity: "error" | "warning"; message: string; variable?: string }[];
+  passed: boolean;
+  errorCount: number;
+  warningCount: number;
+}
+
 interface QAResult {
   links: {
     items: { url: string; status: string; inDomain: boolean }[];
@@ -30,6 +37,7 @@ interface QAResult {
     issues: { src: string; issue: string }[];
     passed: boolean;
   };
+  flowValidation?: FlowValidationResult;
   overallPassed: boolean;
 }
 
