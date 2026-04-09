@@ -342,6 +342,7 @@ export type Database = {
         Row: {
           brand_id: string
           brief: string | null
+          cached_flow_preview: Json | null
           campaign_mode: string
           created_at: string
           exclude_list_ids: string[] | null
@@ -378,6 +379,7 @@ export type Database = {
         Insert: {
           brand_id: string
           brief?: string | null
+          cached_flow_preview?: Json | null
           campaign_mode?: string
           created_at?: string
           exclude_list_ids?: string[] | null
@@ -414,6 +416,7 @@ export type Database = {
         Update: {
           brand_id?: string
           brief?: string | null
+          cached_flow_preview?: Json | null
           campaign_mode?: string
           created_at?: string
           exclude_list_ids?: string[] | null

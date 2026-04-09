@@ -1,0 +1,1 @@
+ALTER TABLE public.campaigns ADD COLUMN cached_flow_preview JSONB DEFAULT NULL;

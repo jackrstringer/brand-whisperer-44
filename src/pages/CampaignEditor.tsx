@@ -259,8 +259,8 @@ export default function CampaignEditor() {
   const [iframeContentHeight, setIframeContentHeight] = useState(800);
   const [previewFallbackUrls, setPreviewFallbackUrls] = useState<string[]>([]);
 
-  // Helper: pre-render flow HTML with real Klaviyo event data
-  const preRenderFlowHtml = useCallback(async (html: string, fc: FlowConfig) => {
+  // Helper: pre-render flow HTML with real Klaviyo event data and cache it
+  const preRenderFlowHtml = useCallback(async (html: string, fc: FlowConfig, saveToCampaignId?: string) => {
     if (!fc?.trigger_metric_id || !brandId) return;
     try {
       const session = (await supabase.auth.getSession()).data.session;
@@ -302,11 +302,22 @@ export default function CampaignEditor() {
       if (renderData.rendered_html) {
         setFlowPreviewHtml(renderData.rendered_html);
         setPreviewHtml(renderData.rendered_html);
+        // Cache the rendered preview + event data to DB for instant future loads
+        const cachePayload = {
+          rendered_html: renderData.rendered_html,
+          event_data: ev,
+          source_html_hash: html.length, // simple change detection
+          cached_at: new Date().toISOString(),
+        };
+        const cid = saveToCampaignId || campaignId;
+        if (cid) {
+          supabase.from("campaigns").update({ cached_flow_preview: cachePayload } as any).eq("id", cid).then(() => {});
+        }
       }
     } catch (err) {
       console.warn("[flow-prerender] Could not pre-render flow preview:", err);
     }
-  }, [brandId]);
+  }, [brandId, campaignId]);
 
   useEffect(() => {
     if (!campaignId || !brandId) return;
@@ -381,9 +392,17 @@ export default function CampaignEditor() {
             }
           } catch {}
         }
-        // Pre-render flow HTML with real Klaviyo data so we never show raw Liquid
-        if ((campaign as any).campaign_mode === "flow" && campaign.html && (campaign as any).flow_config?.trigger_metric_id) {
-          preRenderFlowHtml(campaign.html, (campaign as any).flow_config as FlowConfig);
+        // For flow campaigns: use cached preview instantly, or fetch in background
+        if ((campaign as any).campaign_mode === "flow" && campaign.html) {
+          const cached = (c as any).cached_flow_preview;
+          if (cached?.rendered_html && cached?.source_html_hash === campaign.html.length) {
+            // Instant display from cache
+            setFlowPreviewHtml(cached.rendered_html);
+            setPreviewHtml(cached.rendered_html);
+          } else if ((campaign as any).flow_config?.trigger_metric_id) {
+            // No cache or HTML changed — fetch in background
+            preRenderFlowHtml(campaign.html, (campaign as any).flow_config as FlowConfig);
+          }
         }
       }
       const { data: msgs } = await supabase
@@ -2463,9 +2482,11 @@ export default function CampaignEditor() {
   const baseHtml = previewHtml || (activeVersionIndex !== null ? allVersions[activeVersionIndex] : campaign?.html);
   const displayHtml = iframeOwnedHtmlRef.current ? (lastStableHtmlRef.current || baseHtml) : baseHtml;
   if (!iframeOwnedHtmlRef.current) lastStableHtmlRef.current = displayHtml || null;
-  const htmlForPreview = displayHtml
-    ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls)
-    : "";
+  // For flow campaigns: hide raw Liquid until we have a rendered preview
+  const isFlowAwaitingPreview = campaignMode === "flow" && campaign?.html && !flowPreviewHtml && !generating;
+  const htmlForPreview = isFlowAwaitingPreview
+    ? "" // Don't show raw Liquid — wait for cached/rendered preview
+    : (displayHtml ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls) : "");
 
 
   const srcdocHtml = htmlForPreview
