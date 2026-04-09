@@ -762,10 +762,28 @@ What NOT to do for cancellation winback:
 SECTION 2: LIQUID TEMPLATING BEST PRACTICES
 ════════════════════════════════════════════════════════════════════════════════
 
-Liquid is Klaviyo's templating language. Every variable rendered in an email
-must be written defensively — assume any value could be missing or malformed.
-A single broken Liquid tag can cause an email to render blank or expose raw
-variable names to the customer. These rules are non-negotiable.
+CRITICAL FOUNDATION — KLAVIYO USES DJANGO TEMPLATES, NOT SHOPIFY LIQUID:
+
+Klaviyo's template engine is Django's template engine, NOT standard Shopify
+Liquid. This is the #1 source of syntax errors when generating Klaviyo emails.
+Django templates look similar to Liquid but have critical differences:
+
+  WRONG (Shopify Liquid):     CORRECT (Klaviyo/Django):
+  {% elsif %}             →   {% elif %}
+  {% unless %}            →   {% if not %}
+  {{ var | default: '' }} →   never use empty string default
+  | date: '%b %d' | default →  never chain default after date
+
+If you write Shopify Liquid syntax in a Klaviyo template, it will fail
+with "Unknown tag" or "requires 2 arguments" errors.
+
+Liquid-style variable syntax ({{ }}, {% %}) is supported, but the underlying
+engine is Django. When in doubt, prefer {% if %}...{% else %}...{% endif %}
+over filter chains.
+
+Every variable rendered in an email must be written defensively — assume any
+value could be missing or malformed. A single broken tag can cause an email
+to render blank or expose raw variable names to the customer.
 
 ────────────────────────────────────────────────────────────────────────────────
 2.1 ALWAYS USE DEFAULT FILTERS
@@ -904,7 +922,7 @@ The copy surrounding the items block should adapt to the count:
   
   {% if item_count == 1 %}
     <p>Here's the item you ordered:</p>
-  {% elsif item_count == 2 %}
+  {% elif item_count == 2 %}
     <p>Here are the 2 items you ordered:</p>
   {% else %}
     <p>Here are all {{ item_count }} items in your order:</p>
