@@ -195,6 +195,7 @@ export default function FlowDetailsPanel({
   html,
   flowConfig,
   onPreviewHtml,
+  onRequestInsert,
 }: FlowDetailsPanelProps) {
   const [previewEvents, setPreviewEvents] = useState<PreviewEvent[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
