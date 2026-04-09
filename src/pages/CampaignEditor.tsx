@@ -473,13 +473,14 @@ export default function CampaignEditor() {
           console.log('[qa-loop] Flow email detected — fetching real preview event...');
           const previewEventsResp = await supabase.functions.invoke('klaviyo-fetch-preview-events', {
             body: {
-              brand_id: campaignData.brand_id,
-              metric_id: flowConfig.trigger_metric_id
+              brandId: campaignData.brand_id,
+              metricId: flowConfig.trigger_metric_id
             }
           });
 
-          if (!previewEventsResp.error && previewEventsResp.data?.events?.length > 0) {
-            const previewEvent = previewEventsResp.data.events[0];
+          const previewEvents = previewEventsResp.data;
+          if (!previewEventsResp.error && Array.isArray(previewEvents) && previewEvents.length > 0) {
+            const previewEvent = previewEvents[0];
             const liquidRenderResp = await supabase.functions.invoke('klaviyo-render-preview', {
               body: {
                 html: campaignData.html,
