@@ -57,7 +57,14 @@ function injectLiquidMarkers(html: string): string {
         result += html.slice(i);
         break;
       }
-      result += html.slice(i, closeIdx + 1);
+      let tagContent = html.slice(i, closeIdx + 1);
+      // If this tag has {{ }} in its attributes (e.g. href, src),
+      // add a data-liquid-attr marker so the iframe can detect it as dynamic
+      if (/\{\{[^}]+\}\}/.test(tagContent) && /^<[a-zA-Z]/.test(tagContent)) {
+        // Add data-liquid-attr to the opening tag
+        tagContent = tagContent.replace(/^(<[a-zA-Z][^\s>]*)/, '$1 data-liquid-attr="true"');
+      }
+      result += tagContent;
       i = closeIdx + 1;
     } else {
       // Text content — find next < or end
