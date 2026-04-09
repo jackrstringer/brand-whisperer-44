@@ -773,27 +773,43 @@ variable names to the customer. These rules are non-negotiable.
 
 Every event variable and person property must have a | default: fallback.
 
+CRITICAL — KLAVIYO DEFAULT FILTER RULES:
+  1. NEVER use | default: '' (empty string). Klaviyo throws: "The default filter
+     requires 2 arguments, but 1 was given." Empty string counts as 1 argument.
+  2. NEVER use | default: (nothing after the colon). Same error.
+  3. ALWAYS provide a meaningful non-empty fallback string.
+
 CORRECT:
   {{ person.first_name | default: 'there' }}
-  {{ event.ItemName | default: 'your item' }}
-  {{ event.OrderID | default: 'your recent order' }}
-  {{ event.CollectionTitle | default: 'our collection' }}
+  {{ event.extra.order_number | default: 'your order' }}
+  {{ event.extra.shipping_address.first_name | default: 'Customer' }}
+  {{ event.extra.shipping_address.last_name | default: '' }}
 
-WRONG (never do this):
+WAIT — for address fields where empty output is acceptable (like last name or
+apt number), use a conditional instead of default:
+  {% if event.extra.shipping_address.last_name %}
+    {{ event.extra.shipping_address.last_name }}
+  {% endif %}
+
+WRONG (will break in Klaviyo):
+  {{ event.extra.order_number | default: '' }}   ← empty string = error
+  {{ person.first_name | default: }}             ← no value = error
+  {{ event.extra.zip | default: '' }}            ← empty string = error
+
+WRONG (missing default entirely):
   {{ person.first_name }}
-  {{ event.ItemName }}
+  {{ event.extra.order_number }}
 
-If the variable is empty or the property doesn't exist on a given profile,
-Klaviyo renders nothing — which means the sentence reads "Hi , your just
-arrived" instead of "Hi there, your item just arrived." Always set a sensible
-default.
-
-For numeric defaults:
-  {{ event.ItemPrice | default: 0 }}
-  {{ event.ItemCount | default: 1 }}
+CORRECT defaults by type:
+  String fields:  | default: 'your order'  (always a meaningful non-empty string)
+  Name fields:    | default: 'there'  or  | default: 'Customer'
+  Numeric fields: | default: 0
+  Price fields:   | default: 0
+  URL fields:     | default: 'https://www.yourbrand.com'
+  Image URLs:     | default: 'https://cdn.yourbrand.com/fallback-product.jpg'
 
 For URL defaults (never render a broken image or link):
-  {{ event.ImageURL | default: 'https://cdn.yourbrand.com/fallback-product.jpg' }}
+  {{ event.extra.order_status_url | default: 'https://www.yourbrand.com' }}
 
 ────────────────────────────────────────────────────────────────────────────────
 2.2 SAFE IMAGE RENDERING — ALWAYS PROVIDE FALLBACK
