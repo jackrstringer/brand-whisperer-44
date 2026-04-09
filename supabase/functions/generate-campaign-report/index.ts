@@ -1,7 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import Anthropic from 'https://esm.sh/@anthropic-ai/sdk';
-import { CAMPAIGN_REPORT_SKILL } from '../_shared/campaignReportSkill.ts';
+import { generateCampaignReportHtml } from '../_shared/campaignReportGenerator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -52,7 +51,11 @@ async function runPipeline(supabase: any, brandId: string) {
   try {
     const scoredCampaigns = scoreCampaigns(bi.klaviyo_raw || []);
     const competitorResearchResults = await researchCompetitors(bi.ai_research);
-    const html = await generateReportHtml(bi.compiled_context, scoredCampaigns, competitorResearchResults);
+    const html = await generateCampaignReportHtml({
+      compiledContext: bi.compiled_context,
+      scoredCampaigns,
+      competitorResearch: competitorResearchResults,
+    });
 
     await supabase
       .from('brand_intelligence')
@@ -167,67 +170,4 @@ async function researchCompetitors(aiResearch: any): Promise<string> {
   return competitors
     .map((name, i) => `### ${name}\n${results[i]}`)
     .join('\n\n');
-}
-
-// ─── HTML Generation ───
-
-async function generateReportHtml(
-  compiledContext: string,
-  scoredCampaigns: any[],
-  competitorResearch: string
-): Promise<string> {
-  const anthropic = new Anthropic({
-    apiKey: Deno.env.get('ANTHROPIC_API_KEY')!,
-  });
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120_000);
-
-  try {
-    const message = await anthropic.messages.create(
-      {
-        model: 'claude-opus-4-6',
-        max_tokens: 8192,
-        system: `You are a senior email marketing strategist generating a comprehensive performance analysis report. You have access to the CAMPAIGN_REPORT_SKILL which defines exactly how to structure this report, score campaigns, and write insights. Follow it precisely. Output only valid, complete HTML — no markdown, no explanation.
-
-CRITICAL RENDERING CONSTRAINTS — the report will be rendered inside a Shadow DOM in a React application:
-- Do NOT include <html>, <head>, or <body> tags. Output only a <style> block followed by the content markup.
-- Do NOT include any <script> tags, onclick handlers, or JavaScript of any kind.
-- Do NOT include any anchor links (href="#..."), sticky/fixed positioning, or interactive elements.
-- Do NOT include any window.print() button or download button — the parent app provides those.
-- The report is a long, static, beautifully typeset document — like a PDF. No interaction required.
-- All styles must be scoped within the output (naturally scoped by Shadow DOM).
-- Import Google Fonts (DM Sans + Instrument Serif) via @import at the top of the <style> block.
-- Use the monochrome color palette defined in the skill document. No colorful accents except impact score badges.`,
-        messages: [
-          {
-            role: 'user',
-            content: `${CAMPAIGN_REPORT_SKILL}
-
-BRAND CONTEXT:
-${compiledContext || 'No brand context available.'}
-
-SCORED CAMPAIGN DATA (365 days, impact scores calculated):
-${JSON.stringify(scoredCampaigns, null, 2)}
-
-COMPETITOR RESEARCH:
-${competitorResearch}
-
-Generate the complete 5-section campaign performance report as a single self-contained HTML file. Include all sections: Executive Dashboard, High Performers, Low Performers, Competitor Analysis, Recommendations. Follow all HTML, CSS, and content standards in the skill document exactly.`,
-          },
-        ],
-      },
-      { signal: controller.signal }
-    );
-
-    const raw = message.content[0]?.type === 'text' ? message.content[0].text : '';
-
-    return raw
-      .replace(/^```html\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/\s*```$/, '')
-      .trim();
-  } finally {
-    clearTimeout(timeout);
-  }
 }
