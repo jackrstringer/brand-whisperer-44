@@ -915,6 +915,15 @@ ${UNIVERSAL_EMAIL_RULES}`;
       flowUserContent.push(...imageBlocks);
     }
 
+    // Include selected reference campaign images for structural guidance
+    if (referenceImageBlocks.length > 0) {
+      flowUserContent.push({
+        type: "text",
+        text: "This is the reference layout — follow its structure, section count, column layout, image sizing, and proportions. Apply the brand's colors, fonts, and copy on top. Adapt for transactional content (product line items, order details) but keep the overall visual skeleton close.",
+      });
+      flowUserContent.push(...referenceImageBlocks);
+    }
+
     // Brand rules
     let flowBrandRules = `Brand design rules:\n${profile.system_prompt}`;
     if (brandIntelBlock) flowBrandRules += brandIntelBlock;
