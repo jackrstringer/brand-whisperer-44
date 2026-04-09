@@ -278,17 +278,35 @@ IMAGES:
 
 GRID LAYOUT — REQUIRED STRUCTURE:
 - Multi-column image grids MUST use direct <td> siblings inside a single <tr>. Never use display:inline-block tables side by side.
+- CRITICAL: ALL grid columns MUST have EQUAL width. For a 390px viewport with N columns: each td width = floor((390 - gutter) / N). A 2-column grid = 193px per cell. A 3-column grid = 128px per cell.
+- NEVER create asymmetric grids (e.g., one column 70% and another 30%). ALL columns in a grid row must be the same width.
 - Correct 2-column example (390px viewport, 4px gutter → 193px per cell):
   <tr>
     <td width="193" valign="top" style="padding:0 2px 0 0;">
-      <img src="..." width="193" height="193" style="display:block;width:100%;height:193px;">
+      <img src="..." width="193" height="193" style="display:block;width:100%;height:193px;object-fit:cover;">
     </td>
     <td width="193" valign="top" style="padding:0 0 0 2px;">
-      <img src="..." width="193" height="193" style="display:block;width:100%;height:193px;">
+      <img src="..." width="193" height="193" style="display:block;width:100%;height:193px;object-fit:cover;">
+    </td>
+  </tr>
+- For "shop by category" or card grids with labels below images, wrap each cell's content in a small nested table but keep the outer <td> widths EQUAL:
+  <tr>
+    <td width="193" valign="top" style="padding:0 2px 0 0;">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr><td><img src="..." width="193" height="193" style="display:block;width:100%;height:193px;object-fit:cover;border-radius:8px;"></td></tr>
+        <tr><td style="padding:8px 0;text-align:center;font-size:14px;">Category Name</td></tr>
+      </table>
+    </td>
+    <td width="193" valign="top" style="padding:0 0 0 2px;">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr><td><img src="..." width="193" height="193" style="display:block;width:100%;height:193px;object-fit:cover;border-radius:8px;"></td></tr>
+        <tr><td style="padding:8px 0;text-align:center;font-size:14px;">Category Name</td></tr>
+      </table>
     </td>
   </tr>
 - Never use: <table align="left" style="display:inline-block"> as a column technique. This stacks vertically at any viewport narrower than the combined column widths.
 - Never add mobile-grid-col or any CSS class that sets display:block on grid columns. The email renders at 390px — mobile stacking rules will fire and destroy the layout.
+- NEVER use percentage widths on grid <td> elements. Always use explicit pixel values.
 
 CONTRAST CARDS:
 - Never full-width color blocks cutting the email in half
