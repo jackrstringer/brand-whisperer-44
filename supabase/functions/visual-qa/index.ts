@@ -177,7 +177,7 @@ Deno.serve(async (req) => {
     });
 
     // Call Claude Sonnet 4
-    console.log("[visual-qa] Calling Claude claude-sonnet-4-6-20251101...");
+    console.log("[visual-qa] Calling Claude claude-sonnet-4-20250514...");
 
     const anthropicResp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6-20251101",
+        model: "claude-sonnet-4-20250514",
         max_tokens: 4096,
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content }],

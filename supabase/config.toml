@@ -2,3 +2,9 @@ project_id = "wauepdkxqhyndsmjzita"
 
 [functions.slice-reference]
 verify_jwt = false
+
+[functions.capture-email-screenshot]
+verify_jwt = false
+
+[functions.slice-image-on-demand]
+verify_jwt = false

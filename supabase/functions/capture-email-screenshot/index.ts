@@ -27,23 +27,28 @@ Deno.serve(async (req) => {
     if (!apiKey) throw new Error("SCREENSHOTONE_API_KEY not configured");
 
     // CRITICAL: always 470px wide, device_scale_factor 1 — matches in-app preview exactly
-    const params = new URLSearchParams({
+    // Use POST to avoid URL length limits (campaign HTML is typically 15-50KB)
+    const body = {
       access_key: apiKey,
       html: html,
-      viewport_width: "470",
-      viewport_height: "10000",
-      full_page: "true",
+      viewport_width: 470,
+      viewport_height: 10000,
+      full_page: true,
       format: "png",
-      block_ads: "true",
-      block_cookie_banners: "true",
-      cache: "false",
-      delay: "2",
-      device_scale_factor: "1",
+      block_ads: true,
+      block_cookie_banners: true,
+      cache: false,
+      delay: 2,
+      device_scale_factor: 1,
+    };
+
+    console.log("[capture-email-screenshot] Rendering at 470px viewport via POST...");
+
+    const resp = await fetch("https://api.screenshotone.com/take", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
     });
-
-    console.log("[capture-email-screenshot] Rendering at 470px viewport...");
-
-    const resp = await fetch(`https://api.screenshotone.com/take?${params}`);
     if (!resp.ok) {
       const errText = await resp.text();
       throw new Error(`ScreenshotOne error ${resp.status}: ${errText}`);
