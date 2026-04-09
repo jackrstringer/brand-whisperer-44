@@ -1,19 +1,20 @@
-import Anthropic from 'https://esm.sh/@anthropic-ai/sdk';
-import { CAMPAIGN_REPORT_SKILL } from './campaignReportSkill.ts';
+import Anthropic from "https://esm.sh/@anthropic-ai/sdk";
+import { CAMPAIGN_REPORT_SKILL } from "./campaignReportSkill.ts";
 
-const REPORT_END_MARKER = '<!-- END OF REPORT -->';
+const REPORT_END_MARKER = "<!-- END OF REPORT -->";
 const REQUIRED_MARKERS = [
-  'Executive Dashboard',
-  'High Performers',
-  'Low Performers',
-  'Competitor Analysis',
-  'Recommendation 1:',
-  'Recommendation 5:',
-  'Methodology',
+  "Executive Dashboard",
+  "High Performers",
+  "Low Performers",
+  "Competitor Analysis",
+  "Recommendation 1:",
+  "Recommendation 5:",
+  "Methodology",
   REPORT_END_MARKER,
 ];
 
-const SYSTEM_PROMPT = `You are a senior email marketing strategist generating a comprehensive performance analysis report. You have access to the CAMPAIGN_REPORT_SKILL which defines exactly how to structure this report, score campaigns, and write insights. Follow it precisely. Output only valid, complete HTML — no markdown, no explanation.
+const SYSTEM_PROMPT =
+  `You are a senior email marketing strategist generating a comprehensive performance analysis report. You have access to the CAMPAIGN_REPORT_SKILL which defines exactly how to structure this report, score campaigns, and write insights. Follow it precisely. Output only valid, complete HTML — no markdown, no explanation.
 
 CRITICAL RENDERING CONSTRAINTS — the report will be rendered inside a Shadow DOM in a React application:
 - Do NOT include <html>, <head>, or <body> tags. Output only a <style> block followed by the content markup.
@@ -44,13 +45,13 @@ export async function generateCampaignReportHtml({
   competitorResearch,
 }: GenerateCampaignReportParams): Promise<string> {
   const anthropic = new Anthropic({
-    apiKey: Deno.env.get('ANTHROPIC_API_KEY')!,
+    apiKey: Deno.env.get("ANTHROPIC_API_KEY")!,
   });
 
   const initialPrompt = `${CAMPAIGN_REPORT_SKILL}
 
 BRAND CONTEXT:
-${compiledContext || 'No brand context available.'}
+${compiledContext || "No brand context available."}
 
 SCORED CAMPAIGN DATA (365 days, impact scores calculated):
 ${JSON.stringify(scoredCampaigns, null, 2)}
@@ -69,8 +70,14 @@ Requirements:
   let validation = validateReportHtml(html);
 
   for (let attempt = 0; attempt < 4 && !validation.isComplete; attempt += 1) {
-    const continuationPrompt = buildContinuationPrompt(html, validation.missingMarkers);
-    const continuation = await requestReportChunk(anthropic, continuationPrompt);
+    const continuationPrompt = buildContinuationPrompt(
+      html,
+      validation.missingMarkers,
+    );
+    const continuation = await requestReportChunk(
+      anthropic,
+      continuationPrompt,
+    );
 
     if (!continuation) break;
 
@@ -80,35 +87,40 @@ Requirements:
 
   if (!validation.isComplete) {
     throw new Error(
-      `Campaign report generation returned incomplete HTML. Missing: ${validation.missingMarkers.join(', ')}`
+      `Campaign report generation returned incomplete HTML. Missing: ${
+        validation.missingMarkers.join(", ")
+      }`,
     );
   }
 
   return html.trim();
 }
 
-async function requestReportChunk(anthropic: Anthropic, prompt: string): Promise<string> {
+async function requestReportChunk(
+  anthropic: Anthropic,
+  prompt: string,
+): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 120_000);
 
   try {
     const message = await anthropic.messages.create(
       {
-        model: 'claude-opus-4-6',
+        model: "claude-opus-4-6",
         max_tokens: 8192,
         system: SYSTEM_PROMPT,
         messages: [
           {
-            role: 'user',
+            role: "user",
             content: prompt,
           },
         ],
       },
-      { signal: controller.signal }
+      { signal: controller.signal },
     );
 
     const html = sanitizeHtmlFragment(extractTextContent(message));
-    console.log('generate-campaign-report chunk', {
+    console.log("generate-campaign-report chunk", {
       stopReason: message.stop_reason,
       length: html.length,
     });
@@ -120,23 +132,23 @@ async function requestReportChunk(anthropic: Anthropic, prompt: string): Promise
 
 function extractTextContent(message: any): string {
   return (message?.content ?? [])
-    .filter((block: any) => block?.type === 'text')
-    .map((block: any) => block.text ?? '')
-    .join('')
+    .filter((block: any) => block?.type === "text")
+    .map((block: any) => block.text ?? "")
+    .join("")
     .trim();
 }
 
 function sanitizeHtmlFragment(raw: string): string {
   return raw
-    .replace(/^```html\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/, '')
+    .replace(/^```html\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/, "")
     .trim();
 }
 
 function validateReportHtml(html: string): ReportValidationResult {
   const missingMarkers = REQUIRED_MARKERS.filter(
-    (marker) => !html.toLowerCase().includes(marker.toLowerCase())
+    (marker) => !html.toLowerCase().includes(marker.toLowerCase()),
   );
 
   return {
@@ -145,7 +157,10 @@ function validateReportHtml(html: string): ReportValidationResult {
   };
 }
 
-function buildContinuationPrompt(existingHtml: string, missingMarkers: string[]): string {
+function buildContinuationPrompt(
+  existingHtml: string,
+  missingMarkers: string[],
+): string {
   const tail = existingHtml.slice(-4000);
 
   return `The current campaign report HTML was cut off before completion. Continue the exact same report from the very next character onward.
@@ -160,7 +175,7 @@ Rules:
 - Output ONLY the continuation HTML fragment.
 
 Missing required markers:
-${missingMarkers.join('\n')}
+${missingMarkers.join("\n")}
 
 Current HTML tail for context:
 ${tail}`;

@@ -1,33 +1,36 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { generateCampaignReportHtml } from '../_shared/campaignReportGenerator.ts';
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { generateCampaignReportHtml } from "../_shared/campaignReportGenerator.ts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
 
   try {
     const { brand_id } = await req.json();
-    if (!brand_id) throw new Error('brand_id is required');
+    if (!brand_id) throw new Error("brand_id is required");
 
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
     await runPipeline(supabase, brand_id);
 
     return new Response(JSON.stringify({ success: true }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
@@ -36,17 +39,22 @@ serve(async (req) => {
 
 async function runPipeline(supabase: any, brandId: string) {
   const { data: bi, error: biError } = await supabase
-    .from('brand_intelligence')
-    .select('klaviyo_raw, ai_research, compiled_context')
-    .eq('brand_id', brandId)
+    .from("brand_intelligence")
+    .select("klaviyo_raw, ai_research, compiled_context")
+    .eq("brand_id", brandId)
     .single();
 
-  if (biError || !bi) throw new Error(`Failed to load brand_intelligence: ${biError?.message}`);
+  if (biError || !bi) {
+    throw new Error(`Failed to load brand_intelligence: ${biError?.message}`);
+  }
 
   await supabase
-    .from('brand_intelligence')
-    .update({ campaign_report_status: 'generating', campaign_report_error: null })
-    .eq('brand_id', brandId);
+    .from("brand_intelligence")
+    .update({
+      campaign_report_status: "generating",
+      campaign_report_error: null,
+    })
+    .eq("brand_id", brandId);
 
   try {
     const scoredCampaigns = scoreCampaigns(bi.klaviyo_raw || []);
@@ -58,22 +66,22 @@ async function runPipeline(supabase: any, brandId: string) {
     });
 
     await supabase
-      .from('brand_intelligence')
+      .from("brand_intelligence")
       .update({
         campaign_report_html: html,
-        campaign_report_status: 'complete',
+        campaign_report_status: "complete",
         campaign_report_generated_at: new Date().toISOString(),
         campaign_report_error: null,
       })
-      .eq('brand_id', brandId);
+      .eq("brand_id", brandId);
   } catch (err: any) {
     await supabase
-      .from('brand_intelligence')
+      .from("brand_intelligence")
       .update({
-        campaign_report_status: 'failed',
+        campaign_report_status: "failed",
         campaign_report_error: err.message,
       })
-      .eq('brand_id', brandId);
+      .eq("brand_id", brandId);
     throw err;
   }
 }
@@ -81,14 +89,26 @@ async function runPipeline(supabase: any, brandId: string) {
 // ─── Campaign Scoring ───
 
 const SALE_KEYWORDS = [
-  'off', '%', 'sale', 'deal', 'save', 'discount', 'free shipping',
-  'bogo', 'bundle', 'flash', 'limited time', 'ends tonight',
-  'last chance', 'today only', 'hours only'
+  "off",
+  "%",
+  "sale",
+  "deal",
+  "save",
+  "discount",
+  "free shipping",
+  "bogo",
+  "bundle",
+  "flash",
+  "limited time",
+  "ends tonight",
+  "last chance",
+  "today only",
+  "hours only",
 ];
 
 function isSaleCampaign(subjectLine: string): boolean {
-  const lower = (subjectLine || '').toLowerCase();
-  return SALE_KEYWORDS.some(kw => lower.includes(kw));
+  const lower = (subjectLine || "").toLowerCase();
+  return SALE_KEYWORDS.some((kw) => lower.includes(kw));
 }
 
 function calcImpactScore(campaign: any): number {
@@ -107,19 +127,19 @@ function calcImpactScore(campaign: any): number {
 }
 
 function scoreCampaigns(campaigns: any[]): any[] {
-  const eligible = campaigns.filter(c => (c.delivered_count || 0) >= 500);
+  const eligible = campaigns.filter((c) => (c.delivered_count || 0) >= 500);
   if (eligible.length === 0) return [];
 
-  const withRaw = eligible.map(c => ({
+  const withRaw = eligible.map((c) => ({
     ...c,
-    isSale: isSaleCampaign(c.subject_line || ''),
+    isSale: isSaleCampaign(c.subject_line || ""),
     rawScore: calcImpactScore(c),
   }));
 
-  const maxScore = Math.max(...withRaw.map(c => c.rawScore));
+  const maxScore = Math.max(...withRaw.map((c) => c.rawScore));
 
   return withRaw
-    .map(c => ({
+    .map((c) => ({
       ...c,
       impactScore: maxScore > 0 ? Math.round((c.rawScore / maxScore) * 100) : 0,
     }))
@@ -129,21 +149,22 @@ function scoreCampaigns(campaigns: any[]): any[] {
 // ─── Competitor Research ───
 
 async function researchCompetitor(name: string): Promise<string> {
-  const key = Deno.env.get('PERPLEXITY_API_KEY');
+  const key = Deno.env.get("PERPLEXITY_API_KEY");
   if (!key) return `Research unavailable for ${name} (API key not configured).`;
 
   try {
-    const resp = await fetch('https://api.perplexity.ai/chat/completions', {
-      method: 'POST',
+    const resp = await fetch("https://api.perplexity.ai/chat/completions", {
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${key}`,
-        'Content-Type': 'application/json',
+        "Authorization": `Bearer ${key}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: 'sonar',
+        model: "sonar",
         messages: [{
-          role: 'user',
-          content: `Research ${name}'s email marketing program. Find: estimated send frequency per week, typical offer types (% off, free gift, etc), subject line patterns and tone, content themes, any recent notable campaigns. Be specific. 300 words max.`,
+          role: "user",
+          content:
+            `Research ${name}'s email marketing program. Find: estimated send frequency per week, typical offer types (% off, free gift, etc), subject line patterns and tone, content themes, any recent notable campaigns. Be specific. 300 words max.`,
         }],
         max_tokens: 500,
       }),
@@ -151,7 +172,8 @@ async function researchCompetitor(name: string): Promise<string> {
 
     if (!resp.ok) throw new Error(`Perplexity HTTP ${resp.status}`);
     const data = await resp.json();
-    return data.choices?.[0]?.message?.content || `No research content returned for ${name}.`;
+    return data.choices?.[0]?.message?.content ||
+      `No research content returned for ${name}.`;
   } catch (err: any) {
     return `Research unavailable for ${name}: ${err.message}`;
   }
@@ -162,12 +184,14 @@ async function researchCompetitors(aiResearch: any): Promise<string> {
     aiResearch?.competitive_landscape?.direct_competitors?.slice(0, 5) || [];
 
   if (competitors.length === 0) {
-    return 'No competitor data available in brand intelligence.';
+    return "No competitor data available in brand intelligence.";
   }
 
-  const results = await Promise.all(competitors.map(name => researchCompetitor(name)));
+  const results = await Promise.all(
+    competitors.map((name) => researchCompetitor(name)),
+  );
 
   return competitors
     .map((name, i) => `### ${name}\n${results[i]}`)
-    .join('\n\n');
+    .join("\n\n");
 }
