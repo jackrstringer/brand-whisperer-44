@@ -566,7 +566,7 @@ export default function CampaignEditor() {
           row.duration_ms = data.duration_ms || null;
           row.result = data.result || null;
         }
-        await supabase.from("generation_events").upsert(row, {
+        await (supabase.from("generation_events") as any).upsert(row, {
           onConflict: "campaign_id,run_id,event_key",
           ignoreDuplicates: false,
         });
