@@ -822,45 +822,61 @@ Always include:
 For any cart or order with multiple items, you MUST loop the Items array.
 Showing only one item when someone bought three is a broken experience.
 
-CORRECT loop pattern (Klaviyo "Placed Order" or "Started Checkout" events):
+CRITICAL — SHOPIFY EVENT SCHEMA REALITY:
 
-  {% for item in event.Items %}
+The Klaviyo Shopify integration stores detailed order data under event.extra, NOT
+in event.Items. This is the most common source of broken templates.
+
+  event.Items         → string array of product names ONLY: ["Product A", "Product B"]
+                        Cannot be looped for images, prices, or variants.
+
+  event.extra         → full Shopify order object with all detailed data
+  event.extra.line_items → array of full line item objects with images and prices
+
+CORRECT loop pattern for Shopify "Placed Order" (use event.extra.line_items):
+
+  {% for line_item in event.extra.line_items %}
     <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
       <tr>
         <td width="80" valign="top">
-          {% if item.ImageURL and item.ImageURL != '' %}
-            <img src="{{ item.ImageURL }}" alt="{{ item.Name | default: 'Item' }}" 
+          {% if line_item.image and line_item.image != '' %}
+            <img src="{{ line_item.image }}" alt="{{ line_item.name | default: 'Item' }}" 
                  width="80" style="display:block;" />
           {% else %}
             <img src="https://cdn.yourbrand.com/fallback-product.jpg" 
-                 alt="{{ item.Name | default: 'Item' }}" width="80" style="display:block;" />
+                 alt="{{ line_item.name | default: 'Item' }}" width="80" style="display:block;" />
           {% endif %}
         </td>
         <td valign="top" style="padding-left:16px;">
           <p style="margin:0; font-weight:bold;">
-            {{ item.Name | default: 'Product' }}
+            {{ line_item.name | default: 'Product' }}
           </p>
-          {% if item.Variant and item.Variant != '' %}
-            <p style="margin:4px 0; color:#666;">{{ item.Variant }}</p>
+          {% if line_item.variant_title and line_item.variant_title != '' %}
+            <p style="margin:4px 0; color:#666;">{{ line_item.variant_title }}</p>
           {% endif %}
           <p style="margin:4px 0;">
-            Qty: {{ item.Quantity | default: 1 }}
+            Qty: {{ line_item.quantity | default: 1 }}
           </p>
           <p style="margin:4px 0;">
-            {{ item.Price | times: 1 | money }}
+            {{ line_item.price | times: 1 | money }}
           </p>
         </td>
       </tr>
     </table>
   {% endfor %}
 
-Klaviyo event property names vary by integration. Common variants:
-  - Shopify "Placed Order": event.Items (array), each item has:
-      item.Name, item.ImageURL, item.Price, item.Quantity, item.SKU,
-      item.Variant, item.URL, item.RowTotal
-  - "Started Checkout": event.Items (same structure)
-  - Always verify actual property names in the Klaviyo event payload before
-    building the template
+Other useful event.extra fields for Shopify Placed Order:
+  event.extra.shipping_address.first_name
+  event.extra.shipping_address.address1
+  event.extra.shipping_address.city
+  event.extra.order_number
+  event.extra.customer.email
+  event.extra.total_price
+  event.extra.subtotal_price
+  event.extra.total_discounts
+
+ALWAYS inspect the raw event JSON provided in the prompt — use the actual
+property paths shown there. Never assume event.Items has sub-properties.
 
 ────────────────────────────────────────────────────────────────────────────────
 2.4 CONDITIONAL LOGIC FOR SINGLE VS. MULTI-ITEM ORDERS
@@ -868,7 +884,7 @@ Klaviyo event property names vary by integration. Common variants:
 
 The copy surrounding the items block should adapt to the count:
 
-  {% assign item_count = event.Items | size %}
+  {% assign item_count = event.extra.line_items | size %}
   
   {% if item_count == 1 %}
     <p>Here's the item you ordered:</p>
@@ -887,9 +903,9 @@ when you have it available.
 
 Before looping, check that the array is not empty:
 
-  {% if event.Items and event.Items != empty %}
-    {% for item in event.Items %}
-      <!-- render items -->
+  {% if event.extra.line_items and event.extra.line_items != empty %}
+    {% for line_item in event.extra.line_items %}
+      <!-- render line_item.name, line_item.image, line_item.price, line_item.quantity -->
     {% endfor %}
   {% else %}
     <p>Your order details will appear in your account portal.</p>
