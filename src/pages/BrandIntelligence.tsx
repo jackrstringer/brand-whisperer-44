@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Brain, RefreshCw, Download } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { Loader2, Brain, RefreshCw, Download, ChevronDown } from "lucide-react";
+import { formatDistanceToNow, format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import BrandIntelligenceWizard from "@/components/brand/BrandIntelligenceWizard";
 import BrandResearchReport from "@/components/brand/BrandResearchReport";
 import { useCampaignReport } from "@/hooks/useCampaignReport";
@@ -18,6 +19,11 @@ export default function BrandIntelligencePage() {
   const [intel, setIntel] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [klaviyoSynced, setKlaviyoSynced] = useState(false);
+
+  // Report history
+  const [reportHistory, setReportHistory] = useState<any[]>([]);
+  const [expandedReportId, setExpandedReportId] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const {
     status: reportStatus,
@@ -43,10 +49,24 @@ export default function BrandIntelligencePage() {
     })();
   }, [brandId]);
 
-  // Shadow DOM rendering for report
+  // Fetch report history
+  const fetchHistory = useCallback(async () => {
+    if (!brandId) return;
+    const { data } = await supabase
+      .from("campaign_reports")
+      .select("id, campaign_count, date_range_days, created_at")
+      .eq("brand_id", brandId)
+      .order("created_at", { ascending: false });
+    setReportHistory(data || []);
+  }, [brandId]);
+
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory, reportStatus]);
+
+  // Shadow DOM rendering for current report
   useEffect(() => {
     if (!reportRef.current || !reportHtml) return;
-    // Clear existing shadow root content if re-rendering
     let shadow = reportRef.current.shadowRoot;
     if (!shadow) {
       shadow = reportRef.current.attachShadow({ mode: "open" });
@@ -54,14 +74,32 @@ export default function BrandIntelligencePage() {
     shadow.innerHTML = reportHtml;
   }, [reportHtml]);
 
-  const handleDownloadPdf = useCallback(() => {
-    if (!reportHtml) return;
+  const handleDownloadPdf = useCallback((html: string) => {
     const win = window.open("", "_blank");
     if (!win) return;
-    win.document.write(reportHtml);
+    win.document.write(html);
     win.document.close();
     win.print();
-  }, [reportHtml]);
+  }, []);
+
+  const handleViewHistoryReport = useCallback(async (reportId: string) => {
+    if (expandedReportId === reportId) {
+      setExpandedReportId(null);
+      return;
+    }
+    setExpandedReportId(reportId);
+  }, [expandedReportId]);
+
+  const handleDownloadHistoryReport = useCallback(async (reportId: string) => {
+    const { data } = await supabase
+      .from("campaign_reports")
+      .select("report_html")
+      .eq("id", reportId)
+      .single();
+    if (data?.report_html) {
+      handleDownloadPdf(data.report_html);
+    }
+  }, [handleDownloadPdf]);
 
   if (loading || !brandId) {
     return (
@@ -70,6 +108,9 @@ export default function BrandIntelligencePage() {
       </div>
     );
   }
+
+  // Skip the most recent history entry since it matches the current report
+  const olderReports = reportHistory.slice(1);
 
   return (
     <div className="space-y-8">
@@ -103,7 +144,7 @@ export default function BrandIntelligencePage() {
           <div className="flex items-center gap-2">
             {reportStatus === "complete" && (
               <>
-                <Button variant="outline" size="sm" onClick={handleDownloadPdf}>
+                <Button variant="outline" size="sm" onClick={() => reportHtml && handleDownloadPdf(reportHtml)}>
                   <Download className="w-3.5 h-3.5 mr-1.5" />
                   Download PDF
                 </Button>
@@ -114,9 +155,18 @@ export default function BrandIntelligencePage() {
                   disabled={reportLoading}
                 >
                   <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-                  Regenerate
+                  Generate New Report
                 </Button>
               </>
+            )}
+            {klaviyoSynced && (!reportStatus || reportStatus === "pending" || reportStatus === "failed") && (
+              <Button onClick={generateReport} disabled={reportLoading} size="sm">
+                {reportLoading ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Starting...</>
+                ) : (
+                  "Generate Report"
+                )}
+              </Button>
             )}
           </div>
         </div>
@@ -147,13 +197,6 @@ export default function BrandIntelligencePage() {
                 Score every campaign by business impact, identify top performers, and get competitor insights.
               </p>
               <p className="text-xs text-muted-foreground mb-6">Takes about 60 seconds.</p>
-              <Button onClick={generateReport} disabled={reportLoading}>
-                {reportLoading ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Starting...</>
-                ) : (
-                  "Generate Performance Analysis"
-                )}
-              </Button>
             </CardContent>
           </Card>
         )}
@@ -213,7 +256,106 @@ export default function BrandIntelligencePage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Previous Reports */}
+        {olderReports.length > 0 && (
+          <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="w-full justify-between">
+                <span>Previous Reports ({olderReports.length})</span>
+                <ChevronDown className={`w-4 h-4 transition-transform ${historyOpen ? "rotate-180" : ""}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-2 mt-2">
+              {olderReports.map((report) => (
+                <HistoryReportCard
+                  key={report.id}
+                  report={report}
+                  isExpanded={expandedReportId === report.id}
+                  onView={() => handleViewHistoryReport(report.id)}
+                  onDownload={() => handleDownloadHistoryReport(report.id)}
+                />
+              ))}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
       </div>
     </div>
+  );
+}
+
+function HistoryReportCard({
+  report,
+  isExpanded,
+  onView,
+  onDownload,
+}: {
+  report: any;
+  isExpanded: boolean;
+  onView: () => void;
+  onDownload: () => void;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [html, setHtml] = useState<string | null>(null);
+  const [loadingHtml, setLoadingHtml] = useState(false);
+
+  useEffect(() => {
+    if (!isExpanded || html) return;
+    setLoadingHtml(true);
+    supabase
+      .from("campaign_reports")
+      .select("report_html")
+      .eq("id", report.id)
+      .single()
+      .then(({ data }) => {
+        setHtml(data?.report_html || null);
+        setLoadingHtml(false);
+      });
+  }, [isExpanded, html, report.id]);
+
+  useEffect(() => {
+    if (!containerRef.current || !html) return;
+    let shadow = containerRef.current.shadowRoot;
+    if (!shadow) {
+      shadow = containerRef.current.attachShadow({ mode: "open" });
+    }
+    shadow.innerHTML = html;
+  }, [html]);
+
+  return (
+    <Card>
+      <CardContent className="py-3 px-4">
+        <div className="flex items-center justify-between">
+          <div className="text-sm">
+            <span className="font-medium">
+              Report — {format(new Date(report.created_at), "MMMM d, yyyy")}
+            </span>
+            <span className="text-muted-foreground ml-2">
+              · {report.campaign_count} campaigns
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={onView}>
+              {isExpanded ? "Hide" : "View"}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onDownload}>
+              <Download className="w-3.5 h-3.5 mr-1" />
+              Download
+            </Button>
+          </div>
+        </div>
+        {isExpanded && (
+          <div className="mt-3 rounded-lg border border-border overflow-hidden bg-card">
+            {loadingHtml ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div ref={containerRef} className="w-full" />
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
