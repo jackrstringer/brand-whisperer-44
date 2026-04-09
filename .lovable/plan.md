@@ -1,55 +1,56 @@
 
 
-## Problem
+# Fix Visual QA Pipeline: Remove Fake Passes, Add Hard Caps
 
-In flow mode, the campaign HTML contains Liquid templates (e.g. `{{ event.extra.line_items[0].name }}`). When a preview event is selected, the `klaviyo-render-preview` edge function resolves these templates into actual values and the result is displayed in the iframe. Two critical issues:
+## Problem Summary
 
-1. **Editing destroys Liquid templates**: When the user clicks into any text element, the iframe's `contentEditable` + `syncHtml()` mechanism serializes the *rendered* DOM (with resolved values) and sends it back via `textEdited`. This overwrites `campaign.html` with the baked-in values, permanently losing the Liquid templates. After that, switching preview events has no effect — the templates are gone.
+The visual QA pipeline has three categories of failure:
 
-2. **No formatting propagation**: If a user changes font size on a product title, it only affects that one DOM element, not all instances of the same Liquid field (e.g., all `{{ item.name }}` inside a `{% for %}` loop).
+1. **Silent success fallbacks** — When Claude returns a 400 error (image too large) or JSON fails to parse, the system lies and returns `passes_visual_qa: true`. The client-side catch block also tells the user "campaign is still usable" on any error.
 
-## Solution
+2. **No image dimension safety cap** — Screenshots can be 10,000px+ tall. When sent to Claude (even as slices), the total payload or individual slice dimensions can exceed Anthropic's limits, triggering the 400 that gets silently swallowed.
 
-### 1. Protect dynamic content from text editing (iframe script changes)
+3. **Stale width references** — The visual-qa prompt still says "470px viewport" in multiple places despite the renderer now using 390px. The capture-email-screenshot log message also says 470px.
 
-In the iframe's initialization script (the giant inline `<script>` block in `srcdocHtml`):
+## Changes
 
-- **Before** setting `contentEditable` on elements, check if the element's text was produced by a Liquid variable. The `klaviyo-render-preview` function will be updated to wrap rendered dynamic content in a marker: `<span data-liquid="event.extra.line_items[0].name">Actual Value</span>`.
-- Elements (or ancestors) with `data-liquid` attributes get `contentEditable = false` — users can click them but cannot type/delete text.
-- The floating toolbar (ftb) still appears for these elements, but with the **Ideate** button hidden and text input disabled. Font size, color, alignment, bold/italic/underline, and padding controls remain functional.
+### 1. Remove all fake-pass paths from `visual-qa/index.ts`
 
-### 2. Apply formatting to the source HTML, not the rendered preview
+- **Line 215-228**: Delete the `if (anthropicResp.status === 400)` block that returns `passes_visual_qa: true`. Let it fall through to the `throw` on line 229 so the error propagates honestly.
+- **Lines 240-253**: Delete the catch block that returns `passes_visual_qa: true` on JSON parse failure. Replace with a proper error response (`status: 500`, `error: "Failed to parse QA response"`).
+- Update the prompt to say 390px instead of 470px (lines 25, 32, 53).
 
-When a formatting change is made on a `data-liquid` element:
+### 2. Remove "still usable" lie from `CampaignEditor.tsx`
 
-- Instead of calling `syncHtml()` (which would bake rendered values into `campaign.html`), the iframe sends a **new message type**: `{ type: 'flowStyleEdit', liquidPath: 'item.name', property: 'fontSize', value: '14px' }`.
-- The parent handler in `CampaignEditor.tsx` receives this message and applies the style change to the **source Liquid HTML** (`campaign.html`), finding all elements that contain the matching `{{ liquid_path }}` pattern and adding/updating the inline style.
-- The updated source HTML is saved to the database, and the preview is re-rendered with the current event data.
+- **Line 700-706**: Change the catch block to set `visual_qa_status: 'error'` in the database and show the actual error message to the user instead of "campaign is still usable."
 
-### 3. Update `klaviyo-render-preview` to mark dynamic content
+### 3. Cap screenshot height in `capture-email-screenshot/index.ts`
 
-Modify the edge function to wrap rendered Liquid output with `data-liquid` markers so the iframe can identify which elements contain dynamic content. This is done by preprocessing the HTML before Liquid rendering:
+- Change `viewport_height` from 10000 to 7500. This keeps the full-page screenshot under Claude's 8000px single-image dimension limit.
+- Fix the log message on line 45 that still says "470px" — change to "390px".
 
-- Find `{{ variable }}` patterns and wrap them: `<span data-liquid="variable">{{ variable }}</span>`
-- For `{% for item in event.extra.line_items %}` blocks, add `data-liquid-loop="event.extra.line_items"` to the loop container.
+### 4. Add slice dimension safety in `slice-image-on-demand` or `visual-qa`
 
-### 4. Prevent `textEdited` saves during flow preview mode
+- Before sending slices to Claude in `visual-qa/index.ts`, check each slice image's dimensions. If any individual slice exceeds 1800px in height, downscale it (or skip and report error). This prevents the 400 from ever happening for sliced images.
+- Use the existing `capImageDimensions` pattern (referenced in memory) or add inline downscaling via ImageKit URL transforms for ImageKit-hosted slice URLs.
 
-In the `textEdited` handler in `CampaignEditor.tsx` (line ~1812):
+### 5. Remove fake-pass paths from `klaviyo-validate-template/index.ts`
 
-- If `flowPreviewHtml` is set (meaning we're viewing a rendered preview), **skip** saving the serialized HTML back to `campaign.html`. The rendered preview is display-only; only explicit style edits (via the new `flowStyleEdit` message) should modify the source.
+- Remove the three places that return `{ valid: true, skipped: true }`:
+  - No Klaviyo connection (line 36-39) — change to `{ valid: false, skipped: true, error: "No Klaviyo connection" }`
+  - Network error (line 59-62) — change to `{ valid: false, error: "Network error connecting to Klaviyo" }`
+  - Catch-all (line 96-99) — change to return `status: 500` with the actual error
 
-## Files to modify
+### Files Modified
 
-1. **`supabase/functions/klaviyo-render-preview/index.ts`** — Add `data-liquid` marker injection before Liquid rendering
-2. **`src/pages/CampaignEditor.tsx`** — Three changes:
-   - Iframe inline script: skip `contentEditable` for `data-liquid` elements, send `flowStyleEdit` messages for formatting, disable text input on dynamic fields
-   - `textEdited` handler: skip save when `flowPreviewHtml` is active
-   - New `flowStyleEdit` handler: apply style changes to source HTML and re-render preview
-3. **No database changes needed**
+| File | Change |
+|------|--------|
+| `supabase/functions/visual-qa/index.ts` | Remove 2 fake-pass blocks, fix 470→390 in prompt, add slice dimension cap |
+| `supabase/functions/capture-email-screenshot/index.ts` | Cap viewport_height to 7500, fix log message |
+| `supabase/functions/klaviyo-validate-template/index.ts` | Remove 3 fake-pass blocks |
+| `src/pages/CampaignEditor.tsx` | Change catch to set error status + show real error |
 
-## Complexity notes
+### Deployment
 
-- The `{% for %}` loop case is the trickiest — the source HTML has one template but renders N items. The marker approach handles this by tagging each rendered item with `data-liquid="item.name"` (the loop variable path), so a style change to any one propagates to the template in the source HTML.
-- Static text elements remain fully editable as before — this only restricts elements containing resolved Liquid variables.
+All 3 edge functions (`visual-qa`, `capture-email-screenshot`, `klaviyo-validate-template`) will be redeployed after changes.
 
