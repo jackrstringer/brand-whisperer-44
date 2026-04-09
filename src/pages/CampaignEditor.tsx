@@ -2388,7 +2388,7 @@ export default function CampaignEditor() {
     }
     return null;
   }
-  var isFlowPreview = !!document.querySelector('[data-liquid]');
+  var isFlowPreview = !!document.querySelector('[data-liquid]') || !!document.querySelector('[data-liquid-attr]');
   document.querySelectorAll('h1,h2,h3,h4,h5,h6,p,span,a,li,button,label').forEach(function(el){
     
     var hasBlock = Array.from(el.children).some(function(c){ return blocks.indexOf(c.tagName)>=0; });
