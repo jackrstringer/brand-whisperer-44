@@ -495,6 +495,48 @@ export type Database = {
           },
         ]
       }
+      generation_events: {
+        Row: {
+          campaign_id: string
+          completed_at: string | null
+          created_at: string | null
+          duration_ms: number | null
+          error: string | null
+          id: string
+          payload: Json | null
+          result: Json | null
+          started_at: string | null
+          status: string
+          step: string
+        }
+        Insert: {
+          campaign_id: string
+          completed_at?: string | null
+          created_at?: string | null
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          payload?: Json | null
+          result?: Json | null
+          started_at?: string | null
+          status?: string
+          step: string
+        }
+        Update: {
+          campaign_id?: string
+          completed_at?: string | null
+          created_at?: string | null
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          payload?: Json | null
+          result?: Json | null
+          started_at?: string | null
+          status?: string
+          step?: string
+        }
+        Relationships: []
+      }
       klaviyo_connections: {
         Row: {
           active_profiles_segment_id: string | null
