@@ -259,6 +259,55 @@ export default function CampaignEditor() {
   const [iframeContentHeight, setIframeContentHeight] = useState(800);
   const [previewFallbackUrls, setPreviewFallbackUrls] = useState<string[]>([]);
 
+  // Helper: pre-render flow HTML with real Klaviyo event data
+  const preRenderFlowHtml = useCallback(async (html: string, fc: FlowConfig) => {
+    if (!fc?.trigger_metric_id || !brandId) return;
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const evResp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/klaviyo-fetch-preview-events`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ brandId, metricId: fc.trigger_metric_id }),
+        }
+      );
+      if (!evResp.ok) return;
+      const events = await evResp.json();
+      if (!Array.isArray(events) || events.length === 0) return;
+      const ev = events[0];
+      const renderResp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/klaviyo-render-preview`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            html,
+            event_properties: ev.event_properties,
+            profile_name: ev.profile_name,
+            profile_email: ev.profile_email,
+          }),
+        }
+      );
+      if (!renderResp.ok) return;
+      const renderData = await renderResp.json();
+      if (renderData.rendered_html) {
+        setFlowPreviewHtml(renderData.rendered_html);
+        setPreviewHtml(renderData.rendered_html);
+      }
+    } catch (err) {
+      console.warn("[flow-prerender] Could not pre-render flow preview:", err);
+    }
+  }, [brandId]);
+
   useEffect(() => {
     if (!campaignId || !brandId) return;
     const load = async () => {
@@ -331,6 +380,10 @@ export default function CampaignEditor() {
               if (restored.length > 0) setSelectedReferences(restored);
             }
           } catch {}
+        }
+        // Pre-render flow HTML with real Klaviyo data so we never show raw Liquid
+        if ((campaign as any).campaign_mode === "flow" && campaign.html && (campaign as any).flow_config?.trigger_metric_id) {
+          preRenderFlowHtml(campaign.html, (campaign as any).flow_config as FlowConfig);
         }
       }
       const { data: msgs } = await supabase
@@ -768,6 +821,10 @@ export default function CampaignEditor() {
           { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `${successCount}/3 variants generated in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
         ]);
 
+        // Pre-render flow preview immediately so user never sees raw Liquid
+        if (campaignMode === "flow" && data.html && flowConfig?.trigger_metric_id) {
+          preRenderFlowHtml(data.html, flowConfig);
+        }
         // Run visual QA on the primary variant
         if (data.html) {
           runVisualQa(data as Campaign);
@@ -784,6 +841,10 @@ export default function CampaignEditor() {
           ...prev,
           { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Campaign generated in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
         ]);
+        // Pre-render flow preview immediately
+        if (campaignMode === "flow" && data.html && flowConfig?.trigger_metric_id) {
+          preRenderFlowHtml(data.html, flowConfig);
+        }
         if (data.html) runVisualQa(data as Campaign);
       } else if (data.status === "error") {
         // Only act on error if we haven't already completed
@@ -826,6 +887,10 @@ export default function CampaignEditor() {
       ...(syncedVariants !== variantHtmls ? { variant_htmls: syncedVariants } : {}),
     } as any).eq("id", campaignId);
     setCampaign(c => c ? { ...c, html: nextVariant.html, status: "ready" } : c);
+    // Re-render flow preview for the new variant
+    if (campaignMode === "flow" && flowConfig?.trigger_metric_id) {
+      preRenderFlowHtml(nextVariant.html, flowConfig);
+    }
   }, [campaign?.html, campaignId, syncActiveVariantHtml, variantHtmls]);
 
   const saveVariantAsNewCampaign = useCallback(async (index: number) => {
