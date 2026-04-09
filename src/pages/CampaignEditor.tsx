@@ -5010,6 +5010,14 @@ export default function CampaignEditor() {
 
 
 
+    {isAdmin && campaignId && (
+      <GenerationTimeline
+        open={showTimeline}
+        onOpenChange={setShowTimeline}
+        campaignId={campaignId}
+        campaignName={campaign?.name}
+      />
+    )}
   </>
   );
 }
