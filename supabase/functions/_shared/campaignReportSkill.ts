@@ -474,7 +474,7 @@ If \`total_revenue\` is null or zero for a campaign, set revenue_per_recipient t
 
 ## SECTION 8: METHODOLOGY FOOTNOTE
 
-At the bottom of the HTML report, include a collapsible "Methodology" section (collapsed by default, expandable with a click) containing:
+At the bottom of the HTML report, include a "Methodology" section (always visible, not collapsible) containing:
 
 1. **Impact score formula** — display the full formula with variable definitions
 2. **Threshold note** — "Campaigns with fewer than 500 delivered recipients were excluded from all rankings and impact score calculations."
