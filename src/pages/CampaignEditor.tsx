@@ -4206,6 +4206,7 @@ export default function CampaignEditor() {
                 campaignId={campaignId}
                 selectedReferences={selectedReferences}
                 onSelectReferences={setSelectedReferences}
+                campaignMode={campaignMode}
               />
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
