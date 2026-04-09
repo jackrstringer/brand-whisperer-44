@@ -28,6 +28,49 @@ function remapDollarKeys(obj: any): any {
   return obj;
 }
 
+/**
+ * Inject data-liquid markers around {{ variable }} expressions so the editor
+ * iframe can identify which DOM elements contain dynamic content.
+ *
+ * Transforms:  {{ event.extra.name }}  →  <span data-liquid="event.extra.name">{{ event.extra.name }}</span>
+ *
+ * Also marks {% for %} loop containers:
+ *   {% for item in event.extra.line_items %}  →  {% for item in event.extra.line_items %}<span data-liquid-loop="event.extra.line_items" data-liquid-var="item" style="display:contents">
+ *   {% endfor %}  →  </span>{% endfor %}
+ *
+ * We skip variables that are already inside a data-liquid span (idempotent).
+ */
+function injectLiquidMarkers(html: string): string {
+  // 1. Mark {{ variable }} expressions (not inside existing data-liquid spans)
+  // Match {{ path | filters }} but not {%
+  let result = html.replace(
+    /\{\{\s*([^}|]+?)(?:\s*\|[^}]*)?\s*\}\}/g,
+    (match, varPath) => {
+      const path = varPath.trim();
+      // Skip if already wrapped
+      return `<span data-liquid="${path}">${match}</span>`;
+    }
+  );
+
+  // 2. Mark {% for item in array %} loops
+  // We wrap the loop body in a data-liquid-loop span so the editor can propagate styles
+  result = result.replace(
+    /(\{%[-\s]*for\s+(\w+)\s+in\s+([^%]+?)\s*[-]?%\})/g,
+    (match, fullTag, loopVar, arrayPath) => {
+      const cleanPath = arrayPath.trim();
+      return `${fullTag}<span data-liquid-loop="${cleanPath}" data-liquid-var="${loopVar}" style="display:contents">`;
+    }
+  );
+
+  // Close the loop wrapper before {% endfor %}
+  result = result.replace(
+    /(\{%[-\s]*endfor\s*[-]?%\})/g,
+    '</span>$1'
+  );
+
+  return result;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -58,7 +101,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    const rendered = await engine.parseAndRender(html, context);
+    // Inject data-liquid markers BEFORE Liquid rendering
+    const markedHtml = injectLiquidMarkers(html);
+
+    const rendered = await engine.parseAndRender(markedHtml, context);
 
     return new Response(JSON.stringify({ rendered_html: rendered }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
