@@ -60,7 +60,7 @@ function PeekSubItem({ item, isActive, delay, onClick }: {
 
 export function CollapsedStrip({
   brands, activeBrandId, activePath, onBrandClick, onItemClick,
-  onExpandClick, onHomeClick, onSettingsClick, onSignOut,
+  onExpandClick, onHomeClick, onSettingsClick, onSignOut, onLibraryClick, isAdmin,
 }: Props) {
   const [mouseY, setMouseY] = useState<number | null>(null);
   const [peeking, setPeeking] = useState(false);
@@ -200,6 +200,9 @@ export function CollapsedStrip({
           gap: 12,
         }}
       >
+        {isAdmin && onLibraryClick && (
+          <HoverIcon icon="library" onClick={(e) => { e.stopPropagation(); onLibraryClick(); }} />
+        )}
         <HoverIcon icon="moon" onClick={(e) => e.stopPropagation()} />
         <HoverIcon icon="settings" onClick={(e) => { e.stopPropagation(); onSettingsClick(); }} />
       </div>

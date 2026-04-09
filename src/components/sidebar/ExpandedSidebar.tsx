@@ -29,7 +29,7 @@ interface Props {
 
 export function ExpandedSidebar({
   brands, activeBrandId, activePath, onBrandClick, onItemClick,
-  onCollapseClick, onHomeClick, onSettingsClick, onSignOut,
+  onCollapseClick, onHomeClick, onSettingsClick, onSignOut, onLibraryClick, isAdmin,
 }: Props) {
   const [hoveredBrand, setHoveredBrand] = useState<string | null>(null);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
