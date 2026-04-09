@@ -618,7 +618,11 @@ export default function CampaignEditor() {
       });
       if (renderResp.error) throw new Error(`Renderer failed: ${renderResp.error.message}`);
       const { imageBase64, mimeType } = renderResp.data;
-      await logQa("qa_screenshot", { duration_ms: Date.now() - screenshotStart, result: { base64_length: imageBase64?.length, mimeType } });
+      await logQa("qa_screenshot", {
+        event_key: `qa_screenshot_iter${iteration}`,
+        duration_ms: Date.now() - screenshotStart,
+        result: { base64_length: imageBase64?.length, mimeType, width: renderResp.data.width, height: renderResp.data.height },
+      });
 
       // AGENT 1: Slice the rendered output
       const sliceStart = Date.now();
@@ -628,7 +632,13 @@ export default function CampaignEditor() {
       });
       if (sliceResp.error) throw new Error(`Slicer failed: ${sliceResp.error.message}`);
       const outputSlices = sliceResp.data.slices;
-      await logQa("qa_slice", { duration_ms: Date.now() - sliceStart, result: { slice_count: outputSlices?.length } });
+      // Capture actual slice URLs for debugging
+      const outputSliceUrls = (outputSlices || []).map((s: any) => ({ index: s.index, label: s.label, url: typeof s.url === 'string' && !s.url.startsWith('data:') ? s.url : `[base64 ${s.url?.length || 0} chars]` }));
+      await logQa("qa_slice", {
+        event_key: `qa_slice_iter${iteration}`,
+        duration_ms: Date.now() - sliceStart,
+        result: { slice_count: outputSlices?.length, slices: outputSliceUrls },
+      });
 
       // Get pre-stored reference slices from DB
       let referenceSlices: any[] = [];
