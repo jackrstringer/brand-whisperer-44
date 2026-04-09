@@ -543,19 +543,32 @@ export default function CampaignEditor() {
     const MAX_ITERATIONS = 3;
     if (!campaignData.html || !campaignId) return;
     setVisualQaRunning(true);
+
+    // Generate a run_id for this QA run (reuse across iterations)
+    const qaRunId = (campaignData as any)._qaRunId || crypto.randomUUID();
     
     // Helper to log QA events (admin-only, fails silently for non-admins)
     const logQa = async (step: string, data: any) => {
       try {
-        await supabase.from("generation_events").insert({
+        const eventKey = data.event_key || `${step}_iter${iteration}`;
+        const status = data.status || "completed";
+        const row: Record<string, any> = {
           campaign_id: campaignId,
           step,
-          status: data.status || "completed",
+          status,
+          run_id: qaRunId,
+          event_key: eventKey,
           payload: data.payload || null,
-          result: data.result || null,
           error: data.error || null,
-          duration_ms: data.duration_ms || null,
-          completed_at: data.status === "started" ? null : new Date().toISOString(),
+        };
+        if (status !== "started") {
+          row.completed_at = new Date().toISOString();
+          row.duration_ms = data.duration_ms || null;
+          row.result = data.result || null;
+        }
+        await supabase.from("generation_events").upsert(row, {
+          onConflict: "campaign_id,run_id,event_key",
+          ignoreDuplicates: false,
         });
       } catch {}
     };
