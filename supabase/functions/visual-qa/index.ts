@@ -31,6 +31,7 @@ CHECK FOR THESE SPECIFIC ISSUES:
 10. PLACEHOLDER DIMENSIONS: Flag any image with width under 100px or height under 100px that is not a logo or icon. These are placeholder values that will break the layout.
 11. GRID STRUCTURE: Flag any multi-column grid that uses display:inline-block tables instead of direct <td> siblings inside a single <tr>. Flag any CSS class (e.g. mobile-grid-col) that sets display:block on grid columns. These techniques cause vertical stacking at the 470px viewport.
 12. GEOMETRIC ACCURACY: Inspect every circular element — progress indicators, icon containers, status badges. Any element that appears oval or egg-shaped when it should be circular is CRITICAL. Flag with category "geometry", severity "critical". Also flag connecting lines that pass through circles instead of running between them.
+13. DYNAMIC DATA POPULATION (flow emails only): When preview data has been used, verify that all dynamic fields have populated correctly — customer name appears as a real name (not a Liquid tag), order numbers are real, product images are loading and showing actual products, prices are formatted correctly. If you see any raw Liquid syntax like {{ event.extra.order_number }} visible in the rendered output, that is a CRITICAL error — it means a variable failed to render.
 
 STRUCTURAL COMPARISON (when reference screenshots are provided):
 Compare the generated output against the reference screenshots and score structural fidelity:
