@@ -401,7 +401,7 @@ export default function FlowDetailsPanel({
             {/* Event summary card */}
             {activeEvent && (
               <div className="border border-border rounded-lg p-3 bg-card">
-                <EventSummaryCard event={activeEvent} />
+                <EventSummaryCard event={activeEvent} showRaw={showRawData} onToggleRaw={() => setShowRawData(r => !r)} />
               </div>
             )}
 
