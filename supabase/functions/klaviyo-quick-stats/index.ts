@@ -173,7 +173,7 @@ async function getActiveProfileCount(apiKey: string, brandId: string, supabase: 
         lastCount = count;
       }
     } catch (e) {
-      console.warn(`[quick-stats] Segment count attempt ${attempt + 1} failed:`, e.message);
+      console.warn(`[quick-stats] Segment count attempt ${attempt + 1} failed:`, (e as any).message);
     }
   }
 

@@ -4,7 +4,7 @@
  */
 import { rehostHtmlImagesWithImageKit } from "./imagekit.ts";
 import { finalizeCampaignHtml } from "./finalizeCampaignHtml.ts";
-import { KLAVIYO_BEST_PRACTICES } from "./klaviyoBestPractices.ts";
+import { KLAVIYO_BEST_PRACTICES, KLAVIYO_FLOW_LIQUID_REFERENCE } from "./klaviyoBestPractices.ts";
 
 /** Lightweight structured event logger for generation pipeline steps.
  *  Uses upsert on (campaign_id, run_id, event_key) so a "started" row
@@ -957,15 +957,16 @@ RULES:
   let systemPrompt = referenceMode ? REFERENCE_MODE_SYSTEM : UNIVERSAL_EMAIL_RULES;
 
   if (campaignMode === "flow" && flowConfig) {
-    systemPrompt = `You are an expert Klaviyo email developer building production-ready transactional email templates. You generate complete HTML with correct Liquid templating syntax. Rules:
-- Every dynamic value MUST use Liquid variables from the provided event schema
-- Every Liquid variable MUST have a | default: filter to prevent broken renders
-- For Shopify events, loop over event.extra.line_items for product details — event.Items is a flat string array with no sub-properties
-- Include {{ organization.unsubscribe_link }} for marketing flows. Omit for order/shipping confirmation.
-- Always include {{ person.first_name | default: 'there' }} personalization in the greeting
+    systemPrompt = `You are an expert Klaviyo email developer building production-ready flow email templates. You generate complete HTML with correct Liquid templating syntax. Rules:
+- Every dynamic value MUST use Liquid variables from the provided event JSON
+- Every Liquid variable MUST have a | default: filter with a non-empty fallback (Klaviyo throws errors on empty string defaults)
+- Read the real event JSON provided below to understand the exact data structure — use the actual key names from that JSON, do not assume or invent field names
+- Include {{ organization.unsubscribe_link }} for marketing flows (browse abandonment, abandoned checkout). Omit for transactional flows (order confirmation, shipping confirmation).
+- Always include {{ person.first_name | default: 'there' }} personalization
+- Klaviyo uses Django templates, not Shopify Liquid. Use {% elif %} not {% elsif %}. Use {% if not %} not {% unless %}.
 - Output complete HTML only
 
-${KLAVIYO_BEST_PRACTICES}
+${KLAVIYO_FLOW_LIQUID_REFERENCE}
 
 ${UNIVERSAL_EMAIL_RULES}`;
 
@@ -1013,14 +1014,15 @@ If the reference email contains a product recommendation grid, cross-sell block,
 
 Correct Liquid syntax for a product feed grid:
 {%- for item in feeds.FeedNameHere|slice:3 -%}
-  {%- catalog_lookup item.item_id as catalog_item -%}
+  {%- catalog item.item_id -%}
   <td>
-    <a href="{{ catalog_item.url }}">
-      <img src="{{ catalog_item.image_full_url | default: 'https://via.placeholder.com/180' }}" width="180" />
+    <a href="{{ catalog_item.url | default: 'https://yourstore.com' }}">
+      <img src="{{ catalog_item.featured_image.full.src | default: 'https://via.placeholder.com/180' }}" width="180" />
     </a>
     <p>{{ catalog_item.title | default: 'Product' }}</p>
-    <p>{{ catalog_item.price | default: '' }}</p>
+    <p>{% currency_format catalog_item.metadata|lookup:"$price" %}</p>
   </td>
+  {%- endcatalog -%}
 {%- endfor -%}
 
 Replace FeedNameHere with the most appropriate feed from the list above based on the flow type:
@@ -1135,28 +1137,53 @@ Replicate this reference's structure EXACTLY:
     if (designNotes) flowBrandRules += `\n\nDesign notes:\n${designNotes}`;
     flowUserContent.push({ type: "text", text: flowBrandRules });
 
-    let flowDetails = `FLOW DETAILS:\nTrigger: ${flowConfig.trigger_metric_name || "Unknown"}\nEmail type: ${flowConfig.flow_type || "Transactional"}`;
+    const triggerName = (flowConfig.trigger_metric_name || "").toLowerCase();
+    let triggerGuidance = "";
+
+    if (triggerName.includes("viewed product") || triggerName.includes("browse")) {
+      triggerGuidance = `TRIGGER TYPE: Viewed Product (Browse Abandonment)
+This event contains exactly ONE product. There is NO items array — the product data lives at the TOP LEVEL of the event object (e.g. event.ProductName, event.ImageURL, event.URL, event.value).
+Do NOT try to loop event.Items or event.extra.line_items — they do not exist for this trigger.
+Any multi-product grid in the reference is a PRODUCT FEED, not trigger data. Use {% catalog event.item_id %}...{% endcatalog %} for the hero product.
+This is a MARKETING email — include {{ organization.unsubscribe_link }}.`;
+    } else if (triggerName.includes("started checkout") || triggerName.includes("checkout started") || triggerName.includes("abandoned checkout")) {
+      triggerGuidance = `TRIGGER TYPE: Started Checkout (Abandoned Cart)
+This event contains ONE OR MORE products in a cart. Find the items array in the real JSON below — it may be at event.Items[], event.extra.line_items[], or another path. Check which one actually exists and has sub-properties (images, prices) before using it.
+The cart items loop = trigger data from this specific checkout.
+Any ADDITIONAL product grid beyond the cart items = PRODUCT FEED (cross-sell/recommendations). Use feed syntax for those.
+This is a MARKETING email — include {{ organization.unsubscribe_link }}.`;
+    } else if (triggerName.includes("placed order") || triggerName.includes("ordered product") || triggerName.includes("order confirmation")) {
+      triggerGuidance = `TRIGGER TYPE: Placed Order (Order Confirmation)
+This event contains ordered products PLUS order metadata. Find the items array in the JSON (usually event.extra.line_items[]). Also extract: order number, totals, shipping address, billing address from the JSON.
+Order items and metadata = trigger data. Any ADDITIONAL product grid beyond order items = PRODUCT FEED (cross-sell). Use feed syntax for those.
+This is a TRANSACTIONAL email — do NOT include {{ organization.unsubscribe_link }}.`;
+    } else if (triggerName.includes("fulfilled") || triggerName.includes("shipment") || triggerName.includes("shipping")) {
+      triggerGuidance = `TRIGGER TYPE: Fulfilled Order (Shipping Confirmation)
+This event contains fulfillment/tracking info. Look for event.extra.fulfillments[] array for tracking numbers and URLs. Also has line items and order metadata.
+This is a TRANSACTIONAL email — do NOT include {{ organization.unsubscribe_link }}.`;
+    } else {
+      triggerGuidance = `TRIGGER TYPE: ${flowConfig.trigger_metric_name || "Unknown"}
+Read the real event JSON below carefully. Identify what data fields are available and use them appropriately. Do not assume any specific structure — use only what exists in the JSON.`;
+    }
+
+    let flowDetails = `FLOW DETAILS:
+Trigger: ${flowConfig.trigger_metric_name || "Unknown"}
+Email type: ${flowConfig.flow_type || "flow"}
+
+${triggerGuidance}`;
     if (flowNotes) flowDetails += `\n\n${flowNotes}`;
 
     flowDetails += `\n\n═══ REAL EVENT DATA — use these exact paths in your Liquid template ═══
 Note: Dollar-sign prefixed keys like $extra have been remapped to clean names (extra, value, event_id).
 ${JSON.stringify(eventSchema, null, 2)}
 
-Use the above JSON to understand the exact data structure. Rules:
-- Top-level keys: {{ event.KeyName }}
-- The extra object contains the full Shopify order: {{ event.extra.field_name }}
-- Line items loop: {%- for line_item in event.extra.line_items -%}...{%- endfor -%}
-- Product image: {{ line_item.product.images[0].src }} (nested under product)
-- Product name: {{ line_item.name }}
-- Product price: {{ line_item.price }}
-- Shipping address: {{ event.extra.shipping_address.first_name }}
-- Billing address: {{ event.extra.billing_address.first_name }}
-- Order number: {{ event.extra.order_number }}
-- Order total: {{ event.extra.total_price }}
-- Order value (top-level): {{ event.value }}
-- Always add | default: '' to every variable
-- Use exactly the property names shown in the JSON above — do not invent paths
+UNIVERSAL RULES FOR EVENT DATA:
+- Use EXACTLY the property names from the JSON above — do not invent paths not shown
+- Every Liquid variable MUST have | default: with a NON-EMPTY fallback (never | default: '')
 - Do NOT use $-prefixed keys in Liquid (e.g. use event.extra NOT event.$extra)
+- Top-level keys: {{ event.KeyName | default: 'fallback' }}
+- Nested keys: {{ event.extra.field_name | default: 'fallback' }}
+- Read the JSON to find the ACTUAL path for items, images, prices — do not guess
 ═══ END EVENT DATA ═══${productFeedsBlock}${referenceAnalysisBlock}`;
     flowUserContent.push({ type: "text", text: flowDetails });
 

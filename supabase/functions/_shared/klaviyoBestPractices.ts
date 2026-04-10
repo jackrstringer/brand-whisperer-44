@@ -2347,3 +2347,272 @@ Use these as the section order blueprint for each flow type.
 END OF KLAVIYO BEST PRACTICES REFERENCE
 ================================================================================
 `;
+
+/**
+ * Slimmed-down Liquid reference for flow email generation.
+ * Includes only Sections 2, 9-12 with corrected catalog syntax.
+ */
+export const KLAVIYO_FLOW_LIQUID_REFERENCE = `
+════════════════════════════════════════════════════════════════════════════════
+LIQUID TEMPLATING REFERENCE FOR FLOW EMAILS
+════════════════════════════════════════════════════════════════════════════════
+
+CRITICAL — KLAVIYO USES DJANGO TEMPLATES, NOT SHOPIFY LIQUID:
+
+Klaviyo's template engine is Django-based. Key differences from Shopify Liquid:
+
+  WRONG (Shopify Liquid):     CORRECT (Klaviyo/Django):
+  {% elsif %}             →   {% elif %}
+  {% unless %}            →   {% if not %}
+  {{ var | default: '' }} →   NEVER use empty string default
+
+If you write Shopify Liquid syntax, Klaviyo will throw "Unknown tag" errors.
+
+────────────────────────────────────────────────────────────────────────────────
+DEFAULT FILTERS — MANDATORY ON EVERY VARIABLE
+────────────────────────────────────────────────────────────────────────────────
+
+CRITICAL — KLAVIYO DEFAULT FILTER RULES:
+  1. NEVER use | default: '' (empty string). Klaviyo throws: "The default filter
+     requires 2 arguments, but 1 was given." Empty string = 1 argument.
+  2. NEVER use | default: (nothing after colon). Same error.
+  3. ALWAYS provide a meaningful non-empty fallback string.
+
+CORRECT:
+  {{ person.first_name | default: 'there' }}
+  {{ event.extra.order_number | default: 'your order' }}
+
+WRONG:
+  {{ event.extra.order_number | default: '' }}   ← empty string = error
+  {{ person.first_name | default: }}             ← no value = error
+  {{ person.first_name }}                        ← missing default entirely
+
+Defaults by type:
+  String fields:  | default: 'your order'
+  Name fields:    | default: 'there' or | default: 'Customer'
+  Numeric fields: | default: 0
+  Price fields:   | default: 0
+  URL fields:     | default: 'https://www.yourbrand.com'
+  Image URLs:     | default: 'https://cdn.yourbrand.com/fallback-product.jpg'
+
+────────────────────────────────────────────────────────────────────────────────
+SAFE IMAGE RENDERING
+────────────────────────────────────────────────────────────────────────────────
+
+  {% if event.ImageURL and event.ImageURL != '' %}
+    <img src="{{ event.ImageURL }}" alt="{{ event.ProductName | default: 'Product' }}"
+         width="300" style="display:block; max-width:100%;" />
+  {% else %}
+    <img src="https://cdn.yourbrand.com/fallback-product.jpg"
+         alt="Your order" width="300" style="display:block; max-width:100%;" />
+  {% endif %}
+
+Always include: width attribute, style="display:block", alt text with default.
+
+────────────────────────────────────────────────────────────────────────────────
+LOOPING ITEMS ARRAYS
+────────────────────────────────────────────────────────────────────────────────
+
+IMPORTANT: The correct loop path depends on the trigger type. Do NOT assume
+event.extra.line_items exists — check the real event JSON provided to you.
+
+  event.Items         → string array of product names ONLY. Cannot loop for images/prices.
+  event.extra.line_items → full line item objects (Shopify Placed Order / Started Checkout)
+
+Generic loop pattern (adapt the path to match the real JSON):
+  {% for line_item in event.extra.line_items %}
+    <td>
+      {% if line_item.image and line_item.image != '' %}
+        <img src="{{ line_item.image }}" alt="{{ line_item.name | default: 'Item' }}" width="80" />
+      {% endif %}
+      <p>{{ line_item.name | default: 'Product' }}</p>
+      <p>Qty: {{ line_item.quantity | default: 1 }}</p>
+      <p>{{ line_item.price | times: 1 | money }}</p>
+    </td>
+  {% endfor %}
+
+────────────────────────────────────────────────────────────────────────────────
+CURRENCY AND PRICE FORMATTING
+────────────────────────────────────────────────────────────────────────────────
+
+  {{ item.Price | times: 1 | money }}
+  {{ event.OrderValue | times: 1 | money }}
+  The | times: 1 coerces to number before | money.
+
+────────────────────────────────────────────────────────────────────────────────
+DATE FORMATTING
+────────────────────────────────────────────────────────────────────────────────
+
+  {{ event.CreatedAt | date: '%B %d, %Y' }}  → "January 15, 2025"
+
+CRITICAL — NEVER chain | default: after | date:
+  WRONG: {{ event.extra.processed_at | date: '%b %d' | default: 'Today' }}
+  CORRECT:
+  {% if event.extra.processed_at %}{{ event.extra.processed_at | date: '%b %d' }}{% else %}Today{% endif %}
+
+────────────────────────────────────────────────────────────────────────────────
+SUBJECT LINE AND PREVIEW TEXT LIMITS
+────────────────────────────────────────────────────────────────────────────────
+
+Subject: 30-50 chars optimal. Hard limit: 60.
+Preview text: 85-100 chars. Always set explicitly.
+
+  {{ person.first_name | default: 'there' | truncate: 20, '' }}
+
+────────────────────────────────────────────────────────────────────────────────
+ADDITIONAL LIQUID PATTERNS
+────────────────────────────────────────────────────────────────────────────────
+
+  {{ person.first_name | default: 'there' | capitalize }}
+  {{ item.Name | default: 'Your item' | truncate: 50, '...' }}
+  {{ event.CouponCode | default: 'SAVE10' | upcase }}
+
+  {% if person.city and person.city != '' %}
+    Shipping to {{ person.city }}
+  {% endif %}
+
+
+════════════════════════════════════════════════════════════════════════════════
+CATALOG LOOKUP REFERENCE
+════════════════════════════════════════════════════════════════════════════════
+
+The catalog tag fetches full product data from Klaviyo's catalog by ID.
+Use it when you have a product ID and need image, title, price, or URL.
+
+SYNTAX (block tag, NOT a single-line tag):
+  {% catalog event.item_id %}
+    {{ catalog_item.title | default: 'Product' }}
+    {{ catalog_item.featured_image.full.src | default: 'https://via.placeholder.com/300' }}
+    {{ catalog_item.url | default: 'https://yourstore.com' }}
+    {% currency_format catalog_item.metadata|lookup:"$price" %}
+  {% endcatalog %}
+
+WRONG SYNTAX (do NOT use):
+  {% catalog_lookup event.item_id as catalog_item %}   ← WRONG, this does not exist
+
+AVAILABLE FIELDS INSIDE {% catalog %}...{% endcatalog %}:
+  catalog_item.title                          → Product title
+  catalog_item.description                    → Product description
+  catalog_item.url                            → Product page URL
+  catalog_item.featured_image.full.src        → Full-size product image URL
+  catalog_item.featured_image.thumbnail.src   → Thumbnail image URL
+  catalog_item.metadata|lookup:"$price"       → Use with {% currency_format %} for price
+  catalog_item.categories                     → Array of category objects
+
+Always provide fallbacks:
+  {{ catalog_item.title | default: event.ItemName | default: 'Product' }}
+  {{ catalog_item.featured_image.full.src | default: 'https://via.placeholder.com/300' }}
+
+
+════════════════════════════════════════════════════════════════════════════════
+PRODUCT FEEDS REFERENCE
+════════════════════════════════════════════════════════════════════════════════
+
+Product feeds provide per-recipient personalized product recommendations.
+They are the ONLY way to show recommendations in a flow email.
+Never hardcode product data in a section that should be a feed.
+
+ACCESSING FEEDS:
+  feeds.FeedName              → Access a feed by its exact Klaviyo name
+  feeds.FeedName|slice:4      → First 4 items
+  feeds.FeedName|slice:0:4    → Same as above
+
+COMMON FEED NAMES:
+  "Best Sellers", "Recently Viewed", "May Also Like", "New Arrivals"
+
+FULL FEED LOOP PATTERN:
+  {% for item in feeds.BestSellers|slice:4 %}
+    {% catalog item.item_id %}
+    <td width="175" valign="top" style="padding:8px;">
+      <a href="{{ catalog_item.url | default: 'https://yourstore.com' }}">
+        <img src="{{ catalog_item.featured_image.full.src | default: 'https://via.placeholder.com/175' }}" width="175" />
+      </a>
+      <p style="font-weight:bold;">{{ catalog_item.title | default: 'Product' }}</p>
+      <p>{% currency_format catalog_item.metadata|lookup:"$price" %}</p>
+      <a href="{{ catalog_item.url | default: 'https://yourstore.com' }}">Shop Now</a>
+    </td>
+    {% endcatalog %}
+    {% if forloop.index == 2 %}</tr><tr>{% endif %}
+  {% endfor %}
+
+GRID ROW BREAK PATTERN:
+  {% if forloop.index == 2 %}</tr><tr>{% endif %}  {# 2-col grid #}
+  {% if forloop.index == 3 %}</tr><tr>{% endif %}  {# 3-col grid #}
+
+IF NO FEED EXISTS, OMIT THE SECTION:
+  {% if feeds.BestSellers %}
+    {# render feed grid #}
+  {% endif %}
+
+
+════════════════════════════════════════════════════════════════════════════════
+PERSON PROPERTIES REFERENCE
+════════════════════════════════════════════════════════════════════════════════
+
+Profile properties available in ALL flow and campaign emails:
+
+  person.first_name         → Always use | default: 'there'
+  person.last_name          → Use conditionally, may be blank
+  person.email              → Always available
+  person.phone_number       → May be blank
+  person.city               → May be blank
+  person.region             → State/province
+  person.country            → May be blank
+  person.zip                → May be blank
+  person.organization       → Company name (B2B)
+
+PERSONALIZATION PATTERNS:
+  Hi {{ person.first_name | default: 'there' }},
+
+  {% if person.city and person.city != '' %}
+    Shipping to {{ person.city }}.
+  {% endif %}
+
+  {{ person.first_name | default: '' }} {% if person.last_name %}{{ person.last_name }}{% endif %}
+
+
+════════════════════════════════════════════════════════════════════════════════
+EMAIL STRUCTURE TEMPLATES BY FLOW TYPE
+════════════════════════════════════════════════════════════════════════════════
+
+Use these as the section order blueprint for each flow type.
+
+BROWSE ABANDONMENT EMAIL 1:
+  1. Header (logo, centered)
+  2. Headline ("Still thinking about it?")
+  3. Hero product block ({% catalog event.item_id %}...{% endcatalog %} — image, name, price, CTA)
+  4. Primary CTA button → event.URL or catalog_item.url
+  5. Social proof (2-3 reviews)
+  6. Recommendation grid (feeds.RecentlyViewed, 4 products, 2-col) — DIFFERENT products
+  7. Footer with {{ organization.unsubscribe_link }}
+
+ABANDONED CHECKOUT EMAIL 1:
+  1. Header (logo)
+  2. Personalized greeting (person.first_name)
+  3. Cart items loop (event.extra.line_items or event.Items — check real JSON)
+  4. Order subtotal
+  5. Primary CTA → event.extra.abandoned_checkout_url
+  6. Trust signals (free shipping threshold, returns policy — static brand copy)
+  7. Footer with {{ organization.unsubscribe_link }}
+
+ORDER CONFIRMATION:
+  1. Header (logo)
+  2. "Your order is confirmed" headline
+  3. Order number
+  4. Line items loop (event.extra.line_items)
+  5. Order totals (subtotal, discount, shipping, total)
+  6. Shipping address block
+  7. "Track Your Order" CTA → event.extra.order_status_url
+  8. Brand copy ("what happens next", expected delivery window)
+  9. Footer (NO unsubscribe link — transactional)
+
+SHIPPING CONFIRMATION:
+  1. Header (logo)
+  2. Exciting headline ("Your order is on its way!")
+  3. Personalized greeting (person.first_name)
+  4. Tracking block (loop event.extra.fulfillments for tracking number and URL)
+  5. "Track Your Package" primary CTA
+  6. Items shipped (event.extra.line_items loop, compact version)
+  7. Brand copy ("while you wait", product usage tips)
+  8. Footer (NO unsubscribe link — transactional)
+`;

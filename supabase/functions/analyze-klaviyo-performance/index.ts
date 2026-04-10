@@ -82,7 +82,7 @@ Top 5 performers by RPR, bottom 5 worst. Be analytical and specific.`;
         // Attempt to fix common issues: trailing commas, unescaped newlines in strings
         let fixed = jsonMatch[0]
           .replace(/,\s*([}\]])/g, "$1") // trailing commas
-          .replace(/[\x00-\x1F\x7F]/g, (ch) => ch === "\n" || ch === "\r" || ch === "\t" ? " " : ""); // control chars
+          .replace(/[\x00-\x1F\x7F]/g, (ch: string) => ch === "\n" || ch === "\r" || ch === "\t" ? " " : ""); // control chars
         report = JSON.parse(fixed);
       } catch (e2) {
         console.error("[analyze-klaviyo] JSON parse failed after repair:", content.substring(0, 1000));
