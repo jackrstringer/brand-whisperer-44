@@ -78,7 +78,7 @@ function klaviyoGetHeaders(apiKey: string) {
   return {
     Authorization: `Klaviyo-API-Key ${apiKey}`,
     revision: KLAVIYO_REVISION,
-    Accept: "application/json",
+    Accept: "application/vnd.api+json",
   };
 }
 
@@ -296,13 +296,16 @@ async function fetchNewArrivals(
 
   console.log(`[klaviyo-fetch-products] Fetching new arrivals: ${url}`);
   const resp = await fetch(url, { headers: klaviyoGetHeaders(apiKey) });
+  console.log(`[klaviyo-fetch-products] Catalog response status: ${resp.status}`);
+  const rawText = await resp.text();
+  console.log(`[klaviyo-fetch-products] Catalog raw response (first 500 chars): ${rawText.substring(0, 500)}`);
+  
   if (!resp.ok) {
-    const err = await resp.text();
-    console.error(`[klaviyo-fetch-products] New arrivals fetch failed: ${resp.status} ${err}`);
+    console.error(`[klaviyo-fetch-products] New arrivals fetch failed: ${resp.status} ${rawText}`);
     return [];
   }
 
-  const data = await resp.json();
+  const data = JSON.parse(rawText);
   const totalItems = (data.data || []).length;
   console.log(`[klaviyo-fetch-products] Catalog returned ${totalItems} items`);
   return (data.data || []).map((item: any) => {
