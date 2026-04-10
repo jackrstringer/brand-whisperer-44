@@ -307,6 +307,9 @@ GRID LAYOUT — REQUIRED STRUCTURE:
 - Never use: <table align="left" style="display:inline-block"> as a column technique. This stacks vertically at any viewport narrower than the combined column widths.
 - Never add mobile-grid-col or any CSS class that sets display:block on grid columns. The email renders at 390px — mobile stacking rules will fire and destroy the layout.
 - NEVER use percentage widths on grid <td> elements. Always use explicit pixel values.
+- NEVER add class="grid-cell" or class="category-cell" to grid <td> elements. These are mobile stacking classes and we do not stack grids on mobile. Grids must remain side-by-side at ALL viewport widths.
+- NEVER include media query rules that set display:block or width:100% on grid cells. The only responsive adjustments allowed on grid cells are font-size changes and padding changes.
+- Do not generate ANY CSS rules targeting .grid-cell or .category-cell. These classes must not exist anywhere in the output.
 
 CONTRAST CARDS:
 - Never full-width color blocks cutting the email in half
@@ -334,6 +337,8 @@ BANNED IN EMAIL HTML — DO NOT USE:
 - CSS position:absolute or position:relative — not supported in email clients
 - CSS flexbox or CSS grid — not supported in email clients
 - CSS calc() — not supported in email clients
+- class="grid-cell" and class="category-cell" on <td> elements — these trigger mobile stacking which we never want. Grids stay side-by-side at all widths.
+- Media query rules that set display:block or width:100% on grid table cells — grids never stack.
 
 CIRCLES AND CIRCULAR ELEMENTS (critical — this breaks constantly):
 - A circle requires IDENTICAL width and height. If width ≠ height, border-radius:50% produces an oval, not a circle.
@@ -479,6 +484,7 @@ Rules:
   9. GRID IMAGE DIMENSIONS: For every multi-column image row, verify all images share identical width and height attributes, have a fixed pixel height in their inline style (never height:auto), and have matching ?tr=w-{W},h-{H},fo-auto on ImageKit URLs. Flag any height:auto on a grid image as critical.
   10. PLACEHOLDER DIMENSIONS: Flag any image with width under 100px or height under 100px that is not a logo or icon. These are placeholder values that will break the layout.
   11. GRID STRUCTURE: Flag any multi-column grid that uses display:inline-block tables instead of direct <td> siblings inside a single <tr>. Flag any CSS class (e.g. mobile-grid-col) that sets display:block on grid columns.
+  12. GRID STACKING CLASSES: Check for class="grid-cell" or class="category-cell" on any <td> element. These are mobile stacking classes that cause grid width imbalance bugs. Flag as [critical] if found. Also check for media query rules containing .grid-cell or .category-cell with display:block or width:100%. Flag as [critical] if found.
   12. GRID GEOMETRY: If a structural skeleton was provided specifying a grid (e.g., "columns: 2, rows: 2, equal_sizing: true"), verify the HTML implements that exact geometry. A 2×2 equal grid must have exactly 2 <tr> rows each containing exactly 2 equal-width <td> cells. Flag any mosaic, asymmetric, or "1 large + 2 small" layout as critical when the skeleton specifies equal sizing.
   13. PRICING SANITY: Flag any compare-at/original price that is $0, $0.00, or less than the sale price as a CRITICAL error. A product cannot be "on sale" from $0. Also flag any pricing that wasn't present in the reference layout.
 

@@ -16,12 +16,17 @@ export function enforceNoStackingLayout(html: string): string {
 
   // Only strip media query rules that explicitly force td to display:block
   // (the most common mobile-stacking pattern in email HTML)
+  // Also strips .grid-cell and .category-cell stacking rules entirely
   output = output.replace(
     /@media[^{]*\{([\s\S]*?)\}\s*\}/gi,
     (mediaBlock) => {
       return mediaBlock.replace(
         /([^{}]*)\{([^}]*)\}/g,
         (rule, selector, body) => {
+          // Completely remove .grid-cell and .category-cell rules (including img sub-selectors)
+          if (/\.grid-cell/i.test(selector) || /\.category-cell/i.test(selector)) {
+            return "";
+          }
           // If rule targets td elements and forces stacking, strip those properties
           if (/\btd\b/i.test(selector)) {
             const cleaned = body
@@ -38,6 +43,10 @@ export function enforceNoStackingLayout(html: string): string {
       );
     }
   );
+
+  // Remove class="grid-cell" and class="category-cell" from <td> elements
+  output = output.replace(/\s+class=["']grid-cell["']/gi, "");
+  output = output.replace(/\s+class=["']category-cell["']/gi, "");
 
   // Strip display:inline-block from table elements used as grid columns
   // (align="left" + display:inline-block is a common but broken pattern)
