@@ -91,13 +91,21 @@ async function resolveMetricId(
 ): Promise<string | null> {
   if (cachedMetricIds[metricName]) return cachedMetricIds[metricName];
 
-  const resp = await fetch(`${KLAVIYO_API_BASE}/metrics/?filter=equals(name,"${metricName}")`, {
-    headers: klaviyoHeaders(apiKey),
-  });
-  if (!resp.ok) {
-    const err = await resp.text();
-    console.error(`[klaviyo-fetch-products] Failed to resolve metric "${metricName}": ${resp.status} ${err}`);
-    return null;
+  // Metrics API doesn't support filtering by name directly — fetch all and find by name
+  let allMetrics: any[] = [];
+  let nextUrl: string | null = `${KLAVIYO_API_BASE}/metrics/?page[size]=50`;
+  while (nextUrl) {
+    const resp = await fetch(nextUrl, { headers: klaviyoHeaders(apiKey) });
+    if (!resp.ok) {
+      const err = await resp.text();
+      console.error(`[klaviyo-fetch-products] Failed to fetch metrics: ${resp.status} ${err}`);
+      return null;
+    }
+    const data = await resp.json();
+    allMetrics = allMetrics.concat(data.data || []);
+    nextUrl = data.links?.next || null;
+    // Safety: don't paginate forever
+    if (allMetrics.length > 500) break;
   }
   const data = await resp.json();
   const metrics = data.data || [];
