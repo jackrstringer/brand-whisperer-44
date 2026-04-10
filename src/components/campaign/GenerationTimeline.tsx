@@ -364,7 +364,8 @@ export default function GenerationTimeline({ open, onOpenChange, campaignId, cam
                   // Extract images from different event types
                   const outputSliceUrls = extractSliceUrls(ev.result);
                   const refSliceUrls = extractSliceUrls(ev.payload);
-                  const miscImageUrls = outputSliceUrls.length === 0 && refSliceUrls.length === 0
+                  const screenshotUrl = extractScreenshotUrl(ev);
+                  const miscImageUrls = outputSliceUrls.length === 0 && refSliceUrls.length === 0 && !screenshotUrl
                     ? extractImageUrls({ ...ev.payload, ...ev.result })
                     : [];
 
