@@ -78,7 +78,7 @@ function klaviyoGetHeaders(apiKey: string) {
   return {
     Authorization: `Klaviyo-API-Key ${apiKey}`,
     revision: KLAVIYO_REVISION,
-    Accept: "application/vnd.api+json",
+    Accept: "application/json",
   };
 }
 
