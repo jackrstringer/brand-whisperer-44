@@ -579,6 +579,12 @@ export default function CampaignEditor() {
       const flowConfig = campaignData.flow_config as any;
 
       if (campaignData.campaign_mode === 'flow' && flowConfig?.trigger_metric_id) {
+        const MAX_RENDER_FIX_ATTEMPTS = 3;
+        let renderSucceeded = false;
+        let currentHtml = campaignData.html;
+        let previewEvent: any = null;
+
+        // Fetch preview event once
         try {
           console.log('[qa-loop] Flow email detected — fetching real preview event...');
           const previewEventsResp = await supabase.functions.invoke('klaviyo-fetch-preview-events', {
@@ -587,38 +593,118 @@ export default function CampaignEditor() {
               metricId: flowConfig.trigger_metric_id
             }
           });
-
           const previewEvents = previewEventsResp.data;
           if (!previewEventsResp.error && Array.isArray(previewEvents) && previewEvents.length > 0) {
-            const previewEvent = previewEvents[0];
+            previewEvent = previewEvents[0];
+          }
+        } catch (fetchErr) {
+          console.warn('[qa-loop] Could not fetch preview events, will render without data:', fetchErr);
+        }
+
+        if (previewEvent) {
+          for (let renderAttempt = 0; renderAttempt < MAX_RENDER_FIX_ATTEMPTS; renderAttempt++) {
+            console.log(`[qa-loop] Render attempt ${renderAttempt + 1}/${MAX_RENDER_FIX_ATTEMPTS}...`);
             const liquidRenderResp = await supabase.functions.invoke('klaviyo-render-preview', {
               body: {
-                html: campaignData.html,
+                html: currentHtml,
                 event_properties: previewEvent.event_properties,
                 profile_name: previewEvent.profile_name || 'there',
                 profile_email: previewEvent.profile_email || ''
               }
             });
 
-            if (liquidRenderResp.error || liquidRenderResp.data?.error) {
-              const renderErr = liquidRenderResp.data?.error || liquidRenderResp.error?.message || 'Unknown render error';
-              console.error('[qa-loop] Flow preview render FAILED — hard-blocking QA:', renderErr);
-              throw new Error(`Flow preview render failed: ${renderErr}`);
-            }
-            if (liquidRenderResp.data?.rendered_html) {
+            if (!liquidRenderResp.error && !liquidRenderResp.data?.error && liquidRenderResp.data?.rendered_html) {
               htmlToCapture = liquidRenderResp.data.rendered_html;
-              console.log('[qa-loop] Using Liquid-rendered HTML with real Klaviyo event data');
+              // If we fixed the HTML, persist the fix
+              if (renderAttempt > 0) {
+                await supabase.from('campaigns').update({ html: currentHtml } as any).eq('id', campaignId);
+                setCampaign((prev: any) => prev ? { ...prev, html: currentHtml } : prev);
+                campaignData = { ...campaignData, html: currentHtml };
+              }
+              renderSucceeded = true;
+              console.log(`[qa-loop] Liquid render succeeded on attempt ${renderAttempt + 1}`);
+              break;
+            }
+
+            // Render failed — send the error to edit-campaign for AI auto-fix
+            const renderErr = liquidRenderResp.data?.error || liquidRenderResp.error?.message || 'Unknown render error';
+            console.warn(`[qa-loop] Render attempt ${renderAttempt + 1} failed: ${renderErr}`);
+            await logQa("render_fix_attempt", {
+              event_key: `render_fix_attempt_${renderAttempt}`,
+              status: "error",
+              error: renderErr,
+              payload: { attempt: renderAttempt + 1 }
+            });
+
+            if (renderAttempt >= MAX_RENDER_FIX_ATTEMPTS - 1) break; // Don't try to fix on last attempt
+
+            // Ask Claude to fix the Liquid syntax error
+            toast.info(`Fixing Liquid syntax error (attempt ${renderAttempt + 1})...`);
+            const session = (await supabase.auth.getSession()).data.session;
+            if (!session?.access_token) break;
+
+            try {
+              const editResp = await fetch(
+                `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/edit-campaign`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`,
+                  },
+                  body: JSON.stringify({
+                    campaignId,
+                    brandId: campaignData.brand_id,
+                    instruction: `CRITICAL: Fix this Liquid/Jinja template syntax error that is crashing the preview renderer. The error is: "${renderErr}". Fix the HTML template so it renders without errors. Do NOT remove dynamic content — fix the syntax so it works with LiquidJS. Common fixes: replace {% elif %} with {% elsif %}, remove unsupported Klaviyo-specific tags, fix unclosed blocks, remove invalid filter syntax.`,
+                  }),
+                }
+              );
+
+              if (editResp.ok && editResp.body) {
+                const reader = editResp.body.getReader();
+                const decoder = new TextDecoder();
+                let buf = '';
+                const EDIT_TIMEOUT = 60_000;
+                const editStart = Date.now();
+                try {
+                  while (true) {
+                    if (Date.now() - editStart > EDIT_TIMEOUT) { reader.cancel(); break; }
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buf += decoder.decode(value, { stream: true });
+                    const lines = buf.split('\n');
+                    buf = lines.pop() || '';
+                    for (const line of lines) {
+                      if (!line.startsWith('data: ')) continue;
+                      try {
+                        const evt = JSON.parse(line.slice(6));
+                        if (evt.type === 'html_patch' && evt.html) {
+                          currentHtml = evt.html;
+                          console.log(`[qa-loop] Got fixed HTML from edit-campaign (${currentHtml.length} chars)`);
+                        }
+                        if (evt.type === 'done' || evt.type === 'error') { reader.cancel(); break; }
+                      } catch {}
+                    }
+                  }
+                } catch (streamErr) {
+                  console.error('[qa-loop] Error consuming edit-campaign fix stream:', streamErr);
+                }
+              }
+            } catch (editErr) {
+              console.error('[qa-loop] edit-campaign fix request failed:', editErr);
             }
           }
-        } catch (err: any) {
-          console.error('[qa-loop] Flow preview render error — blocking QA:', err);
-          // Hard-block: set error status and abort
-          await supabase.from('campaigns').update({
-            visual_qa_status: 'error',
-            status: 'error',
-          } as any).eq('id', campaignId);
-          toast.error(`QA blocked: flow preview failed to render — ${err.message}`);
-          return;
+
+          if (!renderSucceeded) {
+            console.error('[qa-loop] All render fix attempts exhausted — falling back to raw HTML for QA');
+            await logQa("render_fix_exhausted", {
+              event_key: "render_fix_exhausted",
+              status: "error",
+              error: `Failed to fix Liquid syntax after ${MAX_RENDER_FIX_ATTEMPTS} attempts`,
+            });
+            // Don't hard-block — let QA proceed with raw HTML so it can flag visual issues too
+            toast.warning(`Could not fix all Liquid syntax errors after ${MAX_RENDER_FIX_ATTEMPTS} attempts. QA will continue with raw template.`);
+          }
         }
       }
 
