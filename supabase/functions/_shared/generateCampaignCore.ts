@@ -1113,7 +1113,7 @@ Replace FeedNameHere with the most appropriate feed from the list above based on
 - Post-purchase → prefer feeds named "May Also Like" or "Best Sellers"
 - Browse abandonment → prefer feeds named "Recently Viewed"
 - If no matching feed exists, use whichever feed is available
-- If no feeds exist at all, omit the recommendation section entirely rather than hardcoding products`;
+- If no matching feed type exists, use whichever feed is available — always include a product grid if the reference has one`;
 
         productFeedsBlock = `
 ═══ KLAVIYO PRODUCT FEEDS AVAILABLE IN THIS ACCOUNT ═══
@@ -1122,37 +1122,32 @@ ${autoSelectGuidance}
 
 If the reference email contains a product recommendation grid, cross-sell block, or any product section beyond the main cart/order items, use Klaviyo's product feed Liquid syntax to populate it. Do NOT hardcode product data or use event properties for recommendation blocks.
 
-Correct Liquid syntax for a product feed grid:
+Correct Liquid syntax for a product feed grid (DO NOT use {%- catalog -%} inside feed loops — feed items already have all needed data):
 {%- for item in feeds.FeedNameHere|slice:3 -%}
-  {%- catalog item.item_id -%}
-  <td>
-    <a href="{{ catalog_item.url|default:'https://yourstore.com' }}">
-      <img src="{{ catalog_item.featured_image.full.src|default:'https://via.placeholder.com/180' }}" width="180" />
+  <td style="width:50%;padding:8px;">
+    <a href="{{ item.url|default:'#' }}" style="text-decoration:none;">
+      <img src="{{ item.image_full_url|default:'https://placehold.co/300x300/f5f5f5/999999?text=Product' }}" width="180" style="display:block;width:100%;height:auto;" />
     </a>
-    <p>{{ catalog_item.title|default:'Product' }}</p>
-    <p>{% currency_format catalog_item.metadata|lookup:"$price" %}</p>
+    <p>{{ item.title|default:'Product' }}</p>
+    <p>{% currency_format item.metadata|lookup:"$price" %}</p>
   </td>
-  {%- endcatalog -%}
 {%- endfor -%}
+
+IMPORTANT: Inside a feed loop, use item.title, item.url, item.image_full_url, item.image_thumbnail_url, item.metadata — NOT catalog_item.* variables. The {%- catalog -%} tag is ONLY for single-item lookups (e.g. the hero product in browse abandonment via event.item_id).
 ═══ END PRODUCT FEEDS ═══`;
       } else {
         productFeedsBlock = `
 ═══ KLAVIYO PRODUCT FEEDS ═══
 No product feeds are configured in this Klaviyo account yet.
 
-If the reference email contains a product recommendation grid, you MUST still include a product grid. Use the catalog lookup pattern:
+IMPORTANT: If the reference email contains a product recommendation grid, you MUST still include that grid section in the output. Render it with realistic-looking STATIC FILLER content that matches the brand's aesthetic:
+- Use brand product images from the asset catalog provided below
+- Use realistic product names and prices that match the brand
+- Use # as the href for product links
+- Structure it exactly like the reference layout (same number of columns, same card style)
+- Add an HTML comment at the top of the filler section: <!-- PRODUCT_FEED_PLACEHOLDER: This section needs a Klaviyo product feed to be dynamic -->
 
-{%- catalog "PRODUCT-ID" -%}
-<td>
-  <a href="{{ catalog_item.url|default:'#' }}">
-    <img src="{{ catalog_item.featured_image.full.src|default:'https://via.placeholder.com/180' }}" width="180" style="display:block;width:100%;height:auto;" />
-  </a>
-  <p>{{ catalog_item.title|default:'Product' }}</p>
-  <p>{% currency_format catalog_item.metadata|lookup:"$price" %}</p>
-</td>
-{%- endcatalog -%}
-
-Use product IDs from the brand's Shopify product data if available below.
+This ensures the email looks complete and professional. The filler content will be replaced with a real product feed once the user configures one in Klaviyo.
 NEVER replace a product grid with testimonials, reviews, or other non-product content.
 ═══ END PRODUCT FEEDS ═══`;
       }
