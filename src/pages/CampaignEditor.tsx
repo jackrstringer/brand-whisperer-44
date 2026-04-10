@@ -913,7 +913,7 @@ export default function CampaignEditor() {
             mode: r.mode,
           })) : undefined,
           campaignMode,
-          flowConfig: campaignMode === "flow" ? flowConfig : undefined,
+          flowConfig: campaignMode === "flow" ? { ...flowConfig, referenceId: selectedReferences?.[0]?.id || null } : undefined,
           flowNotes: campaignMode === "flow" && flowNotes.trim() ? flowNotes.trim() : undefined,
         }),
       });
