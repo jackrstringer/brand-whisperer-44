@@ -131,14 +131,33 @@ function stripKlaviyoTags(html: string): string {
   // Replace {% elif %} with {% elsif %} (Django→Liquid)
   result = result.replace(/\{%-?\s*elif\b/g, '{%- elsif');
 
-  // Strip {% unless %}/{% endunless %} → LiquidJS supports these, keep them
-  // But strip Klaviyo-specific conditional operators that LiquidJS doesn't understand:
-  // e.g. "not" as unary operator: {% if not condition %} → {% unless condition %}
-  // Handle this by replacing {% if not X %} with {% unless X %}
+  // Convert Django "not" operator: {% if not X %} → {% unless X %}
   result = result.replace(/\{%-?\s*if\s+not\s+/g, '{%- unless ');
 
+  // Convert Klaviyo |slice:N filter in for loops to Liquid limit:N
+  // e.g. {% for item in feeds.RecentlyViewed|slice:4 %} → {% for item in feeds.RecentlyViewed limit:4 %}
+  result = result.replace(
+    /(\{%-?\s*for\s+\w+\s+in\s+[^|%]+)\|slice:(\d+)\s*(-?%\})/gi,
+    '$1 limit:$2 $3'
+  );
+
+  // Strip any remaining |filter:arg on for-loop iterables (Klaviyo/Django filters LiquidJS can't parse)
+  result = result.replace(
+    /(\{%-?\s*for\s+\w+\s+in\s+[^%|]+)\|[^%]+(-?%\})/gi,
+    '$1 $2'
+  );
+
+  // Handle forloop.last / forloop.first used with "or"/"and" inside conditionals
+  // LiquidJS supports forloop natively, but complex expressions like "x or forloop.last" can fail
+  // if the for loop was stripped or the expression uses Django-style operators.
+  // Replace "or forloop.last" / "and forloop.first" etc. with safe Liquid booleans
+  result = result.replace(/\bor\s+forloop\.\w+/gi, 'or true');
+  result = result.replace(/\band\s+forloop\.\w+/gi, 'and true');
+  // Also handle standalone forloop references in conditionals that might be orphaned
+  // (e.g. {% if forloop.last %} outside a for loop context after tag stripping)
+  // We keep them as-is inside real for loops — LiquidJS handles those fine.
+
   // Catch-all: strip any remaining unknown Klaviyo block tags that would crash LiquidJS
-  // Known safe tags: if, elsif, else, endif, for, endfor, unless, endunless, assign, capture, endcapture, comment, endcomment, raw, endraw, case, when, endcase, increment, decrement, cycle, tablerow, endtablerow, break, continue, render, include, layout, block, endblock
   const safeTagNames = /^-?\s*(if|elsif|else|endif|for|endfor|unless|endunless|assign|capture|endcapture|comment|endcomment|raw|endraw|case|when|endcase|increment|decrement|cycle|tablerow|endtablerow|break|continue|render|include|layout|block|endblock)\b/i;
   result = result.replace(/\{%([^%]*?)%\}/g, (match, inner) => {
     const trimmed = inner.trim().replace(/^-/, '').trim();
