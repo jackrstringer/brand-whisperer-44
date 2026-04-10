@@ -128,11 +128,12 @@ async function resolveMetricId(
 ): Promise<string | null> {
   if (cache[metricName]) return cache[metricName];
   let allMetrics: any[] = [];
-  let nextUrl: string | null = `${KLAVIYO_API_BASE}/metrics/?page[size]=50`;
+  let nextUrl: string | null = `${KLAVIYO_API_BASE}/metrics/?page%5Bsize%5D=50`;
   while (nextUrl && allMetrics.length < 500) {
     const resp = await fetch(nextUrl, { headers: klaviyoHeaders(apiKey) });
     if (!resp.ok) {
-      console.error(`[product-sync] Metrics fetch failed: ${resp.status}`);
+      const errBody = await resp.text();
+      console.error(`[product-sync] Metrics fetch failed: ${resp.status} ${errBody}`);
       return null;
     }
     const data = await resp.json();
