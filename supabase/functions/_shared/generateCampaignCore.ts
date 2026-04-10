@@ -1014,10 +1014,17 @@ RULES:
 - NO SPACES around pipes or after colons in filters. CORRECT: {{ var|default:'value' }}  WRONG: {{ var | default: 'value' }}
 - Output complete HTML only
 
-REFERENCE-FIRST DYNAMIC CONTENT RULE:
+REFERENCE-FIRST DYNAMIC CONTENT RULE (THIS OVERRIDES ALL OTHER PERSONALIZATION GUIDANCE):
 - Only include dynamic personalization (first name, pricing, product details, dynamic images) if: (a) the reference email visually contains that element, or (b) the user explicitly requests it in their brief.
 - Do NOT add dynamic fields that aren't present in the reference layout. If the reference shows static text with no personalization, keep it static.
+- This rule overrides any personalization guidance in the Liquid reference docs below. If the reference shows no first-name personalization, do NOT add it — even if the Liquid reference suggests using it. The reference layout is the single source of truth for what dynamic elements to include.
 - Only include pricing if the reference email shows pricing. Never include CompareAtPrice/sale pricing unless the reference explicitly shows a compare-at price pattern.
+
+FALLBACK GRAMMAR RULE:
+- If you do include first-name personalization, the |default: fallback must produce a grammatically correct sentence.
+- "Hi {{ person.first_name|default:'Friend' }}," is safe (standalone greeting).
+- "Still interested, {{ person.first_name|default:'there' }}?" is NOT safe because "Still interested, there?" is broken English.
+- For inline name usage (mid-sentence), use a conditional block: {% if person.first_name %}Still interested, {{ person.first_name }}?{% else %}Still interested?{% endif %}
 
 SEMANTIC PRICE VALIDATION:
 - If CompareAtPrice is $0, $0.00, or LESS than the regular Price, treat it as invalid/absent — do NOT render a compare-at/strikethrough price section.

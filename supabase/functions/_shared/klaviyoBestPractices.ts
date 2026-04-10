@@ -1813,21 +1813,23 @@ categories. For subscription products, coordinate winback timing with the
 expected purchase cycle.
 
 ────────────────────────────────────────────────────────────────────────────────
-7.7 NOT PERSONALIZING WITH FIRST NAME WHEN AVAILABLE
+7.7 PERSONALIZATION: REFERENCE-FIRST, GRAMMAR-SAFE
 ────────────────────────────────────────────────────────────────────────────────
 
-MISTAKE: Writing "Hello!" or "Hi there!" when you have the customer's first
-name in Klaviyo.
+First-name personalization is powerful but should only be used when:
+(a) the reference email visually shows personalization, OR
+(b) the user explicitly requests it in their brief.
 
-WHY IT'S DAMAGING: Personalization demonstrably increases open rates and
-engagement. First-name personalization in email feels human — its absence in
-a flow email (where you definitely have the profile data) feels cold and
-automated. The first name should appear in the subject line or opening line of
-every flow email where you have it.
+Do NOT add personalization that the reference doesn't show.
 
-THE RULE: Always use {{ person.first_name | default: 'there' }} in the opening
-line. Use it in subject lines where it fits naturally (2-3 steps per flow at
-most — over-personalization also feels strange). Always have a sensible default.
+WHEN USING PERSONALIZATION — GRAMMAR SAFETY RULES:
+- Standalone greetings are safe: "Hi {{ person.first_name|default:'Friend' }},"
+- Mid-sentence name usage MUST use conditionals to avoid broken fallbacks:
+  WRONG: "Still interested, {{ person.first_name|default:'there' }}?"
+    → Renders as "Still interested, there?" which is nonsensical.
+  RIGHT: "{% if person.first_name %}Still interested, {{ person.first_name }}?{% else %}Still interested?{% endif %}"
+- The fallback must produce a grammatically correct sentence in ALL cases.
+- Preferred fallback for standalone greetings: 'Friend' (not 'there').
 
 ────────────────────────────────────────────────────────────────────────────────
 7.8 SENDING WITHOUT UNSUBSCRIBE LINKS ON MARKETING FLOWS
@@ -2573,7 +2575,7 @@ PERSON PROPERTIES REFERENCE
 
 Profile properties available in ALL flow and campaign emails:
 
-  person.first_name         → Always use |default:'there'
+  person.first_name         → Use |default:'Friend' — only include if reference shows personalization or user requests it
   person.last_name          → Use conditionally, may be blank
   person.email              → Always available
   person.phone_number       → May be blank
@@ -2584,13 +2586,14 @@ Profile properties available in ALL flow and campaign emails:
   person.organization       → Company name (B2B)
 
 PERSONALIZATION PATTERNS:
-  Hi {{ person.first_name|default:'there' }},
+  Standalone greeting (safe): Hi {{ person.first_name|default:'Friend' }},
+
+  Mid-sentence (MUST use conditional to avoid broken fallback):
+  {% if person.first_name %}Still interested, {{ person.first_name }}?{% else %}Still interested?{% endif %}
 
   {% if person.city and person.city != '' %}
     Shipping to {{ person.city }}.
   {% endif %}
-
-  {{ person.first_name|default:'Friend' }} {% if person.last_name %}{{ person.last_name }}{% endif %}
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -2610,7 +2613,7 @@ BROWSE ABANDONMENT EMAIL 1:
 
 ABANDONED CHECKOUT EMAIL 1:
   1. Header (logo)
-  2. Personalized greeting (person.first_name)
+  2. Greeting (optional: person.first_name if reference shows it)
   3. Cart items loop (event.extra.line_items or event.Items — check real JSON)
   4. Order subtotal
   5. Primary CTA → event.extra.abandoned_checkout_url
@@ -2631,7 +2634,7 @@ ORDER CONFIRMATION:
 SHIPPING CONFIRMATION:
   1. Header (logo)
   2. Exciting headline ("Your order is on its way!")
-  3. Personalized greeting (person.first_name)
+  3. Greeting (optional: person.first_name if reference shows it)
   4. Tracking block (loop event.extra.fulfillments for tracking number and URL)
   5. "Track Your Package" primary CTA
   6. Items shipped (event.extra.line_items loop, compact version)
