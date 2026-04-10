@@ -600,13 +600,25 @@ export default function CampaignEditor() {
               }
             });
 
-            if (!liquidRenderResp.error && liquidRenderResp.data?.rendered_html) {
+            if (liquidRenderResp.error || liquidRenderResp.data?.error) {
+              const renderErr = liquidRenderResp.data?.error || liquidRenderResp.error?.message || 'Unknown render error';
+              console.error('[qa-loop] Flow preview render FAILED — hard-blocking QA:', renderErr);
+              throw new Error(`Flow preview render failed: ${renderErr}`);
+            }
+            if (liquidRenderResp.data?.rendered_html) {
               htmlToCapture = liquidRenderResp.data.rendered_html;
               console.log('[qa-loop] Using Liquid-rendered HTML with real Klaviyo event data');
             }
           }
-        } catch (err) {
-          console.warn('[qa-loop] Could not fetch preview event, falling back to raw HTML:', err);
+        } catch (err: any) {
+          console.error('[qa-loop] Flow preview render error — blocking QA:', err);
+          // Hard-block: set error status and abort
+          await supabase.from('campaigns').update({
+            visual_qa_status: 'error',
+            status: 'error',
+          } as any).eq('id', campaignId);
+          toast.error(`QA blocked: flow preview failed to render — ${err.message}`);
+          return;
         }
       }
 
