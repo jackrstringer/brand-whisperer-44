@@ -983,6 +983,17 @@ export default function CampaignEditor() {
           ...prev,
           { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Campaign generated in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
         ]);
+        // Check for product feed placeholder
+        if (data.html?.includes("PRODUCT_FEED_PLACEHOLDER")) {
+          toast.warning("Product feed needed", {
+            description: "This email includes a product recommendation grid with placeholder content. Create a product feed in Klaviyo to make it dynamic.",
+            duration: 15000,
+            action: {
+              label: "Create Feed",
+              onClick: () => window.open("https://www.klaviyo.com/content/product-feeds", "_blank"),
+            },
+          });
+        }
         // Pre-render flow preview immediately
         if (campaignMode === "flow" && data.html && flowConfig?.trigger_metric_id) {
           preRenderFlowHtml(data.html, flowConfig);
