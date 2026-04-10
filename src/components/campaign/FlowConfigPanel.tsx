@@ -347,14 +347,24 @@ function ProductFeedSection({
   if (feeds.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-muted/30 p-3.5 space-y-2">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <Info className="w-3.5 h-3.5" />
-          No product feeds found
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <Info className="w-3.5 h-3.5" />
+            No product feeds found
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 text-[11px] gap-1"
+            onClick={onRefresh}
+          >
+            <RefreshCw className="w-3 h-3" />
+            Retry
+          </Button>
         </div>
         <p className="text-[11px] text-muted-foreground leading-relaxed">
           Product feeds power recommendation grids in your emails (e.g., "You
-          may also like"). Klaviyo doesn't allow creating feeds via API — you'll
-          need to set one up in your Klaviyo account.
+          may also like"). If you have feeds set up in Klaviyo, try refreshing. Otherwise, you can create one in your Klaviyo account.
         </p>
         <a
           href="https://help.klaviyo.com/hc/en-us/articles/115005082787"
@@ -365,9 +375,6 @@ function ProductFeedSection({
           Learn how to create a product feed
           <ExternalLink className="w-3 h-3" />
         </a>
-        <p className="text-[10px] text-muted-foreground/70">
-          Once created, re-sync your Klaviyo data to see it here.
-        </p>
       </div>
     );
   }
