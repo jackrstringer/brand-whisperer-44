@@ -83,7 +83,7 @@ export default function FlowConfigPanel({
 
   useEffect(() => {
     fetchSchema();
-    fetchProductFeeds();
+    refreshFeeds();
   }, [brandId]);
 
   const fetchProductFeeds = useCallback(async () => {
