@@ -199,6 +199,70 @@ function forceEqualGridColumns(html: string): string {
   return result;
 }
 
+/**
+ * Convert percentage widths on <td> elements to explicit pixel values.
+ * AI frequently generates width="50%" or width="33%" despite rules.
+ */
+function convertPercentageWidthsToPixels(html: string): string {
+  const EMAIL_WIDTH = 390;
+  const PERCENT_MAP: Record<string, number> = {
+    "50%": Math.floor(EMAIL_WIDTH / 2),
+    "33%": Math.floor(EMAIL_WIDTH / 3),
+    "34%": Math.floor(EMAIL_WIDTH / 3),
+    "25%": Math.floor(EMAIL_WIDTH / 4),
+  };
+
+  let result = html;
+  // Fix width="50%" attribute on td elements
+  result = result.replace(
+    /(<td\b[^>]*)\bwidth\s*=\s*["']?(\d+%?)["']?/gi,
+    (match, prefix, widthVal) => {
+      const px = PERCENT_MAP[widthVal];
+      if (px) {
+        return `${prefix}width="${px}"`;
+      }
+      return match;
+    }
+  );
+  // Fix width:50% in inline styles on td elements
+  result = result.replace(
+    /(<td\b[^>]*style\s*=\s*["'][^"']*)width\s*:\s*(\d+)%/gi,
+    (match, prefix, pct) => {
+      const px = PERCENT_MAP[`${pct}%`];
+      if (px) {
+        return `${prefix}width:${px}px`;
+      }
+      return match;
+    }
+  );
+  return result;
+}
+
+/**
+ * Inject overflow-x:hidden guardrail into generated HTML to prevent
+ * any content from ever exceeding the viewport width.
+ */
+function injectOverflowGuardrail(html: string): string {
+  const guardrailCSS = `<style>html,body{overflow-x:hidden;max-width:100%;}</style>`;
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/(<head[^>]*>)/i, `$1${guardrailCSS}`);
+  }
+  // No <head> tag — prepend
+  return guardrailCSS + html;
+}
+
+/**
+ * Remove nonsensical $0.00 strikethrough pricing patterns from generated HTML.
+ * Catches patterns like <del>$0.00</del> or <s>$0.00</s> followed by a real price.
+ */
+function stripZeroPricing(html: string): string {
+  // Remove <del>$0.00</del> or <s>$0.00</s> patterns
+  return html.replace(
+    /<(del|s)\b[^>]*>\s*\$0(\.00)?\s*<\/\1>/gi,
+    ""
+  );
+}
+
 export function finalizeCampaignHtml(html: string): string {
   if (!html) return html;
 
@@ -210,17 +274,26 @@ export function finalizeCampaignHtml(html: string): string {
   // Step 2: Enforce no-stacking for grid layouts
   result = enforceNoStackingLayout(result);
 
-  // Step 3: Force equal-width columns in asymmetric grids
+  // Step 3: Convert percentage widths to pixels before grid processing
+  result = convertPercentageWidthsToPixels(result);
+
+  // Step 4: Force equal-width columns in asymmetric grids
   result = forceEqualGridColumns(result);
 
-  // Step 4: Normalize grid image dimensions (geometry-driven, depth-aware)
+  // Step 5: Normalize grid image dimensions (geometry-driven, depth-aware)
   result = normalizeGridImages(result);
 
-  // Step 5: Fix inline height:auto that contradicts height attributes on grid images only
+  // Step 6: Fix inline height:auto that contradicts height attributes on grid images only
   result = fixGridImageInlineHeights(result);
 
-  // Step 6: Fix CTA button wrapper tables stretching full-width
+  // Step 7: Fix CTA button wrapper tables stretching full-width
   result = fixButtonTableWidth(result);
+
+  // Step 8: Strip nonsensical $0 pricing
+  result = stripZeroPricing(result);
+
+  // Step 9: Inject overflow-x guardrail (always last)
+  result = injectOverflowGuardrail(result);
 
   return result;
 }

@@ -480,6 +480,7 @@ Rules:
   10. PLACEHOLDER DIMENSIONS: Flag any image with width under 100px or height under 100px that is not a logo or icon. These are placeholder values that will break the layout.
   11. GRID STRUCTURE: Flag any multi-column grid that uses display:inline-block tables instead of direct <td> siblings inside a single <tr>. Flag any CSS class (e.g. mobile-grid-col) that sets display:block on grid columns.
   12. GRID GEOMETRY: If a structural skeleton was provided specifying a grid (e.g., "columns: 2, rows: 2, equal_sizing: true"), verify the HTML implements that exact geometry. A 2×2 equal grid must have exactly 2 <tr> rows each containing exactly 2 equal-width <td> cells. Flag any mosaic, asymmetric, or "1 large + 2 small" layout as critical when the skeleton specifies equal sizing.
+  13. PRICING SANITY: Flag any compare-at/original price that is $0, $0.00, or less than the sale price as a CRITICAL error. A product cannot be "on sale" from $0. Also flag any pricing that wasn't present in the reference layout.
 
 Return ONLY the JSON object. No markdown fences, no explanation, no preamble.`;
 
@@ -1009,10 +1010,19 @@ RULES:
 - Every Liquid variable MUST have a |default: filter with a non-empty fallback (Klaviyo throws errors on empty string defaults)
 - Read the real event JSON provided below to understand the exact data structure — use the actual key names from that JSON, do not assume or invent field names
 - Include {{ organization.unsubscribe_link }} for marketing flows (browse abandonment, abandoned checkout). Omit for transactional flows (order confirmation, shipping confirmation).
-- Always include {{ person.first_name|default:'there' }} personalization
 - Klaviyo uses Django templates, not Shopify Liquid. Use {% elif %} not {% elsif %}. Use {% if not %} not {% unless %}.
 - NO SPACES around pipes or after colons in filters. CORRECT: {{ var|default:'value' }}  WRONG: {{ var | default: 'value' }}
 - Output complete HTML only
+
+REFERENCE-FIRST DYNAMIC CONTENT RULE:
+- Only include dynamic personalization (first name, pricing, product details, dynamic images) if: (a) the reference email visually contains that element, or (b) the user explicitly requests it in their brief.
+- Do NOT add dynamic fields that aren't present in the reference layout. If the reference shows static text with no personalization, keep it static.
+- Only include pricing if the reference email shows pricing. Never include CompareAtPrice/sale pricing unless the reference explicitly shows a compare-at price pattern.
+
+SEMANTIC PRICE VALIDATION:
+- If CompareAtPrice is $0, $0.00, or LESS than the regular Price, treat it as invalid/absent — do NOT render a compare-at/strikethrough price section.
+- A product cannot be "on sale" from $0. If the only price available is $0.00, omit the price entirely.
+- Never render a strikethrough price that is lower than or equal to the sale price.
 
 ${KLAVIYO_FLOW_LIQUID_REFERENCE}
 

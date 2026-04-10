@@ -15,7 +15,7 @@ const PROPERTY_MAP: Record<string, string[]> = {
   product_name: ["ProductName", "$product_name", "product_name", "Name", "Title"],
   image_url: ["ImageURL", "$image", "image_url", "ProductImageURL", "ImageUrl"],
   product_url: ["ProductURL", "$url", "product_url", "URL", "Url"],
-  price: ["Price", "$price", "price", "$value", "CompareAtPrice"],
+  price: ["Price", "$price", "price", "$value"],
   quantity: ["Quantity", "$quantity", "quantity"],
   sku: ["SKU", "$sku", "sku"],
   brand: ["Brand", "$brand", "brand", "Vendor"],
