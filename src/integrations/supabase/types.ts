@@ -602,6 +602,83 @@ export type Database = {
           },
         ]
       }
+      klaviyo_product_store: {
+        Row: {
+          brand: string | null
+          brand_id: string
+          categories: string[] | null
+          checkout_count: number
+          created_at: string
+          first_seen: string
+          id: string
+          image_url: string | null
+          is_junk: boolean
+          klaviyo_account_id: string
+          last_seen: string
+          last_synced: string
+          order_count: number
+          price: number | null
+          product_id: string
+          product_name: string
+          product_url: string | null
+          sku: string | null
+          updated_at: string
+          view_count: number
+        }
+        Insert: {
+          brand?: string | null
+          brand_id: string
+          categories?: string[] | null
+          checkout_count?: number
+          created_at?: string
+          first_seen?: string
+          id?: string
+          image_url?: string | null
+          is_junk?: boolean
+          klaviyo_account_id: string
+          last_seen?: string
+          last_synced?: string
+          order_count?: number
+          price?: number | null
+          product_id: string
+          product_name: string
+          product_url?: string | null
+          sku?: string | null
+          updated_at?: string
+          view_count?: number
+        }
+        Update: {
+          brand?: string | null
+          brand_id?: string
+          categories?: string[] | null
+          checkout_count?: number
+          created_at?: string
+          first_seen?: string
+          id?: string
+          image_url?: string | null
+          is_junk?: boolean
+          klaviyo_account_id?: string
+          last_seen?: string
+          last_synced?: string
+          order_count?: number
+          price?: number | null
+          product_id?: string
+          product_name?: string
+          product_url?: string | null
+          sku?: string | null
+          updated_at?: string
+          view_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "klaviyo_product_store_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_assets: {
         Row: {
           ai_category: string | null

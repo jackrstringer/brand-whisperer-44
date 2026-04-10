@@ -1043,62 +1043,57 @@ ${UNIVERSAL_EMAIL_RULES}`;
       }
     }
 
-    // Fetch product data for recommendation grids via Metric Aggregates + Catalog Items
+    // Fetch product data from persistent product store
     let productFeedsBlock = "";
     try {
-      const { data: klavConn } = await supabase
-        .from("klaviyo_connections")
-        .select("api_key")
+      const presetKey = flowConfig?.selected_product_preset || "best_sellers";
+
+      // Query local product store — sorted by the preset's relevant count field
+      const PRESET_SORT_MAP: Record<string, string> = {
+        best_sellers: "order_count",
+        trending: "view_count",
+        most_viewed: "view_count",
+        popular_checkouts: "checkout_count",
+      };
+      const sortField = PRESET_SORT_MAP[presetKey] || "order_count";
+
+      let storeQuery = supabase
+        .from("klaviyo_product_store")
+        .select("product_id, product_name, image_url, product_url, price")
         .eq("brand_id", brandId)
-        .single();
+        .eq("is_junk", false)
+        .not("image_url", "is", null)
+        .order(sortField, { ascending: false })
+        .limit(8);
 
-      if (klavConn?.api_key) {
-        // Determine preset from flow config
-        const presetKey = flowConfig?.selected_product_preset || "best_sellers";
+      if (presetKey === "trending") {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 7);
+        storeQuery = storeQuery.gte("last_seen", cutoff.toISOString());
+      }
 
-        // Fetch products via the edge function logic inline
-        // We call the catalog items API directly to populate product grid data
-        const KLAVIYO_API_BASE = "https://a.klaviyo.com/api";
-        const KLAVIYO_REVISION = "2025-04-15";
-        const apiKey = klavConn.api_key;
-        const klHeaders = {
-          Authorization: `Klaviyo-API-Key ${apiKey}`,
-          revision: KLAVIYO_REVISION,
-          Accept: "application/vnd.api+json",
-        };
+      const { data: storeProducts, error: storeError } = await storeQuery;
 
-        // Fetch some catalog items for context so the AI knows what products exist
-        const catalogResp = await fetch(
-          `${KLAVIYO_API_BASE}/catalog-items/?sort=-created&page[size]=8&fields[catalog-item]=external_id,title,url,price,image_full_url&filter=${encodeURIComponent("equals(published,true)")}`,
-          { headers: klHeaders }
-        );
+      if (storeError) {
+        console.warn("[generateCampaignCore] Product store query error:", storeError);
+      }
 
-        let catalogProducts: { external_id: string; title: string; price: number | null; url: string; image_url: string }[] = [];
-        if (catalogResp.ok) {
-          const catalogData = await catalogResp.json();
-          catalogProducts = (catalogData.data || []).map((item: any) => {
-            const attrs = item.attributes || {};
-            return {
-              external_id: attrs.external_id || "",
-              title: attrs.title || "",
-              price: attrs.price ?? null,
-              url: attrs.url || "#",
-              image_url: attrs.image_full_url || "",
-            };
-          });
-          console.log(`[generateCampaignCore] Fetched ${catalogProducts.length} catalog items for product grid context`);
-        } else {
-          console.warn(`[generateCampaignCore] Catalog items fetch failed: ${catalogResp.status}`);
-          await catalogResp.text();
-        }
+      const catalogProducts = (storeProducts || []).map((p: any) => ({
+        external_id: p.product_id,
+        title: p.product_name,
+        price: p.price,
+        url: p.product_url || "#",
+        image_url: p.image_url || "",
+      }));
+      console.log(`[generateCampaignCore] Loaded ${catalogProducts.length} products from store for preset "${presetKey}"`);
 
-        if (catalogProducts.length > 0) {
-          productFeedsBlock = `
-═══ PRODUCT CATALOG DATA (from Klaviyo Catalog API) ═══
+      if (catalogProducts.length > 0) {
+        productFeedsBlock = `
+═══ PRODUCT CATALOG DATA (from product store) ═══
 Preset: ${presetKey}
 
 Available products for recommendation grids:
-${catalogProducts.map((p, i) => `${i + 1}. "${p.title}" — $${p.price ?? "N/A"} — Image: ${p.image_url} — URL: ${p.url}`).join("\n")}
+${catalogProducts.map((p: any, i: number) => `${i + 1}. "${p.title}" — $${p.price ?? "N/A"} — Image: ${p.image_url} — URL: ${p.url}`).join("\n")}
 
 IMPORTANT: For product recommendation grids in flow emails, use STATIC product data from the list above. 
 Do NOT use Klaviyo product feed Liquid syntax ({%- for item in feeds.* -%}) — product feeds are a Klaviyo UI-only feature with no API access.
@@ -1107,10 +1102,10 @@ Each product card should link to the product URL and show the product image, tit
 The product grid data will be swapped dynamically by the app when the user changes presets.
 Mark the product grid section with an HTML comment: <!-- PRODUCT_GRID:${presetKey} -->
 ═══ END PRODUCT CATALOG ═══`;
-        } else {
-          productFeedsBlock = `
+      } else {
+        productFeedsBlock = `
 ═══ PRODUCT CATALOG DATA ═══
-No catalog items found in the Klaviyo account.
+No products found in the product store for this account.
 
 If the reference email contains a product recommendation grid, you MUST still include that grid section in the output. Render it with realistic-looking STATIC FILLER content that matches the brand's aesthetic:
 - Use brand product images from the asset catalog provided below
@@ -1121,10 +1116,9 @@ If the reference email contains a product recommendation grid, you MUST still in
 
 NEVER replace a product grid with testimonials, reviews, or other non-product content.
 ═══ END PRODUCT CATALOG ═══`;
-        }
       }
     } catch (e) {
-      console.warn("[generateCampaignCore] Failed to fetch product catalog:", e);
+      console.warn("[generateCampaignCore] Failed to query product store:", e);
     }
 
     // Run semantic reference analysis if a reference is selected
