@@ -128,6 +128,20 @@ function stripKlaviyoTags(html: string): string {
   // Replace {% has_category ... %} blocks
   result = result.replace(/\{%-?\s*has_category\s+[^%]*-?%\}/gi, '');
 
+  // Translate Klaviyo/Django-style boolean operators to LiquidJS syntax
+  // "or" → "||", "and" → "&&", "not " → "" (negate handled differently)
+  // Only inside {% %} tags
+  result = result.replace(/\{%-?([^%]*?)-?%\}/g, (_match, inner) => {
+    const translated = inner
+      .replace(/\bor\b/g, '||')
+      .replace(/\band\b/g, '&&')
+      .replace(/\bnot\s+/g, '');
+    return `{%${translated}%}`;
+  });
+
+  // Replace {% elif %} with {% elsif %} (Django→Liquid)
+  result = result.replace(/\{%-?\s*elif\b/g, '{%- elsif');
+
   return result;
 }
 
