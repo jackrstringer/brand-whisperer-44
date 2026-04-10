@@ -996,13 +996,14 @@ ${UNIVERSAL_EMAIL_RULES}`;
 
     // Fetch product feeds for recommendation grids
     let productFeedsBlock = "";
+    let productFeeds: any[] = [];
     try {
       const { data: klavConnFeeds } = await supabase
         .from("klaviyo_connections")
         .select("cached_stats")
         .eq("brand_id", brandId)
         .single();
-      const productFeeds = (klavConnFeeds?.cached_stats as any)?.product_feeds || [];
+      productFeeds = (klavConnFeeds?.cached_stats as any)?.product_feeds || [];
       if (productFeeds.length > 0) {
         productFeedsBlock = `
 ═══ KLAVIYO PRODUCT FEEDS AVAILABLE IN THIS ACCOUNT ═══
@@ -1037,6 +1038,63 @@ None configured in this account yet. Do not include recommendation product grids
       }
     } catch (e) {
       console.warn("[generateCampaignCore] Failed to fetch product feeds:", e);
+    }
+
+    // Run semantic reference analysis if a reference is selected
+    let referenceAnalysisBlock = "";
+    const refId = reference?.id || flowConfig?.referenceId;
+    if (refId) {
+      try {
+        console.log("[generateCampaignCore] Running reference semantic analysis...");
+        const analysisResp = await fetch(
+          `${Deno.env.get("SUPABASE_URL")}/functions/v1/analyze-reference-for-flow`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            },
+            body: JSON.stringify({
+              brand_id: brandId,
+              reference_id: refId,
+              trigger_metric_name: flowConfig.trigger_metric_name || flowConfig.triggerMetricName,
+              flow_type: flowConfig.flow_type || flowConfig.flowType,
+            }),
+          },
+        );
+
+        if (analysisResp.ok) {
+          const analysis = await analysisResp.json();
+          if (!analysis.skipped && analysis.sections?.length > 0) {
+            console.log(`[generateCampaignCore] Reference analysis: ${analysis.sections.length} sections identified`);
+            const feedSections = analysis.sections.filter((s: any) => s.data_source === "product_feed");
+            referenceAnalysisBlock = `
+═══ REFERENCE EMAIL ARCHITECTURE ANALYSIS ═══
+The reference email has been analyzed. Each section's data source is identified below.
+This is your implementation blueprint — replicate the layout and design of each section
+using the correct Klaviyo data pattern. Never hardcode data that should be dynamic.
+
+${analysis.sections.map((s: any, i: number) => `SECTION ${i + 1}: ${s.label}
+Visual: ${s.visual_description}
+Data source: ${s.data_source}
+${s.grid_columns > 1 ? `Grid: ${s.grid_columns} columns × ${s.grid_rows} rows` : ""}
+Liquid pattern to use:
+${s.liquid_pattern}
+${s.recommended_feed ? `Use feed: "${s.recommended_feed}"` : ""}
+Notes: ${s.notes}`).join("\n---\n")}
+
+CRITICAL RULES FROM THIS ANALYSIS:
+- Any section marked "product_feed" MUST use {%- for item in feeds.FeedName|slice:N -%} syntax
+- Any section marked "event_property" MUST use event.* variables — do not use catalog_lookup for these
+- Any section marked "static" should use brand assets from the asset catalog below
+- Never hardcode product images, names, prices, or URLs that belong in dynamic sections
+- The number of products shown in the reference (${feedSections.map((s: any) => `${s.grid_columns * s.grid_rows} in ${s.label}`).join(", ") || "N/A"}) should match your implementation
+═══ END REFERENCE ANALYSIS ═══`;
+          }
+        }
+      } catch (err) {
+        console.warn("[generateCampaignCore] Reference analysis failed, continuing without it:", err);
+      }
     }
 
     // Build flow-specific user content
