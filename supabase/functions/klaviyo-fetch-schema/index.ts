@@ -133,32 +133,33 @@ Deno.serve(async (req) => {
     // Sort by priority
     metricResults.sort((a, b) => a.priority - b.priority);
 
-    // Fetch product feeds for recommendation grids
+    // Fetch product feeds (Klaviyo Web Feeds API) for recommendation grids
     let productFeeds: { id: string; name: string; feed_type: string }[] = [];
     try {
       const feedsResp = await fetch(
-        `${KLAVIYO_API_BASE}/product-feeds/?page[size]=50`,
+        `${KLAVIYO_API_BASE}/web-feeds/?page[size]=20`,
         {
           headers: {
             "Authorization": `Klaviyo-API-Key ${apiKey}`,
-            "revision": "2024-10-15",
+            "revision": "2025-07-15",
             "Accept": "application/json",
           },
         }
       );
       if (feedsResp.ok) {
         const feedsData = await feedsResp.json();
+        console.log("[klaviyo-fetch-schema] Web feeds response:", JSON.stringify(feedsData.data?.length ?? 0), "feeds found");
         productFeeds = (feedsData.data || []).map((f: any) => ({
           id: f.id,
           name: f.attributes?.name || "",
-          feed_type: f.attributes?.feed_type || "",
+          feed_type: f.type || "web-feed",
         }));
       } else {
-        console.warn("Product feeds fetch returned", feedsResp.status);
-        await feedsResp.text(); // consume body
+        const errText = await feedsResp.text();
+        console.warn("[klaviyo-fetch-schema] Web feeds fetch returned", feedsResp.status, errText);
       }
     } catch (e) {
-      console.warn("Failed to fetch product feeds:", e);
+      console.warn("[klaviyo-fetch-schema] Failed to fetch web feeds:", e);
     }
 
     // Store in klaviyo_connections for caching
