@@ -1506,6 +1506,39 @@ Container sizing:
 6.3 PRODUCT IMAGERY — NON-NEGOTIABLE FOR CART AND BROWSE FLOWS
 ────────────────────────────────────────────────────────────────────────────────
 
+CRITICAL — TWO PRODUCT SECTIONS REQUIRE COMPLETELY DIFFERENT DATA SOURCES:
+
+Flow emails commonly have two distinct product sections. These are NOT the same
+thing and must NEVER use the same data source:
+
+  SECTION 1 — THE TRIGGER PRODUCT (hero/main product block)
+  This is the specific product the customer abandoned or viewed.
+  Data source: event properties from the trigger event.
+  For browse abandonment: {% catalog_lookup event.item_id as p %}
+  For abandoned checkout: {% for item in event.extra.line_items %}
+  This section shows THE SPECIFIC ITEM that triggered the flow.
+
+  SECTION 2 — PRODUCT RECOMMENDATIONS (grid below the hero)
+  This is a separate set of DIFFERENT products — recommendations, recently
+  viewed, best sellers, or related items. NOT the same product repeated.
+  Data source: Klaviyo product feed.
+  {% for item in feeds.FeedName|slice:6 %}
+    {% catalog_lookup item.item_id as catalog_item %}
+  {% endfor %}
+  This section shows DIFFERENT products from a feed, personalized per recipient.
+
+NEVER:
+  - Put the same trigger product in both sections
+  - Repeat event.item_id or event.extra.line_items data in the recommendation grid
+  - Hardcode product images, names, or prices in the recommendation section
+  - Use event properties to populate the recommendation grid
+
+ALWAYS:
+  - Use event data ONLY for the hero/trigger product section
+  - Use feeds.FeedName for ALL recommendation/grid sections below the hero
+  - If no product feed is available, omit the recommendation section entirely
+    rather than repeating the hero product in a grid
+
 In abandoned checkout and browse abandonment emails, product images are
 critical — they trigger the visual memory of the purchase intent.
 
