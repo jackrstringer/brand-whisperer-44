@@ -291,7 +291,7 @@ async function fetchNewArrivals(
   slotCount: number,
 ): Promise<ProductSlot[]> {
   const fields = "external_id,title,description,url,price,image_full_url,image_thumbnail_url";
-  const url = `${KLAVIYO_API_BASE}/catalog-items/?sort=-created&page[size]=${slotCount}&fields[catalog-item]=${fields}&filter=${encodeURIComponent("equals(published,true)")}`;
+  const url = `${KLAVIYO_API_BASE}/catalog-items/?sort=-created&fields[catalog-item]=${fields}&filter=${encodeURIComponent("equals(published,true)")}`;
 
   const resp = await fetch(url, { headers: klaviyoGetHeaders(apiKey) });
   if (!resp.ok) {
