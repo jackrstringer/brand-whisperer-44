@@ -353,6 +353,7 @@ PROGRESS/STEP INDICATORS (order tracker, delivery status, etc.):
 - The active/completed step circle gets a filled background + white text checkmark (&#10003;)
 - Inactive step circles get a border only (border:1.5px solid #color) with empty or grey content
 - Labels go in a SECOND <tr> row below, with <td> cells aligned to each circle
+- The checkmark <td> MUST include line-height matching the cell height (e.g. line-height:32px for a 32px circle). Without this, the checkmark will float above center.
 - NEVER use negative margins to reposition a connecting line after the fact
 - NEVER put the line in a separate <tr> from the circles
 - Example structure:
@@ -361,7 +362,7 @@ PROGRESS/STEP INDICATORS (order tracker, delivery status, etc.):
       <td width="113" align="center" valign="middle">
         <table role="presentation"><tr>
           <td width="32" height="32" align="center" valign="middle"
-              style="width:32px;height:32px;border-radius:50%;background-color:#000;color:#fff;font-size:14px;">
+              style="width:32px;height:32px;border-radius:50%;background-color:#000;color:#fff;font-size:13px;line-height:32px;">
             &#10003;
           </td>
         </tr></table>
