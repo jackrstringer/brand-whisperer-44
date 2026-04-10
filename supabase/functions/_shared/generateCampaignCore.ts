@@ -322,11 +322,18 @@ DESIGN COHESION:
 
 NO EMOJIS — EVER:
 - Never use emoji characters anywhere in the email — not in headlines, body text, CTAs, subject lines, or footer
-- For icons (stars, checkmarks, arrows, social media icons, etc.), use inline SVG only
-- Social media icons: use simple inline SVG paths for each platform (Facebook, Instagram, TikTok, YouTube, etc.)
-- Star ratings: use inline SVG stars filled with the brand's accent color
-- Checkmarks, arrows, and decorative icons: use inline SVG with appropriate brand colors
-- Keep SVGs small and simple (single path elements) for email client compatibility
+- For icons (stars, checkmarks, arrows), use hosted PNG/GIF images OR Unicode text characters styled with CSS
+- Social media icons: use small hosted PNG images (not SVG, not emoji)
+- Star ratings: use Unicode ★ (&#9733;) and ☆ (&#9734;) characters with brand accent color
+- Checkmarks: use Unicode ✓ (&#10003;) or ✔ (&#10004;) characters
+- Arrows: use Unicode → (&#8594;) or › (&#8250;) characters
+
+BANNED IN EMAIL HTML — DO NOT USE:
+- Inline <svg> elements — most email clients (Gmail, Outlook, Yahoo) strip or ignore SVG entirely. Use hosted images or Unicode characters instead.
+- Negative margins (margin-top: -Npx, margin-left: -Npx, etc.) — email clients handle these inconsistently. Elements will overlap or misalign. Build layouts with proper table cell spacing instead.
+- CSS position:absolute or position:relative — not supported in email clients
+- CSS flexbox or CSS grid — not supported in email clients
+- CSS calc() — not supported in email clients
 
 CIRCLES AND CIRCULAR ELEMENTS (critical — this breaks constantly):
 - A circle requires IDENTICAL width and height. If width ≠ height, border-radius:50% produces an oval, not a circle.
@@ -335,16 +342,55 @@ CIRCLES AND CIRCULAR ELEMENTS (critical — this breaks constantly):
 - For circular icon containers in email, use a fixed-size <td> with exact equal dimensions:
   <td width="40" height="40" align="center" valign="middle"
       style="width:40px;height:40px;border-radius:50%;background-color:#000;">
-    <svg ...>...</svg>
+    &#10003;
   </td>
-- Progress step indicators: use a <table> row with equal fixed-size cells. Each step circle must have
-  identical explicit width and height (e.g. 32px × 32px). Connect steps with a thin horizontal line
-  using a separate <td> with border-top, not a CSS line element.
-- Inline SVG checkmark for a filled circle with check:
-  <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="10" cy="10" r="10" fill="#000"/>
-    <polyline points="5,10 9,14 15,7" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/>
-  </svg>
+
+PROGRESS/STEP INDICATORS (order tracker, delivery status, etc.):
+- Build the ENTIRE tracker (circles + connecting lines) in a SINGLE <tr> row
+- Structure: [spacer td] [circle td] [line td] [circle td] [line td] [circle td] [spacer td]
+- Circle cells: fixed width/height <td> with border-radius:50% and centered text/Unicode
+- Line cells: <td> with border-top or border-bottom, no content, connecting the circles horizontally
+- The active/completed step circle gets a filled background + white text checkmark (&#10003;)
+- Inactive step circles get a border only (border:1.5px solid #color) with empty or grey content
+- Labels go in a SECOND <tr> row below, with <td> cells aligned to each circle
+- NEVER use negative margins to reposition a connecting line after the fact
+- NEVER put the line in a separate <tr> from the circles
+- Example structure:
+  <table role="presentation" width="340" style="margin:0 auto;">
+    <tr>
+      <td width="113" align="center" valign="middle">
+        <table role="presentation"><tr>
+          <td width="32" height="32" align="center" valign="middle"
+              style="width:32px;height:32px;border-radius:50%;background-color:#000;color:#fff;font-size:14px;">
+            &#10003;
+          </td>
+        </tr></table>
+      </td>
+      <td style="border-top:2px solid #ccc;line-height:0;font-size:0;">&nbsp;</td>
+      <td width="113" align="center" valign="middle">
+        <table role="presentation"><tr>
+          <td width="32" height="32" align="center" valign="middle"
+              style="width:32px;height:32px;border-radius:50%;border:1.5px solid #ccc;">
+          </td>
+        </tr></table>
+      </td>
+      <td style="border-top:2px solid #ccc;line-height:0;font-size:0;">&nbsp;</td>
+      <td width="113" align="center" valign="middle">
+        <table role="presentation"><tr>
+          <td width="32" height="32" align="center" valign="middle"
+              style="width:32px;height:32px;border-radius:50%;border:1.5px solid #ccc;">
+          </td>
+        </tr></table>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" style="padding-top:8px;font-size:10px;">STEP 1</td>
+      <td></td>
+      <td align="center" style="padding-top:8px;font-size:10px;">STEP 2</td>
+      <td></td>
+      <td align="center" style="padding-top:8px;font-size:10px;">STEP 3</td>
+    </tr>
+  </table>
 
 FOOTER (required on every email):
 - Must include: brand name, unsubscribe link placeholder, address placeholder
@@ -352,7 +398,7 @@ FOOTER (required on every email):
 - Unsubscribe link text: "Unsubscribe" — use href="#unsubscribe" as placeholder
 - Address placeholder: "123 Street, City, State 00000"
 - The footer is a SEPARATE section from the main content — never merge it with the last content block
-- Social media icons in footer: use inline SVG, never emoji or text characters
+- Social media icons in footer: use small hosted PNG images, never emoji or SVG
 
 Return only complete HTML. No commentary. No markdown fences.`;
 
@@ -959,11 +1005,12 @@ RULES:
   if (campaignMode === "flow" && flowConfig) {
     systemPrompt = `You are an expert Klaviyo email developer building production-ready flow email templates. You generate complete HTML with correct Liquid templating syntax. Rules:
 - Every dynamic value MUST use Liquid variables from the provided event JSON
-- Every Liquid variable MUST have a | default: filter with a non-empty fallback (Klaviyo throws errors on empty string defaults)
+- Every Liquid variable MUST have a |default: filter with a non-empty fallback (Klaviyo throws errors on empty string defaults)
 - Read the real event JSON provided below to understand the exact data structure — use the actual key names from that JSON, do not assume or invent field names
 - Include {{ organization.unsubscribe_link }} for marketing flows (browse abandonment, abandoned checkout). Omit for transactional flows (order confirmation, shipping confirmation).
-- Always include {{ person.first_name | default: 'there' }} personalization
+- Always include {{ person.first_name|default:'there' }} personalization
 - Klaviyo uses Django templates, not Shopify Liquid. Use {% elif %} not {% elsif %}. Use {% if not %} not {% unless %}.
+- NO SPACES around pipes or after colons in filters. CORRECT: {{ var|default:'value' }}  WRONG: {{ var | default: 'value' }}
 - Output complete HTML only
 
 ${KLAVIYO_FLOW_LIQUID_REFERENCE}
@@ -1016,10 +1063,10 @@ Correct Liquid syntax for a product feed grid:
 {%- for item in feeds.FeedNameHere|slice:3 -%}
   {%- catalog item.item_id -%}
   <td>
-    <a href="{{ catalog_item.url | default: 'https://yourstore.com' }}">
-      <img src="{{ catalog_item.featured_image.full.src | default: 'https://via.placeholder.com/180' }}" width="180" />
+    <a href="{{ catalog_item.url|default:'https://yourstore.com' }}">
+      <img src="{{ catalog_item.featured_image.full.src|default:'https://via.placeholder.com/180' }}" width="180" />
     </a>
-    <p>{{ catalog_item.title | default: 'Product' }}</p>
+    <p>{{ catalog_item.title|default:'Product' }}</p>
     <p>{% currency_format catalog_item.metadata|lookup:"$price" %}</p>
   </td>
   {%- endcatalog -%}
@@ -1179,10 +1226,11 @@ ${JSON.stringify(eventSchema, null, 2)}
 
 UNIVERSAL RULES FOR EVENT DATA:
 - Use EXACTLY the property names from the JSON above — do not invent paths not shown
-- Every Liquid variable MUST have | default: with a NON-EMPTY fallback (never | default: '')
+- Every Liquid variable MUST have |default: with a NON-EMPTY fallback (never |default:'')
 - Do NOT use $-prefixed keys in Liquid (e.g. use event.extra NOT event.$extra)
-- Top-level keys: {{ event.KeyName | default: 'fallback' }}
-- Nested keys: {{ event.extra.field_name | default: 'fallback' }}
+- Top-level keys: {{ event.KeyName|default:'fallback' }}
+- Nested keys: {{ event.extra.field_name|default:'fallback' }}
+- NO SPACES around pipes or after colons in filters
 - Read the JSON to find the ACTUAL path for items, images, prices — do not guess
 ═══ END EVENT DATA ═══${productFeedsBlock}${referenceAnalysisBlock}`;
     flowUserContent.push({ type: "text", text: flowDetails });

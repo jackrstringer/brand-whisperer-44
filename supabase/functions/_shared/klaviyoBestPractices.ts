@@ -2357,6 +2357,28 @@ export const KLAVIYO_FLOW_LIQUID_REFERENCE = `
 LIQUID TEMPLATING REFERENCE FOR FLOW EMAILS
 ════════════════════════════════════════════════════════════════════════════════
 
+════════════════════════════════════════════════════════════════════════════════
+FILTER SYNTAX — ZERO TOLERANCE RULE
+════════════════════════════════════════════════════════════════════════════════
+
+Klaviyo filters use Django syntax. The #1 rule: NO SPACES around pipes or after colons.
+
+  CORRECT: {{ person.first_name|default:'there' }}
+  WRONG:   {{ person.first_name | default: 'there' }}
+
+  CORRECT: {{ event.extra.processed_at|date:'M d' }}
+  WRONG:   {{ event.extra.processed_at | date: '%b %d' }}
+
+Every | must touch the variable/filter on both sides. Every : must touch the argument.
+If you add spaces, Klaviyo will throw: "Could not parse the remainder"
+
+Date filters use Django format characters, NOT Python strftime:
+  F = full month name, M = abbreviated month, d = zero-padded day,
+  j = day without padding, Y = 4-digit year, g = 12-hour, i = minutes, A = AM/PM
+
+  CORRECT: {{ var|date:'M d, Y' }}     → "Jan 15, 2025"
+  WRONG:   {{ var|date:'%b %d, %Y' }}  → parse error
+
 CRITICAL — KLAVIYO USES DJANGO TEMPLATES, NOT SHOPIFY LIQUID:
 
 Klaviyo's template engine is Django-based. Key differences from Shopify Liquid:
@@ -2364,7 +2386,7 @@ Klaviyo's template engine is Django-based. Key differences from Shopify Liquid:
   WRONG (Shopify Liquid):     CORRECT (Klaviyo/Django):
   {% elsif %}             →   {% elif %}
   {% unless %}            →   {% if not %}
-  {{ var | default: '' }} →   NEVER use empty string default
+  {{ var|default:'' }}    →   NEVER use empty string default
 
 If you write Shopify Liquid syntax, Klaviyo will throw "Unknown tag" errors.
 
@@ -2373,34 +2395,34 @@ DEFAULT FILTERS — MANDATORY ON EVERY VARIABLE
 ────────────────────────────────────────────────────────────────────────────────
 
 CRITICAL — KLAVIYO DEFAULT FILTER RULES:
-  1. NEVER use | default: '' (empty string). Klaviyo throws: "The default filter
+  1. NEVER use |default:'' (empty string). Klaviyo throws: "The default filter
      requires 2 arguments, but 1 was given." Empty string = 1 argument.
-  2. NEVER use | default: (nothing after colon). Same error.
+  2. NEVER use |default: (nothing after colon). Same error.
   3. ALWAYS provide a meaningful non-empty fallback string.
 
 CORRECT:
-  {{ person.first_name | default: 'there' }}
-  {{ event.extra.order_number | default: 'your order' }}
+  {{ person.first_name|default:'there' }}
+  {{ event.extra.order_number|default:'your order' }}
 
 WRONG:
-  {{ event.extra.order_number | default: '' }}   ← empty string = error
-  {{ person.first_name | default: }}             ← no value = error
-  {{ person.first_name }}                        ← missing default entirely
+  {{ event.extra.order_number|default:'' }}   ← empty string = error
+  {{ person.first_name|default: }}            ← no value = error
+  {{ person.first_name }}                     ← missing default entirely
 
 Defaults by type:
-  String fields:  | default: 'your order'
-  Name fields:    | default: 'there' or | default: 'Customer'
-  Numeric fields: | default: 0
-  Price fields:   | default: 0
-  URL fields:     | default: 'https://www.yourbrand.com'
-  Image URLs:     | default: 'https://cdn.yourbrand.com/fallback-product.jpg'
+  String fields:  |default:'your order'
+  Name fields:    |default:'there' or |default:'Customer'
+  Numeric fields: |default:0
+  Price fields:   |default:0
+  URL fields:     |default:'https://www.yourbrand.com'
+  Image URLs:     |default:'https://cdn.yourbrand.com/fallback-product.jpg'
 
 ────────────────────────────────────────────────────────────────────────────────
 SAFE IMAGE RENDERING
 ────────────────────────────────────────────────────────────────────────────────
 
   {% if event.ImageURL and event.ImageURL != '' %}
-    <img src="{{ event.ImageURL }}" alt="{{ event.ProductName | default: 'Product' }}"
+    <img src="{{ event.ImageURL }}" alt="{{ event.ProductName|default:'Product' }}"
          width="300" style="display:block; max-width:100%;" />
   {% else %}
     <img src="https://cdn.yourbrand.com/fallback-product.jpg"
@@ -2423,11 +2445,11 @@ Generic loop pattern (adapt the path to match the real JSON):
   {% for line_item in event.extra.line_items %}
     <td>
       {% if line_item.image and line_item.image != '' %}
-        <img src="{{ line_item.image }}" alt="{{ line_item.name | default: 'Item' }}" width="80" />
+        <img src="{{ line_item.image }}" alt="{{ line_item.name|default:'Item' }}" width="80" />
       {% endif %}
-      <p>{{ line_item.name | default: 'Product' }}</p>
-      <p>Qty: {{ line_item.quantity | default: 1 }}</p>
-      <p>{{ line_item.price | times: 1 | money }}</p>
+      <p>{{ line_item.name|default:'Product' }}</p>
+      <p>Qty: {{ line_item.quantity|default:1 }}</p>
+      <p>{{ line_item.price|times:1|money }}</p>
     </td>
   {% endfor %}
 
@@ -2435,20 +2457,20 @@ Generic loop pattern (adapt the path to match the real JSON):
 CURRENCY AND PRICE FORMATTING
 ────────────────────────────────────────────────────────────────────────────────
 
-  {{ item.Price | times: 1 | money }}
-  {{ event.OrderValue | times: 1 | money }}
-  The | times: 1 coerces to number before | money.
+  {{ item.Price|times:1|money }}
+  {{ event.OrderValue|times:1|money }}
+  The |times:1 coerces to number before |money.
 
 ────────────────────────────────────────────────────────────────────────────────
 DATE FORMATTING
 ────────────────────────────────────────────────────────────────────────────────
 
-  {{ event.CreatedAt | date: '%B %d, %Y' }}  → "January 15, 2025"
+  {{ event.CreatedAt|date:'F d, Y' }}  → "January 15, 2025"
 
-CRITICAL — NEVER chain | default: after | date:
-  WRONG: {{ event.extra.processed_at | date: '%b %d' | default: 'Today' }}
+CRITICAL — NEVER chain |default: after |date:
+  WRONG: {{ event.extra.processed_at|date:'M d'|default:'Today' }}
   CORRECT:
-  {% if event.extra.processed_at %}{{ event.extra.processed_at | date: '%b %d' }}{% else %}Today{% endif %}
+  {% if event.extra.processed_at %}{{ event.extra.processed_at|date:'M d' }}{% else %}Today{% endif %}
 
 ────────────────────────────────────────────────────────────────────────────────
 SUBJECT LINE AND PREVIEW TEXT LIMITS
@@ -2457,15 +2479,15 @@ SUBJECT LINE AND PREVIEW TEXT LIMITS
 Subject: 30-50 chars optimal. Hard limit: 60.
 Preview text: 85-100 chars. Always set explicitly.
 
-  {{ person.first_name | default: 'there' | truncate: 20, '' }}
+  {{ person.first_name|default:'there'|truncate:20,'' }}
 
 ────────────────────────────────────────────────────────────────────────────────
 ADDITIONAL LIQUID PATTERNS
 ────────────────────────────────────────────────────────────────────────────────
 
-  {{ person.first_name | default: 'there' | capitalize }}
-  {{ item.Name | default: 'Your item' | truncate: 50, '...' }}
-  {{ event.CouponCode | default: 'SAVE10' | upcase }}
+  {{ person.first_name|default:'there'|capitalize }}
+  {{ item.Name|default:'Your item'|truncate:50,'...' }}
+  {{ event.CouponCode|default:'SAVE10'|upcase }}
 
   {% if person.city and person.city != '' %}
     Shipping to {{ person.city }}
@@ -2481,9 +2503,9 @@ Use it when you have a product ID and need image, title, price, or URL.
 
 SYNTAX (block tag, NOT a single-line tag):
   {% catalog event.item_id %}
-    {{ catalog_item.title | default: 'Product' }}
-    {{ catalog_item.featured_image.full.src | default: 'https://via.placeholder.com/300' }}
-    {{ catalog_item.url | default: 'https://yourstore.com' }}
+    {{ catalog_item.title|default:'Product' }}
+    {{ catalog_item.featured_image.full.src|default:'https://via.placeholder.com/300' }}
+    {{ catalog_item.url|default:'https://yourstore.com' }}
     {% currency_format catalog_item.metadata|lookup:"$price" %}
   {% endcatalog %}
 
@@ -2500,8 +2522,8 @@ AVAILABLE FIELDS INSIDE {% catalog %}...{% endcatalog %}:
   catalog_item.categories                     → Array of category objects
 
 Always provide fallbacks:
-  {{ catalog_item.title | default: event.ItemName | default: 'Product' }}
-  {{ catalog_item.featured_image.full.src | default: 'https://via.placeholder.com/300' }}
+  {{ catalog_item.title|default:event.ItemName|default:'Product' }}
+  {{ catalog_item.featured_image.full.src|default:'https://via.placeholder.com/300' }}
 
 
 ════════════════════════════════════════════════════════════════════════════════
@@ -2524,12 +2546,12 @@ FULL FEED LOOP PATTERN:
   {% for item in feeds.BestSellers|slice:4 %}
     {% catalog item.item_id %}
     <td width="175" valign="top" style="padding:8px;">
-      <a href="{{ catalog_item.url | default: 'https://yourstore.com' }}">
-        <img src="{{ catalog_item.featured_image.full.src | default: 'https://via.placeholder.com/175' }}" width="175" />
+      <a href="{{ catalog_item.url|default:'https://yourstore.com' }}">
+        <img src="{{ catalog_item.featured_image.full.src|default:'https://via.placeholder.com/175' }}" width="175" />
       </a>
-      <p style="font-weight:bold;">{{ catalog_item.title | default: 'Product' }}</p>
+      <p style="font-weight:bold;">{{ catalog_item.title|default:'Product' }}</p>
       <p>{% currency_format catalog_item.metadata|lookup:"$price" %}</p>
-      <a href="{{ catalog_item.url | default: 'https://yourstore.com' }}">Shop Now</a>
+      <a href="{{ catalog_item.url|default:'https://yourstore.com' }}">Shop Now</a>
     </td>
     {% endcatalog %}
     {% if forloop.index == 2 %}</tr><tr>{% endif %}
@@ -2551,7 +2573,7 @@ PERSON PROPERTIES REFERENCE
 
 Profile properties available in ALL flow and campaign emails:
 
-  person.first_name         → Always use | default: 'there'
+  person.first_name         → Always use |default:'there'
   person.last_name          → Use conditionally, may be blank
   person.email              → Always available
   person.phone_number       → May be blank
@@ -2562,13 +2584,13 @@ Profile properties available in ALL flow and campaign emails:
   person.organization       → Company name (B2B)
 
 PERSONALIZATION PATTERNS:
-  Hi {{ person.first_name | default: 'there' }},
+  Hi {{ person.first_name|default:'there' }},
 
   {% if person.city and person.city != '' %}
     Shipping to {{ person.city }}.
   {% endif %}
 
-  {{ person.first_name | default: '' }} {% if person.last_name %}{{ person.last_name }}{% endif %}
+  {{ person.first_name|default:'Friend' }} {% if person.last_name %}{{ person.last_name }}{% endif %}
 
 
 ════════════════════════════════════════════════════════════════════════════════
