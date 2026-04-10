@@ -1932,6 +1932,418 @@ THE RULE: Before publishing any flow:
   5. Verify mobile rendering (use Litmus, Email on Acid, or a real device)
 
 ================================================================================
+SECTION 8: COMPLETE LIQUID IMPLEMENTATION SKELETONS BY FLOW TYPE
+================================================================================
+
+These are working Klaviyo Liquid patterns. Use them as the foundation for every
+flow email. Never guess variable names — use exactly what is shown here.
+
+────────────────────────────────────────────────────────────────────────────────
+8.1 BROWSE ABANDONMENT — TRIGGER: Viewed Product
+────────────────────────────────────────────────────────────────────────────────
+
+EVENT SCHEMA (Viewed Product trigger):
+  event.item_id            → The product ID that was viewed (use for catalog_lookup)
+  event.ItemName           → Product name string (fallback if catalog_lookup fails)
+  event.ImageURL           → Product image URL (fallback)
+  event.URL                → Product page URL
+  event.Price              → Product price (number)
+  event.Categories         → Array of category strings
+
+NOTE: Browse abandonment does NOT have event.extra.line_items. That is checkout only.
+
+HERO PRODUCT BLOCK (Section 1 — the viewed item):
+  {% catalog_lookup event.item_id as p %}
+  <img src="{% if p.image_full_url %}{{ p.image_full_url }}{% else %}{{ event.ImageURL | default: 'https://via.placeholder.com/300' }}{% endif %}" width="300" />
+  <p>{{ p.title | default: event.ItemName | default: 'Your item' }}</p>
+  <a href="{{ p.url | default: event.URL | default: 'https://yourstore.com' }}">Shop Now</a>
+
+RECOMMENDATION GRID (Section 2 — different products from a feed):
+  {% if feeds.RecentlyViewed %}
+  {% for item in feeds.RecentlyViewed|slice:4 %}
+    {% catalog_lookup item.item_id as rec %}
+    <td width="180">
+      <a href="{{ rec.url | default: 'https://yourstore.com' }}">
+        <img src="{{ rec.image_full_url | default: 'https://via.placeholder.com/180' }}" width="180" />
+      </a>
+      <p>{{ rec.title | default: 'Product' }}</p>
+      <p>{{ rec.price | default: '' }}</p>
+    </td>
+  {% endfor %}
+  {% endif %}
+
+COMMON MISTAKES — BROWSE ABANDONMENT:
+  WRONG: {% for item in event.extra.line_items %}  → doesn't exist in Viewed Product
+  WRONG: {{ event.ProductID }}                     → use event.item_id instead
+  WRONG: {{ event.extra.abandoned_checkout_url }}  → that's checkout, not browse
+  WRONG: Using recommendation grid with event.item_id → that repeats the hero product
+  RIGHT: {% catalog_lookup event.item_id as p %} for hero
+  RIGHT: {% for item in feeds.RecentlyViewed|slice:4 %} for recommendations
+
+────────────────────────────────────────────────────────────────────────────────
+8.2 ABANDONED CHECKOUT — TRIGGER: Started Checkout
+────────────────────────────────────────────────────────────────────────────────
+
+EVENT SCHEMA (Started Checkout / Shopify):
+  event.extra.line_items              → Array of cart items
+  event.extra.line_items[].name       → Product name
+  event.extra.line_items[].image      → Product image URL
+  event.extra.line_items[].price      → Item price (string "29.00")
+  event.extra.line_items[].quantity   → Quantity (integer)
+  event.extra.line_items[].variant_title → Variant ("Medium / Black"), may be null
+  event.extra.abandoned_checkout_url  → Link back to the checkout session
+  event.extra.subtotal_price          → Subtotal string ("58.00")
+  event.extra.total_price             → Total including shipping
+  event.extra.total_discounts         → Discount amount ("0.00" if none)
+  event.extra.shipping_address.first_name
+  event.extra.shipping_address.last_name
+  event.extra.email                   → Customer email from checkout
+
+CART ITEMS BLOCK:
+  {% if event.extra.line_items and event.extra.line_items != empty %}
+    {% for line_item in event.extra.line_items %}
+      <tr>
+        <td width="80">
+          {% if line_item.image and line_item.image != '' %}
+            <img src="{{ line_item.image }}" width="80" />
+          {% endif %}
+        </td>
+        <td>
+          <p>{{ line_item.name | default: 'Product' }}</p>
+          {% if line_item.variant_title and line_item.variant_title != '' %}
+            <p>{{ line_item.variant_title }}</p>
+          {% endif %}
+          <p>Qty: {{ line_item.quantity | default: 1 }}</p>
+          <p>{{ line_item.price | times: 1 | money }}</p>
+        </td>
+      </tr>
+      {% if not forloop.last %}<tr><td colspan="2"><hr /></td></tr>{% endif %}
+    {% endfor %}
+  {% else %}
+    <p>Your cart items will appear in your account.</p>
+  {% endif %}
+
+ORDER TOTALS BLOCK:
+  <p>Subtotal: {{ event.extra.subtotal_price | times: 1 | money }}</p>
+  {% if event.extra.total_discounts and event.extra.total_discounts != '0.00' %}
+    <p>Discount: -{{ event.extra.total_discounts | times: 1 | money }}</p>
+  {% endif %}
+
+PRIMARY CTA:
+  <a href="{{ event.extra.abandoned_checkout_url | default: 'https://yourstore.com/checkout' }}">Complete Your Order</a>
+
+COMMON MISTAKES — ABANDONED CHECKOUT:
+  WRONG: {% catalog_lookup event.item_id as p %} → item_id doesn't exist here
+  WRONG: event.Items (top-level)                 → only string array, use event.extra.line_items
+  WRONG: Showing only first item                 → always loop all line_items
+  WRONG: Linking to homepage                     → always use event.extra.abandoned_checkout_url
+  WRONG: Omitting the flow filter note           → comment in code that flow filter excludes purchasers
+
+────────────────────────────────────────────────────────────────────────────────
+8.3 ORDER CONFIRMATION — TRIGGER: Placed Order
+────────────────────────────────────────────────────────────────────────────────
+
+EVENT SCHEMA (Placed Order / Shopify):
+  event.extra.order_number              → "1042"
+  event.extra.line_items                → Array of ordered items (same as checkout)
+  event.extra.subtotal_price            → Subtotal
+  event.extra.total_price               → Total charged
+  event.extra.total_discounts           → Discount amount
+  event.extra.total_shipping_price_set.shop_money.amount → Shipping cost
+  event.extra.shipping_address.first_name
+  event.extra.shipping_address.last_name
+  event.extra.shipping_address.address1
+  event.extra.shipping_address.address2
+  event.extra.shipping_address.city
+  event.extra.shipping_address.province_code  → State abbreviation
+  event.extra.shipping_address.zip
+  event.extra.shipping_address.country
+  event.extra.order_status_url          → Link to order status page
+  event.extra.payment_gateway           → e.g. "shopify_payments", "paypal"
+
+ORDER HEADER:
+  <p>Order #{{ event.extra.order_number | default: 'your order' }}</p>
+
+SHIPPING ADDRESS BLOCK:
+  <p>{{ event.extra.shipping_address.first_name | default: 'Customer' }} {{ event.extra.shipping_address.last_name | default: '' }}</p>
+  <p>{{ event.extra.shipping_address.address1 | default: '' }}</p>
+  {% if event.extra.shipping_address.address2 and event.extra.shipping_address.address2 != '' %}
+    <p>{{ event.extra.shipping_address.address2 }}</p>
+  {% endif %}
+  <p>{{ event.extra.shipping_address.city | default: '' }}, {{ event.extra.shipping_address.province_code | default: '' }} {{ event.extra.shipping_address.zip | default: '' }}</p>
+
+ORDER TOTALS:
+  <p>Subtotal: {{ event.extra.subtotal_price | times: 1 | money }}</p>
+  {% if event.extra.total_discounts and event.extra.total_discounts != '0.00' %}
+    <p>Discount: -{{ event.extra.total_discounts | times: 1 | money }}</p>
+  {% endif %}
+  <p>Shipping: {{ event.extra.total_shipping_price_set.shop_money.amount | times: 1 | money }}</p>
+  <p><strong>Total: {{ event.extra.total_price | times: 1 | money }}</strong></p>
+
+TRACK ORDER CTA:
+  <a href="{{ event.extra.order_status_url | default: 'https://yourstore.com/account' }}">Track Your Order</a>
+
+CRITICAL — ORDER CONFIRMATION IS TRANSACTIONAL:
+  DO NOT include {{ organization.unsubscribe_link }} in order confirmations.
+  Order confirmations are legally transactional. Including an unsubscribe link
+  can cause deliverability issues and is unnecessary.
+
+COMMON MISTAKES — ORDER CONFIRMATION:
+  WRONG: Including unsubscribe link
+  WRONG: event.Items (string array) instead of event.extra.line_items
+  WRONG: Formatting price without | times: 1 | money
+  WRONG: Skipping shipping address block
+  WRONG: Forgetting order number in header
+
+────────────────────────────────────────────────────────────────────────────────
+8.4 SHIPPING CONFIRMATION — TRIGGER: Fulfilled Order
+────────────────────────────────────────────────────────────────────────────────
+
+EVENT SCHEMA (Fulfilled Order / Shopify):
+  event.extra.order_number              → Order number
+  event.extra.fulfillments              → Array of fulfillment objects
+  event.extra.fulfillments[].tracking_number → Tracking number string
+  event.extra.fulfillments[].tracking_url    → Carrier tracking page URL
+  event.extra.fulfillments[].tracking_company → "UPS", "FedEx", "USPS", etc.
+  event.extra.line_items                → Items that were shipped
+
+TRACKING BLOCK:
+  {% for fulfillment in event.extra.fulfillments %}
+    {% if fulfillment.tracking_url and fulfillment.tracking_url != '' %}
+      <a href="{{ fulfillment.tracking_url }}">Track Your Package</a>
+      {% if fulfillment.tracking_company and fulfillment.tracking_company != '' %}
+        <p>Carrier: {{ fulfillment.tracking_company }}</p>
+      {% endif %}
+      {% if fulfillment.tracking_number and fulfillment.tracking_number != '' %}
+        <p>Tracking #: {{ fulfillment.tracking_number }}</p>
+      {% endif %}
+    {% else %}
+      <p>Your tracking information will be available soon.</p>
+    {% endif %}
+  {% endfor %}
+
+CRITICAL: Shipping confirmation is transactional. NO unsubscribe link needed.
+
+COMMON MISTAKES — SHIPPING CONFIRMATION:
+  WRONG: Accessing event.TrackingURL directly → it's inside event.extra.fulfillments[]
+  WRONG: Assuming one fulfillment → always loop event.extra.fulfillments
+  WRONG: Including unsubscribe link
+  WRONG: Sending without a CTA → always include "Track Your Package" button
+
+────────────────────────────────────────────────────────────────────────────────
+8.5 WINBACK — TRIGGER: Time-based (no product event)
+────────────────────────────────────────────────────────────────────────────────
+
+Winback flows are triggered by PROFILE INACTIVITY, not a product event.
+There is NO event.extra.line_items, NO event.item_id, NO abandoned cart URL.
+Do not try to reference product event data in winback emails.
+
+AVAILABLE DATA — WINBACK:
+  person.first_name, person.last_name, person.email
+  person.city, person.region (if collected)
+  No event.* product properties
+
+PRODUCT CONTENT — WINBACK:
+  Use product feeds only. Never event data.
+  {% for item in feeds.BestSellers|slice:4 %}
+    {% catalog_lookup item.item_id as p %}
+    <img src="{{ p.image_full_url | default: '' }}" />
+    <p>{{ p.title | default: 'Product' }}</p>
+    <a href="{{ p.url | default: 'https://yourstore.com' }}">Shop Now</a>
+  {% endfor %}
+
+COMMON MISTAKES — WINBACK:
+  WRONG: Any reference to event.extra.* or event.item_id
+  WRONG: Sending before 90 days of inactivity (annoys recent customers)
+  WRONG: Offering a discount in email 1 (use it only in email 3 as a last resort)
+  WRONG: Generic "we miss you" with no product content — always include a feed grid
+
+────────────────────────────────────────────────────────────────────────────────
+8.6 SUBSCRIPTION FLOWS — TRIGGER: Recharge/Skio Events
+────────────────────────────────────────────────────────────────────────────────
+
+Recharge and Skio use a DIFFERENT event schema from Shopify native orders.
+Do not use event.extra.* for Recharge events — Recharge passes top-level properties.
+
+RECHARGE EVENT SCHEMA (common properties):
+  event.ProductName           → Subscription product name
+  event.ProductImageUrl       → Product image
+  event.ScheduledAt           → Next charge date (ISO string)
+  event.Price                 → Subscription price
+  event.ManageSubscriptionUrl → Link to manage subscription
+  event.CancelSubscriptionUrl → Link to cancel
+  event.OrderId               → Order ID
+
+SUBSCRIPTION UPCOMING CHARGE BLOCK:
+  <p>Your next order of {{ event.ProductName | default: 'your subscription' }} is coming up.</p>
+  {% if event.ScheduledAt %}
+    <p>Scheduled: {{ event.ScheduledAt | date: '%B %d, %Y' }}</p>
+  {% else %}
+    <p>Scheduled: soon</p>
+  {% endif %}
+  <p>Total: {{ event.Price | times: 1 | money }}</p>
+  <a href="{{ event.ManageSubscriptionUrl | default: 'https://yourstore.com/account' }}">Manage Subscription</a>
+
+FAILED PAYMENT BLOCK:
+  <p>We had trouble processing your payment for {{ event.ProductName | default: 'your subscription' }}.</p>
+  <a href="{{ event.ManageSubscriptionUrl | default: 'https://yourstore.com/account' }}">Update Payment Method</a>
+
+================================================================================
+SECTION 9: CATALOG LOOKUP COMPLETE REFERENCE
+================================================================================
+
+The catalog_lookup tag fetches full product data from Klaviyo's catalog by ID.
+Use it whenever you have a product ID and need image, title, price, or URL.
+
+SYNTAX:
+  {% catalog_lookup "hardcoded_id" as catalog_item %}
+  {% catalog_lookup event.item_id as catalog_item %}        {# from Viewed Product event #}
+  {% catalog_lookup item.item_id as catalog_item %}          {# inside a feeds.X loop #}
+
+AVAILABLE FIELDS AFTER LOOKUP:
+  catalog_item.title                  → Product title
+  catalog_item.description            → Product description
+  catalog_item.url                    → Product page URL
+  catalog_item.image_full_url         → Full-size product image URL
+  catalog_item.image_thumbnail_url    → Thumbnail image URL
+  catalog_item.price                  → Price as formatted string ("$29.00")
+  catalog_item.custom_metadata.*      → Any custom fields synced to catalog
+  catalog_item.categories             → Array of category objects
+
+IMPORTANT: catalog_lookup can fail if the product ID doesn't exist in the catalog.
+Always provide fallbacks for every field:
+  {{ catalog_item.title | default: event.ItemName | default: 'Product' }}
+  {{ catalog_item.image_full_url | default: 'https://via.placeholder.com/300' }}
+  {{ catalog_item.url | default: 'https://yourstore.com' }}
+
+================================================================================
+SECTION 10: PRODUCT FEEDS COMPLETE REFERENCE
+================================================================================
+
+Product feeds provide per-recipient personalized product recommendations.
+They are the ONLY way to show recommendations in a flow email.
+Never hardcode product data in a section that should be a feed.
+
+ACCESSING FEEDS:
+  feeds.FeedName              → Access a feed by its exact Klaviyo name
+  feeds.FeedName|slice:4      → First 4 items
+  feeds.FeedName|slice:0:4    → Same as above
+  feeds.FeedName|slice:2:4    → Items 3 through 6 (skip first 2)
+
+COMMON FEED NAMES BY TYPE:
+  "Best Sellers"              → Top-selling products sitewide
+  "Recently Viewed"           → Products this customer recently viewed (requires Viewed Product tracking)
+  "May Also Like"             → AI recommendations based on purchase/view history
+  "New Arrivals"              → Recently added to catalog
+  Custom names                → Whatever the brand created in Klaviyo Content > Products
+
+FULL FEED LOOP PATTERN WITH CATALOG LOOKUP:
+  {% for item in feeds.BestSellers|slice:4 %}
+    {% catalog_lookup item.item_id as p %}
+    <td width="175" valign="top" style="padding:8px;">
+      <a href="{{ p.url | default: 'https://yourstore.com' }}">
+        <img src="{{ p.image_full_url | default: 'https://via.placeholder.com/175' }}" width="175" />
+      </a>
+      <p style="font-weight:bold;">{{ p.title | default: 'Product' }}</p>
+      <p>{{ p.price | default: '' }}</p>
+      <a href="{{ p.url | default: 'https://yourstore.com' }}">Shop Now</a>
+    </td>
+    {% if forloop.index == 2 %}</tr><tr>{% endif %}
+  {% endfor %}
+
+GRID ROW BREAK PATTERN (for 2-column grids):
+  Use forloop.index to insert </tr><tr> after every 2nd item:
+  {% if forloop.index == 2 %}</tr><tr>{% endif %}  {# 2-col grid, 4 items: break after item 2 #}
+  {% if forloop.index == 3 %}</tr><tr>{% endif %}  {# 3-col grid, 6 items: break after item 3 #}
+
+IF NO FEED EXISTS, OMIT THE SECTION:
+  {% if feeds.BestSellers %}
+    {# render feed grid #}
+  {% endif %}
+
+================================================================================
+SECTION 11: PERSON PROPERTIES COMPLETE REFERENCE
+================================================================================
+
+These are profile properties available in ALL flow and campaign emails.
+They come from the customer's Klaviyo profile, not from the trigger event.
+
+  person.first_name         → Always use | default: 'there'
+  person.last_name          → Use conditionally, may be blank
+  person.email              → Always available
+  person.phone_number       → May be blank
+  person.city               → May be blank
+  person.region             → State/province, may be blank
+  person.country            → May be blank
+  person.zip                → May be blank
+  person.organization       → Company name (B2B accounts)
+
+PERSONALIZATION PATTERNS:
+  {# Safe greeting #}
+  Hi {{ person.first_name | default: 'there' }},
+
+  {# Location-based #}
+  {% if person.city and person.city != '' %}
+    Shipping to {{ person.city }}.
+  {% endif %}
+
+  {# Full name safely #}
+  {{ person.first_name | default: '' }} {% if person.last_name %}{{ person.last_name }}{% endif %}
+
+================================================================================
+SECTION 12: EMAIL STRUCTURE TEMPLATES BY FLOW TYPE
+================================================================================
+
+Use these as the section order blueprint for each flow type.
+
+────────────────────────────────────────
+12.1 BROWSE ABANDONMENT EMAIL 1
+────────────────────────────────────────
+  1. Header (logo, centered)
+  2. Headline ("Still thinking about it?")
+  3. Hero product block (catalog_lookup from event.item_id — image, name, price, CTA)
+  4. Primary CTA button → event.URL or catalog_item.url
+  5. Social proof (2-3 reviews for this product)
+  6. Recommendation grid (feeds.RecentlyViewed, 4 products, 2-col) — DIFFERENT products
+  7. Footer with {{ organization.unsubscribe_link }}
+
+────────────────────────────────────────
+12.2 ABANDONED CHECKOUT EMAIL 1
+────────────────────────────────────────
+  1. Header (logo)
+  2. Personalized greeting (person.first_name)
+  3. Cart items loop (event.extra.line_items — image, name, variant, qty, price)
+  4. Order subtotal
+  5. Primary CTA → event.extra.abandoned_checkout_url
+  6. Trust signals (free shipping threshold, returns policy — static brand copy)
+  7. Footer with {{ organization.unsubscribe_link }}
+
+────────────────────────────────────────
+12.3 ORDER CONFIRMATION
+────────────────────────────────────────
+  1. Header (logo)
+  2. "Your order is confirmed" headline
+  3. Order number
+  4. Line items loop (event.extra.line_items)
+  5. Order totals (subtotal, discount, shipping, total)
+  6. Shipping address block
+  7. "Track Your Order" CTA → event.extra.order_status_url
+  8. Brand copy ("what happens next", expected delivery window)
+  9. Footer (NO unsubscribe link — transactional)
+
+────────────────────────────────────────
+12.4 SHIPPING CONFIRMATION
+────────────────────────────────────────
+  1. Header (logo)
+  2. Exciting headline ("Your order is on its way!")
+  3. Personalized greeting (person.first_name)
+  4. Tracking block (loop event.extra.fulfillments for tracking number and URL)
+  5. "Track Your Package" primary CTA
+  6. Items shipped (event.extra.line_items loop, compact version)
+  7. Brand copy ("while you wait", product usage tips)
+  8. Footer (NO unsubscribe link — transactional)
+
+================================================================================
 END OF KLAVIYO BEST PRACTICES REFERENCE
 ================================================================================
 `;
