@@ -23,6 +23,7 @@ export interface FlowConfig {
   liquid_variables?: string[];
   selected_preview_event_id?: string;
   klaviyo_synced_at?: string;
+  selected_product_feed?: { id: string; name: string } | null;
   [key: string]: any;
 }
 
