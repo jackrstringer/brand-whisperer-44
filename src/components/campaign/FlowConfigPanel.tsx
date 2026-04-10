@@ -1,9 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -11,13 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Loader2, CheckCircle, AlertTriangle, Info, RefreshCw, ExternalLink } from "lucide-react";
+import { Loader2, CheckCircle, AlertTriangle } from "lucide-react";
 import type { FlowConfig } from "@/lib/types";
 
 interface TriggerMetric {
@@ -29,12 +22,6 @@ interface TriggerMetric {
   has_real_data: boolean;
   sample_payload: any;
   liquid_variables: string[];
-}
-
-interface ProductFeed {
-  id: string;
-  name: string;
-  feed_type: string;
 }
 
 interface FlowConfigPanelProps {
@@ -53,6 +40,13 @@ const TRIGGER_PREFILLS: Record<string, string> = {
   "Fulfilled Order": "Shipping Confirmation",
   "Viewed Product": "Browse Abandonment — Step 1",
 };
+
+const FEED_PRESETS = [
+  { key: "best_sellers", label: "Best Sellers" },
+  { key: "trending", label: "Trending Now" },
+  { key: "new_arrivals", label: "New Arrivals" },
+  { key: "most_viewed", label: "Most Viewed" },
+];
 
 function relativeTime(dateStr: string | null | undefined): string {
   if (!dateStr) return "";
@@ -78,55 +72,10 @@ export default function FlowConfigPanel({
   const [connected, setConnected] = useState<boolean | null>(null);
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [accountName, setAccountName] = useState<string>("");
-  const [productFeeds, setProductFeeds] = useState<ProductFeed[]>([]);
-  const [feedsLoading, setFeedsLoading] = useState(false);
 
   useEffect(() => {
     fetchSchema();
-    refreshFeeds();
   }, [brandId]);
-
-  const fetchProductFeeds = useCallback(async () => {
-    setFeedsLoading(true);
-    try {
-      const { data } = await supabase
-        .from("klaviyo_connections")
-        .select("cached_stats")
-        .eq("brand_id", brandId)
-        .single();
-      const feeds = (data?.cached_stats as any)?.product_feeds || [];
-      setProductFeeds(feeds);
-    } catch (err) {
-      console.error("Failed to fetch product feeds:", err);
-      setProductFeeds([]);
-    } finally {
-      setFeedsLoading(false);
-    }
-  }, [brandId]);
-
-  const refreshFeeds = async () => {
-    setFeedsLoading(true);
-    try {
-      const session = (await supabase.auth.getSession()).data.session;
-      await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/klaviyo-fetch-schema`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${session?.access_token}`,
-          },
-          body: JSON.stringify({ brandId }),
-        }
-      );
-      await fetchProductFeeds();
-    } catch (err) {
-      console.error("Failed to refresh feeds:", err);
-    } finally {
-      setFeedsLoading(false);
-    }
-  };
 
   const fetchSchema = async () => {
     setLoading(true);
@@ -164,6 +113,7 @@ export default function FlowConfigPanel({
             flowConfig.flow_type ||
             TRIGGER_PREFILLS[best.metric_name] ||
             "",
+          selected_product_preset: flowConfig.selected_product_preset || "best_sellers",
         });
       }
     } catch (err) {
@@ -192,18 +142,8 @@ export default function FlowConfigPanel({
     });
   };
 
-  const handleFeedChange = (value: string) => {
-    if (value === "__auto__") {
-      onConfigChange({ ...flowConfig, selected_product_feed: null });
-    } else {
-      const feed = productFeeds.find((f) => f.id === value);
-      if (feed) {
-        onConfigChange({
-          ...flowConfig,
-          selected_product_feed: { id: feed.id, name: feed.name },
-        });
-      }
-    }
+  const handlePresetChange = (value: string) => {
+    onConfigChange({ ...flowConfig, selected_product_preset: value });
   };
 
   return (
@@ -297,14 +237,30 @@ export default function FlowConfigPanel({
         />
       </div>
 
-      {/* Section 3: Product Feed Selector */}
-      <ProductFeedSection
-        feeds={productFeeds}
-        loading={feedsLoading}
-        selectedFeed={flowConfig.selected_product_feed}
-        onFeedChange={handleFeedChange}
-        onRefresh={refreshFeeds}
-      />
+      {/* Section 3: Product Preset Selector */}
+      <div className="space-y-2">
+        <label className="text-xs text-muted-foreground">
+          Product Grid Preset
+        </label>
+        <Select
+          value={flowConfig.selected_product_preset || "best_sellers"}
+          onValueChange={handlePresetChange}
+        >
+          <SelectTrigger className="bg-card border-border">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {FEED_PRESETS.map((preset) => (
+              <SelectItem key={preset.key} value={preset.key}>
+                {preset.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-[11px] text-muted-foreground">
+          Controls which products appear in recommendation grids. Data is pulled live from your Klaviyo catalog.
+        </p>
+      </div>
 
       {/* Section 4: Additional Notes */}
       <div className="space-y-2">
@@ -318,106 +274,6 @@ export default function FlowConfigPanel({
           className="bg-card border-border min-h-[80px]"
         />
       </div>
-    </div>
-  );
-}
-
-function ProductFeedSection({
-  feeds,
-  loading,
-  selectedFeed,
-  onFeedChange,
-  onRefresh,
-}: {
-  feeds: ProductFeed[];
-  loading: boolean;
-  selectedFeed?: { id: string; name: string } | null;
-  onFeedChange: (value: string) => void;
-  onRefresh: () => void;
-}) {
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
-        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-        Loading product feeds...
-      </div>
-    );
-  }
-
-  if (feeds.length === 0) {
-    return (
-      <div className="rounded-lg border border-border bg-muted/30 p-3.5 space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <Info className="w-3.5 h-3.5" />
-            No product feeds found
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 text-[11px] gap-1"
-            onClick={onRefresh}
-          >
-            <RefreshCw className="w-3 h-3" />
-            Retry
-          </Button>
-        </div>
-        <p className="text-[11px] text-muted-foreground leading-relaxed">
-          Product feeds power recommendation grids in your emails (e.g., "You
-          may also like"). If you have feeds set up in Klaviyo, try refreshing. Otherwise, you can create one in your Klaviyo account.
-        </p>
-        <a
-          href="https://help.klaviyo.com/hc/en-us/articles/115005082787"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
-        >
-          Learn how to create a product feed
-          <ExternalLink className="w-3 h-3" />
-        </a>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-1.5">
-        <label className="text-xs text-muted-foreground">Product Feed</label>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Info className="w-3 h-3 text-muted-foreground/60 cursor-help" />
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-[200px] text-xs">
-              Used for product recommendation grids in your email
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-5 w-5 ml-auto"
-          onClick={onRefresh}
-        >
-          <RefreshCw className="w-3 h-3" />
-        </Button>
-      </div>
-      <Select
-        value={selectedFeed?.id || "__auto__"}
-        onValueChange={onFeedChange}
-      >
-        <SelectTrigger className="bg-card border-border">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="__auto__">Auto-select (recommended)</SelectItem>
-          {feeds.map((feed) => (
-            <SelectItem key={feed.id} value={feed.id}>
-              {feed.name} ({feed.feed_type})
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
     </div>
   );
 }
