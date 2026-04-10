@@ -1053,10 +1053,32 @@ ${UNIVERSAL_EMAIL_RULES}`;
         .eq("brand_id", brandId)
         .single();
       productFeeds = (klavConnFeeds?.cached_stats as any)?.product_feeds || [];
+
+      // Check if user selected a specific feed
+      const userSelectedFeed = flowConfig?.selected_product_feed;
+      let feedSelectionDirective = "";
+
+      if (userSelectedFeed) {
+        const feedStillExists = productFeeds.some((f: any) => f.id === userSelectedFeed.id);
+        if (feedStillExists) {
+          feedSelectionDirective = `\nThe user has selected the feed "${userSelectedFeed.name}" — use this feed for all product recommendation grids. Do not substitute a different feed.\n`;
+        }
+        // If feed was deleted, fall through to auto-select
+      }
+
       if (productFeeds.length > 0) {
+        const autoSelectGuidance = feedSelectionDirective || `
+Replace FeedNameHere with the most appropriate feed from the list above based on the flow type:
+- Abandoned checkout → prefer feeds named "Recently Viewed" or "Best Sellers"
+- Post-purchase → prefer feeds named "May Also Like" or "Best Sellers"
+- Browse abandonment → prefer feeds named "Recently Viewed"
+- If no matching feed exists, use whichever feed is available
+- If no feeds exist at all, omit the recommendation section entirely rather than hardcoding products`;
+
         productFeedsBlock = `
 ═══ KLAVIYO PRODUCT FEEDS AVAILABLE IN THIS ACCOUNT ═══
 ${productFeeds.map((f: any) => `- "${f.name}" (type: ${f.feed_type})`).join("\n")}
+${autoSelectGuidance}
 
 If the reference email contains a product recommendation grid, cross-sell block, or any product section beyond the main cart/order items, use Klaviyo's product feed Liquid syntax to populate it. Do NOT hardcode product data or use event properties for recommendation blocks.
 
@@ -1072,13 +1094,6 @@ Correct Liquid syntax for a product feed grid:
   </td>
   {%- endcatalog -%}
 {%- endfor -%}
-
-Replace FeedNameHere with the most appropriate feed from the list above based on the flow type:
-- Abandoned checkout → prefer feeds named "Recently Viewed" or "Best Sellers"
-- Post-purchase → prefer feeds named "May Also Like" or "Best Sellers"
-- Browse abandonment → prefer feeds named "Recently Viewed"
-- If no matching feed exists, use whichever feed is available
-- If no feeds exist at all, omit the recommendation section entirely rather than hardcoding products
 ═══ END PRODUCT FEEDS ═══`;
       } else {
         productFeedsBlock = `
