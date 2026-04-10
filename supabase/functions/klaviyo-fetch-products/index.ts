@@ -357,7 +357,7 @@ Deno.serve(async (req) => {
 
     // Check scope permissions early
     try {
-      const testResp = await fetch(`${KLAVIYO_API_BASE}/catalog-items/?page[size]=1`, {
+      const testResp = await fetch(`${KLAVIYO_API_BASE}/catalog-items/?fields[catalog-item]=external_id`, {
         headers: klaviyoGetHeaders(apiKey),
       });
       if (testResp.status === 403) {
