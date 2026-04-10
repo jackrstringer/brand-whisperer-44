@@ -480,6 +480,7 @@ Rules:
   10. PLACEHOLDER DIMENSIONS: Flag any image with width under 100px or height under 100px that is not a logo or icon. These are placeholder values that will break the layout.
   11. GRID STRUCTURE: Flag any multi-column grid that uses display:inline-block tables instead of direct <td> siblings inside a single <tr>. Flag any CSS class (e.g. mobile-grid-col) that sets display:block on grid columns.
   12. GRID GEOMETRY: If a structural skeleton was provided specifying a grid (e.g., "columns: 2, rows: 2, equal_sizing: true"), verify the HTML implements that exact geometry. A 2×2 equal grid must have exactly 2 <tr> rows each containing exactly 2 equal-width <td> cells. Flag any mosaic, asymmetric, or "1 large + 2 small" layout as critical when the skeleton specifies equal sizing.
+  13. PRICING SANITY: Flag any compare-at/original price that is $0, $0.00, or less than the sale price as a CRITICAL error. A product cannot be "on sale" from $0. Also flag any pricing that wasn't present in the reference layout.
 
 Return ONLY the JSON object. No markdown fences, no explanation, no preamble.`;
 
