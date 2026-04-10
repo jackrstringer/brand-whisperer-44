@@ -103,7 +103,7 @@ async function resolveMetricId(
   let allMetrics: any[] = [];
   let nextUrl: string | null = `${KLAVIYO_API_BASE}/metrics/?page[size]=50`;
   while (nextUrl) {
-    const resp = await fetch(nextUrl, { headers: klaviyoHeaders(apiKey) });
+    const resp = await fetch(nextUrl, { headers: klaviyoGetHeaders(apiKey) });
     if (!resp.ok) {
       const err = await resp.text();
       console.error(`[klaviyo-fetch-products] Failed to fetch metrics: ${resp.status} ${err}`);
@@ -153,7 +153,7 @@ async function fetchMetricAggregates(
 
   const resp = await fetch(`${KLAVIYO_API_BASE}/metric-aggregates/`, {
     method: "POST",
-    headers: klaviyoHeaders(apiKey),
+    headers: klaviyoGetHeaders(apiKey),
     body: JSON.stringify(payload),
   });
 
@@ -194,7 +194,7 @@ async function hydrateCatalogItems(
   const fields = "external_id,title,description,url,price,image_full_url,image_thumbnail_url";
 
   const url = `${KLAVIYO_API_BASE}/catalog-items/?filter=${encodeURIComponent(filterStr)}&fields[catalog-item]=${fields}`;
-  const resp = await fetch(url, { headers: klaviyoHeaders(apiKey) });
+  const resp = await fetch(url, { headers: klaviyoGetHeaders(apiKey) });
 
   if (!resp.ok) {
     // If catalog-items fails, try catalog-variants (metric may return variant IDs)
@@ -248,7 +248,7 @@ async function hydrateFromVariants(
   const filterStr = `any(ids,["${compoundIds.join('","')}"])`;
   const url = `${KLAVIYO_API_BASE}/catalog-variants/?filter=${encodeURIComponent(filterStr)}&fields[catalog-variant]=external_id,title,price,image_full_url&include=items&fields[catalog-item]=external_id,title,url,image_full_url`;
 
-  const resp = await fetch(url, { headers: klaviyoHeaders(apiKey) });
+  const resp = await fetch(url, { headers: klaviyoGetHeaders(apiKey) });
   if (!resp.ok) {
     const err = await resp.text();
     console.error(`[klaviyo-fetch-products] Catalog variants fetch failed: ${resp.status} ${err}`);
@@ -293,7 +293,7 @@ async function fetchNewArrivals(
   const fields = "external_id,title,description,url,price,image_full_url,image_thumbnail_url";
   const url = `${KLAVIYO_API_BASE}/catalog-items/?sort=-created&page[size]=${slotCount}&fields[catalog-item]=${fields}&filter=${encodeURIComponent("equals(published,true)")}`;
 
-  const resp = await fetch(url, { headers: klaviyoHeaders(apiKey) });
+  const resp = await fetch(url, { headers: klaviyoGetHeaders(apiKey) });
   if (!resp.ok) {
     const err = await resp.text();
     console.error(`[klaviyo-fetch-products] New arrivals fetch failed: ${resp.status} ${err}`);
@@ -358,7 +358,7 @@ Deno.serve(async (req) => {
     // Check scope permissions early
     try {
       const testResp = await fetch(`${KLAVIYO_API_BASE}/catalog-items/?page[size]=1`, {
-        headers: klaviyoHeaders(apiKey),
+        headers: klaviyoGetHeaders(apiKey),
       });
       if (testResp.status === 403) {
         const errBody = await testResp.text();
