@@ -727,25 +727,42 @@ export default function CampaignEditor() {
       if (needsFix && iteration < MAX_ITERATIONS - 1) {
         console.log(`[qa-loop] ${criticalIssues.length} critical issues — attempting fix (iteration ${iteration + 1})`);
 
-        // Fast path: apply direct find/replace patches
+        // Fast path: apply direct find/replace patches with flexible matching
         let patchedHtml = campaignData.html;
         let patchesApplied = 0;
         for (const issue of criticalIssues) {
-          if (issue.find && issue.replace && patchedHtml.includes(issue.find)) {
+          if (!issue.find || !issue.replace) continue;
+          // Try exact match first
+          if (patchedHtml.includes(issue.find)) {
             patchedHtml = patchedHtml.replace(issue.find, issue.replace);
             patchesApplied++;
+            continue;
           }
+          // Try whitespace-flexible match
+          try {
+            const escaped = issue.find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const wsFlexible = escaped.replace(/\s+/g, '\\s*');
+            const regex = new RegExp(wsFlexible);
+            if (regex.test(patchedHtml)) {
+              patchedHtml = patchedHtml.replace(regex, issue.replace);
+              patchesApplied++;
+              continue;
+            }
+          } catch {}
+          console.warn(`[qa-loop] Patch did not match: "${issue.find.substring(0, 80)}..."`);
         }
 
         if (patchesApplied > 0) {
+          console.log(`[qa-loop] Applied ${patchesApplied} direct patches`);
           await supabase.from('campaigns').update({ html: patchedHtml } as any).eq('id', campaignId);
           setCampaign(prev => prev ? { ...prev, html: patchedHtml } as Campaign : prev);
           return runVisualQa({ ...campaignData, html: patchedHtml, _qaRunId: qaRunId } as any, iteration + 1);
         }
 
-        // Slow path: send back to Agent 2 for targeted edit
+        // Slow path: send to Agent 2 via edit-campaign SSE stream and WAIT for completion
+        console.log(`[qa-loop] No direct patches matched — sending to edit-campaign...`);
         const issueDescriptions = criticalIssues
-          .map((i: any) => `[${i.category}] ${i.description}`)
+          .map((i: any) => `[${i.category}] ${i.description}${i.find ? `\nFind: ${i.find.substring(0, 200)}` : ''}`)
           .join('\n- ');
 
         const session = (await supabase.auth.getSession()).data.session;
@@ -768,14 +785,83 @@ export default function CampaignEditor() {
           }
         );
 
-        if (editResp.ok) {
-          await new Promise(r => setTimeout(r, 2000));
-          const { data: updated } = await supabase
-            .from('campaigns').select('*').eq('id', campaignId).single();
-          if (updated?.html) {
-            setCampaign(updated as Campaign);
-            return runVisualQa({ ...updated, _qaRunId: qaRunId } as any, iteration + 1);
+        if (editResp.ok && editResp.body) {
+          // Consume the SSE stream and wait for the "done" or "html_patch" event
+          let fixedHtml: string | null = null;
+          let editChanged = false;
+          try {
+            const reader = editResp.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            const EDIT_TIMEOUT = 120_000; // 2 minutes max
+            const editStart = Date.now();
+
+            while (true) {
+              if (Date.now() - editStart > EDIT_TIMEOUT) {
+                console.warn('[qa-loop] edit-campaign stream timed out');
+                reader.cancel();
+                break;
+              }
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+
+              // Parse SSE events from buffer
+              const lines = buffer.split('\n');
+              buffer = lines.pop() || '';
+              for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                try {
+                  const evt = JSON.parse(line.slice(6));
+                  if (evt.type === 'html_patch' && evt.html) {
+                    fixedHtml = evt.html;
+                    editChanged = true;
+                    console.log(`[qa-loop] Received html_patch from edit-campaign (${fixedHtml!.length} chars)`);
+                  }
+                  if (evt.type === 'done') {
+                    editChanged = evt.changed ?? editChanged;
+                    console.log(`[qa-loop] edit-campaign done: changed=${editChanged}, patchesApplied=${evt.patchesApplied}`);
+                    reader.cancel();
+                    break;
+                  }
+                  if (evt.type === 'error') {
+                    console.error(`[qa-loop] edit-campaign error: ${evt.message}`);
+                    reader.cancel();
+                    break;
+                  }
+                } catch {}
+              }
+            }
+          } catch (streamErr) {
+            console.error('[qa-loop] Error consuming edit-campaign stream:', streamErr);
           }
+
+          // If we got patched HTML from the stream, use it directly
+          if (fixedHtml && editChanged) {
+            setCampaign(prev => prev ? { ...prev, html: fixedHtml! } as Campaign : prev);
+            return runVisualQa({ ...(campaignData as any), html: fixedHtml, _qaRunId: qaRunId } as any, iteration + 1);
+          }
+
+          // Fallback: re-read from DB in case stream parsing failed but edit saved
+          if (!fixedHtml) {
+            const { data: updated } = await supabase
+              .from('campaigns').select('*').eq('id', campaignId).single();
+            if (updated?.html && updated.html !== campaignData.html) {
+              console.log('[qa-loop] DB read found updated HTML after edit-campaign');
+              setCampaign(updated as Campaign);
+              return runVisualQa({ ...updated, _qaRunId: qaRunId } as any, iteration + 1);
+            }
+          }
+
+          console.warn('[qa-loop] edit-campaign produced no HTML change');
+          await logQa("qa_fix_failed", {
+            event_key: `qa_fix_failed_iter${iteration}`,
+            status: "error",
+            error: "edit-campaign produced no HTML change",
+            result: { issues_sent: criticalIssues.length, edit_changed: editChanged },
+          });
+        } else {
+          console.error(`[qa-loop] edit-campaign request failed: ${editResp.status}`);
         }
       }
 
