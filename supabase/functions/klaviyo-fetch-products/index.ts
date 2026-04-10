@@ -9,16 +9,72 @@ const corsHeaders = {
 const KLAVIYO_API_BASE = "https://a.klaviyo.com/api";
 const KLAVIYO_REVISION = "2025-04-15";
 
+// ── Property resolver ────────────────────────────────────────────
+const PROPERTY_MAP: Record<string, string[]> = {
+  product_id: ["ProductID", "$product_id", "product_id", "$variant_id", "VariantId"],
+  product_name: ["ProductName", "$product_name", "product_name", "Name", "Title"],
+  image_url: ["ImageURL", "$image", "image_url", "ProductImageURL", "ImageUrl"],
+  product_url: ["ProductURL", "$url", "product_url", "URL", "Url"],
+  price: ["Price", "$price", "price", "$value", "CompareAtPrice"],
+  quantity: ["Quantity", "$quantity", "quantity"],
+  sku: ["SKU", "$sku", "sku"],
+  brand: ["Brand", "$brand", "brand", "Vendor"],
+  categories: ["Categories", "$categories", "collections", "ProductType"],
+};
+
+function resolveProperty(props: Record<string, any>, field: string): any {
+  const keys = PROPERTY_MAP[field];
+  if (!keys) return null;
+  for (const key of keys) {
+    if (props[key] !== undefined && props[key] !== null && props[key] !== "") {
+      return props[key];
+    }
+  }
+  return null;
+}
+
+// ── Junk filter ──────────────────────────────────────────────────
+const JUNK_NAME_BLACKLIST = [
+  "shipping protection", "route protection", "route package protection",
+  "shipping insurance", "package protection", "order protection",
+  "delivery protection", "carbon neutral", "carbon offset",
+  "offset shipping", "eco shipping", "free gift", "free sample",
+  "gwp ", "gift with purchase", "bonus gift", "mystery gift",
+  "warranty", "extended warranty", "product warranty", "protection plan",
+  "care plan", "tip for", "tip - ", "gratuity", "donation", "charitable",
+  "gift card", "gift certificate", "e-gift", "egift", "store credit",
+  "placeholder", "test product", "do not delete", "draft product", "hidden product",
+];
+
+const JUNK_SKU_PREFIXES = [
+  "SHIP-", "PROTECT-", "GWP-", "FREE-", "WARRANTY-", "TIP-",
+  "DONATION-", "GC-", "GIFTCARD-",
+];
+
+function isJunkProduct(name: string | null, price: number | null, sku: string | null, imageUrl: string | null): boolean {
+  const nameLower = (name || "").toLowerCase();
+  for (const term of JUNK_NAME_BLACKLIST) {
+    if (nameLower.includes(term)) return true;
+  }
+  if (price !== null && (price <= 0.01 || price > 5000)) return true;
+  if (sku) {
+    const skuUpper = sku.toUpperCase();
+    for (const prefix of JUNK_SKU_PREFIXES) {
+      if (skuUpper.startsWith(prefix)) return true;
+    }
+  }
+  if (!name || !imageUrl) return true;
+  return false;
+}
+
 // ── Feed presets ─────────────────────────────────────────────────
 interface FeedPreset {
   key: string;
   label: string;
-  metric: string | null;
-  measurement: string;
-  groupBy: string;
-  timeframeDays: number | null;
-  sort: string;
-  catalogSort: string | null;
+  metric: string;
+  timeframeDays: number;
+  description: string;
+  countField: string; // column in DB to sort by
 }
 
 const FEED_PRESETS: Record<string, FeedPreset> = {
@@ -26,55 +82,38 @@ const FEED_PRESETS: Record<string, FeedPreset> = {
     key: "best_sellers",
     label: "Best Sellers",
     metric: "Ordered Product",
-    measurement: "count",
-    groupBy: "$variation",
     timeframeDays: 30,
-    sort: "-count",
-    catalogSort: null,
+    description: "Products with the most orders in the last 30 days",
+    countField: "order_count",
   },
   trending: {
     key: "trending",
     label: "Trending Now",
     metric: "Viewed Product",
-    measurement: "count",
-    groupBy: "$variation",
     timeframeDays: 7,
-    sort: "-count",
-    catalogSort: null,
-  },
-  new_arrivals: {
-    key: "new_arrivals",
-    label: "New Arrivals",
-    metric: null,
-    measurement: "",
-    groupBy: "",
-    timeframeDays: null,
-    sort: "",
-    catalogSort: "-created",
+    description: "Most viewed products in the last 7 days",
+    countField: "view_count",
   },
   most_viewed: {
     key: "most_viewed",
     label: "Most Viewed",
     metric: "Viewed Product",
-    measurement: "count",
-    groupBy: "$variation",
     timeframeDays: 30,
-    sort: "-count",
-    catalogSort: null,
+    description: "Most viewed products in the last 30 days",
+    countField: "view_count",
+  },
+  popular_checkouts: {
+    key: "popular_checkouts",
+    label: "Popular Picks",
+    metric: "Started Checkout",
+    timeframeDays: 30,
+    description: "Products most frequently added to checkout in the last 30 days",
+    countField: "checkout_count",
   },
 };
 
-interface ProductSlot {
-  external_id: string;
-  title: string;
-  price: number | null;
-  url: string;
-  image_url: string;
-}
-
-// ── Helpers ──────────────────────────────────────────────────────
-
-function klaviyoGetHeaders(apiKey: string) {
+// ── Klaviyo API helpers ──────────────────────────────────────────
+function klaviyoHeaders(apiKey: string) {
   return {
     Authorization: `Klaviyo-API-Key ${apiKey}`,
     revision: KLAVIYO_REVISION,
@@ -82,246 +121,273 @@ function klaviyoGetHeaders(apiKey: string) {
   };
 }
 
-function klaviyoPostHeaders(apiKey: string) {
-  return {
-    Authorization: `Klaviyo-API-Key ${apiKey}`,
-    revision: KLAVIYO_REVISION,
-    Accept: "application/vnd.api+json",
-    "Content-Type": "application/vnd.api+json",
-  };
-}
-
-/** Resolve metric name → metric ID. Cached in klaviyo_connections.cached_stats.metric_id_cache */
 async function resolveMetricId(
   apiKey: string,
   metricName: string,
-  cachedMetricIds: Record<string, string>
+  cache: Record<string, string>
 ): Promise<string | null> {
-  if (cachedMetricIds[metricName]) return cachedMetricIds[metricName];
-
-  // Metrics API doesn't support filtering by name directly — fetch all and find by name
+  if (cache[metricName]) return cache[metricName];
   let allMetrics: any[] = [];
   let nextUrl: string | null = `${KLAVIYO_API_BASE}/metrics/?page[size]=50`;
-  while (nextUrl) {
-    const resp = await fetch(nextUrl, { headers: klaviyoGetHeaders(apiKey) });
+  while (nextUrl && allMetrics.length < 500) {
+    const resp = await fetch(nextUrl, { headers: klaviyoHeaders(apiKey) });
     if (!resp.ok) {
-      const err = await resp.text();
-      console.error(`[klaviyo-fetch-products] Failed to fetch metrics: ${resp.status} ${err}`);
+      console.error(`[product-sync] Metrics fetch failed: ${resp.status}`);
       return null;
     }
     const data = await resp.json();
     allMetrics = allMetrics.concat(data.data || []);
     nextUrl = data.links?.next || null;
-    // Safety: don't paginate forever
-    if (allMetrics.length > 500) break;
   }
   const found = allMetrics.find((m: any) => m.attributes?.name === metricName);
   if (!found) return null;
-  const id = found.id;
-  cachedMetricIds[metricName] = id;
-  return id;
+  cache[metricName] = found.id;
+  return found.id;
 }
 
-/** Fetch ranked product IDs via Metric Aggregates */
-async function fetchMetricAggregates(
-  apiKey: string,
+async function fetchEventsForMetric(
   metricId: string,
-  preset: FeedPreset,
-  slotCount: number
-): Promise<string[]> {
-  const endDate = new Date();
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - (preset.timeframeDays || 30));
-
-  const payload = {
-    data: {
-      type: "metric-aggregate",
-      attributes: {
-        metric_id: metricId,
-        measurements: [preset.measurement],
-        interval: "day",
-        page_size: slotCount,
-        by: [preset.groupBy],
-        filter: [
-          `greater-or-equal(datetime,${startDate.toISOString().split("T")[0]}T00:00:00)`,
-          `less-than(datetime,${endDate.toISOString().split("T")[0]}T00:00:00)`,
-        ],
-        sort: preset.sort,
-      },
-    },
-  };
-
-  const resp = await fetch(`${KLAVIYO_API_BASE}/metric-aggregates/`, {
-    method: "POST",
-    headers: klaviyoPostHeaders(apiKey),
-    body: JSON.stringify(payload),
-  });
-
-  if (!resp.ok) {
-    const err = await resp.text();
-    console.error(`[klaviyo-fetch-products] Metric aggregates failed: ${resp.status} ${err}`);
-    return [];
-  }
-
-  const data = await resp.json();
-  // Extract product IDs from grouped results
-  // The response has data.attributes.data where each entry has dimensions and measurements
-  const results = data?.data?.attributes?.data || [];
-  const ids: string[] = [];
-  for (const row of results) {
-    const dimensions = row.dimensions || [];
-    if (dimensions.length > 0 && dimensions[0]) {
-      ids.push(dimensions[0]);
-    }
-  }
-  return ids.slice(0, slotCount);
-}
-
-/** Build compound catalog ID */
-function compoundId(externalId: string): string {
-  return `$custom:::$default:::${externalId}`;
-}
-
-/** Hydrate product data from Catalog Items API */
-async function hydrateCatalogItems(
+  startDate: Date,
+  endDate: Date,
   apiKey: string,
-  externalIds: string[],
-): Promise<ProductSlot[]> {
-  if (externalIds.length === 0) return [];
+  minEvents: number = 500
+): Promise<any[]> {
+  const allEvents: any[] = [];
+  const startISO = startDate.toISOString().replace(/\.\d{3}Z$/, "Z");
+  const endISO = endDate.toISOString().replace(/\.\d{3}Z$/, "Z");
+  const filter = `equals(metric_id,"${metricId}"),greater-or-equal(datetime,${startISO}),less-than(datetime,${endISO})`;
+  let url: string | null = `${KLAVIYO_API_BASE}/events/?filter=${encodeURIComponent(filter)}&sort=-datetime&page[size]=100`;
 
-  const compoundIds = externalIds.map(compoundId);
-  const filterStr = `any(ids,["${compoundIds.join('","')}"])`;
-  const fields = "external_id,title,description,url,price,image_full_url,image_thumbnail_url";
+  const timeout = Date.now() + 10000; // 10s max
 
-  const url = `${KLAVIYO_API_BASE}/catalog-items/?filter=${encodeURIComponent(filterStr)}&fields[catalog-item]=${fields}`;
-  const resp = await fetch(url, { headers: klaviyoGetHeaders(apiKey) });
-
-  if (!resp.ok) {
-    // If catalog-items fails, try catalog-variants (metric may return variant IDs)
-    console.warn(`[klaviyo-fetch-products] Catalog items fetch failed (${resp.status}), trying variants`);
-    await resp.text();
-    return await hydrateFromVariants(apiKey, externalIds);
+  while (url && allEvents.length < minEvents && Date.now() < timeout) {
+    const response = await fetch(url, { headers: klaviyoHeaders(apiKey) });
+    if (!response.ok) {
+      console.error(`[product-sync] Events fetch failed: ${response.status}`);
+      break;
+    }
+    const data = await response.json();
+    allEvents.push(...(data.data || []));
+    url = data.links?.next || null;
   }
 
-  const data = await resp.json();
-  const items = data.data || [];
+  return allEvents;
+}
 
-  // Map back in original order
-  const itemMap = new Map<string, ProductSlot>();
-  for (const item of items) {
-    const attrs = item.attributes || {};
-    const slot: ProductSlot = {
-      external_id: attrs.external_id || "",
-      title: attrs.title || "",
-      price: attrs.price ?? null,
-      url: attrs.url || "#",
-      image_url: attrs.image_full_url || attrs.image_thumbnail_url || "",
-    };
-    itemMap.set(attrs.external_id, slot);
-    // Also map by compound ID
-    itemMap.set(item.id, slot);
-  }
+// ── Sync logic ───────────────────────────────────────────────────
+interface ExtractedProduct {
+  product_id: string;
+  product_name: string;
+  image_url: string;
+  product_url: string;
+  price: number | null;
+  sku: string | null;
+  brand: string | null;
+  categories: string[] | null;
+  order_count: number;
+  view_count: number;
+  checkout_count: number;
+  first_seen: string;
+  last_seen: string;
+}
 
-  // If we got fewer items than IDs, some may be variant IDs
-  if (items.length < externalIds.length) {
-    const missingIds = externalIds.filter(id => !itemMap.has(id) && !itemMap.has(compoundId(id)));
-    if (missingIds.length > 0) {
-      const variantSlots = await hydrateFromVariants(apiKey, missingIds);
-      for (const slot of variantSlots) {
-        itemMap.set(slot.external_id, slot);
+type MetricType = "Ordered Product" | "Viewed Product" | "Started Checkout";
+const METRIC_COUNT_FIELD: Record<MetricType, keyof Pick<ExtractedProduct, "order_count" | "view_count" | "checkout_count">> = {
+  "Ordered Product": "order_count",
+  "Viewed Product": "view_count",
+  "Started Checkout": "checkout_count",
+};
+
+async function syncProductStore(
+  supabase: any,
+  brandId: string,
+  klaviyoAccountId: string,
+  apiKey: string,
+  fullSync: boolean = true
+): Promise<{ synced: number; errors: string[] }> {
+  const errors: string[] = [];
+  const metricCache: Record<string, string> = {};
+  const productMap = new Map<string, ExtractedProduct>();
+
+  const metricsToSync: MetricType[] = ["Ordered Product", "Viewed Product", "Started Checkout"];
+  const lookbackDays = fullSync ? 30 : 2; // 48h overlap for incremental
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - lookbackDays);
+  const endDate = new Date();
+
+  for (const metricName of metricsToSync) {
+    const metricId = await resolveMetricId(apiKey, metricName, metricCache);
+    if (!metricId) {
+      console.warn(`[product-sync] Could not resolve metric "${metricName}"`);
+      errors.push(`Metric "${metricName}" not found — this account may not have ${metricName} tracking enabled.`);
+      continue;
+    }
+
+    console.log(`[product-sync] Fetching events for "${metricName}" (metric ${metricId}), lookback ${lookbackDays}d`);
+    const events = await fetchEventsForMetric(metricId, startDate, endDate, apiKey, fullSync ? 500 : 200);
+    console.log(`[product-sync] Got ${events.length} events for "${metricName}"`);
+
+    const countField = METRIC_COUNT_FIELD[metricName];
+
+    for (const event of events) {
+      const props = event.attributes?.event_properties || {};
+      
+      // Handle events with Items array (checkout, order events)
+      const items = props.Items || props.items || props.line_items || (props.extra?.line_items);
+      if (items && Array.isArray(items)) {
+        for (const item of items) {
+          processEventItem(item, event.attributes?.datetime, countField, productMap);
+        }
+      } else {
+        // Single product event (Viewed Product, etc.)
+        processEventItem(props, event.attributes?.datetime, countField, productMap);
       }
     }
   }
 
-  // Return in original order
-  return externalIds
-    .map(id => itemMap.get(id) || itemMap.get(compoundId(id)))
-    .filter(Boolean) as ProductSlot[];
-}
-
-/** Fallback: hydrate from catalog variants and get parent item data */
-async function hydrateFromVariants(
-  apiKey: string,
-  externalIds: string[],
-): Promise<ProductSlot[]> {
-  const compoundIds = externalIds.map(compoundId);
-  const filterStr = `any(ids,["${compoundIds.join('","')}"])`;
-  const url = `${KLAVIYO_API_BASE}/catalog-variants/?filter=${encodeURIComponent(filterStr)}&fields[catalog-variant]=external_id,title,price,image_full_url&include=items&fields[catalog-item]=external_id,title,url,image_full_url`;
-
-  const resp = await fetch(url, { headers: klaviyoGetHeaders(apiKey) });
-  if (!resp.ok) {
-    const err = await resp.text();
-    console.error(`[klaviyo-fetch-products] Catalog variants fetch failed: ${resp.status} ${err}`);
-    return [];
-  }
-
-  const data = await resp.json();
-  const variants = data.data || [];
-  const included = data.included || [];
-
-  // Build parent item map
-  const parentMap = new Map<string, any>();
-  for (const inc of included) {
-    if (inc.type === "catalog-item") {
-      parentMap.set(inc.id, inc.attributes || {});
+  // Persist metric ID cache
+  if (Object.keys(metricCache).length > 0) {
+    const { data: conn } = await supabase
+      .from("klaviyo_connections")
+      .select("cached_stats")
+      .eq("brand_id", brandId)
+      .single();
+    if (conn) {
+      const stats = (conn.cached_stats || {}) as Record<string, any>;
+      await supabase.from("klaviyo_connections").update({
+        cached_stats: { ...stats, metric_id_cache: metricCache },
+      }).eq("brand_id", brandId);
     }
   }
 
-  const slots: ProductSlot[] = [];
-  for (const v of variants) {
-    const attrs = v.attributes || {};
-    // Try to get parent item for URL
-    const parentRel = v.relationships?.items?.data?.[0];
-    const parent = parentRel ? parentMap.get(parentRel.id) : null;
+  // Upsert to DB
+  const products = Array.from(productMap.values());
+  console.log(`[product-sync] Extracted ${products.length} unique products, upserting to store`);
 
-    slots.push({
-      external_id: attrs.external_id || "",
-      title: attrs.title || parent?.title || "",
-      price: attrs.price ?? null,
-      url: parent?.url || "#",
-      image_url: attrs.image_full_url || parent?.image_full_url || "",
-    });
+  let synced = 0;
+  const now = new Date().toISOString();
+
+  // Batch upsert in chunks of 50
+  for (let i = 0; i < products.length; i += 50) {
+    const chunk = products.slice(i, i + 50);
+    const rows = chunk.map((p) => ({
+      brand_id: brandId,
+      klaviyo_account_id: klaviyoAccountId,
+      product_id: p.product_id,
+      product_name: p.product_name,
+      image_url: p.image_url || null,
+      product_url: p.product_url || null,
+      price: p.price,
+      sku: p.sku,
+      brand: p.brand,
+      categories: p.categories,
+      is_junk: isJunkProduct(p.product_name, p.price, p.sku, p.image_url),
+      first_seen: p.first_seen,
+      last_seen: p.last_seen,
+      order_count: p.order_count,
+      view_count: p.view_count,
+      checkout_count: p.checkout_count,
+      last_synced: now,
+    }));
+
+    const { error } = await supabase
+      .from("klaviyo_product_store")
+      .upsert(rows, {
+        onConflict: "brand_id,product_id",
+        ignoreDuplicates: false,
+      });
+
+    if (error) {
+      console.error(`[product-sync] Upsert error:`, error);
+      errors.push(`Database upsert failed: ${error.message}`);
+    } else {
+      synced += chunk.length;
+    }
   }
-  return slots;
+
+  return { synced, errors };
 }
 
-/** Fetch catalog items sorted by creation date (New Arrivals) */
-async function fetchNewArrivals(
-  apiKey: string,
-  slotCount: number,
-): Promise<ProductSlot[]> {
-  const fields = "external_id,title,description,url,price,image_full_url,image_thumbnail_url";
-  // Don't filter by published — some accounts may not set this field
-  const url = `${KLAVIYO_API_BASE}/catalog-items/?sort=-created&fields[catalog-item]=${fields}`;
+function processEventItem(
+  props: Record<string, any>,
+  eventDatetime: string,
+  countField: keyof Pick<ExtractedProduct, "order_count" | "view_count" | "checkout_count">,
+  productMap: Map<string, ExtractedProduct>
+) {
+  const productId = resolveProperty(props, "product_id");
+  if (!productId) return;
 
-  console.log(`[klaviyo-fetch-products] Fetching new arrivals: ${url}`);
-  const resp = await fetch(url, { headers: klaviyoGetHeaders(apiKey) });
-  console.log(`[klaviyo-fetch-products] Catalog response status: ${resp.status}`);
-  const rawText = await resp.text();
-  console.log(`[klaviyo-fetch-products] Catalog raw response (first 500 chars): ${rawText.substring(0, 500)}`);
-  
-  if (!resp.ok) {
-    console.error(`[klaviyo-fetch-products] New arrivals fetch failed: ${resp.status} ${rawText}`);
-    return [];
+  const idStr = String(productId);
+  const existing = productMap.get(idStr);
+
+  const name = resolveProperty(props, "product_name") || existing?.product_name || "";
+  const imageUrl = resolveProperty(props, "image_url") || existing?.image_url || "";
+  const productUrl = resolveProperty(props, "product_url") || existing?.product_url || "";
+  const rawPrice = resolveProperty(props, "price");
+  const price = rawPrice !== null ? Number(rawPrice) : (existing?.price ?? null);
+  const sku = resolveProperty(props, "sku") || existing?.sku || null;
+  const brand = resolveProperty(props, "brand") || existing?.brand || null;
+  const rawCats = resolveProperty(props, "categories");
+  const categories = rawCats
+    ? (Array.isArray(rawCats) ? rawCats : [String(rawCats)])
+    : (existing?.categories || null);
+
+  const dt = eventDatetime || new Date().toISOString();
+
+  const product: ExtractedProduct = {
+    product_id: idStr,
+    product_name: name,
+    image_url: imageUrl,
+    product_url: productUrl,
+    price,
+    sku,
+    brand,
+    categories,
+    order_count: (existing?.order_count || 0) + (countField === "order_count" ? 1 : 0),
+    view_count: (existing?.view_count || 0) + (countField === "view_count" ? 1 : 0),
+    checkout_count: (existing?.checkout_count || 0) + (countField === "checkout_count" ? 1 : 0),
+    first_seen: existing?.first_seen && existing.first_seen < dt ? existing.first_seen : dt,
+    last_seen: existing?.last_seen && existing.last_seen > dt ? existing.last_seen : dt,
+  };
+
+  productMap.set(idStr, product);
+}
+
+// ── Query local store ────────────────────────────────────────────
+async function queryPresetFromStore(
+  supabase: any,
+  brandId: string,
+  presetKey: string,
+  slotCount: number
+): Promise<any[]> {
+  const preset = FEED_PRESETS[presetKey];
+  if (!preset) return [];
+
+  // For trending, also filter by last_seen within timeframe
+  let query = supabase
+    .from("klaviyo_product_store")
+    .select("product_id, product_name, image_url, product_url, price, order_count, view_count, checkout_count")
+    .eq("brand_id", brandId)
+    .eq("is_junk", false)
+    .not("image_url", "is", null);
+
+  if (presetKey === "trending") {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 7);
+    query = query.gte("last_seen", cutoff.toISOString());
   }
 
-  const data = JSON.parse(rawText);
-  const totalItems = (data.data || []).length;
-  console.log(`[klaviyo-fetch-products] Catalog returned ${totalItems} items`);
-  return (data.data || []).map((item: any) => {
-    const attrs = item.attributes || {};
-    return {
-      external_id: attrs.external_id || "",
-      title: attrs.title || "",
-      price: attrs.price ?? null,
-      url: attrs.url || "#",
-      image_url: attrs.image_full_url || attrs.image_thumbnail_url || "",
-    };
-  });
+  query = query.order(preset.countField, { ascending: false }).limit(slotCount);
+
+  const { data, error } = await query;
+  if (error) {
+    console.error(`[product-sync] Store query error:`, error);
+    return [];
+  }
+  return data || [];
 }
 
 // ── Main handler ─────────────────────────────────────────────────
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -337,18 +403,17 @@ Deno.serve(async (req) => {
     if (authError || !user) throw new Error("Unauthorized");
 
     const body = await req.json();
-    const { brandId, presetKey, slotCount: requestedSlotCount } = body;
+    const { brandId, presetKey, slotCount: requestedSlotCount, forceSync } = body;
     if (!brandId) throw new Error("brandId is required");
 
     const preset = FEED_PRESETS[presetKey || "best_sellers"];
     if (!preset) throw new Error(`Unknown preset: ${presetKey}`);
-
-    const slotCount = Math.min(requestedSlotCount || 6, 20);
+    const slotCount = Math.min(requestedSlotCount || 8, 20);
 
     // Get Klaviyo connection
     const { data: connection } = await supabase
       .from("klaviyo_connections")
-      .select("api_key, cached_stats")
+      .select("api_key, klaviyo_account_id")
       .eq("brand_id", brandId)
       .single();
 
@@ -361,72 +426,68 @@ Deno.serve(async (req) => {
     }
 
     const apiKey = connection.api_key;
+    const accountId = connection.klaviyo_account_id || brandId;
 
-    // Check scope permissions early
-    try {
-      const testResp = await fetch(`${KLAVIYO_API_BASE}/catalog-items/?fields[catalog-item]=external_id`, {
-        headers: klaviyoGetHeaders(apiKey),
-      });
-      if (testResp.status === 403) {
-        const errBody = await testResp.text();
-        return new Response(JSON.stringify({
-          error: "Missing API scopes. Your Klaviyo API key needs: catalogs:read, metrics:read",
-          details: errBody,
-          products: [],
-          presetKey: preset.key,
-        }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-      await testResp.text(); // consume body
-    } catch (scopeErr) {
-      console.warn("[klaviyo-fetch-products] Scope check error:", scopeErr);
+    // Check if store has recent data
+    const { data: storeCheck } = await supabase
+      .from("klaviyo_product_store")
+      .select("last_synced")
+      .eq("brand_id", brandId)
+      .order("last_synced", { ascending: false })
+      .limit(1)
+      .single();
+
+    const staleThresholdMs = 24 * 60 * 60 * 1000; // 24 hours
+    const isStale = !storeCheck?.last_synced ||
+      (Date.now() - new Date(storeCheck.last_synced).getTime()) > staleThresholdMs;
+
+    let syncPerformed = false;
+    let syncErrors: string[] = [];
+
+    if (forceSync || isStale || !storeCheck) {
+      // Sync now — full sync if empty, incremental if just stale
+      const isFirstSync = !storeCheck;
+      console.log(`[product-sync] ${isFirstSync ? "First" : "Incremental"} sync for brand ${brandId}`);
+
+      const result = await syncProductStore(supabase, brandId, accountId, apiKey, isFirstSync || forceSync);
+      syncPerformed = true;
+      syncErrors = result.errors;
+      console.log(`[product-sync] Synced ${result.synced} products, ${result.errors.length} errors`);
     }
 
-    // Load cached metric IDs
-    const cachedStats = (connection.cached_stats || {}) as Record<string, any>;
-    const cachedMetricIds: Record<string, string> = cachedStats.metric_id_cache || {};
-    let products: ProductSlot[] = [];
-    let fellBackToNewArrivals = false;
+    // Query from local store
+    const products = await queryPresetFromStore(supabase, brandId, presetKey || "best_sellers", slotCount);
 
-    if (preset.metric) {
-      // Metric-based preset (best sellers, trending, most viewed)
-      const metricId = await resolveMetricId(apiKey, preset.metric, cachedMetricIds);
-
-      if (!metricId) {
-        console.warn(`[klaviyo-fetch-products] Could not resolve metric "${preset.metric}", falling back to new arrivals`);
-        products = await fetchNewArrivals(apiKey, slotCount);
-        fellBackToNewArrivals = true;
+    // If no products after sync, provide specific error
+    let error: string | null = null;
+    if (products.length === 0 && syncPerformed) {
+      if (syncErrors.length > 0) {
+        error = syncErrors.join("; ");
       } else {
-        const rankedIds = await fetchMetricAggregates(apiKey, metricId, preset, slotCount);
-
-        if (rankedIds.length === 0) {
-          console.warn(`[klaviyo-fetch-products] No aggregate data for "${preset.metric}", falling back to new arrivals`);
-          products = await fetchNewArrivals(apiKey, slotCount);
-          fellBackToNewArrivals = true;
-        } else {
-          products = await hydrateCatalogItems(apiKey, rankedIds);
-        }
+        error = "No product data available yet. This account needs Viewed Product or Ordered Product tracking enabled in Klaviyo.";
       }
-
-      // Persist metric ID cache
-      if (Object.keys(cachedMetricIds).length > 0) {
-        await supabase.from("klaviyo_connections").update({
-          cached_stats: { ...cachedStats, metric_id_cache: cachedMetricIds },
-        }).eq("brand_id", brandId);
-      }
-    } else {
-      // Catalog-only preset (new arrivals)
-      products = await fetchNewArrivals(apiKey, slotCount);
     }
 
     return new Response(JSON.stringify({
-      products,
+      products: products.map((p: any) => ({
+        external_id: p.product_id,
+        title: p.product_name,
+        price: p.price,
+        url: p.product_url || "#",
+        image_url: p.image_url || "",
+      })),
       presetKey: preset.key,
       presetLabel: preset.label,
-      fellBackToNewArrivals,
       slotCount,
-      presets: Object.values(FEED_PRESETS).map(p => ({ key: p.key, label: p.label })),
+      syncPerformed,
+      syncErrors: syncErrors.length > 0 ? syncErrors : undefined,
+      error,
+      presets: Object.values(FEED_PRESETS).map((p) => ({
+        key: p.key,
+        label: p.label,
+        description: p.description,
+      })),
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-
   } catch (error: any) {
     console.error("[klaviyo-fetch-products] Error:", error);
     return new Response(JSON.stringify({ error: error.message }), {
