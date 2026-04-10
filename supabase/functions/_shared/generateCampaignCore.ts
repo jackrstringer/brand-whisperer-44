@@ -1043,116 +1043,88 @@ ${UNIVERSAL_EMAIL_RULES}`;
       }
     }
 
-    // Fetch product feeds for recommendation grids — live API first, cache fallback
+    // Fetch product data for recommendation grids via Metric Aggregates + Catalog Items
     let productFeedsBlock = "";
-    let productFeeds: any[] = [];
     try {
-      const { data: klavConnFeeds } = await supabase
+      const { data: klavConn } = await supabase
         .from("klaviyo_connections")
-        .select("api_key, cached_stats")
+        .select("api_key")
         .eq("brand_id", brandId)
         .single();
 
-      if (klavConnFeeds?.api_key) {
-        // Try live fetch from Klaviyo API
-        try {
-          const feedsResp = await fetch(
-            "https://a.klaviyo.com/api/product-feeds/?page[size]=50",
-            {
-              headers: {
-                "Authorization": `Klaviyo-API-Key ${klavConnFeeds.api_key}`,
-                "revision": "2024-10-15",
-                "Accept": "application/json",
-              },
-            }
-          );
-          if (feedsResp.ok) {
-            const feedsData = await feedsResp.json();
-            productFeeds = (feedsData.data || []).map((f: any) => ({
-              id: f.id,
-              name: f.attributes?.name || "",
-              feed_type: f.attributes?.feed_type || "",
-            }));
-            console.log(`[generateCampaignCore] Live-fetched ${productFeeds.length} product feeds from Klaviyo`);
+      if (klavConn?.api_key) {
+        // Determine preset from flow config
+        const presetKey = flowConfig?.selected_product_preset || "best_sellers";
 
-            // Update cache with fresh data
-            const cachedStats = (klavConnFeeds.cached_stats || {}) as Record<string, unknown>;
-            await supabase.from("klaviyo_connections").update({
-              cached_stats: { ...cachedStats, product_feeds: productFeeds },
-            }).eq("brand_id", brandId);
-          } else {
-            console.warn(`[generateCampaignCore] Live feed fetch failed (${feedsResp.status}), using cache`);
-            await feedsResp.text(); // consume body
-            productFeeds = (klavConnFeeds.cached_stats as any)?.product_feeds || [];
-          }
-        } catch (liveFetchErr) {
-          console.warn("[generateCampaignCore] Live feed fetch error, using cache:", liveFetchErr);
-          productFeeds = (klavConnFeeds.cached_stats as any)?.product_feeds || [];
+        // Fetch products via the edge function logic inline
+        // We call the catalog items API directly to populate product grid data
+        const KLAVIYO_API_BASE = "https://a.klaviyo.com/api";
+        const KLAVIYO_REVISION = "2025-04-15";
+        const apiKey = klavConn.api_key;
+        const klHeaders = {
+          Authorization: `Klaviyo-API-Key ${apiKey}`,
+          revision: KLAVIYO_REVISION,
+          Accept: "application/vnd.api+json",
+        };
+
+        // Fetch some catalog items for context so the AI knows what products exist
+        const catalogResp = await fetch(
+          `${KLAVIYO_API_BASE}/catalog-items/?sort=-created&page[size]=8&fields[catalog-item]=external_id,title,url,price,image_full_url&filter=${encodeURIComponent("equals(published,true)")}`,
+          { headers: klHeaders }
+        );
+
+        let catalogProducts: { external_id: string; title: string; price: number | null; url: string; image_url: string }[] = [];
+        if (catalogResp.ok) {
+          const catalogData = await catalogResp.json();
+          catalogProducts = (catalogData.data || []).map((item: any) => {
+            const attrs = item.attributes || {};
+            return {
+              external_id: attrs.external_id || "",
+              title: attrs.title || "",
+              price: attrs.price ?? null,
+              url: attrs.url || "#",
+              image_url: attrs.image_full_url || "",
+            };
+          });
+          console.log(`[generateCampaignCore] Fetched ${catalogProducts.length} catalog items for product grid context`);
+        } else {
+          console.warn(`[generateCampaignCore] Catalog items fetch failed: ${catalogResp.status}`);
+          await catalogResp.text();
         }
-      } else {
-        // No API key, use cache
-        productFeeds = (klavConnFeeds?.cached_stats as any)?.product_feeds || [];
-      }
 
-      // Check if user selected a specific feed
-      const userSelectedFeed = flowConfig?.selected_product_feed;
-      let feedSelectionDirective = "";
+        if (catalogProducts.length > 0) {
+          productFeedsBlock = `
+═══ PRODUCT CATALOG DATA (from Klaviyo Catalog API) ═══
+Preset: ${presetKey}
 
-      if (userSelectedFeed) {
-        const feedStillExists = productFeeds.some((f: any) => f.id === userSelectedFeed.id);
-        if (feedStillExists) {
-          feedSelectionDirective = `\nThe user has selected the feed "${userSelectedFeed.name}" — use this feed for all product recommendation grids. Do not substitute a different feed.\n`;
-        }
-        // If feed was deleted, fall through to auto-select
-      }
+Available products for recommendation grids:
+${catalogProducts.map((p, i) => `${i + 1}. "${p.title}" — $${p.price ?? "N/A"} — Image: ${p.image_url} — URL: ${p.url}`).join("\n")}
 
-      if (productFeeds.length > 0) {
-        const autoSelectGuidance = feedSelectionDirective || `
-Replace FeedNameHere with the most appropriate feed from the list above based on the flow type:
-- Abandoned checkout → prefer feeds named "Recently Viewed" or "Best Sellers"
-- Post-purchase → prefer feeds named "May Also Like" or "Best Sellers"
-- Browse abandonment → prefer feeds named "Recently Viewed"
-- If no matching feed exists, use whichever feed is available
-- If no matching feed type exists, use whichever feed is available — always include a product grid if the reference has one`;
+IMPORTANT: For product recommendation grids in flow emails, use STATIC product data from the list above. 
+Do NOT use Klaviyo product feed Liquid syntax ({%- for item in feeds.* -%}) — product feeds are a Klaviyo UI-only feature with no API access.
+Instead, render product grids with real product data from the catalog above, using direct HTML with the actual image URLs, titles, prices, and links.
+Each product card should link to the product URL and show the product image, title, and price.
+The product grid data will be swapped dynamically by the app when the user changes presets.
+Mark the product grid section with an HTML comment: <!-- PRODUCT_GRID:${presetKey} -->
+═══ END PRODUCT CATALOG ═══`;
+        } else {
+          productFeedsBlock = `
+═══ PRODUCT CATALOG DATA ═══
+No catalog items found in the Klaviyo account.
 
-        productFeedsBlock = `
-═══ KLAVIYO PRODUCT FEEDS AVAILABLE IN THIS ACCOUNT ═══
-${productFeeds.map((f: any) => `- "${f.name}" (type: ${f.feed_type})`).join("\n")}
-${autoSelectGuidance}
-
-If the reference email contains a product recommendation grid, cross-sell block, or any product section beyond the main cart/order items, use Klaviyo's product feed Liquid syntax to populate it. Do NOT hardcode product data or use event properties for recommendation blocks.
-
-Correct Liquid syntax for a product feed grid (DO NOT use {%- catalog -%} inside feed loops — feed items already have all needed data):
-{%- for item in feeds.FeedNameHere|slice:3 -%}
-  <td style="width:50%;padding:8px;">
-    <a href="{{ item.url|default:'#' }}" style="text-decoration:none;">
-      <img src="{{ item.image_full_url|default:'https://placehold.co/300x300/f5f5f5/999999?text=Product' }}" width="180" style="display:block;width:100%;height:auto;" />
-    </a>
-    <p>{{ item.title|default:'Product' }}</p>
-    <p>{% currency_format item.metadata|lookup:"$price" %}</p>
-  </td>
-{%- endfor -%}
-
-IMPORTANT: Inside a feed loop, use item.title, item.url, item.image_full_url, item.image_thumbnail_url, item.metadata — NOT catalog_item.* variables. The {%- catalog -%} tag is ONLY for single-item lookups (e.g. the hero product in browse abandonment via event.item_id).
-═══ END PRODUCT FEEDS ═══`;
-      } else {
-        productFeedsBlock = `
-═══ KLAVIYO PRODUCT FEEDS ═══
-No product feeds are configured in this Klaviyo account yet.
-
-IMPORTANT: If the reference email contains a product recommendation grid, you MUST still include that grid section in the output. Render it with realistic-looking STATIC FILLER content that matches the brand's aesthetic:
+If the reference email contains a product recommendation grid, you MUST still include that grid section in the output. Render it with realistic-looking STATIC FILLER content that matches the brand's aesthetic:
 - Use brand product images from the asset catalog provided below
 - Use realistic product names and prices that match the brand
 - Use # as the href for product links
 - Structure it exactly like the reference layout (same number of columns, same card style)
-- Add an HTML comment at the top of the filler section: <!-- PRODUCT_FEED_PLACEHOLDER: This section needs a Klaviyo product feed to be dynamic -->
+- Mark the section with: <!-- PRODUCT_GRID:${presetKey} -->
 
-This ensures the email looks complete and professional. The filler content will be replaced with a real product feed once the user configures one in Klaviyo.
 NEVER replace a product grid with testimonials, reviews, or other non-product content.
-═══ END PRODUCT FEEDS ═══`;
+═══ END PRODUCT CATALOG ═══`;
+        }
       }
     } catch (e) {
-      console.warn("[generateCampaignCore] Failed to fetch product feeds:", e);
+      console.warn("[generateCampaignCore] Failed to fetch product catalog:", e);
     }
 
     // Run semantic reference analysis if a reference is selected

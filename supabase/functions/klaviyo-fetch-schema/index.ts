@@ -133,35 +133,6 @@ Deno.serve(async (req) => {
     // Sort by priority
     metricResults.sort((a, b) => a.priority - b.priority);
 
-    // Fetch product feeds (Klaviyo Web Feeds API) for recommendation grids
-    let productFeeds: { id: string; name: string; feed_type: string }[] = [];
-    try {
-      const feedsResp = await fetch(
-        `${KLAVIYO_API_BASE}/web-feeds/?page[size]=20`,
-        {
-          headers: {
-            "Authorization": `Klaviyo-API-Key ${apiKey}`,
-            "revision": "2025-07-15",
-            "Accept": "application/json",
-          },
-        }
-      );
-      if (feedsResp.ok) {
-        const feedsData = await feedsResp.json();
-        console.log("[klaviyo-fetch-schema] Web feeds response:", JSON.stringify(feedsData.data?.length ?? 0), "feeds found");
-        productFeeds = (feedsData.data || []).map((f: any) => ({
-          id: f.id,
-          name: f.attributes?.name || "",
-          feed_type: f.type || "web-feed",
-        }));
-      } else {
-        const errText = await feedsResp.text();
-        console.warn("[klaviyo-fetch-schema] Web feeds fetch returned", feedsResp.status, errText);
-      }
-    } catch (e) {
-      console.warn("[klaviyo-fetch-schema] Failed to fetch web feeds:", e);
-    }
-
     // Store in klaviyo_connections for caching
     const now = new Date().toISOString();
     const cachedStats = (connection.cached_stats || {}) as Record<string, unknown>;
@@ -169,7 +140,6 @@ Deno.serve(async (req) => {
       cached_stats: {
         ...cachedStats,
         event_schemas: { metrics: metricResults, synced_at: now },
-        product_feeds: productFeeds,
       },
     }).eq("brand_id", brandId);
 
