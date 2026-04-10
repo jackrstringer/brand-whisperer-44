@@ -10,7 +10,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, CheckCircle, AlertTriangle } from "lucide-react";
+import { Loader2, CheckCircle, AlertTriangle, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import type { FlowConfig } from "@/lib/types";
 
 interface TriggerMetric {
@@ -42,10 +44,10 @@ const TRIGGER_PREFILLS: Record<string, string> = {
 };
 
 const FEED_PRESETS = [
-  { key: "best_sellers", label: "Best Sellers" },
-  { key: "trending", label: "Trending Now" },
-  { key: "new_arrivals", label: "New Arrivals" },
-  { key: "most_viewed", label: "Most Viewed" },
+  { key: "best_sellers", label: "Best Sellers", description: "Products with the most orders in the last 30 days" },
+  { key: "trending", label: "Trending Now", description: "Most viewed products in the last 7 days" },
+  { key: "most_viewed", label: "Most Viewed", description: "Most viewed products in the last 30 days" },
+  { key: "popular_checkouts", label: "Popular Picks", description: "Products most frequently added to checkout in the last 30 days" },
 ];
 
 function relativeTime(dateStr: string | null | undefined): string {
@@ -72,9 +74,12 @@ export default function FlowConfigPanel({
   const [connected, setConnected] = useState<boolean | null>(null);
   const [syncedAt, setSyncedAt] = useState<string | null>(null);
   const [accountName, setAccountName] = useState<string>("");
+  const [productCount, setProductCount] = useState<number | null>(null);
+  const [syncingProducts, setSyncingProducts] = useState(false);
 
   useEffect(() => {
     fetchSchema();
+    checkProductStore();
   }, [brandId]);
 
   const fetchSchema = async () => {
@@ -116,11 +121,67 @@ export default function FlowConfigPanel({
           selected_product_preset: flowConfig.selected_product_preset || "best_sellers",
         });
       }
+
+      // Auto-sync products if connected and no products exist
+      if (data.connected) {
+        triggerProductSync(false);
+      }
     } catch (err) {
       console.error("Failed to fetch schema:", err);
       setConnected(false);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkProductStore = async () => {
+    const { count } = await supabase
+      .from("klaviyo_product_store")
+      .select("id", { count: "exact", head: true })
+      .eq("brand_id", brandId)
+      .eq("is_junk", false);
+    setProductCount(count ?? 0);
+  };
+
+  const triggerProductSync = async (force: boolean) => {
+    setSyncingProducts(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/klaviyo-fetch-products`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            brandId,
+            presetKey: flowConfig.selected_product_preset || "best_sellers",
+            slotCount: 8,
+            forceSync: force,
+          }),
+        }
+      );
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.syncPerformed) {
+          await checkProductStore();
+          if (data.products?.length > 0) {
+            toast.success(`Synced ${data.products.length} products from Klaviyo`);
+          } else if (data.error) {
+            toast.error(data.error);
+          }
+        }
+        if (data.syncErrors?.length > 0) {
+          console.warn("[FlowConfigPanel] Sync errors:", data.syncErrors);
+        }
+      }
+    } catch (err) {
+      console.error("Product sync failed:", err);
+    } finally {
+      setSyncingProducts(false);
     }
   };
 
@@ -145,6 +206,10 @@ export default function FlowConfigPanel({
   const handlePresetChange = (value: string) => {
     onConfigChange({ ...flowConfig, selected_product_preset: value });
   };
+
+  const selectedPreset = FEED_PRESETS.find(
+    (p) => p.key === (flowConfig.selected_product_preset || "best_sellers")
+  );
 
   return (
     <div className="space-y-5">
@@ -239,9 +304,25 @@ export default function FlowConfigPanel({
 
       {/* Section 3: Product Preset Selector */}
       <div className="space-y-2">
-        <label className="text-xs text-muted-foreground">
-          Product Grid Preset
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="text-xs text-muted-foreground">
+            Product Grid Preset
+          </label>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-[10px]"
+            onClick={() => triggerProductSync(true)}
+            disabled={syncingProducts}
+          >
+            {syncingProducts ? (
+              <Loader2 className="w-3 h-3 animate-spin mr-1" />
+            ) : (
+              <RefreshCw className="w-3 h-3 mr-1" />
+            )}
+            {syncingProducts ? "Syncing..." : "Refresh"}
+          </Button>
+        </div>
         <Select
           value={flowConfig.selected_product_preset || "best_sellers"}
           onValueChange={handlePresetChange}
@@ -258,8 +339,18 @@ export default function FlowConfigPanel({
           </SelectContent>
         </Select>
         <p className="text-[11px] text-muted-foreground">
-          Controls which products appear in recommendation grids. Data is pulled live from your Klaviyo catalog.
+          {selectedPreset?.description || "Controls which products appear in recommendation grids."}
         </p>
+        {productCount !== null && productCount > 0 && (
+          <p className="text-[10px] text-muted-foreground/70">
+            {productCount} products in store
+          </p>
+        )}
+        {productCount === 0 && connected && !syncingProducts && (
+          <p className="text-[10px] text-amber-500">
+            No products found yet. Click Refresh to sync from Klaviyo event data.
+          </p>
+        )}
       </div>
 
       {/* Section 4: Additional Notes */}
