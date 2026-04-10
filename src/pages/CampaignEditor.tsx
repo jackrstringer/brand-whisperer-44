@@ -610,6 +610,31 @@ export default function CampaignEditor() {
         }
       }
 
+      // Helper: upload a base64 image to qa-artifacts storage and return the public URL
+      const uploadQaImage = async (base64Data: string, fileMime: string, fileName: string): Promise<string | null> => {
+        try {
+          const byteString = atob(base64Data);
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+          const blob = new Blob([ab], { type: fileMime });
+          const path = `${campaignId}/${qaRunId}/${fileName}`;
+          const { error: uploadErr } = await supabase.storage.from('qa-artifacts').upload(path, blob, {
+            contentType: fileMime,
+            upsert: true,
+          });
+          if (uploadErr) {
+            console.warn(`[qa-loop] Failed to upload ${fileName}:`, uploadErr.message);
+            return null;
+          }
+          const { data: urlData } = supabase.storage.from('qa-artifacts').getPublicUrl(path);
+          return urlData?.publicUrl || null;
+        } catch (e) {
+          console.warn(`[qa-loop] Upload error for ${fileName}:`, e);
+          return null;
+        }
+      };
+
       // AGENT 3: Render at exactly 390px — same as in-app preview (Gmail mobile)
       const screenshotStart = Date.now();
       console.log(`[qa-loop] Iteration ${iteration + 1}: Rendering at 390px...`);
@@ -618,10 +643,15 @@ export default function CampaignEditor() {
       });
       if (renderResp.error) throw new Error(`Renderer failed: ${renderResp.error.message}`);
       const { imageBase64, mimeType } = renderResp.data;
+
+      // Upload full screenshot to storage
+      const ext = mimeType === 'image/png' ? 'png' : 'jpg';
+      const screenshotUrl = await uploadQaImage(imageBase64, mimeType, `screenshot_iter${iteration}.${ext}`);
+
       await logQa("qa_screenshot", {
         event_key: `qa_screenshot_iter${iteration}`,
         duration_ms: Date.now() - screenshotStart,
-        result: { base64_length: imageBase64?.length, mimeType, width: renderResp.data.width, height: renderResp.data.height },
+        result: { screenshot_url: screenshotUrl, mimeType, width: renderResp.data.width, height: renderResp.data.height },
       });
 
       // AGENT 1: Slice the rendered output
@@ -632,8 +662,22 @@ export default function CampaignEditor() {
       });
       if (sliceResp.error) throw new Error(`Slicer failed: ${sliceResp.error.message}`);
       const outputSlices = sliceResp.data.slices;
-      // Capture actual slice URLs for debugging
-      const outputSliceUrls = (outputSlices || []).map((s: any) => ({ index: s.index, label: s.label, url: typeof s.url === 'string' && !s.url.startsWith('data:') ? s.url : `[base64 ${s.url?.length || 0} chars]` }));
+
+      // Upload each output slice to storage (parallel)
+      const outputSliceUrls = await Promise.all(
+        (outputSlices || []).map(async (s: any, i: number) => {
+          let url = s.url;
+          if (typeof s.url === 'string' && s.url.startsWith('data:')) {
+            const b64 = s.url.split(',')[1];
+            const sliceMime = s.url.split(';')[0].split(':')[1] || mimeType;
+            const sliceExt = sliceMime.includes('png') ? 'png' : 'jpg';
+            const uploaded = await uploadQaImage(b64, sliceMime, `slice_iter${iteration}_${i}_${s.label || i}.${sliceExt}`);
+            url = uploaded || `[upload failed]`;
+          }
+          return { index: s.index, label: s.label, url };
+        })
+      );
+
       await logQa("qa_slice", {
         event_key: `qa_slice_iter${iteration}`,
         duration_ms: Date.now() - sliceStart,

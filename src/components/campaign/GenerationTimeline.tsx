@@ -158,7 +158,7 @@ function extractSliceUrls(data: any): string[] {
   // Check for slices array with url properties
   if (data.slices && Array.isArray(data.slices)) {
     return data.slices
-      .filter((s: any) => s.url && typeof s.url === "string" && !s.url.startsWith("[base64"))
+      .filter((s: any) => s.url && typeof s.url === "string" && !s.url.startsWith("[base64") && !s.url.startsWith("[upload"))
       .map((s: any) => s.url);
   }
   // Check for reference_slices
@@ -168,6 +168,12 @@ function extractSliceUrls(data: any): string[] {
       .map((s: any) => s.url);
   }
   return [];
+}
+
+/** Extract screenshot URL from qa_screenshot result */
+function extractScreenshotUrl(ev: GenerationEvent): string | null {
+  if (ev.step !== "qa_screenshot") return null;
+  return ev.result?.screenshot_url || null;
 }
 
 /** Extract any image URLs from deeply nested payload/result */
@@ -358,7 +364,8 @@ export default function GenerationTimeline({ open, onOpenChange, campaignId, cam
                   // Extract images from different event types
                   const outputSliceUrls = extractSliceUrls(ev.result);
                   const refSliceUrls = extractSliceUrls(ev.payload);
-                  const miscImageUrls = outputSliceUrls.length === 0 && refSliceUrls.length === 0
+                  const screenshotUrl = extractScreenshotUrl(ev);
+                  const miscImageUrls = outputSliceUrls.length === 0 && refSliceUrls.length === 0 && !screenshotUrl
                     ? extractImageUrls({ ...ev.payload, ...ev.result })
                     : [];
 
@@ -430,6 +437,11 @@ export default function GenerationTimeline({ open, onOpenChange, campaignId, cam
                         {/* QA Issues */}
                         {Array.isArray(qaIssues) && qaIssues.length > 0 && (
                           <QaIssuesList issues={qaIssues} />
+                        )}
+
+                        {/* Full screenshot (from qa_screenshot events) */}
+                        {screenshotUrl && (
+                          <ImageGallery urls={[screenshotUrl]} label="Full Screenshot" />
                         )}
 
                         {/* Reference slices gallery */}
