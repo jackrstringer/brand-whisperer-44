@@ -74,7 +74,15 @@ interface ProductSlot {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-function klaviyoHeaders(apiKey: string) {
+function klaviyoGetHeaders(apiKey: string) {
+  return {
+    Authorization: `Klaviyo-API-Key ${apiKey}`,
+    revision: KLAVIYO_REVISION,
+    Accept: "application/vnd.api+json",
+  };
+}
+
+function klaviyoPostHeaders(apiKey: string) {
   return {
     Authorization: `Klaviyo-API-Key ${apiKey}`,
     revision: KLAVIYO_REVISION,
