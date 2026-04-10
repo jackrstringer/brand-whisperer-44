@@ -158,7 +158,7 @@ function extractSliceUrls(data: any): string[] {
   // Check for slices array with url properties
   if (data.slices && Array.isArray(data.slices)) {
     return data.slices
-      .filter((s: any) => s.url && typeof s.url === "string" && !s.url.startsWith("[base64"))
+      .filter((s: any) => s.url && typeof s.url === "string" && !s.url.startsWith("[base64") && !s.url.startsWith("[upload"))
       .map((s: any) => s.url);
   }
   // Check for reference_slices
@@ -168,6 +168,12 @@ function extractSliceUrls(data: any): string[] {
       .map((s: any) => s.url);
   }
   return [];
+}
+
+/** Extract screenshot URL from qa_screenshot result */
+function extractScreenshotUrl(ev: GenerationEvent): string | null {
+  if (ev.step !== "qa_screenshot") return null;
+  return ev.result?.screenshot_url || null;
 }
 
 /** Extract any image URLs from deeply nested payload/result */
