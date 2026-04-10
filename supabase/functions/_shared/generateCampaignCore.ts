@@ -1043,16 +1043,56 @@ ${UNIVERSAL_EMAIL_RULES}`;
       }
     }
 
-    // Fetch product feeds for recommendation grids
+    // Fetch product feeds for recommendation grids — live API first, cache fallback
     let productFeedsBlock = "";
     let productFeeds: any[] = [];
     try {
       const { data: klavConnFeeds } = await supabase
         .from("klaviyo_connections")
-        .select("cached_stats")
+        .select("api_key, cached_stats")
         .eq("brand_id", brandId)
         .single();
-      productFeeds = (klavConnFeeds?.cached_stats as any)?.product_feeds || [];
+
+      if (klavConnFeeds?.api_key) {
+        // Try live fetch from Klaviyo API
+        try {
+          const feedsResp = await fetch(
+            "https://a.klaviyo.com/api/product-feeds/?page[size]=50",
+            {
+              headers: {
+                "Authorization": `Klaviyo-API-Key ${klavConnFeeds.api_key}`,
+                "revision": "2024-10-15",
+                "Accept": "application/json",
+              },
+            }
+          );
+          if (feedsResp.ok) {
+            const feedsData = await feedsResp.json();
+            productFeeds = (feedsData.data || []).map((f: any) => ({
+              id: f.id,
+              name: f.attributes?.name || "",
+              feed_type: f.attributes?.feed_type || "",
+            }));
+            console.log(`[generateCampaignCore] Live-fetched ${productFeeds.length} product feeds from Klaviyo`);
+
+            // Update cache with fresh data
+            const cachedStats = (klavConnFeeds.cached_stats || {}) as Record<string, unknown>;
+            await supabase.from("klaviyo_connections").update({
+              cached_stats: { ...cachedStats, product_feeds: productFeeds },
+            }).eq("brand_id", brandId);
+          } else {
+            console.warn(`[generateCampaignCore] Live feed fetch failed (${feedsResp.status}), using cache`);
+            await feedsResp.text(); // consume body
+            productFeeds = (klavConnFeeds.cached_stats as any)?.product_feeds || [];
+          }
+        } catch (liveFetchErr) {
+          console.warn("[generateCampaignCore] Live feed fetch error, using cache:", liveFetchErr);
+          productFeeds = (klavConnFeeds.cached_stats as any)?.product_feeds || [];
+        }
+      } else {
+        // No API key, use cache
+        productFeeds = (klavConnFeeds?.cached_stats as any)?.product_feeds || [];
+      }
 
       // Check if user selected a specific feed
       const userSelectedFeed = flowConfig?.selected_product_feed;
@@ -1098,7 +1138,22 @@ Correct Liquid syntax for a product feed grid:
       } else {
         productFeedsBlock = `
 ═══ KLAVIYO PRODUCT FEEDS ═══
-None configured in this account yet. Do not include recommendation product grids in this email — only use event data for product display.
+No product feeds are configured in this Klaviyo account yet.
+
+If the reference email contains a product recommendation grid, you MUST still include a product grid. Use the catalog lookup pattern:
+
+{%- catalog "PRODUCT-ID" -%}
+<td>
+  <a href="{{ catalog_item.url|default:'#' }}">
+    <img src="{{ catalog_item.featured_image.full.src|default:'https://via.placeholder.com/180' }}" width="180" style="display:block;width:100%;height:auto;" />
+  </a>
+  <p>{{ catalog_item.title|default:'Product' }}</p>
+  <p>{% currency_format catalog_item.metadata|lookup:"$price" %}</p>
+</td>
+{%- endcatalog -%}
+
+Use product IDs from the brand's Shopify product data if available below.
+NEVER replace a product grid with testimonials, reviews, or other non-product content.
 ═══ END PRODUCT FEEDS ═══`;
       }
     } catch (e) {
@@ -1154,6 +1209,8 @@ CRITICAL RULES FROM THIS ANALYSIS:
 - Any section marked "static" should use brand assets from the asset catalog below
 - Never hardcode product images, names, prices, or URLs that belong in dynamic sections
 - The number of products shown in the reference (${feedSections.map((s: any) => `${s.grid_columns * s.grid_rows} in ${s.label}`).join(", ") || "N/A"}) should match your implementation
+- ABSOLUTE RULE: If ANY section in this analysis has data_source "product_feed", you MUST include a product recommendation grid at that position using {%- for item in feeds.FeedName|slice:N -%} syntax. NEVER replace a product_feed section with testimonials, reviews, social proof, quotes, or any non-product content. The product grid is NON-NEGOTIABLE — it must appear in the output.
+- The reference structure is SACRED. Every section identified above must appear in your output in the same order with the same purpose. A product grid stays a product grid. A hero stays a hero. A footer stays a footer.
 ═══ END REFERENCE ANALYSIS ═══`;
           }
         }
