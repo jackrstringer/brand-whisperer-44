@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
     let nextUrl: string | null = `https://${shop}/admin/api/2024-01/products.json?limit=250`;
 
     while (nextUrl) {
-      const resp = await fetch(nextUrl, {
+      const resp: Response = await fetch(nextUrl, {
         headers: { "X-Shopify-Access-Token": token },
       });
 
@@ -149,8 +149,8 @@ Deno.serve(async (req) => {
       }
 
       // Follow pagination
-      const linkHeader = resp.headers.get("Link");
-      const nextMatch = linkHeader?.match(/<([^>]+)>;\s*rel="next"/);
+      const linkHeader: string | null = resp.headers.get("Link");
+      const nextMatch: RegExpMatchArray | null = linkHeader?.match(/<([^>]+)>;\s*rel="next"/) ?? null;
       nextUrl = nextMatch ? nextMatch[1] : null;
     }
 
@@ -177,6 +177,6 @@ Deno.serve(async (req) => {
     });
   } catch (error) {
     console.error("shopify-sync-products error:", error);
-    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: (error as any).message }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });

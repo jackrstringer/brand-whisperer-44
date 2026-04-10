@@ -143,7 +143,8 @@ and what Klaviyo data source populates it. You understand the difference between
 - Static content (hardcoded images, text)
 - Event-triggered dynamic content (the specific product that triggered the flow)
 - Product feed content (Klaviyo feeds that populate per-recipient recommendations)
-- Catalog lookup content (looking up a specific product by ID)
+- Catalog lookup content (looking up a specific product by ID using {% catalog item_id %}...{% endcatalog %} block syntax)
+IMPORTANT: Klaviyo uses {% catalog item_id %}...{% endcatalog %} block tags for catalog lookups — NOT {% catalog_lookup %}. Inside the block, use catalog_item.featured_image.full.src for images and {% currency_format catalog_item.metadata|lookup:"$price" %} for prices.
 You always return valid JSON only, no explanation.`,
         messages: [{ role: "user", content }],
       }),

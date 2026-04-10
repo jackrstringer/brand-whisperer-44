@@ -256,7 +256,7 @@ Deno.serve(async (req) => {
     }
 
     // Fire-and-forget: run research in background
-    EdgeRuntime.waitUntil(runResearch(brand_id, brand_name, domain));
+    (globalThis as any).EdgeRuntime.waitUntil(runResearch(brand_id, brand_name, domain));
 
     // Return immediately
     return new Response(JSON.stringify({
