@@ -107,10 +107,9 @@ async function resolveMetricId(
     // Safety: don't paginate forever
     if (allMetrics.length > 500) break;
   }
-  const data = await resp.json();
-  const metrics = data.data || [];
-  if (metrics.length === 0) return null;
-  const id = metrics[0].id;
+  const found = allMetrics.find((m: any) => m.attributes?.name === metricName);
+  if (!found) return null;
+  const id = found.id;
   cachedMetricIds[metricName] = id;
   return id;
 }
