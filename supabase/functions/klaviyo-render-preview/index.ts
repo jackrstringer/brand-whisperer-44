@@ -128,6 +128,28 @@ function stripKlaviyoTags(html: string): string {
   // Replace {% has_category ... %} blocks
   result = result.replace(/\{%-?\s*has_category\s+[^%]*-?%\}/gi, '');
 
+  // Replace {% elif %} with {% elsif %} (Django→Liquid)
+  result = result.replace(/\{%-?\s*elif\b/g, '{%- elsif');
+
+  // Strip {% unless %}/{% endunless %} → LiquidJS supports these, keep them
+  // But strip Klaviyo-specific conditional operators that LiquidJS doesn't understand:
+  // e.g. "not" as unary operator: {% if not condition %} → {% unless condition %}
+  // Handle this by replacing {% if not X %} with {% unless X %}
+  result = result.replace(/\{%-?\s*if\s+not\s+/g, '{%- unless ');
+
+  // Catch-all: strip any remaining unknown Klaviyo block tags that would crash LiquidJS
+  // Known safe tags: if, elsif, else, endif, for, endfor, unless, endunless, assign, capture, endcapture, comment, endcomment, raw, endraw, case, when, endcase, increment, decrement, cycle, tablerow, endtablerow, break, continue, render, include, layout, block, endblock
+  const safeTagNames = /^-?\s*(if|elsif|else|endif|for|endfor|unless|endunless|assign|capture|endcapture|comment|endcomment|raw|endraw|case|when|endcase|increment|decrement|cycle|tablerow|endtablerow|break|continue|render|include|layout|block|endblock)\b/i;
+  result = result.replace(/\{%([^%]*?)%\}/g, (match, inner) => {
+    const trimmed = inner.trim().replace(/^-/, '').trim();
+    if (safeTagNames.test(trimmed)) {
+      return match; // Keep safe tags
+    }
+    // Unknown tag — strip it
+    console.log(`[stripKlaviyoTags] Stripping unknown tag: {% ${inner.trim()} %}`);
+    return '';
+  });
+
   return result;
 }
 
