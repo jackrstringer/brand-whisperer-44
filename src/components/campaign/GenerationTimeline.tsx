@@ -439,6 +439,11 @@ export default function GenerationTimeline({ open, onOpenChange, campaignId, cam
                           <QaIssuesList issues={qaIssues} />
                         )}
 
+                        {/* Full screenshot (from qa_screenshot events) */}
+                        {screenshotUrl && (
+                          <ImageGallery urls={[screenshotUrl]} label="Full Screenshot" />
+                        )}
+
                         {/* Reference slices gallery */}
                         {refSliceUrls.length > 0 && (
                           <ImageGallery urls={refSliceUrls} label={`Reference Slices (${refSliceUrls.length})`} />
