@@ -291,8 +291,10 @@ async function fetchNewArrivals(
   slotCount: number,
 ): Promise<ProductSlot[]> {
   const fields = "external_id,title,description,url,price,image_full_url,image_thumbnail_url";
-  const url = `${KLAVIYO_API_BASE}/catalog-items/?sort=-created&fields[catalog-item]=${fields}&filter=${encodeURIComponent("equals(published,true)")}`;
+  // Don't filter by published — some accounts may not set this field
+  const url = `${KLAVIYO_API_BASE}/catalog-items/?sort=-created&fields[catalog-item]=${fields}`;
 
+  console.log(`[klaviyo-fetch-products] Fetching new arrivals: ${url}`);
   const resp = await fetch(url, { headers: klaviyoGetHeaders(apiKey) });
   if (!resp.ok) {
     const err = await resp.text();
@@ -301,6 +303,8 @@ async function fetchNewArrivals(
   }
 
   const data = await resp.json();
+  const totalItems = (data.data || []).length;
+  console.log(`[klaviyo-fetch-products] Catalog returned ${totalItems} items`);
   return (data.data || []).map((item: any) => {
     const attrs = item.attributes || {};
     return {
