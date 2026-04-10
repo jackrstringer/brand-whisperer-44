@@ -1,79 +1,60 @@
 
 
-# Plan: Fix Flow Email Generation Pipeline
+# Plan: Fix 5 Systemic Issues in Campaign Editor
 
-## Summary
-Six changes to fix trigger product vs. product feed confusion, correct Liquid syntax, slim down the flow system prompt, and fix TypeScript build errors across edge functions.
+## Issue 1: Chat edits don't visually update until page reload
 
-## Technical Details
+**Root cause**: When `edit-campaign` returns an `html_patch` SSE event, the code updates `campaign.html` via `setCampaign`, but the preview HTML derivation chain (`baseHtml → displayHtml → htmlForPreview → srcdocHtml`) is blocked by `iframeOwnedHtmlRef.current`. Line 2778 shows that when `iframeOwnedHtmlRef.current` is truthy, `displayHtml` freezes to `lastStableHtmlRef.current`, ignoring the updated `campaign.html`.
 
-### Change 1: New `KLAVIYO_FLOW_LIQUID_REFERENCE` export in `klaviyoBestPractices.ts`
-Add a new export at the end of the file containing only:
-- **Section 2** (lines 761-1073): Liquid Templating Best Practices (2.1-2.9)
-- **Section 9** (lines 2191-2217): Catalog Lookup — but fix syntax: `{% catalog_lookup ... as catalog_item %}` → `{% catalog item_id %}...{% endcatalog %}`, `catalog_item.image_full_url` → `catalog_item.featured_image.full.src`, prices use `{% currency_format catalog_item.metadata|lookup:"$price" %}`
-- **Section 10** (lines 2219-2262): Product Feeds — same catalog syntax fix inside feed loops
-- **Section 11** (lines 2264-2291): Person Properties — as-is
-- **Section 12** (lines 2293-2348): Email Structure Templates — as-is
+The fix at line 1405 does `iframeOwnedHtmlRef.current = null`, which should work. But for flow campaigns, there's also `flowPreviewHtml` state that may be stale — the rendered preview cache isn't invalidated after an edit.
 
-Sections 1, 3-8 are excluded. Original `KLAVIYO_BEST_PRACTICES` export untouched.
+**Fix**:
+- In the `html_patch` handler (line 1403), also clear `flowPreviewHtml` so the flow preview re-renders with the new HTML
+- Ensure `lastStableHtmlRef.current` is updated to the new HTML when an `html_patch` arrives
 
-### Change 2: Replace flow mode system prompt in `generateCampaignCore.ts`
-- Add import of `KLAVIYO_FLOW_LIQUID_REFERENCE` from klaviyoBestPractices.ts (line 7)
-- Replace lines 959-970 with the new system prompt that uses `KLAVIYO_FLOW_LIQUID_REFERENCE` instead of full `KLAVIYO_BEST_PRACTICES`
-- Key differences: says "flow email templates" not "transactional", specifies non-empty default rule, mentions Django vs Shopify Liquid, references the new slim export
+## Issue 2: Product grid sizing is off
 
-### Change 3: Replace hardcoded Shopify paths with trigger-aware context
-- Replace lines 1138-1160 (the `flowDetails` block with hardcoded `event.extra.line_items` paths)
-- Read `flowConfig.trigger_metric_name` to determine trigger type
-- Inject trigger-specific guidance:
-  - **Viewed Product**: ONE product, no items array, top-level keys, extra grids = product feed, MARKETING
-  - **Started Checkout / Checkout Started**: Cart items in Items[] or extra.line_items[], additional grids = product feed, MARKETING
-  - **Placed Order / Ordered Product**: Order items + metadata, additional grids = cross-sell feed, TRANSACTIONAL
-  - **Fulfilled Order**: Tracking in fulfillments array, TRANSACTIONAL
-  - **Default**: Generic "read the JSON carefully"
-- After trigger context, include event JSON with universal rules (use exact paths, | default: with non-empty fallback, no $-prefixed keys)
-- Remove ALL hardcoded lines like "Line items loop: {%- for line_item in event.extra.line_items -%}" etc.
+**Root cause**: The generated HTML uses `width="50%"` on product grid `<td>` elements (lines 123, 150, 187, 214, 251, 278 of the uploaded HTML). This violates the explicit rule "NEVER use percentage widths on grid <td> elements. Always use explicit pixel values." The `forceEqualGridColumns` post-processor in `finalizeCampaignHtml.ts` only processes grids detected by `isGridImageTd`, which checks for simple img or card-style tables. The product grid cards have nested tables with multiple rows (image + title + button), which may not be detected by `tdContainsCardTable` since it checks `trCount > 4` — each card has 3 `<tr>` elements inside, which passes, but the detection might still miss them because `imgCount > 2` could fail when there are sub-tables.
 
-### Change 4: Fix Liquid syntax in productFeedsBlock
-- In `generateCampaignCore.ts` lines 1014-1024, replace:
-  - `{%- catalog_lookup item.item_id as catalog_item -%}` → `{%- catalog item.item_id -%}...{%- endcatalog -%}`
-  - `catalog_item.image_full_url` → `catalog_item.featured_image.full.src`
-  - Price: use `{% currency_format catalog_item.metadata|lookup:"$price" %}`
+**Fix**:
+- In `finalizeCampaignHtml.ts`, add a step that converts any `width="50%"` or `width="33%"` on grid `<td>` elements to explicit pixel values based on the 390px viewport
+- Update `forceEqualGridColumns` to also handle percentage-width tds, not just pixel-width ones
+- The generation prompt already says "NEVER use percentage widths" but Claude keeps using them, so the post-processor must enforce it
 
-### Change 5: Fix Liquid syntax in `analyze-reference-for-flow/index.ts`
-- Update system prompt and any example text to use `{% catalog %}...{% endcatalog %}` instead of `catalog_lookup`
+## Issue 3: AI aggressively adds dynamic content (names, pricing) not in the reference
 
-### Change 6: Fix 11 TypeScript build errors
-All are simple type annotation fixes:
-- **analyze-asset/index.ts:117** — `(err)` → `(err: any)`
-- **analyze-klaviyo-performance/index.ts:85** — `(ch)` → `(ch: string)`
-- **klaviyo-quick-stats/index.ts:176** — `e.message` → `(e as any).message`
-- **refine-brand/index.ts:79** — `err.message` → `(err as any).message`
-- **research-brand/index.ts:259** — `EdgeRuntime.waitUntil` → `(globalThis as any).EdgeRuntime.waitUntil`
-- **shopify-classify-images/index.ts:268** — `error.message` → `(error as any).message`
-- **shopify-install/index.ts:37** — `error.message` → `(error as any).message`
-- **shopify-sync-products/index.ts:78,152,153** — Add explicit type annotations: `const resp: Response = ...`, `const linkHeader: string | null = ...`, `const nextMatch: RegExpMatchArray | null = ...`
-- **shopify-sync-products/index.ts:180** — `error.message` → `(error as any).message`
+**Root cause**: The flow system prompt at line 1012 explicitly says `Always include {{ person.first_name|default:'there' }} personalization`. This is a blanket instruction. Additionally, event data like `CompareAtPrice`, `Price`, and `Name` is dumped into the prompt (line 1257-1268), and there's no instruction telling the AI to only use dynamic fields that the reference actually showed.
 
-## What is NOT changing
-- Reference image fetching / skeleton extraction
-- analyze-reference-for-flow core logic (only prompt text fix)
-- Product feeds fetch/caching
-- Brand assets, brand rules, design notes injection
-- QA pass logic
-- Standard (non-flow) campaign generation mode
-- The original `KLAVIYO_BEST_PRACTICES` export
+**Fix**:
+- Remove `Always include {{ person.first_name|default:'there' }} personalization` from the system prompt
+- Replace with: "Only include dynamic personalization (first name, pricing, product details) if: (a) the reference email visually contains that element, or (b) the user explicitly requests it in their brief. Do NOT add dynamic fields that aren't present in the reference layout."
+- Add specific guidance about pricing: "Only include pricing if the reference email shows pricing. Never include CompareAtPrice/sale pricing unless the reference explicitly shows a compare-at price pattern."
 
-## Files Modified
-1. `supabase/functions/_shared/klaviyoBestPractices.ts` — new export
-2. `supabase/functions/_shared/generateCampaignCore.ts` — changes 2, 3, 4
-3. `supabase/functions/analyze-reference-for-flow/index.ts` — change 5
-4. `supabase/functions/analyze-asset/index.ts` — TS fix
-5. `supabase/functions/analyze-klaviyo-performance/index.ts` — TS fix
-6. `supabase/functions/klaviyo-quick-stats/index.ts` — TS fix
-7. `supabase/functions/refine-brand/index.ts` — TS fix
-8. `supabase/functions/research-brand/index.ts` — TS fix
-9. `supabase/functions/shopify-classify-images/index.ts` — TS fix
-10. `supabase/functions/shopify-install/index.ts` — TS fix
-11. `supabase/functions/shopify-sync-products/index.ts` — TS fix
+## Issue 4: Generated HTML can be wider than the preview iframe, causing horizontal scroll
+
+**Root cause**: The iframe at line 4737 has `width: renderWidth` (390px) but no `overflow-x: hidden`. If the generated HTML has elements wider than 390px (e.g., images with `width="220"` inside padded containers), the iframe shows horizontal scrollbars.
+
+**Fix**:
+- In the injected `<style>` at line 2790, add `html,body{...overflow-x:hidden!important;max-width:100vw!important;}` to prevent any horizontal overflow inside the iframe
+- In `finalizeCampaignHtml.ts`, add a new step that injects `<style>html,body{overflow-x:hidden;max-width:100%;}</style>` into the `<head>` of every generated email, so the content can never overflow horizontally regardless of where it's rendered
+- This is a hard guardrail — even if the AI generates elements that are too wide, the overflow is hidden
+
+## Issue 5: CompareAtPrice of $0.00 shown as a "sale from $0 to $99"
+
+**Root cause**: Two problems:
+1. In `klaviyo-fetch-products/index.ts` line 18, `CompareAtPrice` is listed as a fallback for the `price` field in `PROPERTY_MAP`. This means if `Price` is missing, it falls back to `CompareAtPrice` which could be $0.
+2. The AI template generates a compare-at price section using `event.CompareAtPrice` without semantic validation. When the Klaviyo event has `CompareAtPrice: $0.00` and `Price: $99.00`, it renders as "~~$0.00~~ $99.00" which is nonsensical.
+
+**Fix**:
+- Remove `CompareAtPrice` from the `price` fallback chain in `PROPERTY_MAP` — it's not a price, it's a comparison price
+- Add semantic validation in the flow generation prompt: "SEMANTIC PRICE VALIDATION: If CompareAtPrice is $0, $0.00, or less than the regular Price, treat it as invalid/absent — do not render a compare-at price section. A product cannot be 'on sale' from $0."
+- Add a post-processing step in `finalizeCampaignHtml.ts` that detects `$0.00` strike-through pricing patterns and removes them
+- Add to QA audit checklist: "PRICING SANITY: Flag any compare-at/original price that is $0, $0.00, or less than the sale price as a critical error."
+
+## Files to modify
+
+1. **`src/pages/CampaignEditor.tsx`** — Fix html_patch handler to clear flow preview state; add overflow-x:hidden to iframe injected CSS
+2. **`supabase/functions/_shared/finalizeCampaignHtml.ts`** — Add overflow-x guardrail injection; add percentage-width-to-pixel conversion step; add $0 pricing strip
+3. **`supabase/functions/_shared/generateCampaignCore.ts`** — Update flow system prompt to remove blanket personalization; add semantic price validation rules; add "reference-first" dynamic content rules; add pricing sanity to QA checklist
+4. **`supabase/functions/klaviyo-fetch-products/index.ts`** — Remove `CompareAtPrice` from price fallback chain
 
