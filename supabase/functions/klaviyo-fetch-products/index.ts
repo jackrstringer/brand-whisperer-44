@@ -153,7 +153,7 @@ async function fetchMetricAggregates(
 
   const resp = await fetch(`${KLAVIYO_API_BASE}/metric-aggregates/`, {
     method: "POST",
-    headers: klaviyoGetHeaders(apiKey),
+    headers: klaviyoPostHeaders(apiKey),
     body: JSON.stringify(payload),
   });
 
