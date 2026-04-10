@@ -128,7 +128,7 @@ async function resolveMetricId(
 ): Promise<string | null> {
   if (cache[metricName]) return cache[metricName];
   let allMetrics: any[] = [];
-  let nextUrl: string | null = `${KLAVIYO_API_BASE}/metrics/?page%5Bsize%5D=50`;
+  let nextUrl: string | null = `${KLAVIYO_API_BASE}/metrics/`;
   while (nextUrl && allMetrics.length < 500) {
     const resp = await fetch(nextUrl, { headers: klaviyoHeaders(apiKey) });
     if (!resp.ok) {
