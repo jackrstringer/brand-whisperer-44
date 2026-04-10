@@ -104,6 +104,33 @@ function injectLiquidMarkers(html: string): string {
   return result;
 }
 
+/**
+ * Strip Klaviyo-specific template tags that LiquidJS can't parse.
+ * Replace {% catalog %}...{% endcatalog %} blocks with their inner content
+ * (using placeholder values for catalog_item variables).
+ * Replace {% currency_format ... %} with a placeholder price.
+ */
+function stripKlaviyoTags(html: string): string {
+  // Remove {% catalog ... %} and {% endcatalog %} tags but keep inner content
+  let result = html.replace(/\{%-?\s*catalog\s+[^%]*-?%\}/gi, '');
+  result = result.replace(/\{%-?\s*endcatalog\s*-?%\}/gi, '');
+
+  // Replace catalog_item variables with placeholder values
+  result = result.replace(/\{\{\s*catalog_item\.title[^}]*\}\}/gi, 'Product Title');
+  result = result.replace(/\{\{\s*catalog_item\.url[^}]*\}\}/gi, '#');
+  result = result.replace(/\{\{\s*catalog_item\.featured_image\.full\.src[^}]*\}\}/gi, 'https://placehold.co/300x300/f5f5f5/999999?text=Product');
+  result = result.replace(/\{\{\s*catalog_item\.featured_image\.thumbnail\.src[^}]*\}\}/gi, 'https://placehold.co/180x180/f5f5f5/999999?text=Product');
+  result = result.replace(/\{\{\s*catalog_item\.[^}]*\}\}/gi, '');
+
+  // Replace {% currency_format ... %} with a placeholder price
+  result = result.replace(/\{%-?\s*currency_format\s+[^%]*-?%\}/gi, '$0.00');
+
+  // Replace {% has_category ... %} blocks
+  result = result.replace(/\{%-?\s*has_category\s+[^%]*-?%\}/gi, '');
+
+  return result;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -135,7 +162,8 @@ Deno.serve(async (req) => {
     }
 
     // Inject data-liquid markers BEFORE Liquid rendering
-    const markedHtml = injectLiquidMarkers(html);
+    const cleanedHtml = stripKlaviyoTags(html);
+    const markedHtml = injectLiquidMarkers(cleanedHtml);
 
     const rendered = await engine.parseAndRender(markedHtml, context);
 
