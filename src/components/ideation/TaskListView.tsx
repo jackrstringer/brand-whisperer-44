@@ -2,7 +2,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { DesignQueueItem } from '@/hooks/useDesignQueue';
-import { X, Loader2, Settings2 } from 'lucide-react';
+import { X, Loader2, Settings2, Pencil } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useMultiSelect } from '@/hooks/useMultiSelect';
 import { useCallback, useRef, useState, useEffect } from 'react';
@@ -32,13 +32,14 @@ interface ColumnDef {
   label: string;
   defaultWidth: number;
   minWidth: number;
-  editPattern: 'inline' | 'popover' | 'expanded';
+  editPattern: 'inline' | 'popover' | 'expanded' | 'title';
+  locked?: boolean; // cannot be hidden
 }
 
 const ALL_COLUMNS: ColumnDef[] = [
-  { key: 'status', label: 'Status', defaultWidth: 100, minWidth: 70, editPattern: 'popover' },
-  { key: 'title', label: 'Title', defaultWidth: 0, minWidth: 120, editPattern: 'inline' },
-  { key: 'send_date', label: 'Send Date', defaultWidth: 110, minWidth: 80, editPattern: 'popover' },
+  { key: 'status', label: 'Status', defaultWidth: 100, minWidth: 70, editPattern: 'popover', locked: true },
+  { key: 'title', label: 'Title', defaultWidth: 0, minWidth: 120, editPattern: 'title', locked: true },
+  { key: 'send_date', label: 'Send Date', defaultWidth: 110, minWidth: 80, editPattern: 'popover', locked: true },
   { key: 'campaign_info', label: 'Brief', defaultWidth: 160, minWidth: 80, editPattern: 'expanded' },
   { key: 'copy_direction', label: 'Copy', defaultWidth: 140, minWidth: 80, editPattern: 'expanded' },
   { key: 'design_notes', label: 'Design Notes', defaultWidth: 140, minWidth: 80, editPattern: 'expanded' },
@@ -72,7 +73,6 @@ interface Props {
   bulkProgress: { completed: number; total: number } | null;
 }
 
-// Editing state: which cell is being edited
 interface EditingCell {
   rowId: string;
   columnKey: string;
@@ -89,6 +89,20 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
 
   useEffect(() => { saveColumnConfig(colConfig); }, [colConfig]);
+
+  // Click-outside handler: dismiss editing cell when clicking outside the table
+  useEffect(() => {
+    if (!editingCell) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // If the click is inside a popover portal or the table, let the component handle it
+      if (target.closest('[data-radix-popper-content-wrapper]') || target.closest('[data-editing-overlay]')) return;
+      setEditingCell(null);
+    };
+    // Use capture so we get it before blur
+    document.addEventListener('mousedown', handler, true);
+    return () => document.removeEventListener('mousedown', handler, true);
+  }, [editingCell]);
 
   const visibleCols = colConfig.order.filter(k => colConfig.visible.includes(k));
 
@@ -138,6 +152,8 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
   }, [colConfig, visibleCols]);
 
   const toggleColumn = (key: string) => {
+    const col = ALL_COLUMNS.find(c => c.key === key);
+    if (col?.locked) return; // can't hide locked columns
     setColConfig(prev => {
       const vis = prev.visible.includes(key)
         ? prev.visible.filter(k => k !== key)
@@ -147,6 +163,7 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
   };
 
   const handleCellSave = useCallback(async (itemId: string, field: string, value: any) => {
+    setEditingCell(null);
     if (field === 'design_notes') {
       const item = items.find(i => i.id === itemId);
       const prefs = { ...((item?.preferences as any) || {}), design_notes: value || undefined };
@@ -158,7 +175,6 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
     } else {
       await supabase.from('design_queue_items').update({ [field]: value || null } as any).eq('id', itemId);
     }
-    // Invalidate queries so list + calendar refresh
     queryClient.invalidateQueries({ queryKey: ['design-queue'] });
     queryClient.invalidateQueries({ queryKey: ['calendar-queue'] });
   }, [items, queryClient]);
@@ -180,96 +196,100 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
         </div>
       )}
 
-      {/* Table header */}
-      <div className="flex items-center px-3 py-1.5 border-b border-border text-[10px] font-medium text-muted-foreground uppercase tracking-wider flex-shrink-0 select-none">
-        <div className="w-7 flex-shrink-0 flex items-center justify-center">
-          <Checkbox
-            checked={allSelected}
-            onCheckedChange={() => allSelected ? clearSelection() : selectAll()}
-            className="w-3.5 h-3.5"
-          />
-        </div>
-        {visibleCols.map((key, idx) => {
-          const col = ALL_COLUMNS.find(c => c.key === key)!;
-          const w = colConfig.widths[key] || col.defaultWidth;
-          const isFlex = w === 0 || key === 'title';
-          const isLast = idx === visibleCols.length - 1;
-
-          return (
-            <div
-              key={key}
-              className={`relative px-2 ${isFlex ? 'flex-1 min-w-0' : 'flex-shrink-0'}`}
-              style={isFlex ? undefined : { width: w }}
-            >
-              {col.label}
-              {!isLast && (
-                <div
-                  onMouseDown={(e) => handleResizeStart(key, e)}
-                  className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/20 transition-colors z-10"
-                >
-                  <div className="absolute right-0 top-1 bottom-1 w-px bg-border" />
-                </div>
-              )}
-            </div>
-          );
-        })}
-        <div className="w-8 flex-shrink-0 flex items-center justify-center">
-          <Popover>
-            <PopoverTrigger asChild>
-              <button className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                <Settings2 className="w-3 h-3" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-48 p-2">
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">Show fields</p>
-              {ALL_COLUMNS.map(col => (
-                <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer">
-                  <Checkbox
-                    checked={colConfig.visible.includes(col.key)}
-                    onCheckedChange={() => toggleColumn(col.key)}
-                    disabled={col.key === 'title'}
-                    className="w-3.5 h-3.5"
-                  />
-                  <span className="text-xs text-foreground">{col.label}</span>
-                </label>
-              ))}
-            </PopoverContent>
-          </Popover>
-        </div>
-      </div>
-
-      {/* List */}
-      <div
-        ref={setNodeRef}
-        className={`flex-1 overflow-y-auto transition-colors ${isOver ? 'bg-primary/[0.03]' : ''}`}
-      >
-        {items.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-center px-6">
-            <p className="text-xs text-muted-foreground">
-              Drag ideas here or click + on any idea row
-            </p>
+      {/* Horizontally scrollable table wrapper */}
+      <div className="flex-1 overflow-auto" style={{ scrollbarWidth: 'thin' }}>
+        {/* Header */}
+        <div className="flex items-center px-3 py-1.5 border-b border-border text-[10px] font-medium text-muted-foreground uppercase tracking-wider flex-shrink-0 select-none sticky top-0 bg-card z-10 min-w-max">
+          <div className="w-7 flex-shrink-0 flex items-center justify-center">
+            <Checkbox
+              checked={allSelected}
+              onCheckedChange={() => allSelected ? clearSelection() : selectAll()}
+              className="w-3.5 h-3.5"
+            />
           </div>
-        ) : (
-          <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
-            {items.map((item, index) => (
-              <SortableTaskRow
-                key={item.id}
-                item={item}
-                index={index}
-                isSelected={selectedIds.has(item.id)}
-                onSelect={(e) => handleSelect(item.id, index, e)}
-                onRemove={() => onRemove(item.id)}
-                onClick={() => onItemClick(item)}
-                visibleCols={visibleCols}
-                colWidths={colConfig.widths}
-                editingCell={editingCell}
-                onStartEdit={(cellKey) => setEditingCell({ rowId: item.id, columnKey: cellKey })}
-                onEndEdit={() => setEditingCell(null)}
-                onCellSave={handleCellSave}
-              />
-            ))}
-          </SortableContext>
-        )}
+          {visibleCols.map((key, idx) => {
+            const col = ALL_COLUMNS.find(c => c.key === key)!;
+            const w = colConfig.widths[key] || col.defaultWidth;
+            const isFlex = w === 0 || key === 'title';
+            const isLast = idx === visibleCols.length - 1;
+
+            return (
+              <div
+                key={key}
+                className={`relative px-2 ${isFlex ? 'flex-1 min-w-[120px]' : 'flex-shrink-0'}`}
+                style={isFlex ? undefined : { width: w }}
+              >
+                {col.label}
+                {!isLast && (
+                  <div
+                    onMouseDown={(e) => handleResizeStart(key, e)}
+                    className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/20 transition-colors z-10"
+                  >
+                    <div className="absolute right-0 top-1 bottom-1 w-px bg-border" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <div className="w-8 flex-shrink-0 flex items-center justify-center">
+            <Popover>
+              <PopoverTrigger asChild>
+                <button className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                  <Settings2 className="w-3 h-3" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-48 p-2">
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-2">Show fields</p>
+                {ALL_COLUMNS.map(col => (
+                  <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer">
+                    <Checkbox
+                      checked={colConfig.visible.includes(col.key)}
+                      onCheckedChange={() => toggleColumn(col.key)}
+                      disabled={!!col.locked}
+                      className="w-3.5 h-3.5"
+                    />
+                    <span className="text-xs text-foreground">{col.label}</span>
+                    {col.locked && <span className="text-[9px] text-muted-foreground ml-auto">Required</span>}
+                  </label>
+                ))}
+              </PopoverContent>
+            </Popover>
+          </div>
+        </div>
+
+        {/* List */}
+        <div
+          ref={setNodeRef}
+          className={`transition-colors min-w-max ${isOver ? 'bg-primary/[0.03]' : ''}`}
+        >
+          {items.length === 0 ? (
+            <div className="flex items-center justify-center h-40 text-center px-6">
+              <p className="text-xs text-muted-foreground">
+                Drag ideas here or click + on any idea row
+              </p>
+            </div>
+          ) : (
+            <SortableContext items={items.map(i => i.id)} strategy={verticalListSortingStrategy}>
+              {items.map((item, index) => (
+                <SortableTaskRow
+                  key={item.id}
+                  item={item}
+                  index={index}
+                  isSelected={selectedIds.has(item.id)}
+                  onSelect={(e) => handleSelect(item.id, index, e)}
+                  onRemove={() => onRemove(item.id)}
+                  onOpenTask={() => onItemClick(item)}
+                  visibleCols={visibleCols}
+                  colWidths={colConfig.widths}
+                  editingCell={editingCell}
+                  onStartEdit={(cellKey) => setEditingCell({ rowId: item.id, columnKey: cellKey })}
+                  onEndEdit={() => setEditingCell(null)}
+                  onCellSave={handleCellSave}
+                />
+              ))}
+            </SortableContext>
+          )}
+        </div>
       </div>
 
       {/* Floating bulk action bar */}
@@ -324,11 +344,12 @@ function InlineCellInput({
   return (
     <input
       ref={inputRef}
+      data-editing-overlay="true"
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => onSave(draft)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter') onSave(draft);
+        if (e.key === 'Enter') { e.preventDefault(); onSave(draft); }
         if (e.key === 'Escape') onCancel();
       }}
       className="w-full h-full bg-transparent border-0 outline-none text-sm text-foreground px-0 py-0"
@@ -340,19 +361,29 @@ function StatusPopover({
   currentStatus,
   onSelect,
   onClose,
-  anchorRef,
 }: {
   currentStatus: string;
   onSelect: (status: string) => void;
   onClose: () => void;
-  anchorRef?: React.RefObject<HTMLDivElement>;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handler, true);
+    return () => document.removeEventListener('mousedown', handler, true);
+  }, [onClose]);
+
   return (
-    <div className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg p-1 min-w-[140px] animate-in fade-in-0 zoom-in-95 duration-100">
+    <div ref={ref} data-editing-overlay="true" className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg p-1 min-w-[140px] animate-in fade-in-0 zoom-in-95 duration-100">
       {STATUS_OPTIONS.map(opt => (
         <button
           key={opt.value}
-          onClick={() => { onSelect(opt.value); onClose(); }}
+          onClick={(e) => { e.stopPropagation(); onSelect(opt.value); }}
           className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs text-left hover:bg-muted transition-colors ${
             currentStatus === opt.value ? 'bg-muted/70 font-medium' : ''
           }`}
@@ -375,30 +406,40 @@ function DatePopover({
   onSelect: (date: Date | undefined) => void;
   onClose: () => void;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handler, true);
+    return () => document.removeEventListener('mousedown', handler, true);
+  }, [onClose]);
+
   return (
-    <div className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg p-2 animate-in fade-in-0 zoom-in-95 duration-100">
+    <div ref={ref} data-editing-overlay="true" className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg p-2 animate-in fade-in-0 zoom-in-95 duration-100">
       <Calendar
         mode="single"
         selected={currentDate}
-        onSelect={(d) => { onSelect(d); onClose(); }}
+        onSelect={(d) => { onSelect(d); }}
         initialFocus
       />
-      {currentDate && (
-        <div className="border-t border-border pt-1.5 mt-1 flex justify-between">
-          <button
-            onClick={() => { onSelect(new Date()); onClose(); }}
-            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
-          >
-            Today
-          </button>
-          <button
-            onClick={() => { onSelect(undefined); onClose(); }}
-            className="text-[10px] text-destructive hover:text-destructive/80 transition-colors px-2 py-1"
-          >
-            Clear
-          </button>
-        </div>
-      )}
+      <div className="border-t border-border pt-1.5 mt-1 flex justify-between">
+        <button
+          onClick={() => { onSelect(new Date()); }}
+          className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
+        >
+          Today
+        </button>
+        <button
+          onClick={() => { onSelect(undefined); }}
+          className="text-[10px] text-destructive hover:text-destructive/80 transition-colors px-2 py-1"
+        >
+          Clear
+        </button>
+      </div>
     </div>
   );
 }
@@ -416,17 +457,28 @@ function ExpandedEditor({
 }) {
   const [draft, setDraft] = useState(value);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     textareaRef.current?.focus();
-    // move cursor to end
     if (textareaRef.current) {
       textareaRef.current.selectionStart = textareaRef.current.value.length;
     }
   }, []);
 
+  // Click outside to save
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        onSave(draft);
+      }
+    };
+    document.addEventListener('mousedown', handler, true);
+    return () => document.removeEventListener('mousedown', handler, true);
+  }, [draft, onSave]);
+
   return (
-    <div className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg w-[360px] animate-in fade-in-0 zoom-in-95 duration-100">
+    <div ref={containerRef} data-editing-overlay="true" className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg w-[360px] animate-in fade-in-0 zoom-in-95 duration-100">
       <div className="flex items-center justify-between px-3 py-2 border-b border-border">
         <span className="text-xs font-medium text-foreground">{fieldName}</span>
         <button onClick={onCancel} className="text-muted-foreground hover:text-foreground text-xs">✕</button>
@@ -459,7 +511,7 @@ function SortableTaskRow({
   isSelected,
   onSelect,
   onRemove,
-  onClick,
+  onOpenTask,
   visibleCols,
   colWidths,
   editingCell,
@@ -472,7 +524,7 @@ function SortableTaskRow({
   isSelected: boolean;
   onSelect: (e: React.MouseEvent) => void;
   onRemove: () => void;
-  onClick: () => void;
+  onOpenTask: () => void;
   visibleCols: string[];
   colWidths: Record<string, number>;
   editingCell: EditingCell | null;
@@ -517,7 +569,6 @@ function SortableTaskRow({
   };
 
   const handleSave = async (key: string, value: any) => {
-    onEndEdit();
     await onCellSave(item.id, key, value);
   };
 
@@ -527,10 +578,6 @@ function SortableTaskRow({
       style={style}
       {...attributes}
       {...listeners}
-      onDoubleClick={(e) => {
-        // double click opens full task detail
-        if (!editingCell) onClick();
-      }}
       className={`flex items-center px-3 py-2 border-b border-border/50 cursor-pointer transition-colors group ${
         isSelected ? 'bg-primary/[0.06]' : 'hover:bg-muted/50'
       }`}
@@ -571,12 +618,12 @@ function SortableTaskRow({
           );
         }
 
+        // Title: click opens task, pencil icon to edit inline
         if (key === 'title') {
           return (
             <div
               key={key}
-              className={`flex-1 min-w-0 px-2 ${editing ? 'ring-2 ring-primary rounded' : ''}`}
-              onClick={(e) => handleCellClick(key, e)}
+              className={`flex-1 min-w-[120px] px-2 flex items-center gap-1 ${editing ? 'ring-2 ring-primary rounded' : ''}`}
             >
               {editing ? (
                 <InlineCellInput
@@ -585,7 +632,21 @@ function SortableTaskRow({
                   onCancel={onEndEdit}
                 />
               ) : (
-                <span className="text-sm font-medium text-foreground truncate block">{item.title}</span>
+                <>
+                  <span
+                    className="text-sm font-medium text-foreground truncate block cursor-pointer hover:underline"
+                    onClick={(e) => { e.stopPropagation(); onOpenTask(); }}
+                  >
+                    {item.title}
+                  </span>
+                  <button
+                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all flex-shrink-0"
+                    onClick={(e) => { e.stopPropagation(); onStartEdit('title'); }}
+                    title="Rename"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                </>
               )}
             </div>
           );
@@ -617,7 +678,7 @@ function SortableTaskRow({
           );
         }
 
-        // Brief, Copy, Design Notes — expanded editor
+        // Brief, Copy, Design Notes — expanded editor (long text)
         const val = getCellValue(key);
         const colLabel = colDef.label;
         return (
@@ -628,7 +689,7 @@ function SortableTaskRow({
             onClick={(e) => handleCellClick(key, e)}
           >
             <span className={`text-xs block truncate ${val ? 'text-muted-foreground' : 'text-muted-foreground/0 group-hover:text-muted-foreground/50'}`}>
-              {val || 'Type here...'}
+              {val || 'Add a value'}
             </span>
             {editing && (
               <ExpandedEditor
