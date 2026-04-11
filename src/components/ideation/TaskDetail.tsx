@@ -388,15 +388,16 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
       <Dialog open={refPanelOpen} onOpenChange={setRefPanelOpen}>
         <DialogContent className="max-w-[95vw] w-[1400px] h-[90vh] p-0 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
-          <ReferencePanel
-            brandId={brandId}
-            campaignId={item.campaign_id || ''}
-            selectedReferences={selectedRefs}
-            onSelectReferences={(refs) => {
-              handleReferenceChange(refs);
-              if (refs.length > 0) setRefPanelOpen(false);
-            }}
-          />
+            <ReferencePanel
+              brandId={brandId}
+              campaignId={item.campaign_id || ''}
+              selectedReferences={selectedRefs}
+              onSelectReferences={(refs) => {
+                handleReferenceChange(refs);
+                if (refs.length > 0) setRefPanelOpen(false);
+              }}
+            />
+          </div>
         </DialogContent>
       </Dialog>
     </div>
