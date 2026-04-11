@@ -321,13 +321,30 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
         {campaignHtml && (
           <div className="pt-2">
             <label className="text-[11px] font-medium text-muted-foreground mb-2 block">Preview</label>
-            <div className="border border-border rounded-lg overflow-hidden bg-white">
+            <div className="border border-border rounded-lg overflow-hidden bg-white mx-auto" style={{ maxWidth: 600 }}>
               <iframe
                 srcDoc={campaignHtml}
-                className="w-full border-0"
-                style={{ height: '400px' }}
+                className="w-full border-0 block"
+                style={{ height: iframeHeight, overflow: 'hidden' }}
                 sandbox="allow-same-origin"
                 title="Campaign preview"
+                onLoad={(e) => {
+                  const iframe = e.currentTarget;
+                  measureIframe(iframe);
+                  // Inject overflow guard + re-measure after images load
+                  try {
+                    const doc = iframe.contentDocument;
+                    if (doc) {
+                      const style = doc.createElement('style');
+                      style.textContent = 'html,body{margin:0;padding:0;overflow-x:hidden!important;max-width:100%!important;}*{max-width:100%!important;box-sizing:border-box;}';
+                      doc.head?.appendChild(style);
+                      doc.querySelectorAll('img').forEach(img => {
+                        if (!img.complete) img.addEventListener('load', () => measureIframe(iframe), { once: true });
+                      });
+                    }
+                  } catch {}
+                  setTimeout(() => measureIframe(iframe), 500);
+                }}
               />
             </div>
           </div>
