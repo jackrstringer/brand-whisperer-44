@@ -7,7 +7,7 @@ import { streamIdeas, streamChat } from '@/lib/ideation/streamHelpers';
 
 export type IdeationNode =
   | { id: string; type: 'brief'; content: string; campaignType?: string; campaignSubtype?: string; timestamp: number }
-  | { id: string; type: 'generation'; ideas: CampaignIdea[]; isStreaming: boolean; timestamp: number }
+  | { id: string; type: 'generation'; ideas: CampaignIdea[]; isStreaming: boolean; wasTurbo?: boolean; timestamp: number }
   | { id: string; type: 'feedback'; content: string; selectedIdeas: CampaignIdea[]; timestamp: number }
   | { id: string; type: 'ai_response'; content: string; isStreaming: boolean; timestamp: number };
 
@@ -120,7 +120,7 @@ export function useIdeation(brandId: string) {
 
     const newNodes: IdeationNode[] = [
       { id: briefNodeId, type: 'brief', content: briefContent, campaignType: typeName, campaignSubtype: subtypeName, timestamp: Date.now() },
-      { id: genNodeId, type: 'generation', ideas: [], isStreaming: true, timestamp: Date.now() },
+      { id: genNodeId, type: 'generation', ideas: [], isStreaming: true, wasTurbo: state.turboMode, timestamp: Date.now() },
       { id: chatNodeId, type: 'ai_response', content: '', isStreaming: true, timestamp: Date.now() },
     ];
 
@@ -278,7 +278,7 @@ export function useIdeation(brandId: string) {
         timestamp: Date.now(),
       });
     }
-    newNodes.push({ id: genNodeId, type: 'generation', ideas: [], isStreaming: true, timestamp: Date.now() });
+    newNodes.push({ id: genNodeId, type: 'generation', ideas: [], isStreaming: true, wasTurbo: state.turboMode, timestamp: Date.now() });
     newNodes.push({ id: chatNodeId, type: 'ai_response', content: '', isStreaming: true, timestamp: Date.now() });
 
     setState(s => ({
