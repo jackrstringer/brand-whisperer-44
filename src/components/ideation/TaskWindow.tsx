@@ -165,7 +165,7 @@ export function TaskWindow({
 
       {/* Task detail flyout sheet */}
       <Sheet open={!!selectedItem} onOpenChange={(open) => { if (!open) setSelectedItem(null); }}>
-        <SheetContent side="right" className="w-[460px] sm:w-[500px] p-0 flex flex-col">
+        <SheetContent side="right" className="w-[460px] sm:w-[500px] sm:max-w-[500px] p-0 flex flex-col">
           {selectedItem && (
             <TaskDetail
               item={selectedItem}
