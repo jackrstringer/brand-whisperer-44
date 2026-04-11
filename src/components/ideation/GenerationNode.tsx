@@ -37,14 +37,6 @@ export function GenerationNode({
 
   return (
     <div className="mb-3 animate-[slide-up-section_0.5s_ease-out_forwards]">
-      {roundIndex > 0 && (
-        <div className="text-center mb-2">
-          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-            Round {roundIndex + 1}
-          </span>
-        </div>
-      )}
-
       {showResearch && (
         <div className="flex items-center gap-3 py-4 px-4 justify-center animate-fade-in-up">
           <div className="relative">

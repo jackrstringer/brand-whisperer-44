@@ -21,16 +21,14 @@ export function IdeaGrid({ ideas, isStreaming, selectedIds, onToggleSelect, onAd
   const skeletonCount = isStreaming ? Math.max(0, 4 - ideas.length) : 0;
 
   return (
-    <div className="border border-border rounded-xl overflow-hidden bg-card">
-      <table className="w-full text-sm">
+    <div className="border border-border rounded-xl overflow-hidden bg-card w-full">
+      <table className="w-full text-sm table-fixed">
         <thead>
           <tr className="border-b border-border">
             <th className="w-10 p-2" />
-            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider w-[120px]">Type</th>
+            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider w-[30%]">Type</th>
             <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Title</th>
-            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell max-w-[300px]">Description</th>
-            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider hidden lg:table-cell w-[200px]">Subject Line</th>
-            <th className="w-20 p-2" />
+            <th className="w-16 p-2" />
           </tr>
         </thead>
         <tbody>
@@ -49,11 +47,9 @@ export function IdeaGrid({ ideas, isStreaming, selectedIds, onToggleSelect, onAd
           {Array.from({ length: skeletonCount }).map((_, i) => (
             <tr key={`skel-${i}`} className="border-t border-border">
               <td className="p-2.5 w-10"><div className="w-4 h-4 rounded-full border border-border mx-auto" /></td>
-              <td className="p-2.5 w-[120px]"><div className="w-16 h-3 bg-muted rounded animate-pulse" /></td>
+              <td className="p-2.5"><div className="w-20 h-3 bg-muted rounded animate-pulse" /></td>
               <td className="p-2.5"><div className="w-48 h-4 bg-muted rounded animate-pulse" /></td>
-              <td className="p-2.5 hidden md:table-cell"><div className="w-64 h-3 bg-muted rounded animate-pulse" /></td>
-              <td className="p-2.5 hidden lg:table-cell"><div className="w-40 h-3 bg-muted rounded animate-pulse" /></td>
-              <td className="p-2.5 w-20" />
+              <td className="p-2.5 w-16" />
             </tr>
           ))}
         </tbody>
@@ -107,9 +103,9 @@ function IdeaRow({
         </div>
       </td>
 
-      <td className="p-2.5 w-[120px] align-middle">
+      <td className="p-2.5 align-middle">
         {idea.campaign_type && (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 min-w-0">
             <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getTypeColor(idea.campaign_type)}`} />
             <span className="text-[11px] text-muted-foreground truncate">{idea.campaign_type}</span>
           </div>
@@ -117,7 +113,7 @@ function IdeaRow({
       </td>
 
       <td className="p-2.5 align-middle">
-        <span className="text-[13px] font-semibold text-foreground whitespace-nowrap truncate block max-w-[300px]">
+        <span className="text-[13px] font-semibold text-foreground truncate block">
           {idea.title || <span className="inline-block w-32 h-4 bg-muted rounded animate-pulse" />}
           {isStreaming && !idea.id && (
             <span className="inline-block w-[2px] h-[14px] bg-primary/70 animate-pulse ml-0.5 align-middle" />
@@ -125,22 +121,7 @@ function IdeaRow({
         </span>
       </td>
 
-      <td className="p-2.5 hidden md:table-cell align-middle max-w-[300px]">
-        {idea.description && (
-          <span className="text-xs text-muted-foreground line-clamp-1">{idea.description}</span>
-        )}
-      </td>
-
-      <td className="p-2.5 hidden lg:table-cell align-middle w-[200px]">
-        {idea.subject_line && (
-          <div className="flex items-center gap-1">
-            <Mail className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-            <span className="text-xs text-muted-foreground line-clamp-1">{idea.subject_line}</span>
-          </div>
-        )}
-      </td>
-
-      <td className="p-2.5 w-20 align-middle">
+      <td className="p-2.5 w-16 align-middle">
         {!isPartial && (
           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
             <button

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { Zap, Rocket, X, Square, Sparkles, ArrowRight, LayoutGrid, RotateCcw } from 'lucide-react';
+import { Zap, Rocket, X, Square, Sparkles, Plus, LayoutGrid, RotateCcw } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 
 interface Props {
@@ -17,6 +17,7 @@ interface Props {
   menuOpen?: boolean;
   onToggleMenu?: () => void;
   onClearChat?: () => void;
+  onAddToQueue?: () => void;
 }
 
 export function ChatBar({
@@ -34,6 +35,7 @@ export function ChatBar({
   menuOpen,
   onToggleMenu,
   onClearChat,
+  onAddToQueue,
 }: Props) {
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -104,12 +106,12 @@ export function ChatBar({
         </div>
 
         {/* Bottom row — controls */}
-        <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-border">
-          <div className="flex items-center gap-1.5">
+        <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-border flex-wrap gap-1.5">
+          <div className="flex items-center gap-1 flex-wrap">
             {/* Menu toggle */}
             <button
               onClick={onToggleMenu}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
                 menuOpen
                   ? 'bg-primary/10 border-primary/30 text-foreground'
                   : 'text-muted-foreground hover:text-foreground border-transparent'
@@ -120,7 +122,7 @@ export function ChatBar({
             </button>
 
             {/* Turbo toggle */}
-            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+            <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
               turboMode
                 ? 'bg-cyan-50 border-cyan-200 text-cyan-700'
                 : 'text-muted-foreground border-transparent'
@@ -135,7 +137,7 @@ export function ChatBar({
             </div>
 
             {/* Chaos toggle */}
-            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+            <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
               chaosMode
                 ? 'bg-amber-50 border-amber-200 text-amber-700'
                 : 'text-muted-foreground border-transparent'
@@ -175,9 +177,7 @@ export function ChatBar({
                 <button
                   onClick={handleSend}
                   disabled={!input.trim() && selectedCount === 0}
-                  className={`flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium transition-all border ${
-                    'bg-muted border-border text-foreground hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed'
-                  }`}
+                  className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium transition-all border bg-muted border-border text-foreground hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   Ideate
@@ -189,7 +189,7 @@ export function ChatBar({
                 </button>
 
                 <button
-                  onClick={() => selectedCount > 0 && handleSend()}
+                  onClick={() => selectedCount > 0 && onAddToQueue?.()}
                   disabled={selectedCount === 0}
                   className={`flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium transition-all ${
                     selectedCount > 0
@@ -197,8 +197,8 @@ export function ChatBar({
                       : 'bg-muted text-muted-foreground cursor-not-allowed'
                   }`}
                 >
-                  <ArrowRight className="w-3.5 h-3.5" />
-                  Build
+                  <Plus className="w-3.5 h-3.5" />
+                  Add to Queue
                 </button>
               </>
             )}

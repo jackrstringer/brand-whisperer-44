@@ -1,6 +1,19 @@
-import { IdeationCalendar } from './IdeationCalendar';
+import { useDroppable } from '@dnd-kit/core';
+import { useDraggable } from '@dnd-kit/core';
+import { useState, useMemo } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { DesignQueueItem } from '@/hooks/useDesignQueue';
 import { CalendarDayData } from '@/hooks/useIdeationCalendar';
+
+const STATUS_COLORS: Record<string, string> = {
+  queued: 'bg-muted text-muted-foreground',
+  configured: 'bg-blue-100 text-blue-700',
+  generating: 'bg-amber-100 text-amber-700 animate-pulse',
+  generated: 'bg-green-100 text-green-700',
+  sent: 'bg-green-600 text-white',
+};
+
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 interface Props {
   calendarData: Record<string, CalendarDayData>;
@@ -8,14 +21,166 @@ interface Props {
   onPillClick: (item: DesignQueueItem) => void;
 }
 
+function buildMonthGrid(year: number, month: number) {
+  const firstDayOfWeek = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstDayOfWeek; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+  return cells;
+}
+
 export function TaskCalendarView({ calendarData, onRequestMonths, onPillClick }: Props) {
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth();
+  const cells = useMemo(() => buildMonthGrid(year, month), [year, month]);
+  const monthLabel = currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  const goToPrev = () => {
+    const prev = new Date(year, month - 1, 1);
+    setCurrentMonth(prev);
+    onRequestMonths([prev]);
+  };
+
+  const goToNext = () => {
+    const next = new Date(year, month + 1, 1);
+    setCurrentMonth(next);
+    onRequestMonths([next]);
+  };
+
+  const goToToday = () => {
+    const now = new Date();
+    const t = new Date(now.getFullYear(), now.getMonth(), 1);
+    setCurrentMonth(t);
+    onRequestMonths([t]);
+  };
+
+  const rows = [];
+  for (let i = 0; i < cells.length; i += 7) {
+    rows.push(cells.slice(i, i + 7));
+  }
+
   return (
-    <div className="h-full">
-      <IdeationCalendar
-        calendarData={calendarData}
-        onRequestMonths={onRequestMonths}
-        onPillClick={onPillClick}
-      />
+    <div className="flex flex-col h-full">
+      {/* Month header with nav */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border flex-shrink-0">
+        <div className="flex items-center gap-1">
+          <button onClick={goToPrev} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-sm font-semibold text-foreground min-w-[140px] text-center">{monthLabel}</span>
+          <button onClick={goToNext} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+        <button onClick={goToToday} className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded hover:bg-muted">
+          Today
+        </button>
+      </div>
+
+      {/* Day headers */}
+      <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
+        {DAYS.map(d => (
+          <div key={d} className="text-center text-[10px] font-medium text-muted-foreground py-1.5">
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Grid — fills remaining space evenly */}
+      <div className="flex-1 grid grid-cols-7 auto-rows-fr min-h-0">
+        {cells.map((day, idx) => {
+          if (day === null) {
+            return <div key={`empty-${idx}`} className="border-b border-r border-border/30" />;
+          }
+
+          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const isToday = dateStr === todayStr;
+          const dayData = calendarData[dateStr];
+
+          return (
+            <CalendarDayCell
+              key={dateStr}
+              dateStr={dateStr}
+              day={day}
+              isToday={isToday}
+              dayData={dayData}
+              onPillClick={onPillClick}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function CalendarDayCell({
+  dateStr,
+  day,
+  isToday,
+  dayData,
+  onPillClick,
+}: {
+  dateStr: string;
+  day: number;
+  isToday: boolean;
+  dayData?: CalendarDayData;
+  onPillClick?: (item: DesignQueueItem) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `calendar-day-${dateStr}` });
+  const hasEvents = dayData?.events && dayData.events.length > 0;
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`border-b border-r border-border/30 p-1 overflow-hidden transition-colors ${
+        isOver ? 'bg-primary/10 ring-1 ring-inset ring-primary/30' : hasEvents ? 'bg-amber-50/30' : ''
+      } ${isToday ? 'ring-1 ring-inset ring-blue-300 bg-blue-50/20' : ''}`}
+    >
+      <span className={`text-[10px] font-medium ${isToday ? 'text-blue-600' : 'text-muted-foreground'}`}>
+        {day}
+      </span>
+
+      {dayData?.events?.map(evt => (
+        <div key={evt.id} className="text-[8px] text-muted-foreground truncate mt-0.5" title={evt.event_name}>
+          {evt.event_name}
+        </div>
+      ))}
+
+      {dayData?.queueItems?.map(item => (
+        <DraggableCalendarPill key={item.id} item={item} onClick={() => onPillClick?.(item)} />
+      ))}
+    </div>
+  );
+}
+
+function DraggableCalendarPill({ item, onClick }: { item: DesignQueueItem; onClick: () => void }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `cal-pill-${item.id}`,
+    data: { type: 'queue-item', item },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      onClick={e => { e.stopPropagation(); onClick(); }}
+      className={`text-[9px] font-medium px-1.5 py-0.5 rounded truncate cursor-pointer mt-0.5 ${
+        STATUS_COLORS[item.status] || STATUS_COLORS.queued
+      } ${isDragging ? 'opacity-50' : ''}`}
+      title={item.title}
+    >
+      {item.title}
     </div>
   );
 }
