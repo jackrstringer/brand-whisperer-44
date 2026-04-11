@@ -13,8 +13,8 @@ export function CampaignTypePicker({ onSelectType, activeType, isCompact }: Prop
 
   if (isCompact) {
     return (
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border overflow-x-auto scrollbar-hide">
-        <span className="text-xs text-muted-foreground whitespace-nowrap">Type:</span>
+      <div className="flex items-center gap-1.5 px-4 py-2 border-b border-border flex-wrap">
+        <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mr-1">Type:</span>
         {CAMPAIGN_TYPES.map(t => (
           <button
             key={t.name}
@@ -25,14 +25,14 @@ export function CampaignTypePicker({ onSelectType, activeType, isCompact }: Prop
                 onSelectType(t.name);
               }
             }}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+            className={`px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors ${
               activeType === t.name
                 ? 'bg-foreground text-background'
-                : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground'
+                : 'bg-muted/60 text-muted-foreground hover:bg-accent hover:text-foreground'
             }`}
           >
             {t.name}
-            {t.needsResearch && <Globe className="inline-block ml-1 w-3 h-3" />}
+            {t.needsResearch && <Globe className="inline-block ml-1 w-2.5 h-2.5" />}
           </button>
         ))}
       </div>

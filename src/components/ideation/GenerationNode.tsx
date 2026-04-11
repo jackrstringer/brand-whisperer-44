@@ -42,7 +42,7 @@ export function GenerationNode({
   }
 
   return (
-    <div className="mb-4">
+    <div className="mb-3">
       <IdeaGrid
         ideas={displayIdeas}
         isStreaming={isStreaming}

@@ -152,7 +152,7 @@ export default function IdeatePage() {
         {/* Main content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Panel — Ideation Flow */}
-          <div className={`flex flex-col ${rightPanelOpen ? 'w-full lg:w-[55%]' : 'w-full'} border-r border-border transition-all`}>
+          <div className={`flex flex-col ${rightPanelOpen ? 'w-full lg:w-3/5' : 'w-full'} border-r border-border transition-all`}>
             <CampaignTypePicker
               onSelectType={(type, sub) => ideation.generateForType(type, sub)}
               activeType={ideation.activeType}
@@ -183,7 +183,7 @@ export default function IdeatePage() {
 
           {/* Right Panel — Desktop */}
           {rightPanelOpen && (
-            <div className="hidden lg:flex lg:w-[45%] flex-col">
+            <div className="hidden lg:flex lg:w-2/5 flex-col">
               {/* Design Queue — top half */}
               <div className="h-1/2 border-b border-border">
                 <DesignQueue

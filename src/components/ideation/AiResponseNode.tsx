@@ -10,7 +10,7 @@ export function AiResponseNode({ content, isStreaming }: Props) {
 
   return (
     <div className="flex justify-start mb-3">
-      <div className="max-w-[85%] flex gap-2.5">
+      <div className="max-w-full flex gap-2.5">
         <div className="w-6 h-6 rounded-full bg-foreground flex items-center justify-center flex-shrink-0 mt-0.5">
           <Sparkles className="w-3.5 h-3.5 text-background" />
         </div>
