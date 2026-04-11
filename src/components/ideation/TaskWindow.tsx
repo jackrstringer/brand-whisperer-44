@@ -6,6 +6,7 @@ import { TaskListView } from './TaskListView';
 import { TaskCalendarView } from './TaskCalendarView';
 import { TaskDetail } from './TaskDetail';
 import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 
 type ViewMode = 'list' | 'calendar';
 
@@ -40,7 +41,7 @@ export function TaskWindow({
   });
   const [selectedItem, setSelectedItem] = useState<DesignQueueItem | null>(null);
 
-  // Calendar month state (lifted here so we can show month label in header)
+  // Calendar month state
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -84,27 +85,11 @@ export function TaskWindow({
     setSelectedItem(item);
   };
 
-  if (selectedItem) {
-    return (
-      <TaskDetail
-        item={selectedItem}
-        brandId={brandId}
-        onBack={() => setSelectedItem(null)}
-        onRemove={(id) => {
-          onRemove(id);
-          setSelectedItem(null);
-        }}
-        onStatusChange={onStatusChange}
-      />
-    );
-  }
-
   return (
     <div className="flex flex-col h-full">
       {/* Unified header bar */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border flex-shrink-0">
         <div className="flex items-center gap-1">
-          {/* View toggle icons */}
           <button
             onClick={() => setView('list')}
             className={`p-1.5 rounded transition-colors ${
@@ -115,7 +100,7 @@ export function TaskWindow({
             <List className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); handleStarView(view === 'list' ? 'list' : 'calendar'); handleStarView(view); }}
+            onClick={() => handleStarView(view)}
             className={`p-0.5 rounded transition-colors ${
               defaultView === view ? 'text-amber-500' : 'text-muted-foreground/30 hover:text-muted-foreground'
             }`}
@@ -133,7 +118,6 @@ export function TaskWindow({
             <CalendarDays className="w-3.5 h-3.5" />
           </button>
 
-          {/* Calendar month nav — only in calendar view */}
           {view === 'calendar' && (
             <div className="flex items-center gap-0.5 ml-2">
               <button onClick={goToPrev} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
@@ -150,7 +134,6 @@ export function TaskWindow({
           )}
         </div>
 
-        {/* Bulk generate */}
         {bulkEligibleCount > 0 && !bulkProgress && (
           <Button size="sm" variant="outline" onClick={onBulkGenerate} className="h-7 text-xs gap-1">
             <Zap className="w-3 h-3" />
@@ -179,6 +162,24 @@ export function TaskWindow({
           />
         )}
       </div>
+
+      {/* Task detail flyout sheet */}
+      <Sheet open={!!selectedItem} onOpenChange={(open) => { if (!open) setSelectedItem(null); }}>
+        <SheetContent side="right" className="w-[460px] sm:w-[500px] sm:max-w-[500px] p-0 flex flex-col">
+          {selectedItem && (
+            <TaskDetail
+              item={selectedItem}
+              brandId={brandId}
+              onBack={() => setSelectedItem(null)}
+              onRemove={(id) => {
+                onRemove(id);
+                setSelectedItem(null);
+              }}
+              onStatusChange={onStatusChange}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
