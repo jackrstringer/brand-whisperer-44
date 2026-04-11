@@ -1,50 +1,108 @@
 
 
-# Plan: Fix Personalization Override and Fallback Quality
+## Plan: Ideation Page Overhaul — Resizable Panels, Task Window, View Modes
 
-## Problem
+### Summary
+Restructure the Ideation page into a flexible two-panel layout with resizable divider, replace the separate Design Queue + Calendar with a unified "Task Window" (Airtable/ClickUp-style list view + calendar view), and add layout mode toggling (split vs single window).
 
-The AI keeps injecting `{{ person.first_name|default:'there' }}` into headlines even when the reference has no personalization. This happens because the `klaviyoBestPractices.ts` file contains multiple hard directives telling the AI to **always** use first-name personalization -- these override the "reference-first" rule we added to the system prompt.
+### What Changes
 
-Additionally, the fallback value `'there'` creates grammatically broken sentences when used mid-headline (e.g., "Still interested, there?" reads as nonsense).
+**1. Remove top header bar entirely**
+- Delete the header containing back button, "Ideate" label, and panel toggle from `IdeatePage.tsx`
+- The sidebar already provides navigation; no dedicated header needed
 
-## Root causes
+**2. Add "Clear Chat" button to ChatBar**
+- Small icon button (Trash2 or RotateCcw) in the ChatBar bottom row
+- New `onClearChat` prop on ChatBar, wired to a reset function in IdeatePage
 
-Three locations in `klaviyoBestPractices.ts` push personalization:
+**3. Menu (CampaignTypePicker) shows by default on new sessions**
+- When `hasStarted` is false, show the full CampaignTypePicker inline (already does this)
+- Remove the "Menu" toggle button from ChatBar bottom row — the picker is always visible when there are no nodes, and accessible via the existing compact pill bar after generation starts
+- Keep the Menu button for re-opening the full picker mid-session (overlay above ChatBar)
 
-1. **Line 1828**: "THE RULE: Always use `{{ person.first_name | default: 'there' }}` in the opening line"
-2. **Line 2576** (inside `KLAVIYO_FLOW_LIQUID_REFERENCE`): `person.first_name → Always use |default:'there'`
-3. **Lines 2602-2640** (flow structure templates): Multiple templates list "Personalized greeting (person.first_name)" as a required section
+**4. Resizable panel divider (drag to resize)**
+- Use the existing `react-resizable-panels` library (already in `src/components/ui/resizable.tsx`)
+- Replace the current CSS-based 50/50 split with `<ResizablePanelGroup>` + `<ResizablePanel>` + `<ResizableHandle>`
+- Left panel: ideation flow (default 50%, min 30%)
+- Right panel: task window (default 50%, min 25%)
+- Everything fills available space responsively
 
-The system prompt says "reference-first" but these embedded docs say "always" -- the AI sees both and defaults to the more explicit, repeated instruction.
+**5. Unified Task Window (replaces separate Queue + Calendar)**
 
-## Changes
+Create a new component `src/components/ideation/TaskWindow.tsx`:
 
-### File 1: `supabase/functions/_shared/klaviyoBestPractices.ts`
+- **View toggle**: Two small icon buttons at top — List view (default) and Calendar view
+- **Star button** next to each view icon: clicking stars a view to make it the default (persisted in localStorage)
+- **List View** (Airtable-style table):
+  - Columns: Status (color dot), Title, Campaign Type, Send Date, Actions
+  - Sortable rows via drag handles
+  - Status shown as colored badge (queued/configured/generating/generated/sent)
+  - Click row → opens Task Detail panel
+  - Bulk Generate button in header
+  - Drop target for dragging ideas from left panel
+- **Calendar View**: 
+  - Reuse existing `IdeationCalendar` component but embedded within the Task Window
+  - Click a pill → opens Task Detail panel
 
-**Section 7.7 (lines 1822-1830)**: Rewrite to remove the blanket "always" rule. Replace with guidance that personalization is powerful but should only be used when the reference shows it or the user requests it. When used, the fallback must be grammatically safe in context -- e.g., `'Friend'` or `'there'` for standalone greetings like "Hi there," but never inline in phrases like "Still interested, X" where the fallback creates broken grammar.
+**6. Task Detail Panel (replaces GenerationDrawer)**
 
-**Person Properties section in `KLAVIYO_FLOW_LIQUID_REFERENCE` (line 2576)**: Change "Always use |default:'there'" to "Use |default:'Friend' — only include if reference shows personalization or user requests it"
+Create `src/components/ideation/TaskDetail.tsx`:
 
-**Personalization patterns section (lines 2586-2593)**: Add a warning about grammatical safety of fallbacks. If the name appears mid-sentence (not in a standalone "Hi X," greeting), use a conditional block instead:
+- Renders **inline within the right panel** (not a full-screen drawer/overlay)
+- Shows all fields from current GenerationDrawer: title, brief, subject line, copy direction, design notes, send date
+- Status displayed prominently as a badge — clicking cycles through statuses or opens a dropdown
+- "Generate Email" button feels like a status transition: queued → generating → generated
+- Progress indicator during generation
+- If campaign is generated (`status === 'generated'` and `campaign_id` exists): render the campaign preview at the bottom (iframe or fetch campaign HTML)
+- Back button to return to list/calendar view
+- Auto-saves on field changes (debounced, same as current GenerationDrawer)
+
+**7. Layout mode toggle (split vs single window)**
+
+Two small icons in the top-right area of the page (above the panels):
+- **Split view** (default): Ideation left, Task Window right — the current resizable split
+- **Single view**: One full-width panel. Small tab bar at top to switch between "Ideation" and "Tasks"
+- Persisted in localStorage
+
+### Files to Create
+| File | Purpose |
+|------|---------|
+| `src/components/ideation/TaskWindow.tsx` | Unified list/calendar container with view toggle |
+| `src/components/ideation/TaskDetail.tsx` | Inline task detail panel (replaces GenerationDrawer as overlay) |
+| `src/components/ideation/TaskListView.tsx` | Airtable-style list table for queue items |
+| `src/components/ideation/TaskCalendarView.tsx` | Calendar view wrapper (reuses IdeationCalendar internals) |
+
+### Files to Modify
+| File | Change |
+|------|--------|
+| `src/pages/IdeatePage.tsx` | Remove header bar, use ResizablePanelGroup for split, add layout mode toggle (split/single), wire TaskWindow + TaskDetail, remove separate DesignQueue + IdeationCalendar usage |
+| `src/components/ideation/ChatBar.tsx` | Remove "Menu" button from bottom row, add "Clear chat" icon button, add `onClearChat` prop |
+| `src/components/ideation/IdeationCalendar.tsx` | Minor — may need prop adjustments for embedding in TaskCalendarView |
+
+### Files Unchanged
+- All hooks (`useIdeation`, `useDesignQueue`, `useIdeationCalendar`)
+- All backend/edge functions
+- `campaignTypes.ts`, `streamHelpers.ts`, `bulkGenerate.ts`, `seedCalendar.ts`
+- `GenerationDrawer.tsx` (kept for reference but no longer rendered from IdeatePage — TaskDetail replaces it)
+
+### Technical Details
+
+**Resizable panels** use the existing `react-resizable-panels` already installed:
+```tsx
+<ResizablePanelGroup direction="horizontal">
+  <ResizablePanel defaultSize={50} minSize={30}>
+    {/* Ideation flow */}
+  </ResizablePanel>
+  <ResizableHandle withHandle />
+  <ResizablePanel defaultSize={50} minSize={25}>
+    {/* Task Window */}
+  </ResizablePanel>
+</ResizablePanelGroup>
 ```
-{% if person.first_name %}Still interested, {{ person.first_name }}?{% else %}Still interested?{% endif %}
-```
 
-**Flow structure templates (lines 2602-2640)**: Remove "Personalized greeting (person.first_name)" as a mandatory section from Browse Abandonment and other templates where the reference may not include it. Instead note it as optional.
+**View preference persistence**: `localStorage.setItem('ideation-default-view', 'list' | 'calendar')` and `localStorage.setItem('ideation-layout', 'split' | 'single')`.
 
-### File 2: `supabase/functions/_shared/generateCampaignCore.ts`
+**Task Detail inline rendering**: When a task is selected, the TaskWindow component replaces its list/calendar content with TaskDetail. A back arrow returns to the previous view. No overlay/backdrop — it's a panel navigation, not a modal.
 
-**Reference-first rule (lines 1017-1020)**: Strengthen the existing rule with an explicit override clause:
-
-"This rule overrides any personalization guidance in the Liquid reference docs below. If the reference shows no first-name personalization, do NOT add it -- even if the Liquid reference suggests using it. The reference layout is the single source of truth for what dynamic elements to include."
-
-Add a new sub-rule about fallback grammar safety:
-
-"FALLBACK GRAMMAR RULE: If you do include first-name personalization, the |default: fallback must produce a grammatically correct sentence. 'Hi {{ person.first_name|default:\'Friend\' }},' is safe. But 'Still interested, {{ person.first_name|default:\'there\' }}?' is NOT safe because 'Still interested, there?' reads as broken English. For inline name usage, use a conditional: {% if person.first_name %}Still interested, {{ person.first_name }}?{% else %}Still interested?{% endif %}"
-
-## Files to modify
-
-1. `supabase/functions/_shared/klaviyoBestPractices.ts` — Remove "always use first_name" directives, add grammatical safety guidance for fallbacks
-2. `supabase/functions/_shared/generateCampaignCore.ts` — Strengthen reference-first rule to explicitly override embedded docs, add fallback grammar rule
+**Campaign preview in TaskDetail**: When `campaign_id` exists and status is `generated`, fetch the campaign's `final_html` from the `campaigns` table and render in a sandboxed iframe at the bottom of the detail panel.
 
