@@ -1,7 +1,6 @@
 import { useDroppable } from '@dnd-kit/core';
 import { useDraggable } from '@dnd-kit/core';
-import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useMemo } from 'react';
 import { DesignQueueItem } from '@/hooks/useDesignQueue';
 import { CalendarDayData } from '@/hooks/useIdeationCalendar';
 
@@ -19,6 +18,7 @@ interface Props {
   calendarData: Record<string, CalendarDayData>;
   onRequestMonths: (months: Date[]) => void;
   onPillClick: (item: DesignQueueItem) => void;
+  currentMonth: Date;
 }
 
 function buildMonthGrid(year: number, month: number) {
@@ -31,62 +31,16 @@ function buildMonthGrid(year: number, month: number) {
   return cells;
 }
 
-export function TaskCalendarView({ calendarData, onRequestMonths, onPillClick }: Props) {
-  const [currentMonth, setCurrentMonth] = useState(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
-  });
-
+export function TaskCalendarView({ calendarData, onPillClick, currentMonth }: Props) {
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
   const year = currentMonth.getFullYear();
   const month = currentMonth.getMonth();
   const cells = useMemo(() => buildMonthGrid(year, month), [year, month]);
-  const monthLabel = currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
-  const goToPrev = () => {
-    const prev = new Date(year, month - 1, 1);
-    setCurrentMonth(prev);
-    onRequestMonths([prev]);
-  };
-
-  const goToNext = () => {
-    const next = new Date(year, month + 1, 1);
-    setCurrentMonth(next);
-    onRequestMonths([next]);
-  };
-
-  const goToToday = () => {
-    const now = new Date();
-    const t = new Date(now.getFullYear(), now.getMonth(), 1);
-    setCurrentMonth(t);
-    onRequestMonths([t]);
-  };
-
-  const rows = [];
-  for (let i = 0; i < cells.length; i += 7) {
-    rows.push(cells.slice(i, i + 7));
-  }
 
   return (
     <div className="flex flex-col h-full">
-      {/* Month header with nav */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border flex-shrink-0">
-        <div className="flex items-center gap-1">
-          <button onClick={goToPrev} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-sm font-semibold text-foreground min-w-[140px] text-center">{monthLabel}</span>
-          <button onClick={goToNext} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-        <button onClick={goToToday} className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded hover:bg-muted">
-          Today
-        </button>
-      </div>
-
       {/* Day headers */}
       <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
         {DAYS.map(d => (
