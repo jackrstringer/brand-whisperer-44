@@ -129,6 +129,19 @@ Deno.serve(async (req) => {
       throw new Error(`Database error: ${updateError.message}`);
     }
 
+    // Fire-and-forget: rebuild ideation prompt
+    try {
+      const functionUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/build-ideation-prompt`;
+      fetch(functionUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+        },
+        body: JSON.stringify({ brand_id }),
+      }).catch(() => {});
+    } catch {}
+
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

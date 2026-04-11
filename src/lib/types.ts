@@ -122,6 +122,16 @@ export interface ProductAsset {
   created_at: string;
 }
 
+export interface CampaignIdea {
+  id: string;
+  title: string;
+  description: string;
+  subject_line?: string;
+  campaign_type: string;
+  campaign_info?: string;
+  copy_direction?: string;
+}
+
 export interface BrandExtraction {
   colors: {
     canvas: string;
