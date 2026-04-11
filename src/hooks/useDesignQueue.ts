@@ -43,7 +43,10 @@ export function useDesignQueue(brandId: string) {
     enabled: !!brandId,
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey });
+    queryClient.invalidateQueries({ queryKey: ['calendar-queue', brandId] });
+  };
 
   const addToQueue = useMutation({
     mutationFn: async (params: { idea: CampaignIdea; sessionId?: string | null; sendDate?: string | null }) => {

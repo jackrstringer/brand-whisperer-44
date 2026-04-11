@@ -44,13 +44,13 @@ export function TaskCalendarView({ calendarData, onPillClick, currentMonth }: Pr
       {/* Day headers */}
       <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
         {DAYS.map(d => (
-          <div key={d} className="text-center text-[10px] font-medium text-muted-foreground py-1.5">
+          <div key={d} className="text-center text-xs font-medium text-muted-foreground py-2">
             {d}
           </div>
         ))}
       </div>
 
-      {/* Grid — fills remaining space evenly */}
+      {/* Grid */}
       <div className="flex-1 grid grid-cols-7 auto-rows-fr min-h-0">
         {cells.map((day, idx) => {
           if (day === null) {
@@ -96,16 +96,16 @@ function CalendarDayCell({
   return (
     <div
       ref={setNodeRef}
-      className={`border-b border-r border-border/30 p-1 overflow-y-auto transition-colors ${
-        isOver ? 'bg-primary/10 ring-1 ring-inset ring-primary/30' : hasEvents ? 'bg-amber-50/30' : ''
+      className={`border-b border-r border-border/30 p-1.5 overflow-y-auto transition-colors ${
+        isOver ? 'bg-primary/10 ring-2 ring-inset ring-primary/40' : hasEvents ? 'bg-amber-50/30' : ''
       } ${isToday ? 'ring-1 ring-inset ring-blue-300 bg-blue-50/20' : ''}`}
     >
-      <span className={`text-[10px] font-medium ${isToday ? 'text-blue-600' : 'text-muted-foreground'}`}>
+      <span className={`text-xs font-medium ${isToday ? 'text-blue-600' : 'text-muted-foreground'}`}>
         {day}
       </span>
 
       {dayData?.events?.map(evt => (
-        <div key={evt.id} className="text-[8px] text-muted-foreground mt-0.5 leading-tight" title={evt.event_name}>
+        <div key={evt.id} className="text-[10px] text-muted-foreground mt-0.5 leading-tight" title={evt.event_name}>
           {evt.event_name}
         </div>
       ))}
@@ -129,7 +129,7 @@ function DraggableCalendarPill({ item, onClick }: { item: DesignQueueItem; onCli
       {...attributes}
       {...listeners}
       onClick={e => { e.stopPropagation(); onClick(); }}
-      className={`text-[9px] font-medium px-1.5 py-0.5 rounded cursor-pointer mt-0.5 leading-tight break-words ${
+      className={`text-xs font-medium px-1.5 py-1 rounded cursor-pointer mt-1 leading-tight break-words ${
         STATUS_COLORS[item.status] || STATUS_COLORS.draft
       } ${isDragging ? 'opacity-50' : ''}`}
       title={item.title}
