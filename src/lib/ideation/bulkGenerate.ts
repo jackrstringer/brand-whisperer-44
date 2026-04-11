@@ -79,13 +79,13 @@ export async function bulkGenerate(
         throw new Error(errText);
       }
 
-      await supabase.from('design_queue_items').update({ status: 'generated' }).eq('id', item.id);
-      onItemStatusChange(item.id, 'generated');
+      await supabase.from('design_queue_items').update({ status: 'designed' }).eq('id', item.id);
+      onItemStatusChange(item.id, 'designed');
       results.push({ itemId: item.id, campaignId: campaign.id, success: true });
     } catch (err: any) {
       console.error(`[bulkGenerate] Failed for ${item.id}:`, err);
-      await supabase.from('design_queue_items').update({ status: 'configured' }).eq('id', item.id);
-      onItemStatusChange(item.id, 'configured');
+      await supabase.from('design_queue_items').update({ status: 'draft' }).eq('id', item.id);
+      onItemStatusChange(item.id, 'draft');
       results.push({ itemId: item.id, success: false, error: err.message });
     }
 

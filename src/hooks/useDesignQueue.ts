@@ -19,7 +19,7 @@ export interface DesignQueueItem {
   source_session_id: string | null;
   campaign_id: string | null;
   klaviyo_campaign_id: string | null;
-  status: 'queued' | 'configured' | 'generating' | 'generated' | 'sent';
+  status: 'draft' | 'generating' | 'designed' | 'templated' | 'sent';
   created_at: string;
   updated_at: string;
 }
@@ -61,7 +61,7 @@ export function useDesignQueue(brandId: string) {
         source_session_id: params.sessionId || null,
         send_date: params.sendDate || null,
         position: nextPos,
-        status: 'queued',
+        status: 'draft',
       } as any);
       if (error) throw error;
     },

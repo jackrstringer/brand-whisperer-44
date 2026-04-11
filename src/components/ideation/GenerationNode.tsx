@@ -8,6 +8,7 @@ interface Props {
   streamingIdeas: CampaignIdea[];
   isStreaming: boolean;
   isTurbo: boolean;
+  wasTurbo?: boolean;
   selectedIds: Set<string>;
   onToggleSelect: (idea: CampaignIdea) => void;
   onAddToQueue: (idea: CampaignIdea) => void;
@@ -21,6 +22,7 @@ export function GenerationNode({
   streamingIdeas,
   isStreaming,
   isTurbo,
+  wasTurbo,
   selectedIds,
   onToggleSelect,
   onAddToQueue,
@@ -34,6 +36,9 @@ export function GenerationNode({
 
   const showResearch = isStreaming && researchStatus;
   const showLoading = isStreaming && displayIdeas.length === 0 && !showResearch;
+
+  // Use turbo display if currently streaming in turbo, or if this node was generated in turbo mode
+  const useTurboDisplay = isStreaming ? isTurbo : (wasTurbo ?? false);
 
   return (
     <div className="mb-3 animate-[slide-up-section_0.5s_ease-out_forwards]">
@@ -67,8 +72,8 @@ export function GenerationNode({
         </div>
       )}
 
-      {(displayIdeas.length > 0 || (isTurbo && isStreaming)) && (
-        isTurbo ? (
+      {(displayIdeas.length > 0 || (useTurboDisplay && isStreaming)) && (
+        useTurboDisplay ? (
           <TurboIdeaTable
             ideas={displayIdeas}
             isStreaming={isStreaming}

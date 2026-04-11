@@ -9,18 +9,18 @@ import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, CalendarIcon, Loader2, Trash2, Play, ExternalLink } from 'lucide-react';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { ArrowLeft, CalendarIcon, Loader2, Trash2, Play, ExternalLink, ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
+import ReferencePanel, { SelectedReference } from '@/components/campaign/ReferencePanel';
 
 const STATUS_STYLES: Record<string, string> = {
-  queued: 'bg-muted text-muted-foreground',
-  configured: 'bg-blue-100 text-blue-700',
+  draft: 'bg-muted text-muted-foreground',
   generating: 'bg-amber-100 text-amber-700 animate-pulse',
-  generated: 'bg-green-100 text-green-700',
-  sent: 'bg-green-600 text-white',
+  designed: 'bg-blue-100 text-blue-700',
+  templated: 'bg-purple-100 text-purple-700',
+  sent: 'bg-green-100 text-green-700',
 };
-
-const STATUS_ORDER = ['queued', 'configured', 'generating', 'generated', 'sent'];
 
 interface Props {
   item: DesignQueueItem;
@@ -44,6 +44,8 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
   const [isGenerating, setIsGenerating] = useState(false);
   const [campaignHtml, setCampaignHtml] = useState<string | null>(null);
   const [iframeHeight, setIframeHeight] = useState(400);
+  const [refPanelOpen, setRefPanelOpen] = useState(false);
+  const [selectedRefs, setSelectedRefs] = useState<SelectedReference[]>([]);
   const saveRef = useRef<ReturnType<typeof setTimeout>>();
 
   const measureIframe = useCallback((iframe: HTMLIFrameElement | null) => {
@@ -56,14 +58,38 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
     } catch {}
   }, []);
 
-  // Load campaign HTML if generated
+  // Load campaign HTML if designed
   useEffect(() => {
-    if (item.campaign_id && (item.status === 'generated' || item.status === 'sent')) {
+    if (item.campaign_id && (item.status === 'designed' || item.status === 'templated' || item.status === 'sent')) {
       supabase.from('campaigns').select('html').eq('id', item.campaign_id).single().then(({ data }) => {
         if (data?.html) setCampaignHtml(data.html);
       });
     }
   }, [item.campaign_id, item.status]);
+
+  // Load saved reference from preferences
+  useEffect(() => {
+    const prefs = (item.preferences as any) || {};
+    if (prefs.reference_campaign_id) {
+      supabase.from('reference_campaigns')
+        .select('id, title, thumbnail_url, image_urls')
+        .eq('id', prefs.reference_campaign_id)
+        .single()
+        .then(({ data }) => {
+          if (data) {
+            setSelectedRefs([{
+              type: 'library',
+              id: data.id,
+              title: data.title,
+              thumbnail_url: data.thumbnail_url,
+              image_urls: (data.image_urls as string[]) || [],
+              strength: 50,
+              mode: 'reference',
+            }]);
+          }
+        });
+    }
+  }, [item.preferences]);
 
   const debounceSave = useCallback(
     (fields: Record<string, any>) => {
@@ -85,6 +111,13 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
       preferences: { ...((item.preferences as any) || {}), design_notes: designNotes || undefined },
     } as any);
   }, [title, campaignInfo, subjectLine, copyDirection, designNotes, sendDate, debounceSave, item.preferences]);
+
+  const handleReferenceChange = (refs: SelectedReference[]) => {
+    setSelectedRefs(refs);
+    const refId = refs[0]?.id || null;
+    const prefs = { ...((item.preferences as any) || {}), reference_campaign_id: refId };
+    supabase.from('design_queue_items').update({ preferences: prefs } as any).eq('id', item.id).then(() => {});
+  };
 
   const handleGenerate = async () => {
     if (!user) return;
@@ -133,6 +166,7 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
       };
       if (prefs.product_ids?.length) genBody.productIds = prefs.product_ids;
       if (prefs.reference_campaign_id) genBody.referenceCampaignId = prefs.reference_campaign_id;
+      if (selectedRefs[0]?.id) genBody.referenceCampaignId = selectedRefs[0].id;
       if (prefs.pinned_asset_urls?.length) genBody.pinnedAssetUrls = prefs.pinned_asset_urls;
 
       const resp = await fetch(
@@ -153,10 +187,9 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
         throw new Error(`Generation failed: ${errText}`);
       }
 
-      await supabase.from('design_queue_items').update({ status: 'generated' }).eq('id', item.id);
-      onStatusChange(item.id, 'generated');
+      await supabase.from('design_queue_items').update({ status: 'designed' }).eq('id', item.id);
+      onStatusChange(item.id, 'designed');
 
-      // Load the generated HTML
       const { data: campData } = await supabase.from('campaigns').select('html').eq('id', campaign.id).single();
       if (campData?.html) setCampaignHtml(campData.html);
 
@@ -164,8 +197,8 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
     } catch (err: any) {
       console.error('[TaskDetail] Generate error:', err);
       toast.error(err.message || 'Generation failed');
-      onStatusChange(item.id, 'queued');
-      await supabase.from('design_queue_items').update({ status: 'queued' }).eq('id', item.id);
+      onStatusChange(item.id, 'draft');
+      await supabase.from('design_queue_items').update({ status: 'draft' }).eq('id', item.id);
     } finally {
       setIsGenerating(false);
     }
@@ -176,8 +209,6 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
     onBack();
     toast.success('Removed from queue');
   };
-
-  const currentStatusIdx = STATUS_ORDER.indexOf(item.status);
 
   return (
     <div className="flex flex-col h-full">
@@ -190,7 +221,7 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
           {item.campaign_type && (
             <Badge variant="secondary" className="text-[10px] shrink-0">{item.campaign_type}</Badge>
           )}
-          <Badge className={`text-[10px] shrink-0 ${STATUS_STYLES[item.status] || STATUS_STYLES.queued}`}>
+          <Badge className={`text-[10px] shrink-0 ${STATUS_STYLES[item.status] || STATUS_STYLES.draft}`}>
             {item.status}
           </Badge>
         </div>
@@ -202,8 +233,8 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
         </button>
       </div>
 
-      {/* Form */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
+      {/* Form — scrollable */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ scrollbarWidth: 'none' }}>
         <div>
           <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Title</label>
           <Input value={title} onChange={e => setTitle(e.target.value)} className="h-8 text-sm" />
@@ -264,26 +295,29 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
           </Popover>
         </div>
 
-        {/* Status progression */}
-        <div className="pt-2">
-          <label className="text-[11px] font-medium text-muted-foreground mb-2 block">Status</label>
-          <div className="flex gap-1">
-            {STATUS_ORDER.map((s, idx) => (
-              <div
-                key={s}
-                className={`flex-1 h-1.5 rounded-full transition-colors ${
-                  idx <= currentStatusIdx ? 'bg-primary' : 'bg-muted'
-                }`}
-              />
-            ))}
-          </div>
-          <div className="flex justify-between mt-1">
-            {STATUS_ORDER.map(s => (
-              <span key={s} className={`text-[9px] ${s === item.status ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-                {s}
-              </span>
-            ))}
-          </div>
+        {/* Reference selector */}
+        <div>
+          <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Reference</label>
+          <button
+            onClick={() => setRefPanelOpen(true)}
+            className="w-full flex items-center gap-2 px-3 py-2 border border-border rounded-lg hover:bg-muted/50 transition-colors text-left"
+          >
+            {selectedRefs.length > 0 ? (
+              <>
+                <img
+                  src={selectedRefs[0].thumbnail_url}
+                  alt=""
+                  className="w-8 h-10 object-cover rounded border border-border"
+                />
+                <span className="text-xs text-foreground truncate flex-1">{selectedRefs[0].title}</span>
+              </>
+            ) : (
+              <>
+                <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Choose a reference...</span>
+              </>
+            )}
+          </button>
         </div>
 
         {/* Generate action */}
@@ -296,7 +330,7 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
           >
             {isGenerating ? (
               <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Generating...</>
-            ) : item.status === 'generated' || item.status === 'sent' ? (
+            ) : item.status === 'designed' || item.status === 'templated' || item.status === 'sent' ? (
               <><Play className="w-3.5 h-3.5 mr-1.5" /> Regenerate</>
             ) : (
               <><Play className="w-3.5 h-3.5 mr-1.5" /> Generate Email</>
@@ -331,7 +365,6 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
                 onLoad={(e) => {
                   const iframe = e.currentTarget;
                   measureIframe(iframe);
-                  // Inject overflow guard + re-measure after images load
                   try {
                     const doc = iframe.contentDocument;
                     if (doc) {
@@ -350,6 +383,21 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
           </div>
         )}
       </div>
+
+      {/* Reference panel full-screen dialog */}
+      <Dialog open={refPanelOpen} onOpenChange={setRefPanelOpen}>
+        <DialogContent className="max-w-5xl h-[85vh] p-0 overflow-hidden">
+          <ReferencePanel
+            brandId={brandId}
+            campaignId={item.campaign_id || ''}
+            selectedReferences={selectedRefs}
+            onSelectReferences={(refs) => {
+              handleReferenceChange(refs);
+              if (refs.length > 0) setRefPanelOpen(false);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

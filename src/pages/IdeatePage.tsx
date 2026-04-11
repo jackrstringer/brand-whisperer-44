@@ -121,7 +121,7 @@ export default function IdeatePage() {
     }
   };
 
-  const eligibleForBulk = designQueue.items.filter(i => i.status === 'queued' || i.status === 'configured');
+  const eligibleForBulk = designQueue.items.filter(i => i.status === 'draft');
 
   const handleBulkGenerate = async () => {
     setBulkConfirmOpen(false);
@@ -150,8 +150,15 @@ export default function IdeatePage() {
     ideation.generateForType(type, sub);
   };
 
-  const handleClearChat = () => {
-    window.location.reload();
+  const handleClearChat = async () => {
+    // Clear the current session's nodes in the DB, then reset local state
+    if (ideation.sessionId) {
+      await supabase
+        .from('ideation_sessions')
+        .update({ nodes: [], status: 'completed' } as any)
+        .eq('id', ideation.sessionId);
+    }
+    ideation.startNewSession();
   };
 
   const handleAddSelectedToQueue = () => {

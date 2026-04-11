@@ -243,7 +243,7 @@ export default function CampaignsList() {
 
   const filteredQueueItems = designQueue.items.filter(item => {
     if (queueFilter === "all") return true;
-    if (queueFilter === "queued") return item.status === "queued" || item.status === "configured";
+    if (queueFilter === "queued") return item.status === "draft";
     return item.status === queueFilter;
   });
 

@@ -65,6 +65,7 @@ export function NodeFlow({
                 streamingIdeas={node.id === streamingNodeId ? streamingIdeas : []}
                 isStreaming={node.isStreaming}
                 isTurbo={isTurbo}
+                wasTurbo={node.wasTurbo}
                 selectedIds={selectedIds}
                 onToggleSelect={onToggleSelect}
                 onAddToQueue={onAddToQueue}
