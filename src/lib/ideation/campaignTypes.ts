@@ -5,22 +5,23 @@ export interface CampaignType {
   subtypes?: { name: string; description: string }[];
   needsResearch?: boolean;
   popular?: boolean;
+  color: string; // Tailwind bg class for the color dot
 }
 
 export const CAMPAIGN_TYPES: CampaignType[] = [
   // DIRECT TYPES (click to generate)
-  { name: "Billboard/Flagship", description: "Hero-driven brand moment", category: "direct", popular: true },
-  { name: "Sale/Promo", description: "Discount, offer, or flash sale", category: "direct", popular: true },
-  { name: "Brand Values", description: "Mission, story, or ethos spotlight", category: "direct" },
-  { name: "Seasonal", description: "Holiday or seasonal campaign", category: "direct" },
-  { name: "Referral Program", description: "Refer-a-friend or ambassador push", category: "direct" },
-  { name: "Re-engagement", description: "Win-back or reactivation", category: "direct" },
-  { name: "Sneak Peek", description: "Teaser for upcoming launch", category: "direct" },
-  { name: "Survey", description: "Customer feedback or quiz", category: "direct" },
+  { name: "Billboard/Flagship", description: "Hero-driven brand moment", category: "direct", popular: true, color: "bg-violet-500" },
+  { name: "Sale/Promo", description: "Discount, offer, or flash sale", category: "direct", popular: true, color: "bg-amber-500" },
+  { name: "Brand Values", description: "Mission, story, or ethos spotlight", category: "direct", color: "bg-rose-500" },
+  { name: "Seasonal", description: "Holiday or seasonal campaign", category: "direct", color: "bg-orange-500" },
+  { name: "Referral Program", description: "Refer-a-friend or ambassador push", category: "direct", color: "bg-pink-500" },
+  { name: "Re-engagement", description: "Win-back or reactivation", category: "direct", color: "bg-red-500" },
+  { name: "Sneak Peek", description: "Teaser for upcoming launch", category: "direct", color: "bg-indigo-500" },
+  { name: "Survey", description: "Customer feedback or quiz", category: "direct", color: "bg-slate-500" },
 
   // SUBTYPE TYPES (click to expand, then pick)
   {
-    name: "Product Highlight", description: "Spotlight a product or collection", category: "subtype", popular: true,
+    name: "Product Highlight", description: "Spotlight a product or collection", category: "subtype", popular: true, color: "bg-blue-500",
     subtypes: [
       { name: "Deep Dive", description: "Everything about one product" },
       { name: 'The "Why"', description: "Why this product exists" },
@@ -33,7 +34,7 @@ export const CAMPAIGN_TYPES: CampaignType[] = [
     ],
   },
   {
-    name: "Blog Style", description: "Editorial or storytelling format", category: "subtype",
+    name: "Blog Style", description: "Editorial or storytelling format", category: "subtype", color: "bg-teal-500",
     subtypes: [
       { name: "How-To", description: "Tutorial or routine guide" },
       { name: "Brand Story", description: "Founder story or brand journey" },
@@ -41,7 +42,7 @@ export const CAMPAIGN_TYPES: CampaignType[] = [
     ],
   },
   {
-    name: "Listicle", description: "Curated product list", category: "subtype",
+    name: "Listicle", description: "Curated product list", category: "subtype", color: "bg-cyan-500",
     subtypes: [
       { name: "Best Sellers", description: "Top performing products" },
       { name: "Staff Picks", description: "Team favorites" },
@@ -49,7 +50,7 @@ export const CAMPAIGN_TYPES: CampaignType[] = [
     ],
   },
   {
-    name: "Bundle", description: "Multi-product package", category: "subtype",
+    name: "Bundle", description: "Multi-product package", category: "subtype", color: "bg-lime-500",
     subtypes: [
       { name: "Starter Kit", description: "Entry-level bundle" },
       { name: "Complete Routine", description: "Full regimen" },
@@ -58,11 +59,18 @@ export const CAMPAIGN_TYPES: CampaignType[] = [
   },
 
   // RESEARCH TYPES (click triggers web research first)
-  { name: "Social Proof", description: "Reviews, testimonials, UGC", category: "research", needsResearch: true, popular: true },
-  { name: "FAQ/Overcoming Objections", description: "Address hesitations head-on", category: "research", needsResearch: true },
-  { name: 'Press/"As Seen In"', description: "Media mentions and editorial", category: "research", needsResearch: true },
-  { name: "Loyalty Program", description: "Rewards, points, VIP perks", category: "research", needsResearch: true },
-  { name: "Comparison", description: "Competitive differentiation", category: "research", needsResearch: true },
+  { name: "Social Proof", description: "Reviews, testimonials, UGC", category: "research", needsResearch: true, popular: true, color: "bg-emerald-500" },
+  { name: "FAQ/Overcoming Objections", description: "Address hesitations head-on", category: "research", needsResearch: true, color: "bg-yellow-500" },
+  { name: 'Press/"As Seen In"', description: "Media mentions and editorial", category: "research", needsResearch: true, color: "bg-sky-500" },
+  { name: "Loyalty Program", description: "Rewards, points, VIP perks", category: "research", needsResearch: true, color: "bg-fuchsia-500" },
+  { name: "Comparison", description: "Competitive differentiation", category: "research", needsResearch: true, color: "bg-stone-500" },
+];
+
+// Hero order: Product Highlight, Sale/Promo, Social Proof first, then rest, Random last
+const HERO_NAMES = ["Product Highlight", "Sale/Promo", "Social Proof"];
+export const ORDERED_TYPES = [
+  ...HERO_NAMES.map(n => CAMPAIGN_TYPES.find(t => t.name === n)!),
+  ...CAMPAIGN_TYPES.filter(t => !HERO_NAMES.includes(t.name)),
 ];
 
 export const POPULAR_TYPES = CAMPAIGN_TYPES.filter(t => t.popular);

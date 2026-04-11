@@ -424,6 +424,23 @@ export function useIdeation(brandId: string) {
     }));
   }, []);
 
+  const abort = useCallback(() => {
+    abortRef.current?.abort();
+    setState(s => ({
+      ...s,
+      isGenerating: false,
+      isChatting: false,
+      streamingIdeas: [],
+      streamingNodeId: null,
+      nodes: s.nodes.map(n => {
+        if ((n.type === 'generation' || n.type === 'ai_response') && n.isStreaming) {
+          return { ...n, isStreaming: false };
+        }
+        return n;
+      }),
+    }));
+  }, []);
+
   return {
     ...state,
     generateForType,
@@ -433,5 +450,6 @@ export function useIdeation(brandId: string) {
     toggleChaosMode,
     toggleTurboMode,
     startNewSession,
+    abort,
   };
 }

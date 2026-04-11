@@ -15,6 +15,7 @@ interface Props {
   onToggleSelect: (idea: CampaignIdea) => void;
   onAddToQueue: (idea: CampaignIdea) => void;
   onBuildNow: (idea: CampaignIdea) => void;
+  researchStatus?: string | null;
 }
 
 export function NodeFlow({
@@ -26,12 +27,16 @@ export function NodeFlow({
   onToggleSelect,
   onAddToQueue,
   onBuildNow,
+  researchStatus,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [nodes.length, streamingIdeas.length]);
+
+  // Count generation round indices
+  let genRoundIndex = 0;
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
@@ -41,7 +46,8 @@ export function NodeFlow({
             return <BriefNode key={node.id} content={node.content} campaignType={node.campaignType} campaignSubtype={node.campaignSubtype} />;
           case 'ai_response':
             return <AiResponseNode key={node.id} content={node.content} isStreaming={node.isStreaming} />;
-          case 'generation':
+          case 'generation': {
+            const currentRound = genRoundIndex++;
             return (
               <GenerationNode
                 key={node.id}
@@ -53,8 +59,11 @@ export function NodeFlow({
                 onToggleSelect={onToggleSelect}
                 onAddToQueue={onAddToQueue}
                 onBuildNow={onBuildNow}
+                researchStatus={node.id === streamingNodeId ? researchStatus : null}
+                roundIndex={currentRound}
               />
             );
+          }
           case 'feedback':
             return <FeedbackNode key={node.id} content={node.content} selectedIdeas={node.selectedIdeas} />;
           default:
