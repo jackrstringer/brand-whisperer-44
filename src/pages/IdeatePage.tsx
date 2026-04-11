@@ -180,9 +180,8 @@ export default function IdeatePage() {
               onToggleChaos={ideation.toggleChaosMode}
               onToggleTurbo={ideation.toggleTurboMode}
               activeType={ideation.activeType}
-              onStop={() => {
-                // Access abort via the hook - we need to expose it
-              }}
+              onStop={() => ideation.abort()}
+            />
             />
           </div>
 
