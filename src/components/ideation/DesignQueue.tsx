@@ -2,7 +2,9 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { DesignQueueItem } from '@/hooks/useDesignQueue';
-import { GripVertical, X, Calendar } from 'lucide-react';
+import { GripVertical, X, Calendar, Zap, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
 
 const STATUS_STYLES: Record<string, string> = {
   queued: 'bg-muted text-muted-foreground',
@@ -16,9 +18,12 @@ interface Props {
   items: DesignQueueItem[];
   onRemove: (id: string) => void;
   onItemClick?: (item: DesignQueueItem) => void;
+  bulkEligibleCount?: number;
+  onBulkGenerate?: () => void;
+  bulkProgress?: { completed: number; total: number } | null;
 }
 
-export function DesignQueue({ items, onRemove, onItemClick }: Props) {
+export function DesignQueue({ items, onRemove, onItemClick, bulkEligibleCount, onBulkGenerate, bulkProgress }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: 'design-queue' });
 
   return (
@@ -32,7 +37,26 @@ export function DesignQueue({ items, onRemove, onItemClick }: Props) {
             </span>
           )}
         </div>
+        {onBulkGenerate && (bulkEligibleCount ?? 0) > 0 && !bulkProgress && (
+          <Button size="sm" variant="outline" onClick={onBulkGenerate} className="h-7 text-xs gap-1">
+            <Zap className="w-3 h-3" />
+            Bulk Generate ({bulkEligibleCount})
+          </Button>
+        )}
       </div>
+
+      {/* Bulk progress */}
+      {bulkProgress && (
+        <div className="px-4 py-2 border-b border-border">
+          <div className="flex items-center gap-2 mb-1">
+            <Loader2 className="w-3 h-3 animate-spin text-primary" />
+            <span className="text-xs text-muted-foreground">
+              Generating {bulkProgress.completed}/{bulkProgress.total}...
+            </span>
+          </div>
+          <Progress value={(bulkProgress.completed / bulkProgress.total) * 100} className="h-1.5" />
+        </div>
+      )}
 
       <div
         ref={setNodeRef}
