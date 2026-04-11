@@ -43,7 +43,18 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
   );
   const [isGenerating, setIsGenerating] = useState(false);
   const [campaignHtml, setCampaignHtml] = useState<string | null>(null);
+  const [iframeHeight, setIframeHeight] = useState(400);
   const saveRef = useRef<ReturnType<typeof setTimeout>>();
+
+  const measureIframe = useCallback((iframe: HTMLIFrameElement | null) => {
+    if (!iframe) return;
+    try {
+      const doc = iframe.contentDocument;
+      if (!doc) return;
+      const h = Math.max(doc.body?.scrollHeight ?? 0, doc.documentElement?.scrollHeight ?? 0, 200);
+      setIframeHeight(h);
+    } catch {}
+  }, []);
 
   // Load campaign HTML if generated
   useEffect(() => {
