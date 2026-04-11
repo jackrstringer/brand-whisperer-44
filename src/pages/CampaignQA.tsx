@@ -214,6 +214,16 @@ export default function CampaignQA() {
       if (mode === "campaign" && data?.klaviyoEditUrl) {
         window.open(data.klaviyoEditUrl, "_blank");
       }
+
+      // Update any linked design_queue_items to 'sent' status
+      if (campaignId && (data?.klaviyoCampaignId || data?.klaviyo_campaign_id)) {
+        const klaviyoId = data.klaviyoCampaignId || data.klaviyo_campaign_id;
+        supabase
+          .from("design_queue_items")
+          .update({ klaviyo_campaign_id: klaviyoId, status: "sent" } as any)
+          .eq("campaign_id", campaignId)
+          .then(() => {});
+      }
     } catch (e: any) {
       toast.error(getKlaviyoErrorMessage(e?.message || ""));
     } finally {
