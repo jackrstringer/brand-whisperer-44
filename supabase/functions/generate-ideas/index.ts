@@ -1,0 +1,511 @@
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+const CHAOS_ANCHORS = [
+  "Think vintage Apple — clean, aspirational, 'Think Different' energy",
+  "Channel Nike manifesto energy — bold declarations, active voice",
+  "Oatly irreverence — self-aware, slightly absurd, anti-corporate",
+  "Supreme drop energy — exclusivity, urgency, cultural cachet",
+  "Glossier community energy — inclusive, real, user-first",
+  "Patagonia purpose — environmental urgency meets understated confidence",
+  "Liquid Death absurdism — extreme personality, unexpected for the category",
+  "Aesop editorial — literary, intellectual, sensory language",
+  "Drunk Elephant transparency — ingredient-first, science-forward, no BS",
+  "Rhode minimalism — gen-z clean, effortless, golden-hour aesthetic",
+];
+
+const RESEARCH_PROMPTS: Record<string, (brand: string, industry: string, products: string, audience: string) => string> = {
+  "Social Proof": (brand, industry, products, audience) =>
+    `Find recent customer reviews, testimonials, and UGC for ${brand} (${industry}). Products: ${products}. Target audience: ${audience}.`,
+  "FAQ/Overcoming Objections": (brand, industry, products, audience) =>
+    `Find the most common customer objections, hesitations, and FAQs about ${brand} in the ${industry} space. Products: ${products}. Target audience: ${audience}. Focus on real purchase barriers.`,
+  'Press/"As Seen In"': (brand, industry) =>
+    `Find recent press mentions, media coverage, and editorial features about ${brand} in the ${industry} industry.`,
+  "Loyalty Program": (brand) =>
+    `Find details about ${brand}'s loyalty or rewards program — tiers, points system, perks, how it works.`,
+  "Comparison": (brand, industry) =>
+    `Find ${brand}'s main competitors and key differentiators in the ${industry} space.`,
+};
+
+function sseEncode(event: string, data: any): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+async function doResearch(
+  campaignType: string,
+  brandName: string,
+  industry: string,
+  products: string,
+  audience: string,
+): Promise<string | null> {
+  const promptFn = RESEARCH_PROMPTS[campaignType];
+  if (!promptFn) return null;
+
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+  if (!LOVABLE_API_KEY) {
+    console.warn("[generate-ideas] LOVABLE_API_KEY not set, skipping research");
+    return null;
+  }
+
+  try {
+    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [{ role: "user", content: promptFn(brandName, industry, products, audience) }],
+        temperature: 0.3,
+        max_tokens: 2000,
+      }),
+    });
+
+    if (!resp.ok) {
+      console.error("[generate-ideas] Research API error:", resp.status);
+      return null;
+    }
+
+    const result = await resp.json();
+    return result.choices?.[0]?.message?.content || null;
+  } catch (err) {
+    console.error("[generate-ideas] Research error:", err);
+    return null;
+  }
+}
+
+async function getFatigueConstraints(supabase: any, brandId: string): Promise<string> {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: decisions } = await supabase
+    .from("creative_decisions")
+    .select("decision_type, value")
+    .eq("brand_id", brandId)
+    .gte("created_at", thirtyDaysAgo);
+
+  if (!decisions || decisions.length === 0) return "";
+
+  // Count usage
+  const counts: Record<string, number> = {};
+  for (const d of decisions) {
+    const key = `${d.decision_type}:${d.value}`;
+    counts[key] = (counts[key] || 0) + 1;
+  }
+
+  const overused = Object.entries(counts)
+    .filter(([, count]) => count >= 3)
+    .map(([key]) => key.split(":").slice(1).join(":"));
+
+  const knownAngles = ["urgency", "scarcity", "social_proof", "educational", "behind_the_scenes", "seasonal", "product_launch"];
+  const usedAngles = new Set(decisions.filter((d: any) => d.decision_type === "angle").map((d: any) => d.value));
+  const freshAngles = knownAngles.filter(a => !usedAngles.has(a));
+
+  if (overused.length === 0 && freshAngles.length === 0) return "";
+
+  let constraints = "\nCREATIVE FATIGUE CONSTRAINTS:\n";
+  if (overused.length > 0) constraints += `AVOID (overused recently): ${overused.join(", ")}\n`;
+  if (freshAngles.length > 0) constraints += `EXPLORE (fresh angles): ${freshAngles.join(", ")}\n`;
+  return constraints;
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  try {
+    const body = await req.json();
+    const {
+      brand_id,
+      brief,
+      parent_ideas,
+      feedback,
+      mode = "initial",
+      campaign_type_filter,
+      campaign_subtype_filter,
+      needs_research = false,
+      chaos_mode = false,
+      turbo_mode = false,
+      stream = true,
+    } = body;
+
+    if (!brand_id) {
+      return new Response(JSON.stringify({ error: "brand_id required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    // Load brand context
+    const { data: brandData } = await supabase
+      .from("brands")
+      .select("name, industry, website_url, ideation_prompt")
+      .eq("id", brand_id)
+      .single();
+
+    const brandName = brandData?.name || "Unknown Brand";
+    const industry = brandData?.industry || "consumer products";
+
+    // Build system prompt
+    let systemPrompt = brandData?.ideation_prompt ||
+      `You are a senior creative strategist at a top-tier email marketing agency. Today is ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.`;
+
+    if (chaos_mode) {
+      const anchor = CHAOS_ANCHORS[Math.floor(Math.random() * CHAOS_ANCHORS.length)];
+      systemPrompt += `\n\nCREATIVE MODE ACTIVATED.\nInspiration: ${anchor}\nBreak your usual patterns. Be surprising, but keep it professional and on-brand.`;
+    }
+
+    if (mode === "bank") {
+      const fatigueConstraints = await getFatigueConstraints(supabase, brand_id);
+      if (fatigueConstraints) systemPrompt += fatigueConstraints;
+    }
+
+    // Research pre-step
+    let researchData: string | null = null;
+    if (needs_research && campaign_type_filter) {
+      // Get product/audience info from merged profile
+      const { data: intel } = await supabase
+        .from("brand_intelligence")
+        .select("merged_profile")
+        .eq("brand_id", brand_id)
+        .single();
+
+      const mp = (intel?.merged_profile as any) || {};
+      const products = mp.hero_products
+        ? (Array.isArray(mp.hero_products) ? mp.hero_products.join(", ") : mp.hero_products)
+        : "various products";
+      const audience = mp.target_audience || "general consumers";
+
+      researchData = await doResearch(campaign_type_filter, brandName, industry, products, audience);
+    }
+
+    // Build user prompt based on mode
+    const ideaCount = turbo_mode ? 20 : 4;
+    let userPrompt = "";
+
+    switch (mode) {
+      case "initial":
+      case "bank":
+        userPrompt = `Generate ${ideaCount} email campaign ideas for ${brandName}.\n`;
+        if (campaign_type_filter) userPrompt += `Campaign type: ${campaign_type_filter}\n`;
+        if (campaign_subtype_filter) userPrompt += `Campaign subtype: ${campaign_subtype_filter}\n`;
+        if (brief) userPrompt += `Direction: ${brief}\n`;
+        break;
+
+      case "variations":
+        userPrompt = `Create variations of these concepts — same core insight, completely different executions:\n`;
+        if (parent_ideas) {
+          parent_ideas.forEach((idea: any) => {
+            userPrompt += `- "${idea.title}": ${idea.description}\n`;
+          });
+        }
+        if (brief) userPrompt += `\nDirection: ${brief}\n`;
+        break;
+
+      case "feedback":
+        userPrompt = `Direction: ${feedback || brief}\nBuilding on:\n`;
+        if (parent_ideas) {
+          parent_ideas.forEach((idea: any) => {
+            userPrompt += `- "${idea.title}": ${idea.description}\n`;
+          });
+        }
+        break;
+
+      case "different":
+        userPrompt = `Generate completely different campaign ideas for ${brandName}.\nAvoid these angles:\n`;
+        if (parent_ideas) {
+          parent_ideas.forEach((idea: any) => {
+            userPrompt += `- "${idea.title}"\n`;
+          });
+        }
+        if (brief) userPrompt += `\nDirection: ${brief}\n`;
+        break;
+    }
+
+    // Append research data
+    if (researchData) {
+      userPrompt += `\n\nRESEARCH DATA (${campaign_type_filter}):\n${researchData}`;
+    }
+
+    // Output format
+    if (turbo_mode) {
+      userPrompt += `\n\nFor each idea, give me ONLY a title and campaign_type. Keep titles punchy and specific.\nReturn ONLY a JSON array:\n[{ "title": "…", "campaign_type": "…" }]`;
+    } else {
+      userPrompt += `\n\nFor each idea, return a JSON object with these fields:
+- "title": Campaign name (punchy, specific, max 8 words)
+- "description": One-sentence summary (max 15 words, punchy and clear)
+- "subject_line": Email subject line
+- "campaign_type": The campaign type category (e.g., "Product Highlight", "Sale/Promo")
+- "campaign_info": 2-3 sentences describing what this email should contain — the key message, product focus, offer details, and structural approach. This will pre-fill the campaign brief field in the generation screen.
+- "copy_direction": 1-2 sentences describing the tone, voice angle, and any specific copy hooks to use. This will pre-fill the copy guidance field.
+
+Return ONLY a JSON array. No other text, no markdown:
+[{ "title": "…", "description": "…", "subject_line": "…", "campaign_type": "…", "campaign_info": "…", "copy_direction": "…" }]`;
+    }
+
+    // Call Claude Haiku 4.5
+    const anthropicResp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 4096,
+        temperature: 1.0,
+        stream: true,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      }),
+    });
+
+    if (!anthropicResp.ok) {
+      const errText = await anthropicResp.text();
+      console.error("[generate-ideas] Anthropic error:", anthropicResp.status, errText);
+      throw new Error(`Anthropic API error: ${anthropicResp.status}`);
+    }
+
+    if (!stream) {
+      // Non-streaming: collect full response
+      const fullText = await collectAnthropicStream(anthropicResp);
+      const ideas = parseIdeasFromText(fullText);
+      return new Response(JSON.stringify({ ideas }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // SSE streaming response
+    const encoder = new TextEncoder();
+    const readableStream = new ReadableStream({
+      async start(controller) {
+        try {
+          // If research happened, emit status
+          if (researchData) {
+            controller.enqueue(encoder.encode(sseEncode("research_status", { status: "complete" })));
+          }
+
+          const reader = anthropicResp.body!.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          let jsonBuffer = "";
+          let braceDepth = 0;
+          let inString = false;
+          let escapeNext = false;
+          let inArray = false;
+          let ideaIndex = 0;
+          let currentFieldKey = "";
+          let currentFieldValue = "";
+          let parsingFieldValue = false;
+
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() || "";
+
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue;
+              const data = line.slice(6).trim();
+              if (data === "[DONE]") continue;
+
+              try {
+                const event = JSON.parse(data);
+                const delta = event.delta?.text || event.delta?.content?.[0]?.text || "";
+                if (!delta) continue;
+
+                // Parse character by character for JSON extraction
+                for (const char of delta) {
+                  if (escapeNext) {
+                    escapeNext = false;
+                    if (parsingFieldValue) {
+                      currentFieldValue += char;
+                    }
+                    jsonBuffer += char;
+                    continue;
+                  }
+
+                  if (char === "\\") {
+                    escapeNext = true;
+                    if (parsingFieldValue) {
+                      currentFieldValue += char;
+                    }
+                    jsonBuffer += char;
+                    continue;
+                  }
+
+                  if (char === '"' && !escapeNext) {
+                    inString = !inString;
+                    jsonBuffer += char;
+
+                    if (inString && braceDepth === 1 && !parsingFieldValue) {
+                      // Starting a key or value
+                      currentFieldKey = "";
+                    } else if (!inString && braceDepth === 1) {
+                      // Ended a string - check if it's a field key or value
+                      const trimmed = jsonBuffer.trim();
+                      if (parsingFieldValue) {
+                        // Emit the complete field
+                        const streamableFields = ["title", "description", "subject_line", "campaign_type", "campaign_info", "copy_direction"];
+                        if (streamableFields.includes(currentFieldKey)) {
+                          controller.enqueue(encoder.encode(sseEncode("idea_field", {
+                            index: ideaIndex,
+                            field: currentFieldKey,
+                            value: currentFieldValue,
+                          })));
+                        }
+                        parsingFieldValue = false;
+                        currentFieldValue = "";
+                      }
+                    }
+                    continue;
+                  }
+
+                  if (inString) {
+                    jsonBuffer += char;
+                    if (parsingFieldValue) {
+                      currentFieldValue += char;
+                    } else if (braceDepth === 1) {
+                      currentFieldKey += char;
+                    }
+                    continue;
+                  }
+
+                  jsonBuffer += char;
+
+                  if (char === "[" && braceDepth === 0) {
+                    inArray = true;
+                    continue;
+                  }
+
+                  if (char === "{") {
+                    braceDepth++;
+                    if (braceDepth === 1) {
+                      jsonBuffer = "{";
+                      controller.enqueue(encoder.encode(sseEncode("idea_start", { index: ideaIndex })));
+                    }
+                    continue;
+                  }
+
+                  if (char === ":") {
+                    if (braceDepth === 1 && !inString) {
+                      parsingFieldValue = true;
+                      currentFieldValue = "";
+                    }
+                    continue;
+                  }
+
+                  if (char === ",") {
+                    if (braceDepth === 1 && !inString) {
+                      parsingFieldValue = false;
+                      currentFieldKey = "";
+                      currentFieldValue = "";
+                    }
+                    continue;
+                  }
+
+                  if (char === "}") {
+                    braceDepth--;
+                    if (braceDepth === 0 && inArray) {
+                      // Complete idea object
+                      try {
+                        const ideaObj = JSON.parse(jsonBuffer);
+                        ideaObj.id = crypto.randomUUID();
+                        controller.enqueue(encoder.encode(sseEncode("idea_complete", {
+                          index: ideaIndex,
+                          idea: ideaObj,
+                        })));
+                      } catch {
+                        // Best effort parse failed, skip
+                        console.warn("[generate-ideas] Failed to parse idea object at index", ideaIndex);
+                      }
+                      ideaIndex++;
+                      jsonBuffer = "";
+                      parsingFieldValue = false;
+                      currentFieldKey = "";
+                      currentFieldValue = "";
+                    }
+                    continue;
+                  }
+                }
+              } catch {
+                // Skip unparseable SSE lines
+              }
+            }
+          }
+
+          controller.enqueue(encoder.encode(sseEncode("done", {})));
+          controller.close();
+        } catch (err) {
+          console.error("[generate-ideas] Stream error:", err);
+          controller.enqueue(encoder.encode(sseEncode("error", { message: (err as Error).message })));
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(readableStream, {
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
+  } catch (err: any) {
+    console.error("[generate-ideas] Error:", err);
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});
+
+async function collectAnthropicStream(resp: Response): Promise<string> {
+  const reader = resp.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let fullText = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const data = line.slice(6).trim();
+      if (data === "[DONE]") continue;
+      try {
+        const event = JSON.parse(data);
+        fullText += event.delta?.text || event.delta?.content?.[0]?.text || "";
+      } catch {}
+    }
+  }
+  return fullText;
+}
+
+function parseIdeasFromText(text: string): any[] {
+  // Extract JSON array from response
+  const match = text.match(/\[[\s\S]*\]/);
+  if (!match) return [];
+  try {
+    const ideas = JSON.parse(match[0]);
+    return ideas.map((idea: any) => ({ ...idea, id: crypto.randomUUID() }));
+  } catch {
+    return [];
+  }
+}

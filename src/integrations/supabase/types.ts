@@ -61,6 +61,44 @@ export type Database = {
           },
         ]
       }
+      brand_calendar: {
+        Row: {
+          auto_generated: boolean | null
+          brand_id: string
+          created_at: string | null
+          event_date: string
+          event_name: string
+          event_type: string | null
+          id: string
+        }
+        Insert: {
+          auto_generated?: boolean | null
+          brand_id: string
+          created_at?: string | null
+          event_date: string
+          event_name: string
+          event_type?: string | null
+          id?: string
+        }
+        Update: {
+          auto_generated?: boolean | null
+          brand_id?: string
+          created_at?: string | null
+          event_date?: string
+          event_name?: string
+          event_type?: string | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_calendar_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brand_feedback: {
         Row: {
           attachment_urls: string[] | null
@@ -273,6 +311,9 @@ export type Database = {
           created_at: string
           figma_url: string | null
           id: string
+          idea_generation_status: string | null
+          ideation_prompt: string | null
+          ideation_prompt_built_at: string | null
           industry: string | null
           name: string
           source_types: string[] | null
@@ -284,6 +325,9 @@ export type Database = {
           created_at?: string
           figma_url?: string | null
           id?: string
+          idea_generation_status?: string | null
+          ideation_prompt?: string | null
+          ideation_prompt_built_at?: string | null
           industry?: string | null
           name: string
           source_types?: string[] | null
@@ -295,6 +339,9 @@ export type Database = {
           created_at?: string
           figma_url?: string | null
           id?: string
+          idea_generation_status?: string | null
+          ideation_prompt?: string | null
+          ideation_prompt_built_at?: string | null
           industry?: string | null
           name?: string
           source_types?: string[] | null
@@ -495,6 +542,48 @@ export type Database = {
           },
         ]
       }
+      creative_decisions: {
+        Row: {
+          brand_id: string
+          campaign_id: string | null
+          created_at: string | null
+          decision_type: string
+          id: string
+          value: string
+        }
+        Insert: {
+          brand_id: string
+          campaign_id?: string | null
+          created_at?: string | null
+          decision_type: string
+          id?: string
+          value: string
+        }
+        Update: {
+          brand_id?: string
+          campaign_id?: string | null
+          created_at?: string | null
+          decision_type?: string
+          id?: string
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creative_decisions_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "creative_decisions_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       generation_events: {
         Row: {
           campaign_id: string
@@ -542,6 +631,103 @@ export type Database = {
           step?: string
         }
         Relationships: []
+      }
+      idea_bank: {
+        Row: {
+          brand_id: string
+          campaign_info: string | null
+          campaign_type: string | null
+          copy_direction: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          source_type: string | null
+          status: string | null
+          subject_line: string | null
+          title: string
+          used_at: string | null
+        }
+        Insert: {
+          brand_id: string
+          campaign_info?: string | null
+          campaign_type?: string | null
+          copy_direction?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          source_type?: string | null
+          status?: string | null
+          subject_line?: string | null
+          title: string
+          used_at?: string | null
+        }
+        Update: {
+          brand_id?: string
+          campaign_info?: string | null
+          campaign_type?: string | null
+          copy_direction?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          source_type?: string | null
+          status?: string | null
+          subject_line?: string | null
+          title?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "idea_bank_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ideation_sessions: {
+        Row: {
+          brand_id: string
+          created_at: string | null
+          id: string
+          initial_brief: string | null
+          locked_idea: Json | null
+          nodes: Json | null
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          brand_id: string
+          created_at?: string | null
+          id?: string
+          initial_brief?: string | null
+          locked_idea?: Json | null
+          nodes?: Json | null
+          status?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          brand_id?: string
+          created_at?: string | null
+          id?: string
+          initial_brief?: string | null
+          locked_idea?: Json | null
+          nodes?: Json | null
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ideation_sessions_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       klaviyo_connections: {
         Row: {
