@@ -1,6 +1,6 @@
 import { CampaignIdea } from '@/lib/types';
 import { useDraggable } from '@dnd-kit/core';
-import { Check, Plus, ArrowRight, Mail } from 'lucide-react';
+import { Check, Plus, ArrowRight } from 'lucide-react';
 import { CAMPAIGN_TYPES } from '@/lib/ideation/campaignTypes';
 
 interface Props {
@@ -26,8 +26,10 @@ export function IdeaGrid({ ideas, isStreaming, selectedIds, onToggleSelect, onAd
         <thead>
           <tr className="border-b border-border">
             <th className="w-10 p-2" />
-            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider w-[30%]">Type</th>
-            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Title</th>
+            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider w-[140px]">Type</th>
+            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider w-[25%]">Title</th>
+            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Description</th>
+            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider hidden lg:table-cell w-[20%]">Subject Line</th>
             <th className="w-16 p-2" />
           </tr>
         </thead>
@@ -48,7 +50,9 @@ export function IdeaGrid({ ideas, isStreaming, selectedIds, onToggleSelect, onAd
             <tr key={`skel-${i}`} className="border-t border-border">
               <td className="p-2.5 w-10"><div className="w-4 h-4 rounded-full border border-border mx-auto" /></td>
               <td className="p-2.5"><div className="w-20 h-3 bg-muted rounded animate-pulse" /></td>
-              <td className="p-2.5"><div className="w-48 h-4 bg-muted rounded animate-pulse" /></td>
+              <td className="p-2.5"><div className="w-32 h-4 bg-muted rounded animate-pulse" /></td>
+              <td className="p-2.5 hidden md:table-cell"><div className="w-48 h-3 bg-muted rounded animate-pulse" /></td>
+              <td className="p-2.5 hidden lg:table-cell"><div className="w-28 h-3 bg-muted rounded animate-pulse" /></td>
               <td className="p-2.5 w-16" />
             </tr>
           ))}
@@ -116,8 +120,20 @@ function IdeaRow({
         <span className="text-[13px] font-semibold text-foreground truncate block">
           {idea.title || <span className="inline-block w-32 h-4 bg-muted rounded animate-pulse" />}
           {isStreaming && !idea.id && (
-            <span className="inline-block w-[2px] h-[14px] bg-primary/70 animate-pulse ml-0.5 align-middle" />
+            <span className="inline-block w-[2px] h-[14px] bg-primary/70 animate-lucy-blink ml-0.5 align-middle" />
           )}
+        </span>
+      </td>
+
+      <td className="p-2.5 align-middle hidden md:table-cell">
+        <span className="text-[12px] text-muted-foreground line-clamp-2">
+          {idea.description || (isStreaming && !idea.id ? <span className="inline-block w-40 h-3 bg-muted rounded animate-pulse" /> : null)}
+        </span>
+      </td>
+
+      <td className="p-2.5 align-middle hidden lg:table-cell">
+        <span className="text-[12px] text-muted-foreground truncate block">
+          {idea.subject_line || null}
         </span>
       </td>
 
