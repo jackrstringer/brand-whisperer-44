@@ -16,7 +16,7 @@ export function IdeaGrid({ ideas, isStreaming, selectedIds, onToggleSelect, onAd
   const skeletonCount = isStreaming ? Math.max(0, 4 - ideas.length) : 0;
 
   return (
-    <div className="grid grid-cols-2 gap-2.5">
+    <div className="grid grid-cols-2 xl:grid-cols-4 gap-2">
       {ideas.map(idea => (
         <IdeaCard
           key={idea.id || idea.title}
@@ -65,7 +65,7 @@ function IdeaCard({
       onClick={isPartial ? undefined : onToggleSelect}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className={`relative p-3.5 rounded-xl border cursor-pointer transition-all select-none ${
+      className={`relative p-3 rounded-xl border cursor-pointer transition-all select-none ${
         isDragging ? 'opacity-50' : ''
       } ${
         isSelected

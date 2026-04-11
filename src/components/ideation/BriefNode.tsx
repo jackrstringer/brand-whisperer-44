@@ -6,9 +6,11 @@ interface Props {
 
 export function BriefNode({ content, campaignType, campaignSubtype }: Props) {
   return (
-    <div className="flex justify-end mb-3">
-      <div className="max-w-[80%] bg-foreground text-background px-4 py-2.5 rounded-2xl rounded-br-md">
-        <p className="text-sm">{content}</p>
+    <div className="flex justify-center mb-3">
+      <div className="bg-foreground text-background px-5 py-2 rounded-full inline-flex items-center gap-2">
+        {campaignType && <span className="text-xs font-medium opacity-80">{campaignType}{campaignSubtype ? ` → ${campaignSubtype}` : ''}</span>}
+        {campaignType && content && <span className="opacity-40">·</span>}
+        {content && <span className="text-sm">{content}</span>}
       </div>
     </div>
   );

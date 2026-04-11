@@ -47,7 +47,7 @@ export function ChatBar({
   };
 
   return (
-    <div className="border-t border-border bg-card px-4 py-3">
+    <div className="border-t border-border bg-card px-4 py-2">
       {/* Selection indicator */}
       {selectedCount > 0 && (
         <div className="flex items-center gap-2 mb-2">
@@ -92,7 +92,7 @@ export function ChatBar({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={isBusy}
-          className="flex-1 bg-muted text-sm text-foreground placeholder:text-muted-foreground px-4 py-2.5 rounded-xl border-0 focus:outline-none focus:ring-1 focus:ring-foreground/20 disabled:opacity-50"
+          className="flex-1 bg-muted text-sm text-foreground placeholder:text-muted-foreground px-3.5 py-2 rounded-xl border-0 focus:outline-none focus:ring-1 focus:ring-foreground/20 disabled:opacity-50"
         />
 
         {/* Send */}

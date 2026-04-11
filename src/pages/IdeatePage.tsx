@@ -136,14 +136,14 @@ export default function IdeatePage() {
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <div className="h-screen flex flex-col bg-background">
         {/* Top bar */}
-        <div className="h-12 border-b border-border flex items-center justify-between px-4 flex-shrink-0">
+        <div className="h-10 border-b border-border flex items-center justify-between px-4 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <Lightbulb className="w-4 h-4 text-foreground" />
-            <span className="text-sm font-semibold text-foreground">Ideate</span>
+            <Lightbulb className="w-3.5 h-3.5 text-foreground" />
+            <span className="text-xs font-semibold text-foreground tracking-wide uppercase">ID8</span>
           </div>
           <button
             onClick={() => setRightPanelOpen(!rightPanelOpen)}
-            className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors hidden lg:flex"
+            className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors hidden lg:flex"
           >
             {rightPanelOpen ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
           </button>
@@ -152,7 +152,7 @@ export default function IdeatePage() {
         {/* Main content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Panel — Ideation Flow */}
-          <div className={`flex flex-col ${rightPanelOpen ? 'w-full lg:w-[55%]' : 'w-full'} border-r border-border transition-all`}>
+          <div className={`flex flex-col ${rightPanelOpen ? 'w-full lg:w-3/5' : 'w-full'} border-r border-border transition-all`}>
             <CampaignTypePicker
               onSelectType={(type, sub) => ideation.generateForType(type, sub)}
               activeType={ideation.activeType}
@@ -183,7 +183,7 @@ export default function IdeatePage() {
 
           {/* Right Panel — Desktop */}
           {rightPanelOpen && (
-            <div className="hidden lg:flex lg:w-[45%] flex-col">
+            <div className="hidden lg:flex lg:w-2/5 flex-col">
               {/* Design Queue — top half */}
               <div className="h-1/2 border-b border-border">
                 <DesignQueue
