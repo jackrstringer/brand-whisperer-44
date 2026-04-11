@@ -181,11 +181,6 @@ export default function IdeatePage() {
 
         {hasStarted && (
           <>
-            <CampaignTypePicker
-              onSelectType={(type, sub) => ideation.generateForType(type, sub)}
-              activeType={ideation.activeType}
-              isCompact={true}
-            />
             <NodeFlow
               nodes={ideation.nodes}
               streamingIdeas={ideation.streamingIdeas}

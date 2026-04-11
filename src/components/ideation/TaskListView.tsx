@@ -71,24 +71,6 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="px-4 py-2.5 border-b border-border flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-foreground">Tasks</h3>
-          {items.length > 0 && (
-            <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full">
-              {items.length}
-            </span>
-          )}
-        </div>
-        {bulkEligibleCount > 0 && !bulkProgress && (
-          <Button size="sm" variant="outline" onClick={onBulkGenerate} className="h-7 text-xs gap-1">
-            <Zap className="w-3 h-3" />
-            Bulk Generate ({bulkEligibleCount})
-          </Button>
-        )}
-      </div>
-
       {/* Bulk progress */}
       {bulkProgress && (
         <div className="px-4 py-2 border-b border-border flex-shrink-0">
