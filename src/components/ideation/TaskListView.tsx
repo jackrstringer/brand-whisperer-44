@@ -80,6 +80,7 @@ interface EditingCell {
 
 export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkEligibleCount, onBulkGenerate, bulkProgress }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: 'design-queue' });
+  const queryClient = useQueryClient();
   const { selectedIds, handleSelect, clearSelection, selectAll } = useMultiSelect(items);
   const selectedCount = selectedIds.size;
 
