@@ -49,19 +49,15 @@ export function NodeFlow({
     }
   }, [streamingNodeId]);
 
-  let genRoundIndex = 0;
-
   return (
-    <div className="max-w-3xl mx-auto px-6 py-4 space-y-1">
+    <div className="w-full max-w-full px-4 py-4 space-y-1">
       {nodes.map(node => {
         switch (node.type) {
           case 'brief':
             return <BriefNode key={node.id} content={node.content} campaignType={node.campaignType} campaignSubtype={node.campaignSubtype} />;
           case 'ai_response':
-            // Hidden — don't render AI response bubbles in the flow
             return null;
           case 'generation': {
-            const currentRound = genRoundIndex++;
             return (
               <GenerationNode
                 key={node.id}
@@ -74,7 +70,6 @@ export function NodeFlow({
                 onAddToQueue={onAddToQueue}
                 onBuildNow={onBuildNow}
                 researchStatus={node.id === streamingNodeId ? researchStatus : null}
-                roundIndex={currentRound}
               />
             );
           }
