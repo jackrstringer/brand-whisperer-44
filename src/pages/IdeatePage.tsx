@@ -151,8 +151,15 @@ export default function IdeatePage() {
   };
 
   const handleClearChat = () => {
-    // Reload the page to start a fresh session
     window.location.reload();
+  };
+
+  const handleAddSelectedToQueue = () => {
+    const selectedIdeas = Array.from(ideation.selectedIdeas.values());
+    selectedIdeas.forEach(idea => {
+      handleAddToQueue(idea);
+    });
+    ideation.clearSelection();
   };
 
   const ideationPanel = (
