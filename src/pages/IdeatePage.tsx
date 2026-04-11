@@ -165,7 +165,7 @@ export default function IdeatePage() {
   const ideationPanel = (
     <div className="flex flex-col h-full relative">
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto pb-36">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-36">
         {!hasStarted && (
           <div className="max-w-2xl mx-auto px-6">
             <div className="text-center mt-16 mb-8">
