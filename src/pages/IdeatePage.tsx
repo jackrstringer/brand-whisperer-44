@@ -121,7 +121,7 @@ export default function IdeatePage() {
     }
   };
 
-  const eligibleForBulk = designQueue.items.filter(i => i.status === 'queued' || i.status === 'configured');
+  const eligibleForBulk = designQueue.items.filter(i => i.status === 'draft');
 
   const handleBulkGenerate = async () => {
     setBulkConfirmOpen(false);
