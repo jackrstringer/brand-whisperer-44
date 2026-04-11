@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { Zap, Rocket, X, Square, Sparkles, ArrowRight, LayoutGrid } from 'lucide-react';
+import { Zap, Rocket, X, Square, Sparkles, ArrowRight, LayoutGrid, RotateCcw } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 
 interface Props {
@@ -16,6 +16,7 @@ interface Props {
   onStop?: () => void;
   menuOpen?: boolean;
   onToggleMenu?: () => void;
+  onClearChat?: () => void;
 }
 
 export function ChatBar({
@@ -32,6 +33,7 @@ export function ChatBar({
   onStop,
   menuOpen,
   onToggleMenu,
+  onClearChat,
 }: Props) {
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -146,6 +148,17 @@ export function ChatBar({
                 className="h-4 w-7 data-[state=checked]:bg-amber-500"
               />
             </div>
+
+            {/* Clear chat */}
+            {onClearChat && (
+              <button
+                onClick={onClearChat}
+                className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors"
+                title="Clear chat"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5">
@@ -163,9 +176,7 @@ export function ChatBar({
                   onClick={handleSend}
                   disabled={!input.trim() && selectedCount === 0}
                   className={`flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium transition-all border ${
-                    isBusy
-                      ? 'bg-muted border-border text-foreground animate-pulse'
-                      : 'bg-muted border-border text-foreground hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed'
+                    'bg-muted border-border text-foreground hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed'
                   }`}
                 >
                   <Sparkles className="w-3.5 h-3.5" />
