@@ -584,6 +584,91 @@ export type Database = {
           },
         ]
       }
+      design_queue_items: {
+        Row: {
+          brand_id: string
+          campaign_id: string | null
+          campaign_info: string | null
+          campaign_type: string | null
+          copy_direction: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          klaviyo_campaign_id: string | null
+          position: number | null
+          preferences: Json | null
+          send_date: string | null
+          source_session_id: string | null
+          status: string
+          subject_line: string | null
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          brand_id: string
+          campaign_id?: string | null
+          campaign_info?: string | null
+          campaign_type?: string | null
+          copy_direction?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          klaviyo_campaign_id?: string | null
+          position?: number | null
+          preferences?: Json | null
+          send_date?: string | null
+          source_session_id?: string | null
+          status?: string
+          subject_line?: string | null
+          title: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          brand_id?: string
+          campaign_id?: string | null
+          campaign_info?: string | null
+          campaign_type?: string | null
+          copy_direction?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          klaviyo_campaign_id?: string | null
+          position?: number | null
+          preferences?: Json | null
+          send_date?: string | null
+          source_session_id?: string | null
+          status?: string
+          subject_line?: string | null
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "design_queue_items_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "design_queue_items_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "design_queue_items_source_session_id_fkey"
+            columns: ["source_session_id"]
+            isOneToOne: false
+            referencedRelation: "ideation_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       generation_events: {
         Row: {
           campaign_id: string
