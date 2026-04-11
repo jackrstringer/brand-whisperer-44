@@ -167,6 +167,7 @@ export default function IdeatePage() {
               onToggleSelect={ideation.toggleSelect}
               onAddToQueue={handleAddToQueue}
               onBuildNow={handleBuildNow}
+              researchStatus={ideation.researchStatus}
             />
             <ChatBar
               onSend={ideation.sendChat}
@@ -178,6 +179,10 @@ export default function IdeatePage() {
               turboMode={ideation.turboMode}
               onToggleChaos={ideation.toggleChaosMode}
               onToggleTurbo={ideation.toggleTurboMode}
+              activeType={ideation.activeType}
+              onStop={() => {
+                // Access abort via the hook - we need to expose it
+              }}
             />
           </div>
 
