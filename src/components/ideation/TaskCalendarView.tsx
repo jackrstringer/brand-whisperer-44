@@ -5,11 +5,11 @@ import { DesignQueueItem } from '@/hooks/useDesignQueue';
 import { CalendarDayData } from '@/hooks/useIdeationCalendar';
 
 const STATUS_COLORS: Record<string, string> = {
-  queued: 'bg-muted text-muted-foreground',
-  configured: 'bg-blue-100 text-blue-700',
+  draft: 'bg-muted text-muted-foreground',
   generating: 'bg-amber-100 text-amber-700 animate-pulse',
-  generated: 'bg-green-100 text-green-700',
-  sent: 'bg-green-600 text-white',
+  designed: 'bg-blue-100 text-blue-700',
+  templated: 'bg-purple-100 text-purple-700',
+  sent: 'bg-green-100 text-green-700',
 };
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -96,7 +96,7 @@ function CalendarDayCell({
   return (
     <div
       ref={setNodeRef}
-      className={`border-b border-r border-border/30 p-1 overflow-hidden transition-colors ${
+      className={`border-b border-r border-border/30 p-1 overflow-y-auto transition-colors ${
         isOver ? 'bg-primary/10 ring-1 ring-inset ring-primary/30' : hasEvents ? 'bg-amber-50/30' : ''
       } ${isToday ? 'ring-1 ring-inset ring-blue-300 bg-blue-50/20' : ''}`}
     >
@@ -105,7 +105,7 @@ function CalendarDayCell({
       </span>
 
       {dayData?.events?.map(evt => (
-        <div key={evt.id} className="text-[8px] text-muted-foreground truncate mt-0.5" title={evt.event_name}>
+        <div key={evt.id} className="text-[8px] text-muted-foreground mt-0.5 leading-tight" title={evt.event_name}>
           {evt.event_name}
         </div>
       ))}
@@ -129,8 +129,8 @@ function DraggableCalendarPill({ item, onClick }: { item: DesignQueueItem; onCli
       {...attributes}
       {...listeners}
       onClick={e => { e.stopPropagation(); onClick(); }}
-      className={`text-[9px] font-medium px-1.5 py-0.5 rounded truncate cursor-pointer mt-0.5 ${
-        STATUS_COLORS[item.status] || STATUS_COLORS.queued
+      className={`text-[9px] font-medium px-1.5 py-0.5 rounded cursor-pointer mt-0.5 leading-tight break-words ${
+        STATUS_COLORS[item.status] || STATUS_COLORS.draft
       } ${isDragging ? 'opacity-50' : ''}`}
       title={item.title}
     >
