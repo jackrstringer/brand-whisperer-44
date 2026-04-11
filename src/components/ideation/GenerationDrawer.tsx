@@ -51,7 +51,7 @@ export function GenerationDrawer({ item, brandId, onClose, onUpdate, onRemove, o
       saveRef.current = setTimeout(() => {
         supabase
           .from('design_queue_items')
-          .update(fields)
+          .update(fields as any)
           .eq('id', item.id)
           .then(() => {});
       }, 500);
