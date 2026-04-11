@@ -4,12 +4,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Plus, ArrowRight, Trash2, Copy, Timer } from "lucide-react";
+import { Plus, ArrowRight, Trash2, Copy, Timer, LayoutList, ListOrdered } from "lucide-react";
 import { toast } from "sonner";
 import type { Brand, Campaign } from "@/lib/types";
 import { useAuth } from "@/hooks/useAuth";
 import { useMultiSelect } from "@/hooks/useMultiSelect";
 import { CampaignBulkBar } from "@/components/campaign/CampaignBulkBar";
+import { useDesignQueue, DesignQueueItem } from "@/hooks/useDesignQueue";
+import { GenerationDrawer } from "@/components/ideation/GenerationDrawer";
+import { Calendar } from "lucide-react";
 
 const statusColors: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -17,6 +20,14 @@ const statusColors: Record<string, string> = {
   ready: "bg-primary/20 text-primary",
   exported: "bg-blue-500/20 text-blue-400",
   error: "bg-destructive/20 text-destructive",
+};
+
+const queueStatusColors: Record<string, string> = {
+  queued: "bg-muted text-muted-foreground",
+  configured: "bg-blue-100 text-blue-700",
+  generating: "bg-amber-100 text-amber-700 animate-pulse",
+  generated: "bg-green-100 text-green-700",
+  sent: "bg-green-600 text-white",
 };
 
 function GenTimer({ campaign }: { campaign: any }) {
@@ -56,6 +67,9 @@ function formatDateTime(dateStr: string) {
     d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
+type ViewTab = "campaigns" | "queue";
+type QueueFilter = "all" | "queued" | "generated" | "sent";
+
 export default function CampaignsList() {
   const { brandId } = useParams<{ brandId: string }>();
   const navigate = useNavigate();
@@ -67,8 +81,12 @@ export default function CampaignsList() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [showTimers, setShowTimers] = useState(false);
   const [timersLoaded, setTimersLoaded] = useState(false);
+  const [viewTab, setViewTab] = useState<ViewTab>("campaigns");
+  const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
+  const [drawerItem, setDrawerItem] = useState<DesignQueueItem | null>(null);
 
   const { selectedIds, handleSelect, clearSelection } = useMultiSelect(campaigns);
+  const designQueue = useDesignQueue(brandId!);
 
   // Load timer preference from user_preferences
   useEffect(() => {
@@ -175,7 +193,6 @@ export default function CampaignsList() {
     navigate(`/brands/${brandId}/campaigns/${cloned.id}`);
   };
 
-  // Bulk actions
   const bulkDelete = async () => {
     const ids = Array.from(selectedIds);
     for (const id of ids) {
@@ -224,6 +241,12 @@ export default function CampaignsList() {
     toast.success(`${cloned.length} campaign${cloned.length > 1 ? "s" : ""} cloned`);
   };
 
+  const filteredQueueItems = designQueue.items.filter(item => {
+    if (queueFilter === "all") return true;
+    if (queueFilter === "queued") return item.status === "queued" || item.status === "configured";
+    return item.status === queueFilter;
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -234,91 +257,217 @@ export default function CampaignsList() {
 
   return (
     <div className="p-6 md:p-12">
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold">{brand?.name || "Brand"}</h1>
         <div className="flex items-center gap-2">
-          <button
-            onClick={toggleTimers}
-            className={`p-1.5 rounded transition-colors ${showTimers ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground"}`}
-            title="Toggle generation timers"
-          >
-            <Timer className="w-3.5 h-3.5" />
-          </button>
-          <Button onClick={createCampaign} className="bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all">
-            <Plus className="w-4 h-4 mr-1" /> New Campaign
-          </Button>
+          {viewTab === "campaigns" && (
+            <>
+              <button
+                onClick={toggleTimers}
+                className={`p-1.5 rounded transition-colors ${showTimers ? "text-primary" : "text-muted-foreground/40 hover:text-muted-foreground"}`}
+                title="Toggle generation timers"
+              >
+                <Timer className="w-3.5 h-3.5" />
+              </button>
+              <Button onClick={createCampaign} className="bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all">
+                <Plus className="w-4 h-4 mr-1" /> New Campaign
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      {campaigns.length === 0 ? (
-        <div className="border border-dashed border-border rounded-lg p-12 text-center">
-          <p className="text-muted-foreground mb-4">No campaigns yet. Create your first one.</p>
-          <Button onClick={createCampaign} variant="outline" className="active:scale-[0.98] transition-all">
-            Create first campaign
-          </Button>
-        </div>
+      {/* View toggle */}
+      <div className="flex items-center gap-1 mb-6 bg-muted rounded-lg p-1 w-fit">
+        <button
+          onClick={() => setViewTab("campaigns")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            viewTab === "campaigns" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <LayoutList className="w-3.5 h-3.5" />
+          Campaigns
+        </button>
+        <button
+          onClick={() => setViewTab("queue")}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+            viewTab === "queue" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <ListOrdered className="w-3.5 h-3.5" />
+          Design Queue
+          {designQueue.items.length > 0 && (
+            <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
+              {designQueue.items.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {viewTab === "campaigns" ? (
+        <>
+          {campaigns.length === 0 ? (
+            <div className="border border-dashed border-border rounded-lg p-12 text-center">
+              <p className="text-muted-foreground mb-4">No campaigns yet. Create your first one.</p>
+              <Button onClick={createCampaign} variant="outline" className="active:scale-[0.98] transition-all">
+                Create first campaign
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {campaigns.map((c, index) => {
+                const isSelected = selectedIds.has(c.id);
+                return (
+                  <div
+                    key={c.id}
+                    className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all duration-200 ease-out ${
+                      isSelected
+                        ? "border-primary bg-primary/5 scale-[1.005]"
+                        : "border-border bg-card hover:border-primary/30 hover:bg-primary/[0.03] hover:scale-[1.005] hover:shadow-sm"
+                    }`}
+                    onClick={(e) => {
+                      if (e.shiftKey || e.metaKey || e.ctrlKey || selectedIds.size > 0) {
+                        e.preventDefault();
+                        handleSelect(c.id, index, e);
+                      } else {
+                        navigate(`/brands/${brandId}/campaigns/${c.id}`);
+                      }
+                    }}
+                  >
+                    <div className="flex items-center gap-4 min-w-0">
+                      <span className="text-sm font-medium truncate">{c.name}</span>
+                      {(c.status === "draft" || c.status === "generating" || c.status === "error") && (
+                        <Badge className={statusColors[c.status] || statusColors.draft}>
+                          {c.status}
+                        </Badge>
+                      )}
+                      {showTimers && <GenTimer campaign={c} />}
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {formatDateTime(c.created_at)}
+                      </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); cloneCampaign(c); }}
+                        className="p-1.5 rounded text-muted-foreground hover:text-primary transition-colors"
+                        title="Clone campaign"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); }}
+                        className="p-1.5 rounded text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <CampaignBulkBar
+            count={selectedIds.size}
+            onDelete={() => setBulkDeleteOpen(true)}
+            onClone={bulkClone}
+            onClearSelection={clearSelection}
+          />
+        </>
       ) : (
-        <div className="space-y-2">
-          {campaigns.map((c, index) => {
-            const isSelected = selectedIds.has(c.id);
-            return (
-              <div
-                key={c.id}
-                className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all duration-200 ease-out ${
-                  isSelected
-                    ? "border-primary bg-primary/5 scale-[1.005]"
-                    : "border-border bg-card hover:border-primary/30 hover:bg-primary/[0.03] hover:scale-[1.005] hover:shadow-sm"
+        /* Design Queue View */
+        <>
+          {/* Filters */}
+          <div className="flex items-center gap-1 mb-4">
+            {(["all", "queued", "generated", "sent"] as QueueFilter[]).map(f => (
+              <button
+                key={f}
+                onClick={() => setQueueFilter(f)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  queueFilter === f
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:text-foreground"
                 }`}
-                onClick={(e) => {
-                  if (e.shiftKey || e.metaKey || e.ctrlKey || selectedIds.size > 0) {
-                    e.preventDefault();
-                    handleSelect(c.id, index, e);
-                  } else {
-                    navigate(`/brands/${brandId}/campaigns/${c.id}`);
-                  }
-                }}
               >
-                <div className="flex items-center gap-4 min-w-0">
-                  <span className="text-sm font-medium truncate">{c.name}</span>
-                  {(c.status === "draft" || c.status === "generating" || c.status === "error") && (
-                    <Badge className={statusColors[c.status] || statusColors.draft}>
-                      {c.status}
+                {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {filteredQueueItems.length === 0 ? (
+            <div className="border border-dashed border-border rounded-lg p-12 text-center">
+              <p className="text-muted-foreground mb-2">No items in queue{queueFilter !== "all" ? ` with status "${queueFilter}"` : ""}.</p>
+              <p className="text-xs text-muted-foreground">Go to the Ideate page to generate ideas and add them here.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredQueueItems.map(item => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between p-4 rounded-lg border border-border bg-card hover:border-primary/30 cursor-pointer transition-all"
+                  onClick={() => setDrawerItem(item)}
+                >
+                  <div className="flex items-center gap-4 min-w-0">
+                    <span className="text-sm font-medium truncate">{item.title}</span>
+                    {item.campaign_type && (
+                      <Badge variant="secondary" className="text-[10px]">{item.campaign_type}</Badge>
+                    )}
+                    <Badge className={`text-[10px] ${queueStatusColors[item.status] || queueStatusColors.queued}`}>
+                      {item.status}
                     </Badge>
-                  )}
-                  {showTimers && <GenTimer campaign={c} />}
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {item.send_date && (
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        {new Date(item.send_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    )}
+                    {item.campaign_id && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/brands/${brandId}/campaigns/${item.campaign_id}`);
+                        }}
+                      >
+                        View Campaign
+                      </Button>
+                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); designQueue.removeFromQueue.mutate(item.id); }}
+                      className="p-1.5 rounded text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {formatDateTime(c.created_at)}
-                  </span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); cloneCampaign(c); }}
-                    className="p-1.5 rounded text-muted-foreground hover:text-primary transition-colors"
-                    title="Clone campaign"
-                  >
-                    <Copy className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(c); }}
-                    className="p-1.5 rounded text-muted-foreground hover:text-destructive transition-colors"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
-      {/* Bulk action bar */}
-      <CampaignBulkBar
-        count={selectedIds.size}
-        onDelete={() => setBulkDeleteOpen(true)}
-        onClone={bulkClone}
-        onClearSelection={clearSelection}
-      />
+      {/* Generation Drawer */}
+      {drawerItem && (
+        <GenerationDrawer
+          item={drawerItem}
+          brandId={brandId!}
+          onClose={() => setDrawerItem(null)}
+          onUpdate={() => {}}
+          onRemove={(id) => {
+            designQueue.removeFromQueue.mutate(id);
+            setDrawerItem(null);
+          }}
+          onStatusChange={(id, status) => {
+            designQueue.updateStatus.mutate({ id, status });
+          }}
+        />
+      )}
 
       {/* Single delete dialog */}
       <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
