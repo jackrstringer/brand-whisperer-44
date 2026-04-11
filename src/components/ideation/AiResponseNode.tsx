@@ -9,15 +9,15 @@ export function AiResponseNode({ content, isStreaming }: Props) {
   if (!content && !isStreaming) return null;
 
   return (
-    <div className="flex justify-start mb-3">
+    <div className="flex justify-start mb-3 animate-[slide-up-section_0.5s_ease-out_forwards]">
       <div className="max-w-full flex gap-2.5">
-        <div className="w-6 h-6 rounded-full bg-foreground flex items-center justify-center flex-shrink-0 mt-0.5">
-          <Sparkles className="w-3.5 h-3.5 text-background" />
+        <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <Sparkles className="w-3 h-3 text-white/70" />
         </div>
-        <div className="bg-muted px-4 py-2.5 rounded-2xl rounded-bl-md">
-          <p className="text-sm text-foreground whitespace-pre-wrap">
+        <div className="bg-white/[0.06] border border-white/[0.06] px-4 py-2.5 rounded-2xl rounded-bl-md">
+          <p className="text-sm text-white/70 whitespace-pre-wrap">
             {content}
-            {isStreaming && <span className="inline-block w-1.5 h-4 bg-foreground/60 ml-0.5 animate-pulse" />}
+            {isStreaming && <span className="inline-block w-[2px] h-[14px] bg-primary/70 ml-0.5 animate-lucy-blink align-middle" />}
           </p>
         </div>
       </div>

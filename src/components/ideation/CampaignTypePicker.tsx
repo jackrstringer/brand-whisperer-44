@@ -13,8 +13,8 @@ export function CampaignTypePicker({ onSelectType, activeType, isCompact }: Prop
 
   if (isCompact) {
     return (
-      <div className="flex items-center gap-1.5 px-4 py-2 border-b border-border overflow-x-auto scrollbar-none">
-        <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mr-1 flex-shrink-0">Type:</span>
+      <div className="flex items-center gap-1.5 px-4 py-2 border-b border-white/[0.06] overflow-x-auto scrollbar-none">
+        <span className="text-[10px] text-white/30 uppercase tracking-wider font-medium mr-1 flex-shrink-0">Type:</span>
         {CAMPAIGN_TYPES.map(t => (
           <button
             key={t.name}
@@ -27,18 +27,18 @@ export function CampaignTypePicker({ onSelectType, activeType, isCompact }: Prop
             }}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap transition-colors flex-shrink-0 ${
               activeType === t.name
-                ? 'bg-foreground text-background'
-                : 'bg-muted/60 text-muted-foreground hover:bg-accent hover:text-foreground'
+                ? 'bg-white/20 text-white border border-white/20'
+                : 'text-white/50 hover:text-white/80 hover:bg-white/[0.06] border border-transparent'
             }`}
           >
-            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${activeType === t.name ? 'bg-background/60' : t.color}`} />
+            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${activeType === t.name ? 'bg-white/60' : t.color}`} />
             {t.name}
             {t.needsResearch && <Globe className="inline-block w-2.5 h-2.5 opacity-60" />}
           </button>
         ))}
         <button
           onClick={() => onSelectType('')}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap bg-muted/60 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors flex-shrink-0"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium whitespace-nowrap text-white/50 hover:text-white/80 hover:bg-white/[0.06] transition-colors flex-shrink-0 border border-transparent"
         >
           <Shuffle className="w-3 h-3" />
           Random
@@ -48,10 +48,7 @@ export function CampaignTypePicker({ onSelectType, activeType, isCompact }: Prop
   }
 
   return (
-    <div className="px-6 py-5">
-      <h2 className="text-base font-semibold text-foreground mb-1">What kind of campaign?</h2>
-      <p className="text-xs text-muted-foreground mb-4">Pick a type to generate ideas, or type a brief below.</p>
-
+    <div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
         {ORDERED_TYPES.map((t, i) => (
           <TypeCard
@@ -64,17 +61,17 @@ export function CampaignTypePicker({ onSelectType, activeType, isCompact }: Prop
             onExpand={() => setExpandedType(expandedType === t.name ? null : t.name)}
           />
         ))}
-        {/* Random / Surprise Me tile */}
+        {/* Random tile */}
         <button
           onClick={() => onSelectType('')}
-          className="text-left px-3 py-2.5 rounded-xl border border-dashed border-border hover:border-foreground/20 hover:bg-muted transition-all opacity-0 animate-[fade-in-up_0.3s_ease-out_forwards]"
+          className="text-left px-3 py-2.5 rounded-2xl glass-card border-dashed opacity-0 animate-[fade-in-up_0.4s_ease-out_forwards]"
           style={{ animationDelay: `${ORDERED_TYPES.length * 50}ms` }}
         >
           <div className="flex items-center gap-2">
-            <Shuffle className="w-3.5 h-3.5 text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground">Random</span>
+            <Shuffle className="w-3.5 h-3.5 text-white/50" />
+            <span className="text-sm font-medium text-white">Random</span>
           </div>
-          <span className="text-xs text-muted-foreground">Surprise me — mixed types</span>
+          <span className="text-xs text-white/40 ml-5.5">Surprise me — mixed types</span>
         </button>
       </div>
 
@@ -83,8 +80,8 @@ export function CampaignTypePicker({ onSelectType, activeType, isCompact }: Prop
         const type = CAMPAIGN_TYPES.find(t => t.name === expandedType);
         if (!type?.subtypes) return null;
         return (
-          <div className="mt-3 p-3 bg-muted rounded-xl animate-in slide-in-from-top-2 duration-200">
-            <p className="text-xs font-medium text-muted-foreground mb-2">{type.name} subtypes</p>
+          <div className="mt-3 p-3 glass-card animate-in slide-in-from-top-2 duration-200">
+            <p className="text-xs font-medium text-white/40 mb-2">{type.name} subtypes</p>
             <div className="grid grid-cols-2 gap-1.5">
               {type.subtypes.map((sub, si) => (
                 <button
@@ -93,11 +90,11 @@ export function CampaignTypePicker({ onSelectType, activeType, isCompact }: Prop
                     onSelectType(type.name, sub.name);
                     setExpandedType(null);
                   }}
-                  className="text-left px-3 py-2 rounded-lg hover:bg-background transition-colors group opacity-0 animate-[fade-in-up_0.25s_ease-out_forwards]"
+                  className="text-left px-3 py-2 rounded-xl hover:bg-white/[0.06] transition-colors group opacity-0 animate-[fade-in-up_0.25s_ease-out_forwards]"
                   style={{ animationDelay: `${si * 40}ms` }}
                 >
-                  <span className="text-sm font-medium text-foreground group-hover:text-foreground">{sub.name}</span>
-                  <span className="block text-xs text-muted-foreground">{sub.description}</span>
+                  <span className="text-sm font-medium text-white group-hover:text-white">{sub.name}</span>
+                  <span className="block text-xs text-white/40">{sub.description}</span>
                 </button>
               ))}
             </div>
@@ -131,36 +128,32 @@ function TypeCard({
         if (hasSubtypes) onExpand();
         else onSelect(type.name);
       }}
-      className={`text-left px-3 py-2.5 rounded-xl border transition-all opacity-0 animate-[fade-in-up_0.3s_ease-out_forwards] ${
+      className={`text-left px-3 py-2.5 rounded-2xl glass-card transition-all opacity-0 animate-[fade-in-up_0.4s_ease-out_forwards] ${
         isExpanded ? 'col-span-2' : ''
       } ${
         isActive
-          ? 'border-foreground bg-foreground text-background'
+          ? 'border-primary/40 bg-primary/[0.08] ring-1 ring-primary/20'
           : isExpanded
-          ? 'border-foreground/30 bg-muted'
-          : 'border-border hover:border-foreground/20 hover:bg-muted'
+          ? 'border-white/20 bg-white/[0.08]'
+          : ''
       }`}
       style={{ animationDelay: `${index * 50}ms` }}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive ? 'bg-background/60' : type.color}`} />
-          <span className={`text-sm font-medium ${isActive ? 'text-background' : 'text-foreground'}`}>
-            {type.name}
-          </span>
+          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${type.color}`} />
+          <span className="text-sm font-medium text-white">{type.name}</span>
         </div>
         <div className="flex items-center gap-1">
           {type.needsResearch && (
-            <Globe className={`w-3 h-3 ${isActive ? 'text-background/70' : 'text-muted-foreground'}`} />
+            <Globe className="w-3 h-3 text-white/40" />
           )}
           {hasSubtypes && (
-            <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-90' : ''} ${isActive ? 'text-background/70' : 'text-muted-foreground'}`} />
+            <ChevronRight className={`w-3.5 h-3.5 transition-transform text-white/40 ${isExpanded ? 'rotate-90' : ''}`} />
           )}
         </div>
       </div>
-      <span className={`text-xs ml-4 ${isActive ? 'text-background/70' : 'text-muted-foreground'}`}>
-        {type.description}
-      </span>
+      <span className="text-xs ml-4 text-white/40">{type.description}</span>
     </button>
   );
 }

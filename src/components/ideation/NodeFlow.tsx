@@ -30,16 +30,32 @@ export function NodeFlow({
   researchStatus,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const hasAutoScrolledRef = useRef(false);
+  const prevNodeCountRef = useRef(nodes.length);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [nodes.length, streamingIdeas.length]);
+    // One-shot auto-scroll per new generation round
+    if (nodes.length > prevNodeCountRef.current && !hasAutoScrolledRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      hasAutoScrolledRef.current = true;
+    }
+    if (nodes.length < prevNodeCountRef.current) {
+      hasAutoScrolledRef.current = false;
+    }
+    prevNodeCountRef.current = nodes.length;
+  }, [nodes.length]);
 
-  // Count generation round indices
+  // Reset scroll lock when new generation starts
+  useEffect(() => {
+    if (streamingNodeId) {
+      hasAutoScrolledRef.current = false;
+    }
+  }, [streamingNodeId]);
+
   let genRoundIndex = 0;
 
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-1">
+    <div className="max-w-3xl mx-auto px-6 py-4 space-y-1">
       {nodes.map(node => {
         switch (node.type) {
           case 'brief':
