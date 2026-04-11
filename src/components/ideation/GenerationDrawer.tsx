@@ -68,7 +68,7 @@ export function GenerationDrawer({ item, brandId, onClose, onUpdate, onRemove, o
       copy_direction: copyDirection || null,
       send_date: sendDate ? sendDate.toISOString().split('T')[0] : null,
       preferences: { ...((item.preferences as any) || {}), design_notes: designNotes || undefined },
-    });
+    } as any);
   }, [title, campaignInfo, subjectLine, copyDirection, designNotes, sendDate, debounceSave, item.preferences]);
 
   const handleGenerate = async () => {
