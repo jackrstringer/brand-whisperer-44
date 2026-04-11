@@ -2,15 +2,21 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { DesignQueueItem } from '@/hooks/useDesignQueue';
-import { X, Calendar, Zap, Loader2, Settings2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { X, Loader2, Settings2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useMultiSelect } from '@/hooks/useMultiSelect';
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { supabase } from '@/integrations/supabase/client';
+
+const STATUS_OPTIONS = [
+  { value: 'draft', dot: 'bg-muted-foreground', label: 'Draft' },
+  { value: 'designed', dot: 'bg-blue-500', label: 'Designed' },
+  { value: 'templated', dot: 'bg-purple-500', label: 'Templated' },
+  { value: 'sent', dot: 'bg-green-600', label: 'Sent' },
+];
 
 const STATUS_STYLES: Record<string, { bg: string; dot: string; label: string }> = {
   draft: { bg: 'bg-muted text-muted-foreground', dot: 'bg-muted-foreground', label: 'Draft' },
@@ -25,15 +31,16 @@ interface ColumnDef {
   label: string;
   defaultWidth: number;
   minWidth: number;
+  editPattern: 'inline' | 'popover' | 'expanded';
 }
 
 const ALL_COLUMNS: ColumnDef[] = [
-  { key: 'status', label: 'Status', defaultWidth: 100, minWidth: 70 },
-  { key: 'title', label: 'Title', defaultWidth: 0, minWidth: 120 }, // 0 = flex
-  { key: 'send_date', label: 'Send Date', defaultWidth: 110, minWidth: 80 },
-  { key: 'campaign_info', label: 'Brief', defaultWidth: 160, minWidth: 80 },
-  { key: 'copy_direction', label: 'Copy', defaultWidth: 140, minWidth: 80 },
-  { key: 'design_notes', label: 'Design Notes', defaultWidth: 140, minWidth: 80 },
+  { key: 'status', label: 'Status', defaultWidth: 100, minWidth: 70, editPattern: 'popover' },
+  { key: 'title', label: 'Title', defaultWidth: 0, minWidth: 120, editPattern: 'inline' },
+  { key: 'send_date', label: 'Send Date', defaultWidth: 110, minWidth: 80, editPattern: 'popover' },
+  { key: 'campaign_info', label: 'Brief', defaultWidth: 160, minWidth: 80, editPattern: 'expanded' },
+  { key: 'copy_direction', label: 'Copy', defaultWidth: 140, minWidth: 80, editPattern: 'expanded' },
+  { key: 'design_notes', label: 'Design Notes', defaultWidth: 140, minWidth: 80, editPattern: 'expanded' },
 ];
 
 const STORAGE_KEY = 'task-list-columns';
@@ -64,6 +71,12 @@ interface Props {
   bulkProgress: { completed: number; total: number } | null;
 }
 
+// Editing state: which cell is being edited
+interface EditingCell {
+  rowId: string;
+  columnKey: string;
+}
+
 export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkEligibleCount, onBulkGenerate, bulkProgress }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: 'design-queue' });
   const { selectedIds, handleSelect, clearSelection, selectAll } = useMultiSelect(items);
@@ -71,6 +84,7 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
 
   const [colConfig, setColConfig] = useState(loadColumnConfig);
   const resizingRef = useRef<{ col: string; startX: number; startWidthLeft: number; colRight: string; startWidthRight: number } | null>(null);
+  const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
 
   useEffect(() => { saveColumnConfig(colConfig); }, [colConfig]);
 
@@ -88,7 +102,6 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
     const rightDef = ALL_COLUMNS.find(c => c.key === rightCol);
     if (!leftDef || !rightDef) return;
 
-    // For flex column (title), measure actual rendered width
     const leftW = colConfig.widths[colLeft] || leftDef.defaultWidth;
     const rightW = colConfig.widths[rightCol] || rightDef.defaultWidth;
 
@@ -130,6 +143,20 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
       return { ...prev, visible: vis };
     });
   };
+
+  const handleCellSave = useCallback(async (itemId: string, field: string, value: any) => {
+    if (field === 'design_notes') {
+      const item = items.find(i => i.id === itemId);
+      const prefs = { ...((item?.preferences as any) || {}), design_notes: value || undefined };
+      await supabase.from('design_queue_items').update({ preferences: prefs } as any).eq('id', itemId);
+    } else if (field === 'status') {
+      await supabase.from('design_queue_items').update({ status: value }).eq('id', itemId);
+    } else if (field === 'send_date') {
+      await supabase.from('design_queue_items').update({ send_date: value }).eq('id', itemId);
+    } else {
+      await supabase.from('design_queue_items').update({ [field]: value || null } as any).eq('id', itemId);
+    }
+  }, [items]);
 
   const allSelected = items.length > 0 && selectedCount === items.length;
 
@@ -230,6 +257,10 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
                 onClick={() => onItemClick(item)}
                 visibleCols={visibleCols}
                 colWidths={colConfig.widths}
+                editingCell={editingCell}
+                onStartEdit={(cellKey) => setEditingCell({ rowId: item.id, columnKey: cellKey })}
+                onEndEdit={() => setEditingCell(null)}
+                onCellSave={handleCellSave}
               />
             ))}
           </SortableContext>
@@ -266,6 +297,157 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
   );
 }
 
+/* ---- Inline editing cell components ---- */
+
+function InlineCellInput({
+  value,
+  onSave,
+  onCancel,
+}: {
+  value: string;
+  onSave: (val: string) => void;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  return (
+    <input
+      ref={inputRef}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => onSave(draft)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onSave(draft);
+        if (e.key === 'Escape') onCancel();
+      }}
+      className="w-full h-full bg-transparent border-0 outline-none text-sm text-foreground px-0 py-0"
+    />
+  );
+}
+
+function StatusPopover({
+  currentStatus,
+  onSelect,
+  onClose,
+  anchorRef,
+}: {
+  currentStatus: string;
+  onSelect: (status: string) => void;
+  onClose: () => void;
+  anchorRef?: React.RefObject<HTMLDivElement>;
+}) {
+  return (
+    <div className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg p-1 min-w-[140px] animate-in fade-in-0 zoom-in-95 duration-100">
+      {STATUS_OPTIONS.map(opt => (
+        <button
+          key={opt.value}
+          onClick={() => { onSelect(opt.value); onClose(); }}
+          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs text-left hover:bg-muted transition-colors ${
+            currentStatus === opt.value ? 'bg-muted/70 font-medium' : ''
+          }`}
+        >
+          <div className={`w-2 h-2 rounded-full ${opt.dot}`} />
+          {opt.label}
+          {currentStatus === opt.value && <span className="ml-auto text-primary">✓</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DatePopover({
+  currentDate,
+  onSelect,
+  onClose,
+}: {
+  currentDate: Date | undefined;
+  onSelect: (date: Date | undefined) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg p-2 animate-in fade-in-0 zoom-in-95 duration-100">
+      <Calendar
+        mode="single"
+        selected={currentDate}
+        onSelect={(d) => { onSelect(d); onClose(); }}
+        initialFocus
+      />
+      {currentDate && (
+        <div className="border-t border-border pt-1.5 mt-1 flex justify-between">
+          <button
+            onClick={() => { onSelect(new Date()); onClose(); }}
+            className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1"
+          >
+            Today
+          </button>
+          <button
+            onClick={() => { onSelect(undefined); onClose(); }}
+            className="text-[10px] text-destructive hover:text-destructive/80 transition-colors px-2 py-1"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExpandedEditor({
+  fieldName,
+  value,
+  onSave,
+  onCancel,
+}: {
+  fieldName: string;
+  value: string;
+  onSave: (val: string) => void;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    textareaRef.current?.focus();
+    // move cursor to end
+    if (textareaRef.current) {
+      textareaRef.current.selectionStart = textareaRef.current.value.length;
+    }
+  }, []);
+
+  return (
+    <div className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg w-[360px] animate-in fade-in-0 zoom-in-95 duration-100">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+        <span className="text-xs font-medium text-foreground">{fieldName}</span>
+        <button onClick={onCancel} className="text-muted-foreground hover:text-foreground text-xs">✕</button>
+      </div>
+      <div className="p-2">
+        <textarea
+          ref={textareaRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') onCancel();
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) onSave(draft);
+          }}
+          className="w-full min-h-[120px] resize-none rounded border border-border bg-background p-2 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary/40"
+        />
+      </div>
+      <div className="flex justify-end gap-2 px-3 py-2 border-t border-border">
+        <button onClick={onCancel} className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted transition-colors">Cancel</button>
+        <button onClick={() => onSave(draft)} className="text-xs text-primary-foreground bg-primary hover:bg-primary/90 px-3 py-1 rounded transition-colors font-medium">Save</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---- Row ---- */
+
 function SortableTaskRow({
   item,
   index,
@@ -275,6 +457,10 @@ function SortableTaskRow({
   onClick,
   visibleCols,
   colWidths,
+  editingCell,
+  onStartEdit,
+  onEndEdit,
+  onCellSave,
 }: {
   item: DesignQueueItem;
   index: number;
@@ -284,6 +470,10 @@ function SortableTaskRow({
   onClick: () => void;
   visibleCols: string[];
   colWidths: Record<string, number>;
+  editingCell: EditingCell | null;
+  onStartEdit: (cellKey: string) => void;
+  onEndEdit: () => void;
+  onCellSave: (itemId: string, field: string, value: any) => Promise<void>;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
@@ -305,11 +495,25 @@ function SortableTaskRow({
       case 'campaign_info': return item.campaign_info || '';
       case 'copy_direction': return item.copy_direction || '';
       case 'design_notes': return prefs.design_notes || '';
-      case 'send_date': return item.send_date
-        ? new Date(item.send_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-        : '';
+      case 'send_date': return item.send_date || '';
       default: return '';
     }
+  };
+
+  const isEditing = (key: string) => editingCell?.rowId === item.id && editingCell?.columnKey === key;
+
+  const handleCellClick = (key: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (e.shiftKey || e.metaKey || e.ctrlKey) {
+      onSelect(e);
+      return;
+    }
+    onStartEdit(key);
+  };
+
+  const handleSave = async (key: string, value: any) => {
+    onEndEdit();
+    await onCellSave(item.id, key, value);
   };
 
   return (
@@ -318,12 +522,9 @@ function SortableTaskRow({
       style={style}
       {...attributes}
       {...listeners}
-      onClick={(e) => {
-        if (e.shiftKey || e.metaKey || e.ctrlKey) {
-          onSelect(e);
-        } else {
-          onClick();
-        }
+      onDoubleClick={(e) => {
+        // double click opens full task detail
+        if (!editingCell) onClick();
       }}
       className={`flex items-center px-3 py-2 border-b border-border/50 cursor-pointer transition-colors group ${
         isSelected ? 'bg-primary/[0.06]' : 'hover:bg-muted/50'
@@ -341,28 +542,97 @@ function SortableTaskRow({
         const colDef = ALL_COLUMNS.find(c => c.key === key)!;
         const w = colWidths[key] || colDef.defaultWidth;
         const isFlex = w === 0 || key === 'title';
+        const editing = isEditing(key);
 
         if (key === 'status') {
           return (
-            <div key={key} className="flex-shrink-0 px-2" style={{ width: w }}>
-              <span className={`inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full ${status.bg}`}>
+            <div
+              key={key}
+              className={`flex-shrink-0 px-2 relative ${editing ? 'ring-2 ring-primary rounded' : ''}`}
+              style={{ width: w }}
+              onClick={(e) => handleCellClick(key, e)}
+            >
+              <span className={`inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full cursor-pointer ${status.bg}`}>
                 {status.label}
               </span>
+              {editing && (
+                <StatusPopover
+                  currentStatus={item.status}
+                  onSelect={(val) => handleSave('status', val)}
+                  onClose={onEndEdit}
+                />
+              )}
             </div>
           );
         }
 
         if (key === 'title') {
           return (
-            <div key={key} className="flex-1 min-w-0 px-2">
-              <span className="text-sm font-medium text-foreground truncate block">{item.title}</span>
+            <div
+              key={key}
+              className={`flex-1 min-w-0 px-2 ${editing ? 'ring-2 ring-primary rounded' : ''}`}
+              onClick={(e) => handleCellClick(key, e)}
+            >
+              {editing ? (
+                <InlineCellInput
+                  value={item.title}
+                  onSave={(val) => handleSave('title', val)}
+                  onCancel={onEndEdit}
+                />
+              ) : (
+                <span className="text-sm font-medium text-foreground truncate block">{item.title}</span>
+              )}
             </div>
           );
         }
 
+        if (key === 'send_date') {
+          const dateVal = item.send_date ? new Date(item.send_date + 'T00:00:00') : undefined;
+          const display = dateVal
+            ? dateVal.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            : '';
+          return (
+            <div
+              key={key}
+              className={`flex-shrink-0 px-2 relative ${editing ? 'ring-2 ring-primary rounded' : ''}`}
+              style={{ width: w }}
+              onClick={(e) => handleCellClick(key, e)}
+            >
+              <span className={`text-xs block truncate ${display ? 'text-foreground' : 'text-muted-foreground/0 group-hover:text-muted-foreground/50'}`}>
+                {display || 'Add date'}
+              </span>
+              {editing && (
+                <DatePopover
+                  currentDate={dateVal}
+                  onSelect={(d) => handleSave('send_date', d ? d.toISOString().split('T')[0] : null)}
+                  onClose={onEndEdit}
+                />
+              )}
+            </div>
+          );
+        }
+
+        // Brief, Copy, Design Notes — expanded editor
+        const val = getCellValue(key);
+        const colLabel = colDef.label;
         return (
-          <div key={key} className="flex-shrink-0 px-2 truncate" style={{ width: w }}>
-            <span className="text-xs text-muted-foreground truncate block">{getCellValue(key) || '—'}</span>
+          <div
+            key={key}
+            className={`flex-shrink-0 px-2 truncate relative ${editing ? 'ring-2 ring-primary rounded' : ''}`}
+            style={{ width: w }}
+            onClick={(e) => handleCellClick(key, e)}
+          >
+            <span className={`text-xs block truncate ${val ? 'text-muted-foreground' : 'text-muted-foreground/0 group-hover:text-muted-foreground/50'}`}>
+              {val || 'Type here...'}
+            </span>
+            {editing && (
+              <ExpandedEditor
+                fieldName={colLabel}
+                value={val}
+                onSave={(v) => handleSave(key, v)}
+                onCancel={onEndEdit}
+              />
+            )}
           </div>
         );
       })}
