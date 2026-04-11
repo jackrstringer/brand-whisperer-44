@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { DesignQueueItem } from '@/hooks/useDesignQueue';
 
 interface CalendarEvent {
@@ -15,31 +15,45 @@ export interface CalendarDayData {
   events: CalendarEvent[];
 }
 
-function startOfMonth(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-}
-
-function endOfMonth(d: Date): string {
-  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  return `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`;
+function formatDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export function useIdeationCalendar(brandId: string) {
-  const [currentMonth, setCurrentMonth] = useState(() => new Date());
+  // Track the full date range we need data for
+  const [dateRange, setDateRange] = useState<{ start: string; end: string }>(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 4, 0);
+    return { start: formatDate(start), end: formatDate(end) };
+  });
 
-  const monthStart = startOfMonth(currentMonth);
-  const monthEnd = endOfMonth(currentMonth);
+  const handleRequestMonths = useCallback((months: Date[]) => {
+    if (months.length === 0) return;
+    const earliest = months[0];
+    const latest = months[months.length - 1];
+    const start = formatDate(new Date(earliest.getFullYear(), earliest.getMonth(), 1));
+    const endD = new Date(latest.getFullYear(), latest.getMonth() + 1, 0);
+    const end = formatDate(endD);
+
+    setDateRange(prev => {
+      const newStart = start < prev.start ? start : prev.start;
+      const newEnd = end > prev.end ? end : prev.end;
+      if (newStart === prev.start && newEnd === prev.end) return prev;
+      return { start: newStart, end: newEnd };
+    });
+  }, []);
 
   const queueQuery = useQuery({
-    queryKey: ['calendar-queue', brandId, monthStart],
+    queryKey: ['calendar-queue', brandId, dateRange.start, dateRange.end],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('design_queue_items')
         .select('*')
         .eq('brand_id', brandId)
         .not('send_date', 'is', null)
-        .gte('send_date', monthStart)
-        .lte('send_date', monthEnd);
+        .gte('send_date', dateRange.start)
+        .lte('send_date', dateRange.end);
       if (error) throw error;
       return (data || []) as DesignQueueItem[];
     },
@@ -47,14 +61,14 @@ export function useIdeationCalendar(brandId: string) {
   });
 
   const eventsQuery = useQuery({
-    queryKey: ['calendar-events', brandId, monthStart],
+    queryKey: ['calendar-events', brandId, dateRange.start, dateRange.end],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('brand_calendar')
         .select('*')
         .eq('brand_id', brandId)
-        .gte('event_date', monthStart)
-        .lte('event_date', monthEnd);
+        .gte('event_date', dateRange.start)
+        .lte('event_date', dateRange.end);
       if (error) throw error;
       return (data || []) as CalendarEvent[];
     },
@@ -77,15 +91,9 @@ export function useIdeationCalendar(brandId: string) {
     return map;
   }, [queueQuery.data, eventsQuery.data]);
 
-  const navigateMonth = (delta: number) => {
-    setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
-  };
-
   return {
     calendarData,
     isLoading: queueQuery.isLoading || eventsQuery.isLoading,
-    currentMonth,
-    setCurrentMonth,
-    navigateMonth,
+    handleRequestMonths,
   };
 }
