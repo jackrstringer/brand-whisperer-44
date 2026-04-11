@@ -2,7 +2,6 @@ import { useRef, useEffect } from 'react';
 import { IdeationNode } from '@/hooks/useIdeation';
 import { CampaignIdea } from '@/lib/types';
 import { BriefNode } from './BriefNode';
-import { AiResponseNode } from './AiResponseNode';
 import { GenerationNode } from './GenerationNode';
 import { FeedbackNode } from './FeedbackNode';
 
@@ -34,7 +33,6 @@ export function NodeFlow({
   const prevNodeCountRef = useRef(nodes.length);
 
   useEffect(() => {
-    // One-shot auto-scroll per new generation round
     if (nodes.length > prevNodeCountRef.current && !hasAutoScrolledRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
       hasAutoScrolledRef.current = true;
@@ -45,7 +43,6 @@ export function NodeFlow({
     prevNodeCountRef.current = nodes.length;
   }, [nodes.length]);
 
-  // Reset scroll lock when new generation starts
   useEffect(() => {
     if (streamingNodeId) {
       hasAutoScrolledRef.current = false;
@@ -61,7 +58,8 @@ export function NodeFlow({
           case 'brief':
             return <BriefNode key={node.id} content={node.content} campaignType={node.campaignType} campaignSubtype={node.campaignSubtype} />;
           case 'ai_response':
-            return <AiResponseNode key={node.id} content={node.content} isStreaming={node.isStreaming} />;
+            // Hidden — don't render AI response bubbles in the flow
+            return null;
           case 'generation': {
             const currentRound = genRoundIndex++;
             return (
