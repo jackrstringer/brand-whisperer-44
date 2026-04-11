@@ -158,7 +158,10 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
     } else {
       await supabase.from('design_queue_items').update({ [field]: value || null } as any).eq('id', itemId);
     }
-  }, [items]);
+    // Invalidate queries so list + calendar refresh
+    queryClient.invalidateQueries({ queryKey: ['design-queue'] });
+    queryClient.invalidateQueries({ queryKey: ['calendar-queue'] });
+  }, [items, queryClient]);
 
   const allSelected = items.length > 0 && selectedCount === items.length;
 
