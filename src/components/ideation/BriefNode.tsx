@@ -5,12 +5,14 @@ interface Props {
 }
 
 export function BriefNode({ content, campaignType, campaignSubtype }: Props) {
+  const label = campaignType
+    ? `${campaignType}${campaignSubtype ? `: ${campaignSubtype}` : ''}${content ? ' — ' + content : ''}`
+    : content;
+
   return (
-    <div className="flex justify-center mb-3">
-      <div className="bg-foreground text-background px-5 py-2 rounded-full inline-flex items-center gap-2">
-        {campaignType && <span className="text-xs font-medium opacity-80">{campaignType}{campaignSubtype ? ` → ${campaignSubtype}` : ''}</span>}
-        {campaignType && content && <span className="opacity-40">·</span>}
-        {content && <span className="text-sm">{content}</span>}
+    <div className="flex justify-end mb-3 animate-[slide-up-section_0.5s_ease-out_forwards]">
+      <div className="max-w-sm bg-white/10 backdrop-blur-sm border border-white/[0.08] px-4 py-2.5 rounded-2xl rounded-br-md">
+        <p className="text-[13px] text-white/80">{label}</p>
       </div>
     </div>
   );

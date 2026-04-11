@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, KeyboardEvent } from 'react';
-import { Send, Zap, Rocket, X, Square } from 'lucide-react';
+import { Send, Zap, Rocket, X, Square, Sparkles, ArrowRight, LayoutGrid } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 
 interface Props {
   onSend: (message: string) => void;
@@ -13,6 +14,8 @@ interface Props {
   onToggleTurbo: () => void;
   activeType?: string | null;
   onStop?: () => void;
+  menuOpen?: boolean;
+  onToggleMenu?: () => void;
 }
 
 export function ChatBar({
@@ -27,6 +30,8 @@ export function ChatBar({
   onToggleTurbo,
   activeType,
   onStop,
+  menuOpen,
+  onToggleMenu,
 }: Props) {
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -39,7 +44,7 @@ export function ChatBar({
   } else if (selectedCount === 1) {
     placeholder = "Describe how to refine this idea, or press Enter to build...";
   } else if (activeType) {
-    placeholder = "Add direction for more ideas...";
+    placeholder = `Add direction for more ${activeType} ideas...`;
   }
 
   // Auto-resize textarea
@@ -66,89 +71,133 @@ export function ChatBar({
   };
 
   return (
-    <div className="border-t border-border bg-card px-4 py-2">
+    <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50 w-full max-w-[700px] px-4">
       {/* Selection indicator */}
       {selectedCount > 0 && (
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs font-medium text-foreground bg-muted px-2.5 py-1 rounded-full">
+        <div className="flex items-center gap-2 mb-2 justify-center">
+          <span className="text-xs font-medium text-white bg-white/10 px-2.5 py-1 rounded-full backdrop-blur-sm">
             {selectedCount} idea{selectedCount > 1 ? 's' : ''} selected
           </span>
           <button
             onClick={onClearSelection}
-            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+            className="text-xs text-white/40 hover:text-white/80 flex items-center gap-0.5"
           >
             <X className="w-3 h-3" /> Clear
           </button>
         </div>
       )}
 
-      <div className="flex items-end gap-2">
-        {/* Mode toggles */}
-        <div className="flex gap-1 pb-0.5">
-          <button
-            onClick={onToggleChaos}
-            className={`p-2 rounded-lg transition-all ${
-              chaosMode
-                ? 'bg-amber-100 text-amber-600 border border-amber-300'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted border border-transparent'
-            }`}
-            title="Chaos Mode — creative entropy"
-          >
-            <Zap className="w-4 h-4" />
-          </button>
-          <button
-            onClick={onToggleTurbo}
-            className={`p-2 rounded-lg transition-all ${
-              turboMode
-                ? 'bg-cyan-100 text-cyan-600 border border-cyan-300'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted border border-transparent'
-            }`}
-            title="Turbo Mode — 20 ideas"
-          >
-            <Rocket className="w-4 h-4" />
-          </button>
+      <div className="glass-input overflow-hidden">
+        {/* Top row — textarea */}
+        <div className="px-4 pt-3 pb-2">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            disabled={isBusy}
+            rows={1}
+            className="w-full bg-transparent text-[15px] text-white placeholder:text-white/40 border-0 focus:outline-none disabled:opacity-50 resize-none overflow-hidden leading-[1.6]"
+            style={{ minHeight: '28px', maxHeight: '120px' }}
+          />
         </div>
 
-        {/* Textarea */}
-        <textarea
-          ref={textareaRef}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          disabled={isBusy}
-          rows={1}
-          className="flex-1 bg-muted text-sm text-foreground placeholder:text-muted-foreground px-3.5 py-1.5 rounded-xl border-0 focus:outline-none focus:ring-1 focus:ring-foreground/20 disabled:opacity-50 resize-none overflow-hidden leading-[1.6]"
-          style={{ minHeight: '28px', maxHeight: '120px' }}
-        />
+        {/* Bottom row — controls */}
+        <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-white/[0.06]">
+          <div className="flex items-center gap-1.5">
+            {/* Menu toggle */}
+            <button
+              onClick={onToggleMenu}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                menuOpen
+                  ? 'bg-primary/20 border border-primary/40 text-white'
+                  : 'text-white/50 hover:text-white/80 border border-transparent'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              Menu
+            </button>
 
-        {/* Send / Stop */}
-        {isBusy ? (
-          <button
-            onClick={onStop}
-            className="p-2.5 rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors flex items-center gap-1.5 flex-shrink-0"
-          >
-            <Square className="w-3.5 h-3.5" />
-            <span className="text-xs font-medium">Stop</span>
-          </button>
-        ) : (
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() && selectedCount === 0}
-            className={`p-2.5 rounded-xl transition-colors flex items-center gap-1.5 flex-shrink-0 ${
-              selectedCount > 0
-                ? 'bg-foreground text-background hover:bg-foreground/90'
-                : 'bg-foreground text-background hover:bg-foreground/90 disabled:opacity-30 disabled:cursor-not-allowed'
-            }`}
-          >
-            <Send className="w-4 h-4" />
-            {selectedCount > 0 && (
-              <span className="rounded-full bg-background/20 px-1.5 text-[10px] font-medium">
-                {selectedCount}
-              </span>
+            {/* Turbo toggle */}
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+              turboMode
+                ? 'bg-cyan-500/20 border border-cyan-400/40 text-cyan-300'
+                : 'text-white/50 border border-transparent'
+            }`}>
+              <Rocket className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Turbo</span>
+              <Switch
+                checked={turboMode}
+                onCheckedChange={onToggleTurbo}
+                className="h-4 w-7 data-[state=checked]:bg-cyan-500"
+              />
+            </div>
+
+            {/* Chaos toggle */}
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+              chaosMode
+                ? 'bg-orange-500/20 border border-orange-400/40 text-orange-300'
+                : 'text-white/50 border border-transparent'
+            }`}>
+              <Zap className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Chaos</span>
+              <Switch
+                checked={chaosMode}
+                onCheckedChange={onToggleChaos}
+                className="h-4 w-7 data-[state=checked]:bg-orange-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            {/* Stop button */}
+            {isBusy ? (
+              <button
+                onClick={onStop}
+                className="flex items-center gap-1.5 h-9 px-4 rounded-xl bg-red-500/20 border border-red-400/40 text-red-300 text-xs font-medium hover:bg-red-500/30 transition-colors"
+              >
+                <Square className="w-3.5 h-3.5" />
+                Stop
+              </button>
+            ) : (
+              <>
+                {/* Ideate button */}
+                <button
+                  onClick={handleSend}
+                  disabled={!input.trim() && selectedCount === 0}
+                  className={`flex items-center gap-1.5 h-9 px-4 rounded-xl text-xs font-medium transition-all ${
+                    isBusy
+                      ? 'bg-white/10 border border-white/20 text-white animate-pulse'
+                      : 'bg-white/10 border border-white/20 text-white hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Ideate
+                  {selectedCount > 0 && (
+                    <span className="rounded-full bg-white/20 px-1.5 text-[10px] font-medium">
+                      {selectedCount}
+                    </span>
+                  )}
+                </button>
+
+                {/* Build button */}
+                <button
+                  onClick={() => selectedCount > 0 && handleSend()}
+                  disabled={selectedCount === 0}
+                  className={`flex items-center gap-1.5 h-9 px-4 rounded-xl text-xs font-medium transition-all ${
+                    selectedCount > 0
+                      ? 'bg-primary text-primary-foreground hover:opacity-90'
+                      : 'bg-white/[0.04] text-white/20 cursor-not-allowed'
+                  }`}
+                >
+                  <ArrowRight className="w-3.5 h-3.5" />
+                  Build
+                </button>
+              </>
             )}
-          </button>
-        )}
+          </div>
+        </div>
       </div>
     </div>
   );

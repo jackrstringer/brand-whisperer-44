@@ -12,9 +12,9 @@ import { GenerationDrawer } from '@/components/ideation/GenerationDrawer';
 import { CampaignIdea } from '@/lib/types';
 import { DesignQueueItem } from '@/hooks/useDesignQueue';
 import { useState, useEffect, useRef } from 'react';
-import { Lightbulb, PanelRightOpen, PanelRightClose, Zap, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ArrowLeft, Zap, PanelRightOpen, PanelRightClose } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import { bulkGenerate } from '@/lib/ideation/bulkGenerate';
@@ -29,6 +29,7 @@ export default function IdeatePage() {
   const [drawerItem, setDrawerItem] = useState<DesignQueueItem | null>(null);
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{ completed: number; total: number } | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const seededRef = useRef(false);
 
   const ideation = useIdeation(brandId!);
@@ -60,7 +61,6 @@ export default function IdeatePage() {
   };
 
   const handleBuildNow = async (idea: CampaignIdea) => {
-    // Create campaign and navigate to editor in pre-generation state
     const { data: campaign, error } = await supabase
       .from('campaigns')
       .insert({
@@ -132,43 +132,79 @@ export default function IdeatePage() {
     }
   };
 
+  const handleTypeFromMenu = (type: string, sub?: string) => {
+    setMenuOpen(false);
+    ideation.generateForType(type, sub);
+  };
+
   return (
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-      <div className="h-screen flex flex-col bg-background">
-        {/* Top bar */}
-        <div className="h-10 border-b border-border flex items-center justify-between px-4 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <Lightbulb className="w-3.5 h-3.5 text-foreground" />
-            <span className="text-xs font-semibold text-foreground tracking-wide uppercase">ID8</span>
+      <div className="h-screen flex flex-col bg-[#0f1117] text-white ideation-glow">
+        {/* Header */}
+        <div className="h-12 flex items-center justify-between px-4 flex-shrink-0 relative z-10">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate(`/brands/${brandId}`)}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-white/40 hover:text-white/80 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div className="w-5 h-5 rounded bg-white/10 flex items-center justify-center">
+              <span className="text-[9px] font-bold text-white/60">ID</span>
+            </div>
+            <span className="text-[12px] tracking-wide text-white/50 uppercase font-medium">ID8</span>
           </div>
           <button
             onClick={() => setRightPanelOpen(!rightPanelOpen)}
-            className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors hidden lg:flex"
+            className="p-1.5 rounded-lg text-white/40 hover:text-white/80 transition-colors hidden lg:flex"
           >
             {rightPanelOpen ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
           </button>
         </div>
 
         {/* Main content */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden relative z-10">
           {/* Left Panel — Ideation Flow */}
-          <div className={`flex flex-col ${rightPanelOpen ? 'w-full lg:w-1/2' : 'w-full'} border-r border-border transition-all`}>
-            <CampaignTypePicker
-              onSelectType={(type, sub) => ideation.generateForType(type, sub)}
-              activeType={ideation.activeType}
-              isCompact={hasStarted}
-            />
-            <NodeFlow
-              nodes={ideation.nodes}
-              streamingIdeas={ideation.streamingIdeas}
-              streamingNodeId={ideation.streamingNodeId}
-              selectedIds={selectedIdsSet}
-              isTurbo={ideation.turboMode}
-              onToggleSelect={ideation.toggleSelect}
-              onAddToQueue={handleAddToQueue}
-              onBuildNow={handleBuildNow}
-              researchStatus={ideation.researchStatus}
-            />
+          <div className={`flex flex-col ${rightPanelOpen ? 'w-full lg:w-[60%]' : 'w-full'} transition-all relative`}>
+            {/* Scrollable content area */}
+            <div className="flex-1 overflow-y-auto pb-36">
+              {!hasStarted && (
+                <div className="max-w-3xl mx-auto px-6">
+                  <div className="text-center mt-16 mb-8">
+                    <p className="text-sm text-white/50">Pick a campaign type to get started</p>
+                  </div>
+                  <CampaignTypePicker
+                    onSelectType={(type, sub) => ideation.generateForType(type, sub)}
+                    activeType={ideation.activeType}
+                    isCompact={false}
+                  />
+                </div>
+              )}
+
+              {hasStarted && (
+                <>
+                  {/* Compact type picker */}
+                  <CampaignTypePicker
+                    onSelectType={(type, sub) => ideation.generateForType(type, sub)}
+                    activeType={ideation.activeType}
+                    isCompact={true}
+                  />
+                  <NodeFlow
+                    nodes={ideation.nodes}
+                    streamingIdeas={ideation.streamingIdeas}
+                    streamingNodeId={ideation.streamingNodeId}
+                    selectedIds={selectedIdsSet}
+                    isTurbo={ideation.turboMode}
+                    onToggleSelect={ideation.toggleSelect}
+                    onAddToQueue={handleAddToQueue}
+                    onBuildNow={handleBuildNow}
+                    researchStatus={ideation.researchStatus}
+                  />
+                </>
+              )}
+            </div>
+
+            {/* Floating ChatBar */}
             <ChatBar
               onSend={ideation.sendChat}
               isGenerating={ideation.isGenerating}
@@ -181,14 +217,28 @@ export default function IdeatePage() {
               onToggleTurbo={ideation.toggleTurboMode}
               activeType={ideation.activeType}
               onStop={() => ideation.abort()}
+              menuOpen={menuOpen}
+              onToggleMenu={() => setMenuOpen(!menuOpen)}
             />
+
+            {/* Menu overlay — type picker popup above ChatBar */}
+            {menuOpen && (
+              <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-[60] w-full max-w-[700px] px-4">
+                <div className="glass-input p-4">
+                  <CampaignTypePicker
+                    onSelectType={handleTypeFromMenu}
+                    activeType={ideation.activeType}
+                    isCompact={false}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right Panel — Desktop */}
           {rightPanelOpen && (
-            <div className="hidden lg:flex lg:w-1/2 flex-col">
-              {/* Design Queue — compact top section */}
-              <div className="max-h-[35%] min-h-[120px] border-b border-border flex-shrink-0">
+            <div className="hidden lg:flex lg:w-[40%] flex-col border-l border-white/[0.06]">
+              <div className="max-h-[35%] min-h-[120px] border-b border-white/[0.06] flex-shrink-0">
                 <DesignQueue
                   items={designQueue.items}
                   onRemove={(id) => designQueue.removeFromQueue.mutate(id)}
@@ -198,7 +248,6 @@ export default function IdeatePage() {
                   bulkProgress={bulkProgress}
                 />
               </div>
-              {/* Calendar — takes remaining space */}
               <div className="flex-1 min-h-0">
                 <IdeationCalendar
                   calendarData={calendar.calendarData}
@@ -211,11 +260,11 @@ export default function IdeatePage() {
         </div>
 
         {/* Mobile bottom tabs */}
-        <div className="lg:hidden flex border-t border-border bg-card">
+        <div className="lg:hidden flex border-t border-white/[0.06] bg-[#0f1117]">
           <button
             onClick={() => setMobileTab(mobileTab === 'queue' ? null : 'queue')}
             className={`flex-1 py-2.5 text-xs font-medium text-center transition-colors ${
-              mobileTab === 'queue' ? 'text-foreground bg-muted' : 'text-muted-foreground'
+              mobileTab === 'queue' ? 'text-white bg-white/[0.06]' : 'text-white/50'
             }`}
           >
             Queue ({designQueue.items.length})
@@ -223,16 +272,15 @@ export default function IdeatePage() {
           <button
             onClick={() => setMobileTab(mobileTab === 'calendar' ? null : 'calendar')}
             className={`flex-1 py-2.5 text-xs font-medium text-center transition-colors ${
-              mobileTab === 'calendar' ? 'text-foreground bg-muted' : 'text-muted-foreground'
+              mobileTab === 'calendar' ? 'text-white bg-white/[0.06]' : 'text-white/50'
             }`}
           >
             Calendar
           </button>
         </div>
 
-        {/* Mobile drawer */}
         {mobileTab && (
-          <div className="lg:hidden fixed inset-x-0 bottom-10 h-[50vh] bg-card border-t border-border z-50 animate-in slide-in-from-bottom duration-200">
+          <div className="lg:hidden fixed inset-x-0 bottom-10 h-[50vh] bg-[#0f1117] border-t border-white/[0.06] z-50 animate-in slide-in-from-bottom duration-200">
             {mobileTab === 'queue' ? (
               <DesignQueue
                 items={designQueue.items}
@@ -253,15 +301,12 @@ export default function IdeatePage() {
         )}
       </div>
 
-      {/* Generation Drawer */}
       {drawerItem && (
         <GenerationDrawer
           item={drawerItem}
           brandId={brandId!}
           onClose={() => setDrawerItem(null)}
-          onUpdate={(id, fields) => {
-            // Optimistic update handled by query invalidation
-          }}
+          onUpdate={(id, fields) => {}}
           onRemove={(id) => {
             designQueue.removeFromQueue.mutate(id);
             setDrawerItem(null);
@@ -272,7 +317,6 @@ export default function IdeatePage() {
         />
       )}
 
-      {/* Bulk generate confirmation */}
       <Dialog open={bulkConfirmOpen} onOpenChange={setBulkConfirmOpen}>
         <DialogContent>
           <DialogHeader>
