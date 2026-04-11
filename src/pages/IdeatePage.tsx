@@ -182,7 +182,6 @@ export default function IdeatePage() {
               activeType={ideation.activeType}
               onStop={() => ideation.abort()}
             />
-            />
           </div>
 
           {/* Right Panel — Desktop */}
