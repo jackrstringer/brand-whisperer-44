@@ -203,7 +203,7 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
       </div>
 
       {/* Form */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide" style={{ scrollbarWidth: 'none' }}>
         <div>
           <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Title</label>
           <Input value={title} onChange={e => setTitle(e.target.value)} className="h-8 text-sm" />
