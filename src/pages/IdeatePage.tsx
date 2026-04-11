@@ -218,6 +218,7 @@ export default function IdeatePage() {
           menuOpen={menuOpen}
           onToggleMenu={() => setMenuOpen(!menuOpen)}
           onClearChat={handleClearChat}
+          onAddToQueue={handleAddSelectedToQueue}
         />
       </div>
 
