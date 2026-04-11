@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { DndContext, DragEndEvent, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
+import { DndContext, DragEndEvent, DragOverlay, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import { useIdeation } from '@/hooks/useIdeation';
 import { useDesignQueue } from '@/hooks/useDesignQueue';
 import { useIdeationCalendar } from '@/hooks/useIdeationCalendar';
@@ -30,6 +30,7 @@ export default function IdeatePage() {
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{ completed: number; total: number } | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [activeDragItem, setActiveDragItem] = useState<any>(null);
   const seededRef = useRef(false);
 
   const ideation = useIdeation(brandId!);
@@ -39,7 +40,6 @@ export default function IdeatePage() {
   const hasStarted = ideation.nodes.length > 0;
   const selectedIdsSet = new Set(ideation.selectedIdeas.keys());
 
-  // Auto-seed holidays on first visit
   useEffect(() => {
     if (!brandId || seededRef.current) return;
     seededRef.current = true;
@@ -82,7 +82,14 @@ export default function IdeatePage() {
     navigate(`/brands/${brandId}/campaigns/${campaign.id}`);
   };
 
+  const handleDragStart = (event: any) => {
+    const data = event.active.data.current;
+    if (data?.type === 'idea') setActiveDragItem(data.idea);
+    else if (data?.type === 'queue-item') setActiveDragItem(data.item);
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
+    setActiveDragItem(null);
     const { active, over } = event;
     if (!over) return;
 
@@ -138,40 +145,37 @@ export default function IdeatePage() {
   };
 
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-      <div className="h-screen flex flex-col bg-[#0f1117] text-white ideation-glow">
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div className="h-screen flex flex-col bg-background text-foreground">
         {/* Header */}
-        <div className="h-12 flex items-center justify-between px-4 flex-shrink-0 relative z-10">
+        <div className="h-11 flex items-center justify-between px-4 flex-shrink-0 border-b border-border">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate(`/brands/${brandId}`)}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-white/40 hover:text-white/80 transition-colors"
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
-            <div className="w-5 h-5 rounded bg-white/10 flex items-center justify-center">
-              <span className="text-[9px] font-bold text-white/60">ID</span>
-            </div>
-            <span className="text-[12px] tracking-wide text-white/50 uppercase font-medium">ID8</span>
+            <span className="text-sm font-medium text-foreground">Ideate</span>
           </div>
           <button
             onClick={() => setRightPanelOpen(!rightPanelOpen)}
-            className="p-1.5 rounded-lg text-white/40 hover:text-white/80 transition-colors hidden lg:flex"
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors hidden lg:flex"
           >
             {rightPanelOpen ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
           </button>
         </div>
 
         {/* Main content */}
-        <div className="flex-1 flex overflow-hidden relative z-10">
+        <div className="flex-1 flex overflow-hidden">
           {/* Left Panel — Ideation Flow */}
-          <div className={`flex flex-col ${rightPanelOpen ? 'w-full lg:w-[60%]' : 'w-full'} transition-all relative`}>
+          <div className={`flex flex-col ${rightPanelOpen ? 'w-full lg:w-1/2' : 'w-full'} transition-all relative`}>
             {/* Scrollable content area */}
             <div className="flex-1 overflow-y-auto pb-36">
               {!hasStarted && (
-                <div className="max-w-3xl mx-auto px-6">
+                <div className="max-w-2xl mx-auto px-6">
                   <div className="text-center mt-16 mb-8">
-                    <p className="text-sm text-white/50">Pick a campaign type to get started</p>
+                    <p className="text-sm text-muted-foreground">Pick a campaign type to get started</p>
                   </div>
                   <CampaignTypePicker
                     onSelectType={(type, sub) => ideation.generateForType(type, sub)}
@@ -183,7 +187,6 @@ export default function IdeatePage() {
 
               {hasStarted && (
                 <>
-                  {/* Compact type picker */}
                   <CampaignTypePicker
                     onSelectType={(type, sub) => ideation.generateForType(type, sub)}
                     activeType={ideation.activeType}
@@ -204,27 +207,29 @@ export default function IdeatePage() {
               )}
             </div>
 
-            {/* Floating ChatBar */}
-            <ChatBar
-              onSend={ideation.sendChat}
-              isGenerating={ideation.isGenerating}
-              isChatting={ideation.isChatting}
-              selectedCount={ideation.selectedIdeas.size}
-              onClearSelection={ideation.clearSelection}
-              chaosMode={ideation.chaosMode}
-              turboMode={ideation.turboMode}
-              onToggleChaos={ideation.toggleChaosMode}
-              onToggleTurbo={ideation.toggleTurboMode}
-              activeType={ideation.activeType}
-              onStop={() => ideation.abort()}
-              menuOpen={menuOpen}
-              onToggleMenu={() => setMenuOpen(!menuOpen)}
-            />
+            {/* Floating ChatBar — contained within left panel */}
+            <div className="absolute bottom-6 left-4 right-4 z-50">
+              <ChatBar
+                onSend={ideation.sendChat}
+                isGenerating={ideation.isGenerating}
+                isChatting={ideation.isChatting}
+                selectedCount={ideation.selectedIdeas.size}
+                onClearSelection={ideation.clearSelection}
+                chaosMode={ideation.chaosMode}
+                turboMode={ideation.turboMode}
+                onToggleChaos={ideation.toggleChaosMode}
+                onToggleTurbo={ideation.toggleTurboMode}
+                activeType={ideation.activeType}
+                onStop={() => ideation.abort()}
+                menuOpen={menuOpen}
+                onToggleMenu={() => setMenuOpen(!menuOpen)}
+              />
+            </div>
 
             {/* Menu overlay — type picker popup above ChatBar */}
             {menuOpen && (
-              <div className="fixed bottom-32 left-1/2 -translate-x-1/2 z-[60] w-full max-w-[700px] px-4">
-                <div className="glass-input p-4">
+              <div className="absolute bottom-28 left-4 right-4 z-[60]">
+                <div className="bg-card border border-border rounded-xl shadow-lg p-4">
                   <CampaignTypePicker
                     onSelectType={handleTypeFromMenu}
                     activeType={ideation.activeType}
@@ -237,8 +242,8 @@ export default function IdeatePage() {
 
           {/* Right Panel — Desktop */}
           {rightPanelOpen && (
-            <div className="hidden lg:flex lg:w-[40%] flex-col border-l border-white/[0.06]">
-              <div className="max-h-[35%] min-h-[120px] border-b border-white/[0.06] flex-shrink-0">
+            <div className="hidden lg:flex lg:w-1/2 flex-col border-l border-border">
+              <div className="h-[35%] min-h-[120px] border-b border-border flex-shrink-0 overflow-hidden">
                 <DesignQueue
                   items={designQueue.items}
                   onRemove={(id) => designQueue.removeFromQueue.mutate(id)}
@@ -260,11 +265,11 @@ export default function IdeatePage() {
         </div>
 
         {/* Mobile bottom tabs */}
-        <div className="lg:hidden flex border-t border-white/[0.06] bg-[#0f1117]">
+        <div className="lg:hidden flex border-t border-border bg-background">
           <button
             onClick={() => setMobileTab(mobileTab === 'queue' ? null : 'queue')}
             className={`flex-1 py-2.5 text-xs font-medium text-center transition-colors ${
-              mobileTab === 'queue' ? 'text-white bg-white/[0.06]' : 'text-white/50'
+              mobileTab === 'queue' ? 'text-foreground bg-muted' : 'text-muted-foreground'
             }`}
           >
             Queue ({designQueue.items.length})
@@ -272,7 +277,7 @@ export default function IdeatePage() {
           <button
             onClick={() => setMobileTab(mobileTab === 'calendar' ? null : 'calendar')}
             className={`flex-1 py-2.5 text-xs font-medium text-center transition-colors ${
-              mobileTab === 'calendar' ? 'text-white bg-white/[0.06]' : 'text-white/50'
+              mobileTab === 'calendar' ? 'text-foreground bg-muted' : 'text-muted-foreground'
             }`}
           >
             Calendar
@@ -280,7 +285,7 @@ export default function IdeatePage() {
         </div>
 
         {mobileTab && (
-          <div className="lg:hidden fixed inset-x-0 bottom-10 h-[50vh] bg-[#0f1117] border-t border-white/[0.06] z-50 animate-in slide-in-from-bottom duration-200">
+          <div className="lg:hidden fixed inset-x-0 bottom-10 h-[50vh] bg-background border-t border-border z-50 animate-in slide-in-from-bottom duration-200">
             {mobileTab === 'queue' ? (
               <DesignQueue
                 items={designQueue.items}
@@ -300,6 +305,18 @@ export default function IdeatePage() {
           </div>
         )}
       </div>
+
+      {/* Drag overlay */}
+      <DragOverlay>
+        {activeDragItem && (
+          <div className="bg-card border border-border rounded-lg shadow-lg px-3 py-2 max-w-[240px] opacity-90">
+            <p className="text-xs font-medium text-foreground truncate">{activeDragItem.title}</p>
+            {activeDragItem.campaign_type && (
+              <p className="text-[10px] text-muted-foreground">{activeDragItem.campaign_type}</p>
+            )}
+          </div>
+        )}
+      </DragOverlay>
 
       {drawerItem && (
         <GenerationDrawer
