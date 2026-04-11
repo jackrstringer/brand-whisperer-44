@@ -4,6 +4,7 @@ import { CampaignIdea } from '@/lib/types';
 import { BriefNode } from './BriefNode';
 import { GenerationNode } from './GenerationNode';
 import { FeedbackNode } from './FeedbackNode';
+import { AiResponseNode } from './AiResponseNode';
 
 interface Props {
   nodes: IdeationNode[];
@@ -11,6 +12,7 @@ interface Props {
   streamingNodeId: string | null;
   selectedIds: Set<string>;
   isTurbo: boolean;
+  isGenerating: boolean;
   onToggleSelect: (idea: CampaignIdea) => void;
   onAddToQueue: (idea: CampaignIdea) => void;
   onBuildNow: (idea: CampaignIdea) => void;
@@ -23,6 +25,7 @@ export function NodeFlow({
   streamingNodeId,
   selectedIds,
   isTurbo,
+  isGenerating,
   onToggleSelect,
   onAddToQueue,
   onBuildNow,
@@ -32,22 +35,21 @@ export function NodeFlow({
   const hasAutoScrolledRef = useRef(false);
   const prevNodeCountRef = useRef(nodes.length);
 
+  // One-shot auto-scroll when new nodes appear
   useEffect(() => {
     if (nodes.length > prevNodeCountRef.current && !hasAutoScrolledRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
       hasAutoScrolledRef.current = true;
     }
-    if (nodes.length < prevNodeCountRef.current) {
-      hasAutoScrolledRef.current = false;
-    }
     prevNodeCountRef.current = nodes.length;
   }, [nodes.length]);
 
+  // Reset scroll lock when a new generation round starts
   useEffect(() => {
-    if (streamingNodeId) {
+    if (isGenerating) {
       hasAutoScrolledRef.current = false;
     }
-  }, [streamingNodeId]);
+  }, [isGenerating]);
 
   return (
     <div className="w-full max-w-full px-4 py-4 space-y-1">
@@ -56,7 +58,7 @@ export function NodeFlow({
           case 'brief':
             return <BriefNode key={node.id} content={node.content} campaignType={node.campaignType} campaignSubtype={node.campaignSubtype} />;
           case 'ai_response':
-            return null;
+            return <AiResponseNode key={node.id} content={node.content} isStreaming={node.isStreaming} />;
           case 'generation': {
             return (
               <GenerationNode

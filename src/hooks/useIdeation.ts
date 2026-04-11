@@ -158,11 +158,11 @@ export function useIdeation(brandId: string) {
             streamingIdeas: [...s.streamingIdeas, { id: '', title: '', description: '', campaign_type: typeName }],
           }));
         },
-        onIdeaField: (index, field, value) => {
+        onIdeaField: (index, field, token) => {
           setState(s => {
             const ideas = [...s.streamingIdeas];
             if (ideas[index]) {
-              (ideas[index] as any)[field] = value;
+              (ideas[index] as any)[field] = ((ideas[index] as any)[field] || '') + token;
             }
             return { ...s, streamingIdeas: ideas };
           });
@@ -318,10 +318,12 @@ export function useIdeation(brandId: string) {
             streamingIdeas: [...s.streamingIdeas, { id: '', title: '', description: '', campaign_type: state.activeType || '' }],
           }));
         },
-        onIdeaField: (index, field, value) => {
+        onIdeaField: (index, field, token) => {
           setState(s => {
             const ideas = [...s.streamingIdeas];
-            if (ideas[index]) (ideas[index] as any)[field] = value;
+            if (ideas[index]) {
+              (ideas[index] as any)[field] = ((ideas[index] as any)[field] || '') + token;
+            }
             return { ...s, streamingIdeas: ideas };
           });
         },

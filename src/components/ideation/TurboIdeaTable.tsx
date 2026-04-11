@@ -14,7 +14,7 @@ interface Props {
 
 function getTypeColor(typeName?: string): string {
   const t = CAMPAIGN_TYPES.find(ct => ct.name === typeName);
-  return t?.color || 'bg-white/20';
+  return t?.color || 'bg-muted-foreground/30';
 }
 
 export function TurboIdeaTable({ ideas, isStreaming, selectedIds, onToggleSelect, onAddToQueue, onBuildNow }: Props) {
@@ -23,13 +23,13 @@ export function TurboIdeaTable({ ideas, isStreaming, selectedIds, onToggleSelect
   const skeletonCount = isStreaming ? Math.max(0, totalSlots - filledCount) : 0;
 
   return (
-    <div className="glass-card overflow-hidden">
+    <div className="border border-border rounded-xl overflow-hidden bg-card">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-white/[0.06]">
+          <tr className="border-b border-border">
             <th className="w-10 p-2" />
-            <th className="text-left p-2 text-[10px] font-medium text-white/30 uppercase tracking-wider w-[200px]">Campaign Type</th>
-            <th className="text-left p-2 text-[10px] font-medium text-white/30 uppercase tracking-wider">Title</th>
+            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider w-[200px]">Campaign Type</th>
+            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Title</th>
             <th className="w-20 p-2" />
           </tr>
         </thead>
@@ -46,18 +46,18 @@ export function TurboIdeaTable({ ideas, isStreaming, selectedIds, onToggleSelect
             />
           ))}
           {Array.from({ length: skeletonCount }).map((_, i) => (
-            <tr key={`skel-${i}`} className="border-t border-white/[0.04]">
+            <tr key={`skel-${i}`} className="border-t border-border">
               <td className="p-2">
-                <div className="w-4 h-4 rounded border border-white/10 mx-auto" />
+                <div className="w-4 h-4 rounded border border-border bg-muted/30 mx-auto" />
               </td>
               <td className="p-2">
                 <div className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-white/[0.06]" />
-                  <div className="w-20 h-3 bg-white/[0.03] rounded animate-pulse" />
+                  <div className="w-1.5 h-1.5 rounded-full bg-muted" />
+                  <div className="w-20 h-3 bg-muted rounded animate-pulse" />
                 </div>
               </td>
               <td className="p-2">
-                <div className="w-48 h-4 bg-white/[0.03] rounded animate-pulse" />
+                <div className="w-48 h-4 bg-muted rounded animate-pulse" />
               </td>
               <td className="p-2" />
             </tr>
@@ -95,38 +95,37 @@ function TurboRow({
       {...attributes}
       {...listeners}
       onClick={isPartial ? undefined : onToggleSelect}
-      className={`border-t border-white/[0.04] cursor-pointer transition-all group select-none ${
+      className={`border-t border-border cursor-pointer transition-all group select-none ${
         isDragging ? 'opacity-50' : ''
-      } ${isSelected ? 'bg-primary/[0.08]' : 'hover:bg-white/[0.04]'}`}
+      } ${isSelected ? 'bg-primary/[0.08]' : 'hover:bg-muted/50'}`}
     >
       <td className="p-2 text-center">
         <div className={`w-4 h-4 rounded border flex items-center justify-center mx-auto transition-colors ${
-          isSelected ? 'bg-white border-white' : 'border-white/20'
+          isSelected ? 'bg-primary border-primary' : 'border-border'
         }`}>
-          {isSelected && <Check className="w-2.5 h-2.5 text-[#0f1117]" />}
+          {isSelected && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
         </div>
       </td>
       <td className="p-2">
         {idea.campaign_type && (
           <div className="flex items-center gap-1.5">
             <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getTypeColor(idea.campaign_type)}`} />
-            <span className="text-[11px] text-white/40">{idea.campaign_type}</span>
+            <span className="text-[11px] text-muted-foreground">{idea.campaign_type}</span>
           </div>
         )}
       </td>
       <td className="p-2">
-        <span className="font-medium text-white transition-opacity duration-300" style={{ opacity: idea.title ? 1 : 0 }}>
+        <span className="font-medium text-foreground transition-opacity duration-300" style={{ opacity: idea.title ? 1 : 0 }}>
           {idea.title}
-          {isPartial && <span className="inline-block w-[2px] h-[14px] bg-primary/70 animate-lucy-blink ml-0.5 align-middle" />}
         </span>
       </td>
       <td className="p-2">
         {!isPartial && (
           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-            <button onClick={onAddToQueue} className="p-1 rounded-md hover:bg-white/10 text-white/40 hover:text-white" title="Add to Queue">
+            <button onClick={onAddToQueue} className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground" title="Add to Queue">
               <Plus className="w-3.5 h-3.5" />
             </button>
-            <button onClick={onBuildNow} className="p-1 rounded-md bg-white/10 text-white hover:bg-white/20" title="Build Now">
+            <button onClick={onBuildNow} className="p-1 rounded-md bg-primary/10 text-foreground hover:bg-primary/20" title="Build Now">
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
