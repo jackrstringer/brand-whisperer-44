@@ -1,0 +1,1 @@
+ALTER TABLE public.brand_calendar ADD CONSTRAINT brand_calendar_unique_event UNIQUE (brand_id, event_name, event_date);
