@@ -152,7 +152,7 @@ export default function IdeatePage() {
         {/* Main content */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Panel — Ideation Flow */}
-          <div className={`flex flex-col ${rightPanelOpen ? 'w-full lg:w-3/5' : 'w-full'} border-r border-border transition-all`}>
+          <div className={`flex flex-col ${rightPanelOpen ? 'w-full lg:w-1/2' : 'w-full'} border-r border-border transition-all`}>
             <CampaignTypePicker
               onSelectType={(type, sub) => ideation.generateForType(type, sub)}
               activeType={ideation.activeType}
@@ -183,9 +183,9 @@ export default function IdeatePage() {
 
           {/* Right Panel — Desktop */}
           {rightPanelOpen && (
-            <div className="hidden lg:flex lg:w-2/5 flex-col">
-              {/* Design Queue — top half */}
-              <div className="h-1/2 border-b border-border">
+            <div className="hidden lg:flex lg:w-1/2 flex-col">
+              {/* Design Queue — compact top section */}
+              <div className="max-h-[35%] min-h-[120px] border-b border-border flex-shrink-0">
                 <DesignQueue
                   items={designQueue.items}
                   onRemove={(id) => designQueue.removeFromQueue.mutate(id)}
@@ -195,12 +195,11 @@ export default function IdeatePage() {
                   bulkProgress={bulkProgress}
                 />
               </div>
-              {/* Calendar — bottom half */}
-              <div className="h-1/2">
+              {/* Calendar — takes remaining space */}
+              <div className="flex-1 min-h-0">
                 <IdeationCalendar
-                  currentMonth={calendar.currentMonth}
                   calendarData={calendar.calendarData}
-                  onNavigateMonth={calendar.navigateMonth}
+                  onRequestMonths={calendar.handleRequestMonths}
                   onPillClick={(item) => setDrawerItem(item)}
                 />
               </div>
@@ -242,9 +241,8 @@ export default function IdeatePage() {
               />
             ) : (
               <IdeationCalendar
-                currentMonth={calendar.currentMonth}
                 calendarData={calendar.calendarData}
-                onNavigateMonth={calendar.navigateMonth}
+                onRequestMonths={calendar.handleRequestMonths}
                 onPillClick={(item) => setDrawerItem(item)}
               />
             )}
