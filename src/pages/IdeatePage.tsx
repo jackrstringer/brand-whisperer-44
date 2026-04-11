@@ -151,7 +151,8 @@ export default function IdeatePage() {
   };
 
   const handleClearChat = () => {
-    ideation.clearSession?.();
+    // Reload the page to start a fresh session
+    window.location.reload();
   };
 
   const ideationPanel = (
