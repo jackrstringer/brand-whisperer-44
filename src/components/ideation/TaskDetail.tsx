@@ -391,11 +391,10 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
             brandId={brandId}
             campaignId={item.campaign_id || ''}
             selectedReferences={selectedRefs}
-            onReferencesChange={(refs) => {
+            onSelectReferences={(refs) => {
               handleReferenceChange(refs);
               if (refs.length > 0) setRefPanelOpen(false);
             }}
-            maxReferences={1}
           />
         </DialogContent>
       </Dialog>
