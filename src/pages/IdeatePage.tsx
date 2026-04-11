@@ -194,6 +194,7 @@ export default function IdeatePage() {
               streamingNodeId={ideation.streamingNodeId}
               selectedIds={selectedIdsSet}
               isTurbo={ideation.turboMode}
+              isGenerating={ideation.isGenerating}
               onToggleSelect={ideation.toggleSelect}
               onAddToQueue={handleAddToQueue}
               onBuildNow={handleBuildNow}
