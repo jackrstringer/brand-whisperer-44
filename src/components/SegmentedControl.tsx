@@ -161,19 +161,19 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
     const ease = "left 200ms cubic-bezier(0.3,0,0.2,1), right 200ms cubic-bezier(0.3,0,0.2,1)";
     const retract = "left 250ms cubic-bezier(0.3,0,0.2,1.15), right 250ms cubic-bezier(0.3,0,0.2,1.15)";
 
-    if (idx === -1) { restPill(cur, retract); return; }
+    if (idx === -1) { restPill(safeSelected, retract); return; }
 
-    if (idx === cur) {
+    if (idx === safeSelected) {
       const last = options.length - 1;
-      if (cur === 0) setPill(m[cur].left, m[cur].right - GROW, ease);
-      else if (cur === last) setPill(m[cur].left - GROW, m[cur].right, ease);
-      else setPill(m[cur].left - GROW, m[cur].right - GROW, ease);
+      if (safeSelected === 0) setPill(m[safeSelected].left, m[safeSelected].right - GROW, ease);
+      else if (safeSelected === last) setPill(m[safeSelected].left - GROW, m[safeSelected].right, ease);
+      else setPill(m[safeSelected].left - GROW, m[safeSelected].right - GROW, ease);
       return;
     }
 
-    const dir = idx > cur ? 1 : -1;
-    if (dir > 0) setPill(m[cur].left, m[cur].right - REACH, ease);
-    else setPill(m[cur].left - REACH, m[cur].right, ease);
+    const dir = idx > safeSelected ? 1 : -1;
+    if (dir > 0) setPill(m[safeSelected].left, m[safeSelected].right - REACH, ease);
+    else setPill(m[safeSelected].left - REACH, m[safeSelected].right, ease);
   }
 
   function onPointerDown(e: React.PointerEvent) {
@@ -275,7 +275,7 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
           key={label}
           ref={(el) => { btnRefs.current[i] = el; }}
           data-seg-btn={i}
-          className={`seg-btn ${coveredIndices.has(i) ? 'seg-btn-active' : ''}`}
+          className={`seg-btn ${i === safeSelected ? 'seg-btn-active' : ''} ${coveredIndices.has(i) ? 'seg-btn-covered' : ''}`}
         >
           {label}
         </button>
