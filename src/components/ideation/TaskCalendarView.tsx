@@ -100,7 +100,8 @@ function CalendarDayCell({
   return (
     <div
       ref={setNodeRef}
-      className={`border-b border-r border-border/30 p-1.5 overflow-y-auto transition-colors ${
+      onClick={() => onDayClick?.(dateStr)}
+      className={`border-b border-r border-border/30 p-1.5 overflow-y-auto transition-colors cursor-pointer hover:bg-muted/30 ${
         isOver ? 'bg-primary/10 ring-2 ring-inset ring-primary/40' : hasEvents ? 'bg-amber-50/30' : ''
       } ${isToday ? 'ring-1 ring-inset ring-blue-300 bg-blue-50/20' : ''}`}
     >
