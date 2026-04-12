@@ -305,42 +305,8 @@ export default function IdeatePage() {
       <div className="h-screen flex flex-col bg-background text-foreground">
         {/* Single unified top bar */}
         <div className="h-10 flex items-center justify-between px-3 border-b border-border flex-shrink-0">
-          {/* Left: tabs for single mode, or label in split */}
-          <div className="flex items-center gap-1">
-            {layoutMode === 'single' ? (
-              <div className="flex items-center">
-                <button
-                  onClick={() => setSingleTab('ideation')}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                    singleTab === 'ideation'
-                      ? 'text-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Ideation
-                </button>
-                <button
-                  onClick={() => setSingleTab('tasks')}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors flex items-center gap-1.5 ${
-                    singleTab === 'tasks'
-                      ? 'text-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Tasks
-                  {designQueue.items.length > 0 && (
-                    <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full">{designQueue.items.length}</span>
-                  )}
-                </button>
-              </div>
-            ) : (
-              <span className="text-xs text-muted-foreground font-medium px-1" />
-            )}
-          </div>
-
-          {/* Right: task view controls + layout toggle */}
-          <div className="flex items-center gap-1">
-            {/* Task view controls — visible when task panel is showing */}
+          {/* Left: task view controls */}
+          <div className="flex items-center gap-1 min-w-0 flex-1">
             {showTaskControls && (
               <>
                 <button
@@ -392,28 +358,37 @@ export default function IdeatePage() {
                     Bulk Generate ({eligibleForBulk.length})
                   </Button>
                 )}
-
-                {/* Separator before layout toggle */}
-                <div className="w-px h-4 bg-border mx-1" />
               </>
             )}
-
-            {/* Layout toggle */}
-            <button
-              onClick={() => setLayoutMode('split')}
-              className={`p-1.5 rounded transition-colors ${layoutMode === 'split' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-              title="Split view"
-            >
-              <Columns2 className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setLayoutMode('single')}
-              className={`p-1.5 rounded transition-colors ${layoutMode === 'single' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-              title="Single view"
-            >
-              <Square className="w-3.5 h-3.5" />
-            </button>
           </div>
+
+          {/* Center: 3-way page mode selector */}
+          <div className="relative flex items-center bg-muted/60 rounded-lg p-0.5">
+            {/* Sliding indicator */}
+            <div
+              className="absolute top-0.5 bottom-0.5 rounded-md bg-foreground shadow-sm transition-all duration-200 ease-out"
+              style={{
+                width: `calc(100% / 3 - 2px)`,
+                left: `calc(${activeModeIndex} * 100% / 3 + 1px)`,
+              }}
+            />
+            {PAGE_MODES.map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setPageMode(mode)}
+                className={`relative z-10 px-4 py-1 text-xs font-medium rounded-md transition-colors duration-200 ${
+                  pageMode === mode
+                    ? 'text-background'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {PAGE_MODE_LABELS[mode]}
+              </button>
+            ))}
+          </div>
+
+          {/* Right: spacer for balance */}
+          <div className="flex-1" />
         </div>
 
         {/* Main content */}
