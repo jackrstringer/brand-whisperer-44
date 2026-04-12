@@ -193,7 +193,6 @@ export function useIdeation(brandId: string) {
         onIdeaField: (index, field, token) => {
           bufferIdeaField(index, field, token);
         },
-        },
         onIdeaComplete: (index, idea) => {
           setState(s => {
             const updatedNodes = s.nodes.map(n => {
