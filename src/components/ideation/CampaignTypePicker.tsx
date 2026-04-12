@@ -49,58 +49,79 @@ export function CampaignTypePicker({ onSelectType, activeType, isCompact }: Prop
     );
   }
 
-  return (
-    <div>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-        {ORDERED_TYPES.map((t, i) => (
-          <TypeCard
-            key={t.name}
-            type={t}
-            index={i}
-            isActive={activeType === t.name}
-            isExpanded={expandedType === t.name}
-            onSelect={onSelectType}
-            onExpand={() => setExpandedType(expandedType === t.name ? null : t.name)}
-          />
-        ))}
-        <button
-          onClick={() => onSelectType('')}
-          className="text-left px-3 py-2.5 rounded-xl border border-dashed border-border hover:border-foreground/20 hover:bg-muted/50 transition-all opacity-0 animate-[fade-in-up_0.4s_ease-out_forwards]"
-          style={{ animationDelay: `${ORDERED_TYPES.length * 50}ms` }}
-        >
-          <div className="flex items-center gap-2">
-            <Shuffle className="w-3.5 h-3.5 text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground">Random</span>
-          </div>
-          <span className="text-xs text-muted-foreground ml-[22px]">Surprise me — mixed types</span>
-        </button>
-      </div>
+  // Build rows: items go left-to-right in groups of 3, but when a type is expanded
+  // its subtypes inject as a full-width row right after the row containing that type.
+  const cols = 3;
+  const rows: (typeof ORDERED_TYPES[number] | 'random')[][] = [];
+  const allItems: (typeof ORDERED_TYPES[number] | 'random')[] = [...ORDERED_TYPES, 'random'];
+  for (let i = 0; i < allItems.length; i += cols) {
+    rows.push(allItems.slice(i, i + cols));
+  }
 
-      {expandedType && (() => {
-        const type = CAMPAIGN_TYPES.find(t => t.name === expandedType);
-        if (!type?.subtypes) return null;
+  return (
+    <div className="space-y-2">
+      {rows.map((row, ri) => {
+        // Check if any item in this row is expanded
+        const expandedInRow = row.find(
+          item => item !== 'random' && item.name === expandedType && item.subtypes
+        );
+
         return (
-          <div className="mt-3 p-3 bg-muted/50 border border-border rounded-xl animate-in slide-in-from-top-2 duration-200">
-            <p className="text-xs font-medium text-muted-foreground mb-2">{type.name} subtypes</p>
-            <div className="grid grid-cols-2 gap-1.5">
-              {type.subtypes.map((sub, si) => (
-                <button
-                  key={sub.name}
-                  onClick={() => {
-                    onSelectType(type.name, sub.name);
-                    setExpandedType(null);
-                  }}
-                  className="text-left px-3 py-2 rounded-lg hover:bg-muted transition-colors group opacity-0 animate-[fade-in-up_0.25s_ease-out_forwards]"
-                  style={{ animationDelay: `${si * 40}ms` }}
-                >
-                  <span className="text-sm font-medium text-foreground">{sub.name}</span>
-                  <span className="block text-xs text-muted-foreground">{sub.description}</span>
-                </button>
-              ))}
+          <div key={ri}>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {row.map((item, ci) => {
+                if (item === 'random') {
+                  return (
+                    <button
+                      key="random"
+                      onClick={() => onSelectType('')}
+                      className="text-left px-3 py-2.5 rounded-xl border border-dashed border-border hover:border-foreground/20 hover:bg-muted/50 transition-all opacity-0 animate-[fade-in-up_0.4s_ease-out_forwards]"
+                      style={{ animationDelay: `${(ri * cols + ci) * 50}ms` }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Shuffle className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span className="text-sm font-medium text-foreground">Random</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground ml-[22px]">Surprise me — mixed types</span>
+                    </button>
+                  );
+                }
+                return (
+                  <TypeCard
+                    key={item.name}
+                    type={item}
+                    index={ri * cols + ci}
+                    isActive={activeType === item.name}
+                    isExpanded={expandedType === item.name}
+                    onSelect={onSelectType}
+                    onExpand={() => setExpandedType(expandedType === item.name ? null : item.name)}
+                  />
+                );
+              })}
             </div>
+
+            {/* Subtypes row — directly below the row containing the expanded type */}
+            {expandedInRow && expandedInRow !== 'random' && expandedInRow.subtypes && (
+              <div className="mt-2 grid grid-cols-2 gap-1.5 animate-in slide-in-from-top-2 duration-200">
+                {expandedInRow.subtypes.map((sub, si) => (
+                  <button
+                    key={sub.name}
+                    onClick={() => {
+                      onSelectType(expandedInRow.name, sub.name);
+                      setExpandedType(null);
+                    }}
+                    className="text-left px-3 py-2 rounded-lg bg-muted/40 border border-border/50 hover:bg-muted hover:border-border transition-colors opacity-0 animate-[fade-in-up_0.25s_ease-out_forwards]"
+                    style={{ animationDelay: `${si * 40}ms` }}
+                  >
+                    <span className="text-sm font-medium text-foreground">{sub.name}</span>
+                    <span className="block text-xs text-muted-foreground">{sub.description}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         );
-      })()}
+      })}
     </div>
   );
 }
