@@ -177,7 +177,7 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
         }
       }
       pill.style.right = Math.max(0, leadR) + "px";
-      if (e.clientX === startX.current) return;
+      if (e.clientX === startX.current) { updateCoveredButtons(); return; }
       pill.style.left = meta[committedIndex.current].left + "px";
     } else {
       let leadL = Math.max(0, anchor.left + dx);
@@ -193,9 +193,10 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
         }
       }
       pill.style.left = Math.max(0, leadL) + "px";
-      if (e.clientX === startX.current) return;
+      if (e.clientX === startX.current) { updateCoveredButtons(); return; }
       pill.style.right = meta[committedIndex.current].right + "px";
     }
+    updateCoveredButtons();
   }
 
   function onPointerUp(e: React.PointerEvent) {
