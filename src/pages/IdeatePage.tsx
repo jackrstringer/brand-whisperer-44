@@ -305,8 +305,28 @@ export default function IdeatePage() {
       <div className="h-screen flex flex-col bg-background text-foreground">
         {/* Single unified top bar */}
         <div className="h-10 flex items-center justify-between px-3 border-b border-border flex-shrink-0">
-          {/* Left: task view controls */}
-          <div className="flex items-center gap-1 min-w-0 flex-1">
+          {/* Left: spacer for balance */}
+          <div className="flex-1" />
+
+          {/* Center: 3-way page mode selector */}
+          <div className="relative flex items-center bg-muted/60 rounded-full p-0.5">
+            {PAGE_MODES.map((mode, idx) => (
+              <button
+                key={mode}
+                onClick={() => setPageMode(mode)}
+                className={`relative z-10 px-5 py-1 text-xs font-medium rounded-full transition-all duration-200 ${
+                  pageMode === mode
+                    ? 'bg-foreground text-background shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {PAGE_MODE_LABELS[mode]}
+              </button>
+            ))}
+          </div>
+
+          {/* Right: task view controls */}
+          <div className="flex items-center gap-1 min-w-0 flex-1 justify-end">
             {showTaskControls && (
               <>
                 <button
@@ -351,38 +371,9 @@ export default function IdeatePage() {
                     </button>
                   </div>
                 )}
-
               </>
             )}
           </div>
-
-          {/* Center: 3-way page mode selector */}
-          <div className="relative flex items-center bg-muted/60 rounded-lg p-0.5">
-            {/* Sliding indicator */}
-            <div
-              className="absolute top-0.5 bottom-0.5 rounded-md bg-foreground shadow-sm transition-all duration-200 ease-out"
-              style={{
-                width: `calc(100% / 3 - 2px)`,
-                left: `calc(${activeModeIndex} * 100% / 3 + 1px)`,
-              }}
-            />
-            {PAGE_MODES.map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setPageMode(mode)}
-                className={`relative z-10 px-4 py-1 text-xs font-medium rounded-md transition-colors duration-200 ${
-                  pageMode === mode
-                    ? 'text-background'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {PAGE_MODE_LABELS[mode]}
-              </button>
-            ))}
-          </div>
-
-          {/* Right: spacer for balance */}
-          <div className="flex-1" />
         </div>
 
         {/* Main content */}
