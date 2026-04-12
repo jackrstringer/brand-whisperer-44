@@ -83,21 +83,17 @@ function IdeaCard({
         <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-primary" />
       )}
 
-      {/* Left controls: grab handle + checkbox, visible on hover or selected */}
+      {/* Left controls: grab handle + checkbox, stacked vertically */}
       <div
-        className={`flex items-center gap-0.5 flex-shrink-0 pt-0.5 transition-opacity duration-150 ${
+        className={`flex flex-col items-center flex-shrink-0 w-5 transition-opacity duration-150 ${
           isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
         }`}
         onClick={e => e.stopPropagation()}
+        style={{ alignSelf: 'stretch' }}
       >
+        {/* Checkbox: aligned with title (top) */}
         <div
-          {...listeners}
-          className="cursor-grab active:cursor-grabbing p-0.5 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
-        >
-          <GripVertical className="w-4 h-4" />
-        </div>
-        <div
-          className={`w-[18px] h-[18px] rounded-full border-[1.5px] flex items-center justify-center flex-shrink-0 transition-all duration-150 cursor-pointer ${
+          className={`w-[18px] h-[18px] rounded-full border-[1.5px] flex items-center justify-center flex-shrink-0 transition-all duration-150 cursor-pointer mt-0.5 ${
             isSelected
               ? 'bg-primary border-primary scale-100'
               : 'border-border hover:border-muted-foreground hover:scale-105'
@@ -105,6 +101,15 @@ function IdeaCard({
           onClick={onToggleSelect}
         >
           {isSelected && <Check className="w-3 h-3 text-primary-foreground" />}
+        </div>
+        {/* Drag handle: vertically centered in remaining space */}
+        <div className="flex-1 flex items-center justify-center">
+          <div
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing p-0.5 text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+          >
+            <GripVertical className="w-4 h-4" />
+          </div>
         </div>
       </div>
 

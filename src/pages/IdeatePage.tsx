@@ -307,7 +307,7 @@ export default function IdeatePage() {
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="h-screen flex flex-col bg-background text-foreground">
         {/* Single unified top bar */}
-        <div className="h-12 flex items-center justify-between px-4 border-b border-border flex-shrink-0">
+        <div className="h-14 flex items-center justify-between px-4 border-b border-border flex-shrink-0">
           {/* Left: spacer for balance */}
           <div className="flex-1" />
 

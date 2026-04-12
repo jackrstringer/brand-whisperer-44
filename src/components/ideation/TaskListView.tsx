@@ -635,7 +635,7 @@ function SortableTaskRow({
       ref={setNodeRef}
       style={style}
       {...attributes}
-      className={`flex items-center px-3 py-2 border-b border-border/50 cursor-pointer transition-colors group ${
+      className={`flex items-center px-3 py-2 border-b border-border/50 border-l-0 cursor-pointer transition-colors group ${
         isSelected ? 'bg-primary/[0.06]' : 'hover:bg-muted/50'
       }`}
     >
