@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CampaignIdea } from '@/lib/types';
 import { useDraggable } from '@dnd-kit/core';
-import { Check, Plus, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { Check, Plus, ArrowRight } from 'lucide-react';
 import { CAMPAIGN_TYPES } from '@/lib/ideation/campaignTypes';
 
 interface Props {
@@ -87,20 +87,12 @@ function IdeaRow({
     disabled: isPartial,
   });
 
-  const hasExpandableContent = !!(
-    (idea.description && idea.description.length > 60) ||
-    idea.campaign_info ||
-    idea.copy_direction
-  );
+
+
 
   const handleRowClick = (e: React.MouseEvent) => {
     if (isPartial) return;
-    // If clicking the expand area or the row itself, toggle selection
-    onToggleSelect();
-  };
-
-  const handleExpandToggle = (e: React.MouseEvent) => {
-    e.stopPropagation();
+    // Click anywhere toggles expand
     setExpanded(!expanded);
   };
 
@@ -115,14 +107,19 @@ function IdeaRow({
           isDragging ? 'opacity-50' : ''
         } ${
           isSelected
-            ? 'bg-primary/[0.06]'
-            : 'hover:bg-muted/70'
+            ? 'bg-primary/[0.08] shadow-[inset_2px_0_0_0_hsl(var(--primary))]'
+            : expanded
+            ? 'bg-muted/60'
+            : 'hover:bg-muted hover:shadow-[inset_2px_0_0_0_hsl(var(--primary)/0.4)]'
         }`}
       >
         <td className="p-2.5 w-10 align-middle">
-          <div className={`w-4 h-4 rounded-full border flex items-center justify-center mx-auto transition-colors ${
-            isSelected ? 'bg-primary border-primary' : 'border-border group-hover:border-muted-foreground/50'
-          }`}>
+          <div
+            className={`w-4 h-4 rounded-full border flex items-center justify-center mx-auto transition-colors cursor-pointer ${
+              isSelected ? 'bg-primary border-primary' : 'border-border group-hover:border-muted-foreground/50'
+            }`}
+            onClick={(e) => { e.stopPropagation(); onToggleSelect(); }}
+          >
             {isSelected && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
           </div>
         </td>
@@ -160,15 +157,6 @@ function IdeaRow({
         <td className="p-2.5 w-20 align-middle">
           {!isPartial && (
             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-              {hasExpandableContent && (
-                <button
-                  onClick={handleExpandToggle}
-                  className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                  title={expanded ? 'Collapse' : 'Expand'}
-                >
-                  {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                </button>
-              )}
               <button
                 onClick={onAddToQueue}
                 className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
