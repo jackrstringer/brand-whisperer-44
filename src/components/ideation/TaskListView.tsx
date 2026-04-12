@@ -38,7 +38,7 @@ interface ColumnDef {
 
 const ALL_COLUMNS: ColumnDef[] = [
   { key: 'status', label: 'Status', defaultWidth: 100, minWidth: 70, editPattern: 'popover', locked: true },
-  { key: 'title', label: 'Title', defaultWidth: 0, minWidth: 120, editPattern: 'title', locked: true },
+  { key: 'title', label: 'Title', defaultWidth: 360, minWidth: 120, editPattern: 'title', locked: true },
   { key: 'send_date', label: 'Send Date', defaultWidth: 110, minWidth: 80, editPattern: 'popover', locked: true },
   { key: 'campaign_info', label: 'Brief', defaultWidth: 160, minWidth: 80, editPattern: 'expanded' },
   { key: 'copy_direction', label: 'Copy', defaultWidth: 140, minWidth: 80, editPattern: 'expanded' },
