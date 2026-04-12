@@ -214,7 +214,6 @@ export function useIdeation(brandId: string) {
     else if (/\bdifferent\b/i.test(message)) mode = 'different';
 
     const genNodeId = crypto.randomUUID();
-    const chatNodeId = crypto.randomUUID();
 
     const newNodes: IdeationNode[] = [];
     if (hasSelections) {
@@ -234,12 +233,11 @@ export function useIdeation(brandId: string) {
       });
     }
     newNodes.push({ id: genNodeId, type: 'generation', ideas: [], isStreaming: true, wasTurbo: state.turboMode, timestamp: Date.now() });
-    newNodes.push({ id: chatNodeId, type: 'ai_response', content: '', isStreaming: true, timestamp: Date.now() });
 
     setState(s => ({
       ...s,
       isGenerating: true,
-      isChatting: true,
+      isChatting: false,
       streamingIdeas: [],
       streamingNodeId: genNodeId,
       nodes: [...s.nodes, ...newNodes],
@@ -310,42 +308,7 @@ export function useIdeation(brandId: string) {
       controller.signal,
     );
 
-    const historyForChat = state.nodes.slice(-10).map(n => ({
-      role: n.type === 'brief' || n.type === 'feedback' ? 'user' : 'assistant',
-      content: n.type === 'generation' ? `[Generated ideas]` : (n as any).content || '',
-    }));
-
-    const chatPromise = streamChat(
-      { brand_id: brandId, message, history: historyForChat },
-      {
-        onToken: (token) => {
-          setState(s => ({
-            ...s,
-            nodes: s.nodes.map(n =>
-              n.id === chatNodeId && n.type === 'ai_response'
-                ? { ...n, content: n.content + token }
-                : n,
-            ),
-          }));
-        },
-        onDone: () => {
-          setState(s => {
-            const updatedNodes = s.nodes.map(n =>
-              n.id === chatNodeId && n.type === 'ai_response' ? { ...n, isStreaming: false } : n,
-            );
-            saveNodes(sessionId, updatedNodes);
-            return { ...s, isChatting: false, nodes: updatedNodes };
-          });
-        },
-        onError: (err) => {
-          console.error('[useIdeation] Chat error:', err);
-          setState(s => ({ ...s, isChatting: false }));
-        },
-      },
-      controller.signal,
-    );
-
-    await Promise.allSettled([ideasPromise, chatPromise]);
+    await ideasPromise;
   }, [ensureSession, brandId, state.selectedIdeas, state.activeType, state.activeSubtype, state.chaosMode, state.turboMode, state.nodes, saveNodes]);
 
   const toggleSelect = useCallback((idea: CampaignIdea) => {
