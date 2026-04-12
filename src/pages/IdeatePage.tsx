@@ -209,7 +209,21 @@ export default function IdeatePage() {
 
   const PAGE_MODES: PageMode[] = ['ideate', 'campaigns', 'split'];
   const PAGE_MODE_LABELS: Record<PageMode, string> = { ideate: 'Ideate', campaigns: 'Campaigns', split: 'Split' };
-  const activeModeIndex = PAGE_MODES.indexOf(pageMode);
+
+  // Measure button positions for pixel-perfect sliding pill
+  const modeContainerRef = useRef<HTMLDivElement>(null);
+  const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [pillStyle, setPillStyle] = useState<{ left: number; width: number }>({ left: 0, width: 0 });
+
+  useLayoutEffect(() => {
+    const container = modeContainerRef.current;
+    const btn = buttonRefs.current[PAGE_MODES.indexOf(pageMode)];
+    if (container && btn) {
+      const cRect = container.getBoundingClientRect();
+      const bRect = btn.getBoundingClientRect();
+      setPillStyle({ left: bRect.left - cRect.left, width: bRect.width });
+    }
+  }, [pageMode]);
 
   const ideationPanel = (
     <div className="flex flex-col h-full relative">
