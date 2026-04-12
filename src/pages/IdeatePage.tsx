@@ -33,6 +33,7 @@ export default function IdeatePage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeDragItem, setActiveDragItem] = useState<any>(null);
   const seededRef = useRef(false);
+  const ideationScrollRef = useRef<HTMLDivElement>(null);
 
   // Lifted TaskWindow state
   const [taskView, setTaskView] = useState<ViewMode>(() => {
@@ -90,6 +91,16 @@ export default function IdeatePage() {
   useEffect(() => {
     localStorage.setItem('ideation-page-mode', pageMode);
   }, [pageMode]);
+
+  // Auto-scroll ideation panel to bottom when switching to it or when nodes change
+  useEffect(() => {
+    const el = ideationScrollRef.current;
+    if (el && (pageMode === 'ideate' || pageMode === 'split')) {
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+      });
+    }
+  }, [pageMode, ideation.nodes.length]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -216,7 +227,7 @@ export default function IdeatePage() {
 
   const ideationPanel = (
     <div className="flex flex-col h-full relative">
-      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-48">
+      <div ref={ideationScrollRef} className="flex-1 overflow-y-auto overflow-x-hidden pb-48">
         <div className="max-w-[1400px] mx-auto">
           {!hasStarted && (
             <div className="px-6">
@@ -307,7 +318,7 @@ export default function IdeatePage() {
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="h-screen flex flex-col bg-background text-foreground">
         {/* Single unified top bar */}
-        <div className="h-12 flex items-center justify-between px-4 border-b border-border flex-shrink-0">
+        <div className="h-14 flex items-center justify-between px-4 border-b border-border flex-shrink-0">
           {/* Left: spacer for balance */}
           <div className="flex-1" />
 

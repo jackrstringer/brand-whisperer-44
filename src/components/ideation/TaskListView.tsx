@@ -187,7 +187,9 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
       )}
 
       {/* Horizontally scrollable table wrapper */}
-      <div className="flex-1 overflow-auto" style={{ scrollbarWidth: 'none' }}>
+      <div className="flex-1 overflow-auto relative" style={{ scrollbarWidth: 'none' }}>
+        {/* Left fade mask */}
+        <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-6 z-20" style={{ background: 'linear-gradient(to right, var(--card), transparent)' }} />
         {/* Header */}
         <div className="flex items-center px-3 py-1.5 border-b border-border text-[10px] font-medium text-muted-foreground uppercase tracking-wider flex-shrink-0 select-none sticky top-0 bg-card z-10 min-w-max group/header">
           <div className="w-10 flex-shrink-0 flex items-center justify-center">
@@ -635,7 +637,7 @@ function SortableTaskRow({
       ref={setNodeRef}
       style={style}
       {...attributes}
-      className={`flex items-center px-3 py-2 border-b border-border/50 cursor-pointer transition-colors group ${
+      className={`flex items-center px-3 py-2 border-b border-border/50 border-l-0 cursor-pointer transition-colors group ${
         isSelected ? 'bg-primary/[0.06]' : 'hover:bg-muted/50'
       }`}
     >
