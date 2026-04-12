@@ -2,7 +2,7 @@ import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { DesignQueueItem } from '@/hooks/useDesignQueue';
-import { X, Loader2, Settings2, Pencil } from 'lucide-react';
+import { X, Loader2, Settings2, Pencil, GripVertical, Zap } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useMultiSelect } from '@/hooks/useMultiSelect';
 import { useCallback, useRef, useState, useEffect } from 'react';

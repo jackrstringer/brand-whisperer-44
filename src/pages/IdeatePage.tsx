@@ -352,12 +352,6 @@ export default function IdeatePage() {
                   </div>
                 )}
 
-                {eligibleForBulk.length > 0 && !bulkProgress && (
-                  <Button size="sm" variant="outline" onClick={() => setBulkConfirmOpen(true)} className="h-6 text-[10px] gap-1 ml-1">
-                    <Zap className="w-3 h-3" />
-                    Bulk Generate ({eligibleForBulk.length})
-                  </Button>
-                )}
               </>
             )}
           </div>
