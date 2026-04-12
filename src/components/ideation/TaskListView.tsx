@@ -209,14 +209,12 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
                 style={{ width: w || col.defaultWidth }}
               >
                 {col.label}
-                {!isLast && (
-                  <div
-                    onMouseDown={(e) => handleResizeStart(key, e)}
-                    className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/20 transition-colors z-10"
-                  >
-                    <div className="absolute right-0 top-1 bottom-1 w-px bg-border" />
-                  </div>
-                )}
+                <div
+                  onMouseDown={(e) => handleResizeStart(key, e)}
+                  className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/20 transition-colors z-10"
+                >
+                  <div className="absolute right-0 top-1 bottom-1 w-px bg-border" />
+                </div>
               </div>
             );
           })}
