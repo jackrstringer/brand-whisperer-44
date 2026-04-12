@@ -4,7 +4,6 @@ import { CalendarDayData } from '@/hooks/useIdeationCalendar';
 import { TaskListView } from './TaskListView';
 import { TaskCalendarView } from './TaskCalendarView';
 import { TaskDetail } from './TaskDetail';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
 
 type ViewMode = 'list' | 'calendar';
 
@@ -76,23 +75,19 @@ export function TaskWindow({
         )}
       </div>
 
-      {/* Task detail flyout sheet */}
-      <Sheet open={!!selectedItem} onOpenChange={(open) => { if (!open) setSelectedItem(null); }}>
-        <SheetContent side="right" className="w-[460px] sm:w-[500px] sm:max-w-[500px] p-0 flex flex-col">
-          {selectedItem && (
-            <TaskDetail
-              item={selectedItem}
-              brandId={brandId}
-              onBack={() => setSelectedItem(null)}
-              onRemove={(id) => {
-                onRemove(id);
-                setSelectedItem(null);
-              }}
-              onStatusChange={onStatusChange}
-            />
-          )}
-        </SheetContent>
-      </Sheet>
+      {/* Task detail peek panel (portal-based) */}
+      {selectedItem && (
+        <TaskDetail
+          item={selectedItem}
+          brandId={brandId}
+          onBack={() => setSelectedItem(null)}
+          onRemove={(id) => {
+            onRemove(id);
+            setSelectedItem(null);
+          }}
+          onStatusChange={onStatusChange}
+        />
+      )}
     </div>
   );
 }

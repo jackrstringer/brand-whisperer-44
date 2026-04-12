@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { DesignQueueItem } from '@/hooks/useDesignQueue';
@@ -10,9 +11,20 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { ArrowLeft, CalendarIcon, Loader2, Trash2, Play, ExternalLink, ImageIcon } from 'lucide-react';
+import {
+  ArrowLeft, CalendarIcon, Loader2, Trash2, Play, ExternalLink, ImageIcon,
+  Maximize2, Minimize2, MoreHorizontal, X, ChevronDown, ChevronRight,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import ReferencePanel, { SelectedReference } from '@/components/campaign/ReferencePanel';
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+
+type PeekMode = 'side' | 'center';
+
+const STORAGE_KEY = 'campaign-peek-mode';
 
 const STATUS_STYLES: Record<string, string> = {
   draft: 'bg-muted text-muted-foreground',
@@ -22,6 +34,48 @@ const STATUS_STYLES: Record<string, string> = {
   sent: 'bg-green-100 text-green-700',
 };
 
+/* ------------------------------------------------------------------ */
+/*  Collapsible Section                                                */
+/* ------------------------------------------------------------------ */
+
+function Section({ title, defaultOpen = true, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border-b border-border last:border-b-0">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 w-full px-6 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+        {title}
+      </button>
+      <div
+        className="overflow-hidden transition-all duration-200"
+        style={{ maxHeight: open ? '4000px' : '0', opacity: open ? 1 : 0 }}
+      >
+        <div className="px-6 pb-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Property Row                                                       */
+/* ------------------------------------------------------------------ */
+
+function PropRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="py-1.5">
+      <label className="text-[11px] font-medium text-muted-foreground mb-1.5 block">{label}</label>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Props                                                              */
+/* ------------------------------------------------------------------ */
+
 interface Props {
   item: DesignQueueItem;
   brandId: string;
@@ -30,9 +84,37 @@ interface Props {
   onStatusChange: (id: string, status: string) => void;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Main Component                                                     */
+/* ------------------------------------------------------------------ */
+
 export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: Props) {
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  // Peek mode
+  const [peekMode, setPeekMode] = useState<PeekMode>(() => {
+    try { return (localStorage.getItem(STORAGE_KEY) as PeekMode) || 'side'; } catch { return 'side'; }
+  });
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
+  const effectiveMode = isMobile ? 'center' : peekMode;
+  const togglePeekMode = () => {
+    const next = peekMode === 'side' ? 'center' : 'side';
+    setPeekMode(next);
+    try { localStorage.setItem(STORAGE_KEY, next); } catch {}
+  };
+
+  // Animate
+  const [visible, setVisible] = useState(false);
+  useEffect(() => { requestAnimationFrame(() => setVisible(true)); }, []);
+  const handleAnimatedClose = () => { setVisible(false); setTimeout(onBack, 200); };
+
+  // Form state
   const [title, setTitle] = useState(item.title);
   const [campaignInfo, setCampaignInfo] = useState(item.campaign_info || '');
   const [subjectLine, setSubjectLine] = useState(item.subject_line || '');
@@ -46,8 +128,28 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
   const [iframeHeight, setIframeHeight] = useState(400);
   const [refPanelOpen, setRefPanelOpen] = useState(false);
   const [selectedRefs, setSelectedRefs] = useState<SelectedReference[]>([]);
+  const [showActions, setShowActions] = useState(false);
   const saveRef = useRef<ReturnType<typeof setTimeout>>();
+  const actionsRef = useRef<HTMLDivElement>(null);
 
+  // Escape to close
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') handleAnimatedClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
+
+  // Click outside actions menu
+  useEffect(() => {
+    if (!showActions) return;
+    const handler = (e: MouseEvent) => {
+      if (actionsRef.current && !actionsRef.current.contains(e.target as Node)) setShowActions(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showActions]);
+
+  // Measure iframe
   const measureIframe = useCallback((iframe: HTMLIFrameElement | null) => {
     if (!iframe) return;
     try {
@@ -91,6 +193,7 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
     }
   }, [item.preferences]);
 
+  // Auto-save debounce
   const debounceSave = useCallback(
     (fields: Record<string, any>) => {
       if (saveRef.current) clearTimeout(saveRef.current);
@@ -206,185 +309,260 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
 
   const handleRemove = () => {
     onRemove(item.id);
-    onBack();
     toast.success('Removed from queue');
   };
 
-  return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border flex-shrink-0">
-        <button onClick={onBack} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div className="flex-1 min-w-0 flex items-center gap-2">
-          {item.campaign_type && (
-            <Badge variant="secondary" className="text-[10px] shrink-0">{item.campaign_type}</Badge>
-          )}
-          <Badge className={`text-[10px] shrink-0 ${STATUS_STYLES[item.status] || STATUS_STYLES.draft}`}>
-            {item.status}
-          </Badge>
-        </div>
-        <button
-          onClick={handleRemove}
-          className="p-1.5 text-muted-foreground hover:text-destructive transition-colors"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
+  /* ------------------------------------------------------------------ */
+  /*  Render                                                             */
+  /* ------------------------------------------------------------------ */
 
-      {/* Form — scrollable */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3" style={{ scrollbarWidth: 'none' }}>
-        <div>
-          <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Title</label>
-          <Input value={title} onChange={e => setTitle(e.target.value)} className="h-8 text-sm" />
-        </div>
+  const sideClasses = effectiveMode === 'side'
+    ? `fixed top-0 right-0 bottom-0 border-l border-border flex flex-col bg-card z-50 transition-transform duration-300 ease-out ${visible ? 'translate-x-0' : 'translate-x-full'}`
+    : `fixed top-1/2 left-1/2 flex flex-col bg-card z-50 rounded-xl shadow-2xl border border-border transition-all duration-200 ease-out ${visible ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`;
 
-        <div>
-          <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Brief</label>
-          <Textarea
-            value={campaignInfo}
-            onChange={e => setCampaignInfo(e.target.value)}
-            placeholder="Describe what this email should communicate..."
-            rows={2}
-            className="text-sm"
-          />
-        </div>
+  const sideStyle = effectiveMode === 'side'
+    ? { width: 'min(680px, 50vw)' }
+    : { width: isMobile ? '95vw' : 'min(900px, 90vw)', maxHeight: isMobile ? '90vh' : '85vh', transform: `translate(-50%, -50%) ${visible ? 'scale(1)' : 'scale(0.95)'}` };
 
-        <div>
-          <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Subject Line</label>
-          <Input value={subjectLine} onChange={e => setSubjectLine(e.target.value)} placeholder="Email subject line" className="h-8 text-sm" />
-        </div>
+  const panel = (
+    <>
+      {/* Backdrop */}
+      <div
+        className={`fixed inset-0 z-40 transition-opacity duration-200 ${visible ? 'opacity-100' : 'opacity-0'} ${effectiveMode === 'center' ? 'bg-black/40 backdrop-blur-sm' : 'bg-black/20'}`}
+        onClick={handleAnimatedClose}
+      />
 
-        <div>
-          <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Copy Direction</label>
-          <Textarea
-            value={copyDirection}
-            onChange={e => setCopyDirection(e.target.value)}
-            placeholder="Tone, voice, hooks..."
-            rows={2}
-            className="text-sm"
-          />
-        </div>
-
-        <div>
-          <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Design Notes</label>
-          <Textarea
-            value={designNotes}
-            onChange={e => setDesignNotes(e.target.value)}
-            placeholder="Additional design instructions..."
-            rows={2}
-            className="text-sm"
-          />
-        </div>
-
-        <div>
-          <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Send Date</label>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="w-full justify-start text-left text-sm h-8">
-                <CalendarIcon className="mr-2 h-3.5 w-3.5" />
-                {sendDate
-                  ? sendDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                  : 'Pick a date'}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar mode="single" selected={sendDate} onSelect={setSendDate} initialFocus />
-            </PopoverContent>
-          </Popover>
-        </div>
-
-        {/* Reference selector */}
-        <div>
-          <label className="text-[11px] font-medium text-muted-foreground mb-1 block">Reference</label>
-          <button
-            onClick={() => setRefPanelOpen(true)}
-            className="w-full flex items-center gap-2 px-3 py-2 border border-border rounded-lg hover:bg-muted/50 transition-colors text-left"
-          >
-            {selectedRefs.length > 0 ? (
-              <>
-                <img
-                  src={selectedRefs[0].thumbnail_url}
-                  alt=""
-                  className="w-8 h-10 object-cover rounded border border-border"
-                />
-                <span className="text-xs text-foreground truncate flex-1">{selectedRefs[0].title}</span>
-              </>
-            ) : (
-              <>
-                <ImageIcon className="w-4 h-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">Choose a reference...</span>
-              </>
+      {/* Panel */}
+      <div className={sideClasses} style={sideStyle}>
+        {/* Top bar */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
+          <div className="flex items-center gap-2">
+            {!isMobile && (
+              <button
+                onClick={togglePeekMode}
+                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                title={`Switch to ${peekMode === 'side' ? 'center' : 'side'} peek`}
+              >
+                {effectiveMode === 'side' ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+              </button>
             )}
-          </button>
+          </div>
+          <div className="flex items-center gap-1">
+            {/* Actions dropdown */}
+            <div className="relative" ref={actionsRef}>
+              <button
+                onClick={() => setShowActions(s => !s)}
+                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <MoreHorizontal className="w-4 h-4" />
+              </button>
+              {showActions && (
+                <div className="absolute right-0 top-full mt-1 w-48 bg-popover border border-border rounded-lg shadow-lg py-1 z-50">
+                  {item.campaign_id && (
+                    <button
+                      onClick={() => { navigate(`/brands/${brandId}/campaigns/${item.campaign_id}`); setShowActions(false); }}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-sm text-foreground hover:bg-muted transition-colors"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" /> Open in Editor
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { handleRemove(); setShowActions(false); }}
+                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Remove from Queue
+                  </button>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={handleAnimatedClose}
+              className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
-        {/* Generate action */}
-        <div className="pt-2">
+        {/* Title + meta row */}
+        <div className="px-6 pt-4 pb-2 border-b border-border shrink-0">
+          <Input
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            className="text-lg font-semibold bg-transparent border-none shadow-none px-0 py-0 h-auto focus-visible:ring-0 hover:bg-muted/40 rounded-md transition-colors"
+            placeholder="Untitled"
+          />
+          <div className="flex items-center gap-2 mt-2 pb-1">
+            <Badge className={`text-[10px] ${STATUS_STYLES[item.status] || STATUS_STYLES.draft}`}>
+              {item.status}
+            </Badge>
+            {item.campaign_type && (
+              <Badge variant="secondary" className="text-[10px]">{item.campaign_type}</Badge>
+            )}
+            {sendDate && (
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <CalendarIcon className="w-3 h-3" />
+                {sendDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+          {/* Details section */}
+          <Section title="Details">
+            <div className="space-y-1">
+              <PropRow label="Brief">
+                <Textarea
+                  value={campaignInfo}
+                  onChange={e => setCampaignInfo(e.target.value)}
+                  placeholder="Describe what this email should communicate..."
+                  rows={3}
+                  className="bg-transparent border-none shadow-none px-2 py-1.5 text-sm rounded-md hover:bg-muted/50 focus:bg-card transition-colors resize-none min-h-0"
+                />
+              </PropRow>
+              <PropRow label="Subject Line">
+                <Input
+                  value={subjectLine}
+                  onChange={e => setSubjectLine(e.target.value)}
+                  placeholder="Email subject line"
+                  className="bg-transparent border-none shadow-none px-2 py-1 text-sm h-auto rounded-md hover:bg-muted/50 focus:bg-card transition-colors"
+                />
+              </PropRow>
+              <PropRow label="Copy Direction">
+                <Textarea
+                  value={copyDirection}
+                  onChange={e => setCopyDirection(e.target.value)}
+                  placeholder="Tone, voice, hooks..."
+                  rows={3}
+                  className="bg-transparent border-none shadow-none px-2 py-1.5 text-sm rounded-md hover:bg-muted/50 focus:bg-card transition-colors resize-none min-h-0"
+                />
+              </PropRow>
+              <PropRow label="Design Notes">
+                <Textarea
+                  value={designNotes}
+                  onChange={e => setDesignNotes(e.target.value)}
+                  placeholder="Additional design instructions..."
+                  rows={2}
+                  className="bg-transparent border-none shadow-none px-2 py-1.5 text-sm rounded-md hover:bg-muted/50 focus:bg-card transition-colors resize-none min-h-0"
+                />
+              </PropRow>
+              <PropRow label="Send Date">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="ghost" size="sm" className="w-full justify-start text-left text-sm h-8 px-2 hover:bg-muted/50">
+                      <CalendarIcon className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
+                      {sendDate
+                        ? sendDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                        : <span className="text-muted-foreground">Pick a date</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={sendDate} onSelect={setSendDate} initialFocus />
+                  </PopoverContent>
+                </Popover>
+              </PropRow>
+              <PropRow label="Reference">
+                <button
+                  onClick={() => setRefPanelOpen(true)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors text-left"
+                >
+                  {selectedRefs.length > 0 ? (
+                    <>
+                      <img
+                        src={selectedRefs[0].thumbnail_url}
+                        alt=""
+                        className="w-8 h-10 object-cover rounded border border-border"
+                      />
+                      <span className="text-xs text-foreground truncate flex-1">{selectedRefs[0].title}</span>
+                    </>
+                  ) : (
+                    <>
+                      <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">Choose a reference...</span>
+                    </>
+                  )}
+                </button>
+              </PropRow>
+            </div>
+          </Section>
+
+          {/* Email Preview section */}
+          {campaignHtml && (
+            <Section title="Email Preview">
+              <div className="border border-border rounded-lg overflow-hidden bg-white mx-auto" style={{ maxWidth: 600 }}>
+                <iframe
+                  srcDoc={campaignHtml}
+                  className="w-full border-0 block"
+                  style={{ height: iframeHeight, overflow: 'hidden' }}
+                  sandbox="allow-same-origin"
+                  title="Campaign preview"
+                  onLoad={(e) => {
+                    const iframe = e.currentTarget;
+                    measureIframe(iframe);
+                    try {
+                      const doc = iframe.contentDocument;
+                      if (doc) {
+                        const style = doc.createElement('style');
+                        style.textContent = 'html,body{margin:0;padding:0;overflow-x:hidden!important;max-width:100%!important;}*{max-width:100%!important;box-sizing:border-box;}';
+                        doc.head?.appendChild(style);
+                        doc.querySelectorAll('img').forEach(img => {
+                          if (!img.complete) img.addEventListener('load', () => measureIframe(iframe), { once: true });
+                        });
+                      }
+                    } catch {}
+                    setTimeout(() => measureIframe(iframe), 500);
+                  }}
+                />
+              </div>
+            </Section>
+          )}
+
+          {/* Activity section */}
+          <Section title="Activity" defaultOpen={false}>
+            <div className="space-y-1.5 text-xs text-muted-foreground">
+              <p>Created {new Date(item.created_at || '').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+              {item.updated_at && item.updated_at !== item.created_at && (
+                <p>Updated {new Date(item.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+              )}
+            </div>
+          </Section>
+        </div>
+
+        {/* Bottom action bar */}
+        <div className="flex items-center justify-between px-6 py-3 border-t border-border shrink-0">
+          <div className="flex items-center gap-2">
+            {item.campaign_id && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => navigate(`/brands/${brandId}/campaigns/${item.campaign_id}`)}
+              >
+                <ExternalLink className="w-3 h-3 mr-1.5" />
+                Open in Editor
+              </Button>
+            )}
+          </div>
           <Button
             onClick={handleGenerate}
             disabled={isGenerating || item.status === 'generating'}
-            className="w-full"
             size="sm"
+            className="h-8"
           >
             {isGenerating ? (
-              <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Generating...</>
+              <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> Generating...</>
             ) : item.status === 'designed' || item.status === 'templated' || item.status === 'sent' ? (
-              <><Play className="w-3.5 h-3.5 mr-1.5" /> Regenerate</>
+              <><Play className="w-3 h-3 mr-1.5" /> Regenerate</>
             ) : (
-              <><Play className="w-3.5 h-3.5 mr-1.5" /> Generate Email</>
+              <><Play className="w-3 h-3 mr-1.5" /> Generate Email</>
             )}
           </Button>
         </div>
-
-        {/* View campaign link */}
-        {item.campaign_id && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={() => navigate(`/brands/${brandId}/campaigns/${item.campaign_id}`)}
-          >
-            <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-            Open in Editor
-          </Button>
-        )}
-
-        {/* Campaign preview */}
-        {campaignHtml && (
-          <div className="pt-2">
-            <label className="text-[11px] font-medium text-muted-foreground mb-2 block">Preview</label>
-            <div className="border border-border rounded-lg overflow-hidden bg-white mx-auto" style={{ maxWidth: 600 }}>
-              <iframe
-                srcDoc={campaignHtml}
-                className="w-full border-0 block"
-                style={{ height: iframeHeight, overflow: 'hidden' }}
-                sandbox="allow-same-origin"
-                title="Campaign preview"
-                onLoad={(e) => {
-                  const iframe = e.currentTarget;
-                  measureIframe(iframe);
-                  try {
-                    const doc = iframe.contentDocument;
-                    if (doc) {
-                      const style = doc.createElement('style');
-                      style.textContent = 'html,body{margin:0;padding:0;overflow-x:hidden!important;max-width:100%!important;}*{max-width:100%!important;box-sizing:border-box;}';
-                      doc.head?.appendChild(style);
-                      doc.querySelectorAll('img').forEach(img => {
-                        if (!img.complete) img.addEventListener('load', () => measureIframe(iframe), { once: true });
-                      });
-                    }
-                  } catch {}
-                  setTimeout(() => measureIframe(iframe), 500);
-                }}
-              />
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Reference panel full-screen dialog */}
+      {/* Reference panel dialog */}
       <Dialog open={refPanelOpen} onOpenChange={setRefPanelOpen}>
         <DialogContent className="max-w-[95vw] w-[1400px] h-[90vh] p-0 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
@@ -400,6 +578,8 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
+
+  return createPortal(panel, document.body);
 }
