@@ -238,7 +238,7 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
           key={label}
           ref={(el) => { btnRefs.current[i] = el; }}
           data-seg-btn={i}
-          className={`seg-btn ${i === selected ? 'seg-btn-active' : ''}`}
+          className={`seg-btn ${coveredIndices.has(i) ? 'seg-btn-active' : ''}`}
         >
           {label}
         </button>
