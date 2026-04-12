@@ -708,7 +708,8 @@ function SortableTaskRow({
           return (
             <div
               key={key}
-              className={`flex-1 min-w-[120px] px-2 flex items-center gap-1 ${editing ? 'ring-2 ring-primary rounded' : ''}`}
+              className={`flex-shrink-0 px-2 flex items-center gap-1 ${editing ? 'ring-2 ring-primary rounded' : ''}`}
+              style={{ width: w || 360 }}
             >
               {editing ? (
                 <InlineCellInput
