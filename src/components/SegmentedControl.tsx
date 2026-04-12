@@ -105,24 +105,50 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
 
   function snapTo(idx: number, blobby: boolean) {
     calcMeta();
-    const old = selected;
-    if (blobby && idx !== old) {
-      const right = idx > old;
-      const distance = Math.abs(idx - old);
+    const pill = pillRef.current;
+    const seg = containerRef.current;
+    if (!pill || !seg) return;
+
+    const currentLeft = parseFloat(pill.style.left || `${metaRef.current[safeSelected]?.left ?? 0}`);
+    const currentRight = parseFloat(pill.style.right || `${metaRef.current[safeSelected]?.right ?? 0}`);
+    const currentCenter = currentLeft + (seg.offsetWidth - currentLeft - currentRight) / 2;
+    const target = metaRef.current[idx];
+    const targetCenter = target.left + target.width / 2;
+
+    if (blobby && idx !== safeSelected) {
+      const right = targetCenter > currentCenter;
+      const distance = Math.abs(idx - safeSelected);
       const trailMs = 320 + distance * 60;
       const leadMs = 200 + distance * 40;
+      isAnimatingClickRef.current = true;
+      if (animationTimeoutRef.current) window.clearTimeout(animationTimeoutRef.current);
       setPill(
-        metaRef.current[idx].left,
-        metaRef.current[idx].right,
+        target.left,
+        target.right,
         right
           ? `left ${trailMs}ms cubic-bezier(0.4,0,0.2,1.4), right ${leadMs}ms cubic-bezier(0.4,0,0.2,1)`
           : `right ${trailMs}ms cubic-bezier(0.4,0,0.2,1.4), left ${leadMs}ms cubic-bezier(0.4,0,0.2,1)`
       );
+      const totalMs = Math.max(trailMs, leadMs);
+      const tickCovered = () => {
+        updateCoveredButtons();
+        if (!isAnimatingClickRef.current) return;
+        animationTimeoutRef.current = window.setTimeout(tickCovered, 16);
+      };
+      tickCovered();
+      window.setTimeout(() => {
+        isAnimatingClickRef.current = false;
+        if (animationTimeoutRef.current) {
+          window.clearTimeout(animationTimeoutRef.current);
+          animationTimeoutRef.current = null;
+        }
+        setCoveredIndices(new Set([idx]));
+      }, totalMs + 40);
     } else {
       restPill(idx, "left 220ms cubic-bezier(0.4,0,0.2,1), right 220ms cubic-bezier(0.4,0,0.2,1)");
+      setCoveredIndices(new Set([idx]));
     }
     hoveredIndex.current = -1;
-    setCoveredIndices(new Set([idx]));
     select(idx);
   }
 
