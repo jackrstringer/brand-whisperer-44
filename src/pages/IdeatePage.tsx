@@ -403,14 +403,15 @@ export default function IdeatePage() {
         {/* Main content */}
         <div className="flex-1 min-h-0">
           {pageMode === 'split' ? (
-            <div className="flex h-full">
-              <div className="w-[50vw] min-w-[400px] flex-shrink-0 border-r border-border">
+            <ResizablePanelGroup direction="horizontal" className="h-full">
+              <ResizablePanel defaultSize={50} minSize={30} className="flex-shrink-0" style={{ flexShrink: 0 }}>
                 {ideationPanel}
-              </div>
-              <div className="flex-1 min-w-[300px]">
+              </ResizablePanel>
+              <ResizableHandle withHandle />
+              <ResizablePanel defaultSize={50} minSize={20}>
                 {taskPanel}
-              </div>
-            </div>
+              </ResizablePanel>
+            </ResizablePanelGroup>
           ) : pageMode === 'ideate' ? (
             <div className="h-full">{ideationPanel}</div>
           ) : (
