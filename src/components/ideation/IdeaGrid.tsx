@@ -95,12 +95,7 @@ function IdeaRow({
 
   const handleRowClick = (e: React.MouseEvent) => {
     if (isPartial) return;
-    // If clicking the expand area or the row itself, toggle selection
-    onToggleSelect();
-  };
-
-  const handleExpandToggle = (e: React.MouseEvent) => {
-    e.stopPropagation();
+    // Click anywhere toggles expand
     setExpanded(!expanded);
   };
 
@@ -115,8 +110,10 @@ function IdeaRow({
           isDragging ? 'opacity-50' : ''
         } ${
           isSelected
-            ? 'bg-primary/[0.06]'
-            : 'hover:bg-muted/70'
+            ? 'bg-primary/[0.08] shadow-[inset_2px_0_0_0_hsl(var(--primary))]'
+            : expanded
+            ? 'bg-muted/60'
+            : 'hover:bg-muted hover:shadow-[inset_2px_0_0_0_hsl(var(--primary)/0.4)]'
         }`}
       >
         <td className="p-2.5 w-10 align-middle">
