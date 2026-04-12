@@ -90,18 +90,19 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
 
   useEffect(() => { saveColumnConfig(colConfig); }, [colConfig]);
 
-  // Click-outside handler: dismiss editing cell when clicking outside the table
+  // Click-outside handler: dismiss editing cell when clicking outside overlays
   useEffect(() => {
     if (!editingCell) return;
     const handler = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      // If the click is inside a popover portal or the table, let the component handle it
-      if (target.closest('[data-radix-popper-content-wrapper]') || target.closest('[data-editing-overlay]')) return;
+      if (target.closest('[data-editing-overlay]') || target.closest('[data-radix-popper-content-wrapper]')) return;
+      // Don't close if clicking another cell (that cell's handler will manage the switch)
+      if (target.closest('[data-cell-key]')) return;
       setEditingCell(null);
     };
-    // Use capture so we get it before blur
-    document.addEventListener('mousedown', handler, true);
-    return () => document.removeEventListener('mousedown', handler, true);
+    // Use bubble phase so component handlers fire first in capture
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, [editingCell]);
 
   const visibleCols = colConfig.order.filter(k => colConfig.visible.includes(k));
@@ -458,6 +459,9 @@ function ExpandedEditor({
   const [draft, setDraft] = useState(value);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const savedRef = useRef(false);
 
   useEffect(() => {
     textareaRef.current?.focus();
@@ -466,22 +470,33 @@ function ExpandedEditor({
     }
   }, []);
 
+  const doSave = useCallback(() => {
+    if (savedRef.current) return;
+    savedRef.current = true;
+    onSave(draftRef.current);
+  }, [onSave]);
+
+  // Save on unmount (covers global click-outside dismissal)
+  useEffect(() => {
+    return () => { doSave(); };
+  }, [doSave]);
+
   // Click outside to save
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        onSave(draft);
+        doSave();
       }
     };
     document.addEventListener('mousedown', handler, true);
     return () => document.removeEventListener('mousedown', handler, true);
-  }, [draft, onSave]);
+  }, [doSave]);
 
   return (
     <div ref={containerRef} data-editing-overlay="true" className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg w-[360px] animate-in fade-in-0 zoom-in-95 duration-100">
       <div className="flex items-center justify-between px-3 py-2 border-b border-border">
         <span className="text-xs font-medium text-foreground">{fieldName}</span>
-        <button onClick={onCancel} className="text-muted-foreground hover:text-foreground text-xs">✕</button>
+        <button onClick={() => { savedRef.current = true; onCancel(); }} className="text-muted-foreground hover:text-foreground text-xs">✕</button>
       </div>
       <div className="p-2">
         <textarea
@@ -489,15 +504,15 @@ function ExpandedEditor({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Escape') onCancel();
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) onSave(draft);
+            if (e.key === 'Escape') { savedRef.current = true; onCancel(); }
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) doSave();
           }}
           className="w-full min-h-[120px] resize-none rounded border border-border bg-background p-2 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary/40"
         />
       </div>
       <div className="flex justify-end gap-2 px-3 py-2 border-t border-border">
-        <button onClick={onCancel} className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted transition-colors">Cancel</button>
-        <button onClick={() => onSave(draft)} className="text-xs text-primary-foreground bg-primary hover:bg-primary/90 px-3 py-1 rounded transition-colors font-medium">Save</button>
+        <button onClick={() => { savedRef.current = true; onCancel(); }} className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted transition-colors">Cancel</button>
+        <button onClick={doSave} className="text-xs text-primary-foreground bg-primary hover:bg-primary/90 px-3 py-1 rounded transition-colors font-medium">Save</button>
       </div>
     </div>
   );
@@ -600,6 +615,7 @@ function SortableTaskRow({
           return (
             <div
               key={key}
+              data-cell-key={key}
               className={`flex-shrink-0 px-2 relative ${editing ? 'ring-2 ring-primary rounded' : ''}`}
               style={{ width: w }}
               onClick={(e) => handleCellClick(key, e)}
@@ -660,6 +676,7 @@ function SortableTaskRow({
           return (
             <div
               key={key}
+              data-cell-key={key}
               className={`flex-shrink-0 px-2 relative ${editing ? 'ring-2 ring-primary rounded' : ''}`}
               style={{ width: w }}
               onClick={(e) => handleCellClick(key, e)}
@@ -684,6 +701,7 @@ function SortableTaskRow({
         return (
           <div
             key={key}
+            data-cell-key={key}
             className={`flex-shrink-0 px-2 truncate relative ${editing ? 'ring-2 ring-primary rounded' : ''}`}
             style={{ width: w }}
             onClick={(e) => handleCellClick(key, e)}
