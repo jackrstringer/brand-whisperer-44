@@ -323,20 +323,22 @@ export default function IdeatePage() {
           <div className="flex-1" />
 
           {/* Center: 3-way page mode selector */}
-          <div className="relative flex items-center bg-muted/60 rounded-full p-0.5">
-            {/* Sliding pill indicator */}
+          <div ref={modeContainerRef} className="relative flex items-center bg-muted/60 rounded-full p-0.5">
+            {/* Sliding pill */}
             <div
-              className="absolute top-0.5 bottom-0.5 rounded-full bg-foreground shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+              className="absolute top-0.5 bottom-0.5 rounded-full bg-foreground shadow-sm"
               style={{
-                width: `calc(${100 / PAGE_MODES.length}% - 2px)`,
-                left: `calc(${activeModeIndex} * ${100 / PAGE_MODES.length}% + 1px)`,
+                width: pillStyle.width,
+                left: pillStyle.left,
+                transition: 'left 150ms cubic-bezier(0.22, 1, 0.36, 1), width 150ms cubic-bezier(0.22, 1, 0.36, 1)',
               }}
             />
-            {PAGE_MODES.map((mode) => (
+            {PAGE_MODES.map((mode, idx) => (
               <button
                 key={mode}
+                ref={(el) => { buttonRefs.current[idx] = el; }}
                 onClick={() => setPageMode(mode)}
-                className={`relative z-10 px-5 py-1 text-xs font-medium rounded-full transition-colors duration-300 ${
+                className={`relative z-10 px-5 py-1 text-xs font-medium rounded-full transition-colors duration-150 ${
                   pageMode === mode
                     ? 'text-background'
                     : 'text-muted-foreground hover:text-foreground'
