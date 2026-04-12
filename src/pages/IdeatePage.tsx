@@ -323,10 +323,10 @@ export default function IdeatePage() {
           <div className="flex-1" />
 
           {/* Center: 3-way page mode selector */}
-          <div ref={modeContainerRef} className="relative flex items-center bg-muted/60 rounded-full p-0.5">
+          <div ref={modeContainerRef} className="relative flex items-center bg-muted/60 rounded-full p-1">
             {/* Sliding pill */}
             <div
-              className="absolute top-0.5 bottom-0.5 rounded-full bg-foreground shadow-sm"
+              className="absolute top-1 bottom-1 rounded-full bg-foreground shadow-sm"
               style={{
                 width: pillStyle.width,
                 left: pillStyle.left,
@@ -338,7 +338,7 @@ export default function IdeatePage() {
                 key={mode}
                 ref={(el) => { buttonRefs.current[idx] = el; }}
                 onClick={() => setPageMode(mode)}
-                className={`relative z-10 px-5 py-1 text-xs font-medium rounded-full transition-colors duration-150 ${
+                className={`relative z-10 px-6 py-1.5 text-sm font-medium rounded-full transition-colors duration-150 ${
                   pageMode === mode
                     ? 'text-background'
                     : 'text-muted-foreground hover:text-foreground'
