@@ -310,13 +310,21 @@ export default function IdeatePage() {
 
           {/* Center: 3-way page mode selector */}
           <div className="relative flex items-center bg-muted/60 rounded-full p-0.5">
-            {PAGE_MODES.map((mode, idx) => (
+            {/* Sliding pill indicator */}
+            <div
+              className="absolute top-0.5 bottom-0.5 rounded-full bg-foreground shadow-sm transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+              style={{
+                width: `calc(${100 / PAGE_MODES.length}% - 2px)`,
+                left: `calc(${activeModeIndex} * ${100 / PAGE_MODES.length}% + 1px)`,
+              }}
+            />
+            {PAGE_MODES.map((mode) => (
               <button
                 key={mode}
                 onClick={() => setPageMode(mode)}
-                className={`relative z-10 px-5 py-1 text-xs font-medium rounded-full transition-all duration-200 ${
+                className={`relative z-10 px-5 py-1 text-xs font-medium rounded-full transition-colors duration-300 ${
                   pageMode === mode
-                    ? 'bg-foreground text-background shadow-sm'
+                    ? 'text-background'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
