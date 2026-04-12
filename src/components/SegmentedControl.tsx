@@ -77,6 +77,24 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
     return () => window.removeEventListener("resize", onResize);
   }, [selected]);
 
+  function updateCoveredButtons() {
+    const pill = pillRef.current;
+    const seg = containerRef.current;
+    if (!pill || !seg) return;
+    const pillLeft = parseFloat(pill.style.left || '0');
+    const pillRight = parseFloat(pill.style.right || '0');
+    const pillLeftEdge = pillLeft;
+    const pillRightEdge = seg.offsetWidth - pillRight;
+    const covered = new Set<number>();
+    metaRef.current.forEach((m, i) => {
+      const btnCenter = m.center;
+      if (btnCenter >= pillLeftEdge && btnCenter <= pillRightEdge) {
+        covered.add(i);
+      }
+    });
+    setCoveredIndices(covered);
+  }
+
   function snapTo(idx: number, blobby: boolean) {
     calcMeta();
     const old = selected;
@@ -86,13 +104,14 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
         metaRef.current[idx].left,
         metaRef.current[idx].right,
         right
-          ? "left 180ms cubic-bezier(0.4,0,0.2,1.4), right 100ms cubic-bezier(0.4,0,0.2,1)"
-          : "right 180ms cubic-bezier(0.4,0,0.2,1.4), left 100ms cubic-bezier(0.4,0,0.2,1)"
+          ? "left 280ms cubic-bezier(0.4,0,0.2,1.4), right 160ms cubic-bezier(0.4,0,0.2,1)"
+          : "right 280ms cubic-bezier(0.4,0,0.2,1.4), left 160ms cubic-bezier(0.4,0,0.2,1)"
       );
     } else {
-      restPill(idx, "left 150ms cubic-bezier(0.4,0,0.2,1), right 150ms cubic-bezier(0.4,0,0.2,1)");
+      restPill(idx, "left 220ms cubic-bezier(0.4,0,0.2,1), right 220ms cubic-bezier(0.4,0,0.2,1)");
     }
     hoveredIndex.current = -1;
+    setCoveredIndices(new Set([idx]));
     select(idx);
   }
 
