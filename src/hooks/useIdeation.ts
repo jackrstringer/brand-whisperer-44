@@ -9,7 +9,8 @@ export type IdeationNode =
   | { id: string; type: 'brief'; content: string; campaignType?: string; campaignSubtype?: string; timestamp: number }
   | { id: string; type: 'generation'; ideas: CampaignIdea[]; isStreaming: boolean; wasTurbo?: boolean; timestamp: number }
   | { id: string; type: 'feedback'; content: string; selectedIdeas: CampaignIdea[]; timestamp: number }
-  | { id: string; type: 'ai_response'; content: string; isStreaming: boolean; timestamp: number };
+  | { id: string; type: 'ai_response'; content: string; isStreaming: boolean; timestamp: number }
+  | { id: string; type: 'menu'; timestamp: number };
 
 interface UseIdeationState {
   sessionId: string | null;
@@ -236,6 +237,15 @@ export function useIdeation(brandId: string) {
     const sessionId = await ensureSession();
     const selected = Array.from(state.selectedIdeas.values());
     const hasSelections = selected.length > 0;
+
+    // If no message and no selections, re-generate with last preferences
+    if (!message.trim() && !hasSelections) {
+      if (state.activeType) {
+        generateForType(state.activeType, state.activeSubtype || undefined);
+        return;
+      }
+      return;
+    }
 
     let mode: 'initial' | 'variations' | 'feedback' | 'different' = 'initial';
     if (hasSelections && message.trim()) mode = 'feedback';
