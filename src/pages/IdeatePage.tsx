@@ -10,7 +10,7 @@ import { TaskWindow } from '@/components/ideation/TaskWindow';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { CampaignIdea } from '@/lib/types';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Columns2, Square, Zap, List, CalendarDays, Star, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Zap, List, CalendarDays, Star, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
