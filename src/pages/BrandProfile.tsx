@@ -100,7 +100,7 @@ export default function BrandProfile() {
                 <Download className="w-4 h-4 mr-1.5" /> Download HTML
               </Button>
             </div>
-            <div className="border border-border rounded-lg overflow-hidden bg-white">
+            <div className="border border-border rounded-lg overflow-hidden bg-card">
               <iframe
                 title="Brand Guide"
                 className="w-full"
