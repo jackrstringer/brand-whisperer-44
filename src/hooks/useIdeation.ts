@@ -191,13 +191,8 @@ export function useIdeation(brandId: string) {
           }));
         },
         onIdeaField: (index, field, token) => {
-          setState(s => {
-            const ideas = [...s.streamingIdeas];
-            if (ideas[index]) {
-              (ideas[index] as any)[field] = ((ideas[index] as any)[field] || '') + token;
-            }
-            return { ...s, streamingIdeas: ideas };
-          });
+          bufferIdeaField(index, field, token);
+        },
         },
         onIdeaComplete: (index, idea) => {
           setState(s => {
@@ -305,13 +300,7 @@ export function useIdeation(brandId: string) {
           }));
         },
         onIdeaField: (index, field, token) => {
-          setState(s => {
-            const ideas = [...s.streamingIdeas];
-            if (ideas[index]) {
-              (ideas[index] as any)[field] = ((ideas[index] as any)[field] || '') + token;
-            }
-            return { ...s, streamingIdeas: ideas };
-          });
+          bufferIdeaField(index, field, token);
         },
         onIdeaComplete: (_index, idea) => {
           setState(s => ({
