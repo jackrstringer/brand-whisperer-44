@@ -400,6 +400,16 @@ export function useIdeation(brandId: string) {
     generateForType(type, sub);
   }, [generateForType]);
 
+  const addMenuNode = useCallback(() => {
+    setState(s => ({
+      ...s,
+      nodes: [
+        ...s.nodes.filter(n => n.type !== 'menu'),
+        { id: crypto.randomUUID(), type: 'menu' as const, timestamp: Date.now() },
+      ],
+    }));
+  }, []);
+
   const removeMenuNodes = useCallback(() => {
     setState(s => ({ ...s, nodes: s.nodes.filter(n => n.type !== 'menu') }));
   }, []);

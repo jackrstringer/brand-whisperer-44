@@ -280,8 +280,7 @@ export default function IdeatePage() {
                 ideation.removeMenuNodes();
               } else {
                 setMenuOpen(true);
-                // Insert a menu node into the flow
-                setState_menuNode();
+                ideation.addMenuNode();
               }
             }}
             onClearChat={handleClearChat}
