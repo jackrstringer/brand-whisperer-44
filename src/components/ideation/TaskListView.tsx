@@ -694,7 +694,7 @@ function SortableTaskRow({
           <div
             key={key}
             data-cell-key={key}
-            className={`flex-shrink-0 px-2 truncate relative ${editing ? 'ring-2 ring-primary rounded' : ''}`}
+            className={`flex-shrink-0 px-2 relative overflow-visible ${editing ? 'z-20 ring-2 ring-primary rounded' : ''}`}
             style={{ width: w }}
             onClick={(e) => handleCellClick(key, e)}
           >
