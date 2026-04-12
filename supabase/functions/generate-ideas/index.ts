@@ -263,7 +263,7 @@ Return ONLY a JSON array. No other text, no markdown:
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 4096,
+        max_tokens: turbo_mode ? 8192 : 4096,
         temperature: 1.0,
         stream: true,
         system: systemPrompt,
