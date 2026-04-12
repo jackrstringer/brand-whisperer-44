@@ -582,153 +582,145 @@ function SortableTaskRow({
     await onCellSave(item.id, key, value);
   };
 
-  // Check if any expanded (long text) field is being edited on this row
-  const expandedField = visibleCols.find(key => {
-    const col = ALL_COLUMNS.find(c => c.key === key);
-    return col?.editPattern === 'expanded' && isEditing(key);
-  });
-
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      {/* Main row */}
-      <div
-        className={`flex items-center px-3 py-2 border-b border-border/50 cursor-pointer transition-colors group ${
-          isSelected ? 'bg-primary/[0.06]' : 'hover:bg-muted/50'
-        } ${expandedField ? 'border-b-0' : ''}`}
-      >
-        <div className="w-7 flex-shrink-0 flex items-center justify-center" onClick={(e) => { e.stopPropagation(); onSelect(e); }}>
-          <Checkbox
-            checked={isSelected}
-            className="w-3.5 h-3.5"
-            onCheckedChange={() => {}}
-          />
-        </div>
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`flex items-center px-3 py-2 border-b border-border/50 cursor-pointer transition-colors group ${
+        isSelected ? 'bg-primary/[0.06]' : 'hover:bg-muted/50'
+      }`}
+    >
+      <div className="w-7 flex-shrink-0 flex items-center justify-center" onClick={(e) => { e.stopPropagation(); onSelect(e); }}>
+        <Checkbox
+          checked={isSelected}
+          className="w-3.5 h-3.5"
+          onCheckedChange={() => {}}
+        />
+      </div>
 
-        {visibleCols.map(key => {
-          const colDef = ALL_COLUMNS.find(c => c.key === key)!;
-          const w = colWidths[key] || colDef.defaultWidth;
-          const isFlex = w === 0 || key === 'title';
-          const editing = isEditing(key);
+      {visibleCols.map(key => {
+        const colDef = ALL_COLUMNS.find(c => c.key === key)!;
+        const w = colWidths[key] || colDef.defaultWidth;
+        const editing = isEditing(key);
 
-          if (key === 'status') {
-            return (
-              <div
-                key={key}
-                data-cell-key={key}
-                className={`flex-shrink-0 px-2 relative ${editing ? 'ring-2 ring-primary rounded' : ''}`}
-                style={{ width: w }}
-                onClick={(e) => handleCellClick(key, e)}
-              >
-                <span className={`inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full cursor-pointer ${status.bg}`}>
-                  {status.label}
-                </span>
-                {editing && (
-                  <StatusPopover
-                    currentStatus={item.status}
-                    onSelect={(val) => handleSave('status', val)}
-                    onClose={onEndEdit}
-                  />
-                )}
-              </div>
-            );
-          }
-
-          if (key === 'title') {
-            return (
-              <div
-                key={key}
-                className={`flex-1 min-w-[120px] px-2 flex items-center gap-1 ${editing ? 'ring-2 ring-primary rounded' : ''}`}
-              >
-                {editing ? (
-                  <InlineCellInput
-                    value={item.title}
-                    onSave={(val) => handleSave('title', val)}
-                    onCancel={onEndEdit}
-                  />
-                ) : (
-                  <>
-                    <span
-                      className="text-sm font-medium text-foreground truncate block cursor-pointer hover:underline"
-                      onClick={(e) => { e.stopPropagation(); onOpenTask(); }}
-                    >
-                      {item.title}
-                    </span>
-                    <button
-                      className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all flex-shrink-0"
-                      onClick={(e) => { e.stopPropagation(); onStartEdit('title'); }}
-                      title="Rename"
-                    >
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                  </>
-                )}
-              </div>
-            );
-          }
-
-          if (key === 'send_date') {
-            const dateVal = item.send_date ? new Date(item.send_date + 'T00:00:00') : undefined;
-            const display = dateVal
-              ? dateVal.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-              : '';
-            return (
-              <div
-                key={key}
-                data-cell-key={key}
-                className={`flex-shrink-0 px-2 relative ${editing ? 'ring-2 ring-primary rounded' : ''}`}
-                style={{ width: w }}
-                onClick={(e) => handleCellClick(key, e)}
-              >
-                <span className={`text-xs block truncate ${display ? 'text-foreground' : 'text-muted-foreground/0 group-hover:text-muted-foreground/50'}`}>
-                  {display || 'Add date'}
-                </span>
-                {editing && (
-                  <DatePopover
-                    currentDate={dateVal}
-                    onSelect={(d) => handleSave('send_date', d ? d.toISOString().split('T')[0] : null)}
-                    onClose={onEndEdit}
-                  />
-                )}
-              </div>
-            );
-          }
-
-          // Brief, Copy, Design Notes — long text fields
-          const val = getCellValue(key);
+        if (key === 'status') {
           return (
             <div
               key={key}
               data-cell-key={key}
-              className={`flex-shrink-0 px-2 truncate ${editing ? 'ring-2 ring-primary rounded' : ''}`}
+              className={`flex-shrink-0 px-2 relative ${editing ? 'ring-2 ring-primary rounded' : ''}`}
               style={{ width: w }}
               onClick={(e) => handleCellClick(key, e)}
             >
-              <span className={`text-xs block truncate ${val ? 'text-muted-foreground' : 'text-muted-foreground/0 group-hover:text-muted-foreground/50'}`}>
-                {val || 'Add a value'}
+              <span className={`inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full cursor-pointer ${status.bg}`}>
+                {status.label}
               </span>
+              {editing && (
+                <StatusPopover
+                  currentStatus={item.status}
+                  onSelect={(val) => handleSave('status', val)}
+                  onClose={onEndEdit}
+                />
+              )}
             </div>
           );
-        })}
+        }
 
-        <div className="w-8 flex-shrink-0 flex items-center justify-center">
-          <button
-            onClick={e => { e.stopPropagation(); onRemove(); }}
-            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+        if (key === 'title') {
+          return (
+            <div
+              key={key}
+              className={`flex-1 min-w-[120px] px-2 flex items-center gap-1 ${editing ? 'ring-2 ring-primary rounded' : ''}`}
+            >
+              {editing ? (
+                <InlineCellInput
+                  value={item.title}
+                  onSave={(val) => handleSave('title', val)}
+                  onCancel={onEndEdit}
+                />
+              ) : (
+                <>
+                  <span
+                    className="text-sm font-medium text-foreground truncate block cursor-pointer hover:underline"
+                    onClick={(e) => { e.stopPropagation(); onOpenTask(); }}
+                  >
+                    {item.title}
+                  </span>
+                  <button
+                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all flex-shrink-0"
+                    onClick={(e) => { e.stopPropagation(); onStartEdit('title'); }}
+                    title="Rename"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                </>
+              )}
+            </div>
+          );
+        }
+
+        if (key === 'send_date') {
+          const dateVal = item.send_date ? new Date(item.send_date + 'T00:00:00') : undefined;
+          const display = dateVal
+            ? dateVal.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            : '';
+          return (
+            <div
+              key={key}
+              data-cell-key={key}
+              className={`flex-shrink-0 px-2 relative ${editing ? 'ring-2 ring-primary rounded' : ''}`}
+              style={{ width: w }}
+              onClick={(e) => handleCellClick(key, e)}
+            >
+              <span className={`text-xs block truncate ${display ? 'text-foreground' : 'text-muted-foreground/0 group-hover:text-muted-foreground/50'}`}>
+                {display || 'Add date'}
+              </span>
+              {editing && (
+                <DatePopover
+                  currentDate={dateVal}
+                  onSelect={(d) => handleSave('send_date', d ? d.toISOString().split('T')[0] : null)}
+                  onClose={onEndEdit}
+                />
+              )}
+            </div>
+          );
+        }
+
+        // Brief, Copy, Design Notes — floating editor anchored to cell
+        const val = getCellValue(key);
+        return (
+          <div
+            key={key}
+            data-cell-key={key}
+            className={`flex-shrink-0 px-2 truncate relative ${editing ? 'ring-2 ring-primary rounded' : ''}`}
+            style={{ width: w }}
+            onClick={(e) => handleCellClick(key, e)}
           >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
+            <span className={`text-xs block truncate ${val ? 'text-muted-foreground' : 'text-muted-foreground/0 group-hover:text-muted-foreground/50'}`}>
+              {val || 'Add a value'}
+            </span>
+            {editing && (
+              <ExpandedEditorRow
+                fieldName={colDef.label}
+                value={val}
+                onSave={(v) => handleSave(key, v)}
+                onCancel={onEndEdit}
+              />
+            )}
+          </div>
+        );
+      })}
 
-      {/* Expanded editor row — drops down below the cell row */}
-      {expandedField && (
-        <ExpandedEditorRow
-          fieldName={ALL_COLUMNS.find(c => c.key === expandedField)!.label}
-          value={getCellValue(expandedField)}
-          onSave={(v) => handleSave(expandedField, v)}
-          onCancel={onEndEdit}
-        />
-      )}
+      <div className="w-8 flex-shrink-0 flex items-center justify-center">
+        <button
+          onClick={e => { e.stopPropagation(); onRemove(); }}
+          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
     </div>
   );
 }
