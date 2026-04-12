@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -10,9 +10,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import {
-  ArrowLeft, CalendarIcon, Loader2, Trash2, Play, ExternalLink, ImageIcon,
+  CalendarIcon, Loader2, Trash2, Play, ExternalLink, ImageIcon,
   Maximize2, Minimize2, MoreHorizontal, X, ChevronDown, ChevronRight,
-  FileText, Mail, Pen, StickyNote, Tag,
+  FileText, Mail, Pen, StickyNote, ChevronLeft, Smile, Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ReferencePanel, { SelectedReference } from '@/components/campaign/ReferencePanel';
@@ -40,10 +40,10 @@ const STATUS_STYLES: Record<string, string> = {
 function Section({ title, defaultOpen = true, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-b border-border last:border-b-0">
+    <div>
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 w-full px-6 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+        className="flex items-center gap-1.5 w-full px-6 py-2.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
       >
         {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
         {title}
@@ -52,53 +52,59 @@ function Section({ title, defaultOpen = true, children }: { title: string; defau
         className="overflow-hidden transition-all duration-200"
         style={{ maxHeight: open ? '4000px' : '0', opacity: open ? 1 : 0 }}
       >
-        <div className="px-6 pb-5">{children}</div>
+        <div className="px-6 pb-4">{children}</div>
       </div>
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  Property Row — ClickUp-style inline field                          */
+/*  Property Row — ClickUp-style with separator lines + layered hover */
 /* ------------------------------------------------------------------ */
 
-function PropRow({ label, icon, children }: { label: string; icon?: React.ReactNode; children: React.ReactNode }) {
+function PropRow({ label, icon, children, noBorder }: { label: string; icon?: React.ReactNode; children: React.ReactNode; noBorder?: boolean }) {
   return (
-    <div className="flex items-start gap-3 min-h-[32px] group/row hover:bg-muted/40 rounded-md -mx-1.5 px-1.5 transition-colors">
-      <div className="flex items-center gap-1.5 w-[130px] shrink-0 pt-[7px]">
-        {icon && <span className="text-muted-foreground">{icon}</span>}
-        <span className="text-[12px] text-muted-foreground select-none">{label}</span>
+    <div className={`flex items-start gap-3 min-h-[36px] group/row hover:bg-muted/40 transition-colors ${noBorder ? '' : 'border-b border-border/50'}`}>
+      <div className="flex items-center gap-1.5 w-[140px] shrink-0 pt-[9px] pl-1">
+        {icon && <span className="text-muted-foreground/70">{icon}</span>}
+        <span className="text-[13px] text-muted-foreground select-none">{label}</span>
       </div>
-      <div className="flex-1 min-w-0 py-[5px]">{children}</div>
+      <div className="flex-1 min-w-0 py-[7px] pr-1">{children}</div>
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  Inline editable text field — shows as plain text, edits on click   */
+/*  Inline editable — ClickUp style: plain text, no box, stable size  */
 /* ------------------------------------------------------------------ */
 
 function InlineText({
   value,
   onChange,
-  placeholder,
   multiline = false,
   large = false,
+  suffix,
 }: {
   value: string;
   onChange: (v: string) => void;
-  placeholder: string;
   multiline?: boolean;
   large?: boolean;
+  suffix?: React.ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
   const ref = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
 
-  const textSize = large ? 'text-lg font-semibold' : 'text-[13px]';
+  // Consistent text sizing whether viewing or editing
+  const textClass = large ? 'text-lg font-semibold leading-snug' : 'text-[13px] leading-[20px]';
 
   useEffect(() => {
     if (editing && ref.current) {
       ref.current.focus();
+      // Place cursor at end
+      const el = ref.current;
+      if (el instanceof HTMLInputElement) {
+        el.setSelectionRange(el.value.length, el.value.length);
+      }
       if (ref.current instanceof HTMLTextAreaElement) {
         ref.current.style.height = 'auto';
         ref.current.style.height = ref.current.scrollHeight + 'px';
@@ -107,55 +113,117 @@ function InlineText({
   }, [editing]);
 
   if (editing) {
-    const sharedClass = `w-full bg-transparent ${textSize} text-foreground outline-none border border-border rounded-md px-2 py-1 focus:border-primary/50 transition-colors`;
+    // No border, no bg change — just a cursor. Same padding as display mode so text doesn't jump.
+    const sharedClass = `w-full bg-transparent ${textClass} text-foreground outline-none px-0 py-0 caret-primary`;
     if (multiline || large) {
       return (
-        <textarea
-          ref={ref as React.RefObject<HTMLTextAreaElement>}
-          value={value}
-          onChange={(e) => {
-            onChange(e.target.value);
-            e.target.style.height = 'auto';
-            e.target.style.height = e.target.scrollHeight + 'px';
-          }}
-          onBlur={() => setEditing(false)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') setEditing(false);
-            if (!large && e.key === 'Enter' && (e.metaKey || e.ctrlKey)) setEditing(false);
-            if (large && e.key === 'Enter' && !e.shiftKey) setEditing(false);
-          }}
-          placeholder={placeholder}
-          className={`${sharedClass} resize-none min-h-[28px]`}
-          rows={1}
-        />
+        <div className="flex items-start gap-1">
+          <textarea
+            ref={ref as React.RefObject<HTMLTextAreaElement>}
+            value={value}
+            onChange={(e) => {
+              onChange(e.target.value);
+              e.target.style.height = 'auto';
+              e.target.style.height = e.target.scrollHeight + 'px';
+            }}
+            onBlur={() => setEditing(false)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setEditing(false);
+              if (!large && e.key === 'Enter' && (e.metaKey || e.ctrlKey)) setEditing(false);
+              if (large && e.key === 'Enter' && !e.shiftKey) setEditing(false);
+            }}
+            className={`${sharedClass} resize-none min-h-[20px]`}
+            rows={1}
+          />
+          {suffix}
+        </div>
       );
     }
     return (
-      <input
-        ref={ref as React.RefObject<HTMLInputElement>}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={() => setEditing(false)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape' || e.key === 'Enter') setEditing(false);
-        }}
-        placeholder={placeholder}
-        className={`${sharedClass} h-7`}
-      />
+      <div className="flex items-center gap-1">
+        <input
+          ref={ref as React.RefObject<HTMLInputElement>}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={() => setEditing(false)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' || e.key === 'Enter') setEditing(false);
+          }}
+          className={`${sharedClass} h-auto`}
+        />
+        {suffix}
+      </div>
     );
   }
 
   return (
     <button
       onClick={() => setEditing(true)}
-      className="w-full text-left rounded-md px-2 py-0.5 -mx-2 hover:bg-muted/60 transition-colors cursor-text group/field"
+      className="w-full text-left rounded-md px-0 py-0 hover:bg-muted/60 transition-colors cursor-text group/field"
     >
       {value ? (
-        <span className={`${textSize} text-foreground whitespace-pre-wrap break-words`}>{value}</span>
+        <span className={`${textClass} text-foreground whitespace-pre-wrap break-words`}>{value}</span>
       ) : (
-        <span className={`${textSize} text-muted-foreground/50 group-hover/field:text-muted-foreground transition-colors`}>{placeholder}</span>
+        <span className={`${textClass} text-muted-foreground/40 group-hover/field:text-muted-foreground/60 transition-colors select-none`}>–</span>
       )}
     </button>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Emoji Picker — simple grid of common emojis for subject lines     */
+/* ------------------------------------------------------------------ */
+
+const EMOJI_LIST = [
+  '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩',
+  '😘','😗','😚','😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🫡',
+  '🤐','🤨','😐','😑','😶','🫥','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴',
+  '🔥','✨','💫','⭐','🌟','💥','💯','❤️','🧡','💛','💚','💙','💜','🖤','🤍','💔',
+  '❣️','💕','💞','💓','💗','💖','💘','💝','🎉','🎊','🎈','🎁','🎀','🏆','🥇','🏅',
+  '👏','🙌','👍','💪','✅','☑️','✔️','🆕','🆓','🔜','🔝','⏰','🕐','📣','📢','🔔',
+  '💰','💵','💸','🛒','🛍️','🎯','📦','🚀','💎','👑','🌈','☀️','🌸','🍀','🌺','🌻',
+];
+
+function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="p-1 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors shrink-0"
+        title="Insert emoji"
+      >
+        <Smile className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg p-2 w-[280px]">
+          <div className="grid grid-cols-8 gap-0.5 max-h-[200px] overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+            {EMOJI_LIST.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => { onSelect(emoji); setOpen(false); }}
+                className="w-8 h-8 flex items-center justify-center rounded hover:bg-muted transition-colors text-base"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -205,6 +273,7 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
   const [title, setTitle] = useState(item.title);
   const [campaignInfo, setCampaignInfo] = useState(item.campaign_info || '');
   const [subjectLine, setSubjectLine] = useState(item.subject_line || '');
+  const [previewText, setPreviewText] = useState((item.preferences as any)?.preview_text || '');
   const [copyDirection, setCopyDirection] = useState(item.copy_direction || '');
   const [designNotes, setDesignNotes] = useState((item.preferences as any)?.design_notes || '');
   const [sendDate, setSendDate] = useState<Date | undefined>(
@@ -212,6 +281,8 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
   );
   const [isGenerating, setIsGenerating] = useState(false);
   const [campaignHtml, setCampaignHtml] = useState<string | null>(null);
+  const [campaignVersions, setCampaignVersions] = useState<string[]>([]);
+  const [activeVersionIdx, setActiveVersionIdx] = useState<number | null>(null);
   const [iframeHeight, setIframeHeight] = useState(400);
   const [refPanelOpen, setRefPanelOpen] = useState(false);
   const [selectedRefs, setSelectedRefs] = useState<SelectedReference[]>([]);
@@ -250,31 +321,40 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
   // Load campaign HTML if designed
   useEffect(() => {
     if (item.campaign_id && (item.status === 'designed' || item.status === 'templated' || item.status === 'sent')) {
-      supabase.from('campaigns').select('html').eq('id', item.campaign_id).single().then(({ data }) => {
-        if (data?.html) setCampaignHtml(data.html);
+      supabase.from('campaigns').select('html, html_history, variant_htmls').eq('id', item.campaign_id).single().then(({ data }) => {
+        if (data?.html) {
+          setCampaignHtml(data.html);
+          // Build version list from history + current
+          const history = Array.isArray(data.html_history) ? data.html_history as string[] : [];
+          const allVersions = [...history, data.html];
+          setCampaignVersions(allVersions);
+          setActiveVersionIdx(null); // null = latest
+        }
       });
     }
   }, [item.campaign_id, item.status]);
 
-  // Load saved reference from preferences
+  // Load saved references from preferences (supports multiple)
   useEffect(() => {
     const prefs = (item.preferences as any) || {};
-    if (prefs.reference_campaign_id) {
+    const refIds: string[] = Array.isArray(prefs.reference_campaign_ids)
+      ? prefs.reference_campaign_ids
+      : prefs.reference_campaign_id ? [prefs.reference_campaign_id] : [];
+    if (refIds.length > 0) {
       supabase.from('reference_campaigns')
         .select('id, title, thumbnail_url, image_urls')
-        .eq('id', prefs.reference_campaign_id)
-        .single()
+        .in('id', refIds)
         .then(({ data }) => {
-          if (data) {
-            setSelectedRefs([{
+          if (data && data.length > 0) {
+            setSelectedRefs(data.map((d: any) => ({
               type: 'library',
-              id: data.id,
-              title: data.title,
-              thumbnail_url: data.thumbnail_url,
-              image_urls: (data.image_urls as string[]) || [],
+              id: d.id,
+              title: d.title,
+              thumbnail_url: d.thumbnail_url,
+              image_urls: (d.image_urls as string[]) || [],
               strength: 50,
               mode: 'reference',
-            }]);
+            })));
           }
         });
     }
@@ -298,16 +378,27 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
       subject_line: subjectLine || null,
       copy_direction: copyDirection || null,
       send_date: sendDate ? sendDate.toISOString().split('T')[0] : null,
-      preferences: { ...((item.preferences as any) || {}), design_notes: designNotes || undefined },
+      preferences: {
+        ...((item.preferences as any) || {}),
+        design_notes: designNotes || undefined,
+        preview_text: previewText || undefined,
+        reference_campaign_ids: selectedRefs.map(r => r.id),
+      },
     } as any);
-  }, [title, campaignInfo, subjectLine, copyDirection, designNotes, sendDate, debounceSave, item.preferences]);
+  }, [title, campaignInfo, subjectLine, previewText, copyDirection, designNotes, sendDate, selectedRefs, debounceSave, item.preferences]);
 
   const handleReferenceChange = (refs: SelectedReference[]) => {
     setSelectedRefs(refs);
-    const refId = refs[0]?.id || null;
-    const prefs = { ...((item.preferences as any) || {}), reference_campaign_id: refId };
+    const refIds = refs.map(r => r.id);
+    const prefs = { ...((item.preferences as any) || {}), reference_campaign_ids: refIds };
     supabase.from('design_queue_items').update({ preferences: prefs } as any).eq('id', item.id).then(() => {});
   };
+
+  // Version navigation
+  const resolvedVersionIdx = activeVersionIdx ?? (campaignVersions.length - 1);
+  const displayHtml = campaignVersions.length > 0 ? campaignVersions[resolvedVersionIdx] : campaignHtml;
+  const canGoPrev = campaignVersions.length > 1 && resolvedVersionIdx > 0;
+  const canGoNext = campaignVersions.length > 1 && resolvedVersionIdx < campaignVersions.length - 1;
 
   const handleGenerate = async () => {
     if (!user) return;
@@ -355,8 +446,13 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
         designNotes: designNotes || undefined,
       };
       if (prefs.product_ids?.length) genBody.productIds = prefs.product_ids;
-      if (prefs.reference_campaign_id) genBody.referenceCampaignId = prefs.reference_campaign_id;
       if (selectedRefs[0]?.id) genBody.referenceCampaignId = selectedRefs[0].id;
+      if (selectedRefs.length > 0) {
+        genBody.references = selectedRefs.map(r => ({
+          type: r.type, id: r.id, title: r.title,
+          image_urls: r.image_urls, strength: r.strength, mode: r.mode,
+        }));
+      }
       if (prefs.pinned_asset_urls?.length) genBody.pinnedAssetUrls = prefs.pinned_asset_urls;
 
       const resp = await fetch(
@@ -380,8 +476,13 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
       await supabase.from('design_queue_items').update({ status: 'designed' }).eq('id', item.id);
       onStatusChange(item.id, 'designed');
 
-      const { data: campData } = await supabase.from('campaigns').select('html').eq('id', campaign.id).single();
-      if (campData?.html) setCampaignHtml(campData.html);
+      const { data: campData } = await supabase.from('campaigns').select('html, html_history').eq('id', campaign.id).single();
+      if (campData?.html) {
+        setCampaignHtml(campData.html);
+        const history = Array.isArray(campData.html_history) ? campData.html_history as string[] : [];
+        setCampaignVersions([...history, campData.html]);
+        setActiveVersionIdx(null);
+      }
 
       toast.success('Email generated successfully');
     } catch (err: any) {
@@ -472,9 +573,9 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
         </div>
 
         {/* Title — large, bold, inline-editable */}
-        <div className="px-6 pt-4 pb-2 border-b border-border shrink-0">
-            <InlineText value={title} onChange={setTitle} placeholder="Untitled" large />
-          <div className="flex items-center gap-2 mt-2 pb-1">
+        <div className="px-6 pt-4 pb-2 shrink-0">
+          <InlineText value={title} onChange={setTitle} large />
+          <div className="flex items-center gap-2 mt-1.5 pb-1">
             <Badge className={`text-[10px] ${STATUS_STYLES[item.status] || STATUS_STYLES.draft}`}>
               {item.status}
             </Badge>
@@ -494,29 +595,38 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
         <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
           {/* Details section */}
           <Section title="Details">
-            <div className="space-y-0.5">
+            <div>
               <PropRow label="Brief" icon={<FileText className="w-3.5 h-3.5" />}>
-                <InlineText value={campaignInfo} onChange={setCampaignInfo} placeholder="Empty" multiline />
+                <InlineText value={campaignInfo} onChange={setCampaignInfo} multiline />
               </PropRow>
               <PropRow label="Subject Line" icon={<Mail className="w-3.5 h-3.5" />}>
-                <InlineText value={subjectLine} onChange={setSubjectLine} placeholder="Empty" />
+                <InlineText
+                  value={subjectLine}
+                  onChange={setSubjectLine}
+                  suffix={
+                    <EmojiPicker onSelect={(emoji) => setSubjectLine(prev => prev + emoji)} />
+                  }
+                />
+              </PropRow>
+              <PropRow label="Preview Text" icon={<Eye className="w-3.5 h-3.5" />}>
+                <InlineText value={previewText} onChange={setPreviewText} />
               </PropRow>
               <PropRow label="Copy Direction" icon={<Pen className="w-3.5 h-3.5" />}>
-                <InlineText value={copyDirection} onChange={setCopyDirection} placeholder="Empty" multiline />
+                <InlineText value={copyDirection} onChange={setCopyDirection} multiline />
               </PropRow>
               <PropRow label="Design Notes" icon={<StickyNote className="w-3.5 h-3.5" />}>
-                <InlineText value={designNotes} onChange={setDesignNotes} placeholder="Empty" multiline />
+                <InlineText value={designNotes} onChange={setDesignNotes} multiline />
               </PropRow>
               <PropRow label="Send Date" icon={<CalendarIcon className="w-3.5 h-3.5" />}>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <button className="rounded-md px-2 py-0.5 -mx-2 hover:bg-muted/60 transition-colors text-left cursor-pointer">
+                    <button className="rounded-md hover:bg-muted/60 transition-colors text-left cursor-pointer">
                       {sendDate ? (
-                        <span className="text-[13px] text-foreground">
+                        <span className="text-[13px] leading-[20px] text-foreground">
                           {sendDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </span>
                       ) : (
-                        <span className="text-[13px] text-muted-foreground/50">Empty</span>
+                        <span className="text-[13px] leading-[20px] text-muted-foreground/40">–</span>
                       )}
                     </button>
                   </PopoverTrigger>
@@ -525,22 +635,29 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
                   </PopoverContent>
                 </Popover>
               </PropRow>
-              <PropRow label="Reference" icon={<ImageIcon className="w-3.5 h-3.5" />}>
+              <PropRow label="Reference" icon={<ImageIcon className="w-3.5 h-3.5" />} noBorder>
                 <button
                   onClick={() => setRefPanelOpen(true)}
-                  className="flex items-center gap-2 rounded-md px-2 py-0.5 -mx-2 hover:bg-muted/60 transition-colors text-left"
+                  className="flex items-center gap-2 rounded-md hover:bg-muted/60 transition-colors text-left"
                 >
                   {selectedRefs.length > 0 ? (
-                    <>
-                      <img
-                        src={selectedRefs[0].thumbnail_url}
-                        alt=""
-                        className="w-6 h-8 object-cover rounded border border-border"
-                      />
-                      <span className="text-[13px] text-foreground truncate">{selectedRefs[0].title}</span>
-                    </>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {selectedRefs.map((r) => (
+                        <div key={r.id} className="flex items-center gap-1.5">
+                          <img
+                            src={r.thumbnail_url}
+                            alt=""
+                            className="w-5 h-7 object-cover rounded border border-border"
+                          />
+                          <span className="text-[13px] leading-[20px] text-foreground truncate max-w-[120px]">{r.title}</span>
+                        </div>
+                      ))}
+                      {selectedRefs.length < 3 && (
+                        <span className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">+ add</span>
+                      )}
+                    </div>
                   ) : (
-                    <span className="text-[13px] text-muted-foreground/50">Empty</span>
+                    <span className="text-[13px] leading-[20px] text-muted-foreground/40">–</span>
                   )}
                 </button>
               </PropRow>
@@ -548,11 +665,33 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
           </Section>
 
           {/* Email Preview section */}
-          {campaignHtml && (
+          {displayHtml && (
             <Section title="Email Preview">
-              <div className="border border-border rounded-lg overflow-hidden bg-white mx-auto" style={{ maxWidth: 600 }}>
+              {/* Version navigation arrows */}
+              {campaignVersions.length > 1 && (
+                <div className="flex items-center justify-center gap-3 mb-3">
+                  <button
+                    onClick={() => canGoPrev && setActiveVersionIdx(resolvedVersionIdx - 1)}
+                    disabled={!canGoPrev}
+                    className="p-1 rounded hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-[11px] text-muted-foreground tabular-nums">
+                    Version {resolvedVersionIdx + 1} of {campaignVersions.length}
+                  </span>
+                  <button
+                    onClick={() => canGoNext && setActiveVersionIdx(resolvedVersionIdx + 1)}
+                    disabled={!canGoNext}
+                    className="p-1 rounded hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+              <div className="rounded-lg overflow-hidden bg-white mx-auto" style={{ maxWidth: 600 }}>
                 <iframe
-                  srcDoc={campaignHtml}
+                  srcDoc={displayHtml}
                   className="w-full border-0 block"
                   style={{ height: iframeHeight, overflow: 'hidden' }}
                   sandbox="allow-same-origin"
@@ -631,7 +770,6 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
               selectedReferences={selectedRefs}
               onSelectReferences={(refs) => {
                 handleReferenceChange(refs);
-                if (refs.length > 0) setRefPanelOpen(false);
               }}
             />
           </div>
