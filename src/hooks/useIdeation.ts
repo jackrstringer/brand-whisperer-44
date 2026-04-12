@@ -121,7 +121,6 @@ export function useIdeation(brandId: string) {
     const newNodes: IdeationNode[] = [
       { id: briefNodeId, type: 'brief', content: briefContent, campaignType: typeName, campaignSubtype: subtypeName, timestamp: Date.now() },
       { id: genNodeId, type: 'generation', ideas: [], isStreaming: true, wasTurbo: state.turboMode, timestamp: Date.now() },
-      { id: chatNodeId, type: 'ai_response', content: '', isStreaming: true, timestamp: Date.now() },
     ];
 
     setState(s => ({
@@ -129,7 +128,7 @@ export function useIdeation(brandId: string) {
       activeType: typeName,
       activeSubtype: subtypeName || null,
       isGenerating: true,
-      isChatting: true,
+      isChatting: false,
       streamingIdeas: [],
       streamingNodeId: genNodeId,
       researchStatus: campaignType?.needsResearch ? 'Researching...' : null,
@@ -139,7 +138,7 @@ export function useIdeation(brandId: string) {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    // Fire parallel streams
+    // Fire ideas stream only (no chat commentary)
     const ideasPromise = streamIdeas(
       {
         brand_id: brandId,
@@ -201,51 +200,7 @@ export function useIdeation(brandId: string) {
       controller.signal,
     );
 
-    // Build history for chat
-    const historyForChat = state.nodes.slice(-10).map(n => ({
-      role: n.type === 'brief' || n.type === 'feedback' ? 'user' : 'assistant',
-      content: n.type === 'generation' ? `[Generated ${(n as any).ideas?.length || 0} ideas]` : (n as any).content || '',
-    }));
-
-    const chatPromise = streamChat(
-      {
-        brand_id: brandId,
-        message: userBrief || typeName,
-        history: historyForChat,
-      },
-      {
-        onToken: (token) => {
-          setState(s => {
-            const updatedNodes = s.nodes.map(n => {
-              if (n.id === chatNodeId && n.type === 'ai_response') {
-                return { ...n, content: n.content + token };
-              }
-              return n;
-            });
-            return { ...s, nodes: updatedNodes };
-          });
-        },
-        onDone: () => {
-          setState(s => {
-            const updatedNodes = s.nodes.map(n => {
-              if (n.id === chatNodeId && n.type === 'ai_response') {
-                return { ...n, isStreaming: false };
-              }
-              return n;
-            });
-            saveNodes(sessionId, updatedNodes);
-            return { ...s, isChatting: false, nodes: updatedNodes };
-          });
-        },
-        onError: (err) => {
-          console.error('[useIdeation] Chat error:', err);
-          setState(s => ({ ...s, isChatting: false }));
-        },
-      },
-      controller.signal,
-    );
-
-    await Promise.allSettled([ideasPromise, chatPromise]);
+    await ideasPromise;
   }, [ensureSession, brandId, state.chaosMode, state.turboMode, state.nodes, saveNodes]);
 
   const sendChat = useCallback(async (message: string) => {
