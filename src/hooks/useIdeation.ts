@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { CampaignIdea } from '@/lib/types';
 import { CAMPAIGN_TYPES } from '@/lib/ideation/campaignTypes';
-import { streamIdeas, streamChat } from '@/lib/ideation/streamHelpers';
+import { streamIdeas } from '@/lib/ideation/streamHelpers';
 
 export type IdeationNode =
   | { id: string; type: 'brief'; content: string; campaignType?: string; campaignSubtype?: string; timestamp: number }
@@ -146,7 +146,7 @@ export function useIdeation(brandId: string) {
 
     const briefNodeId = crypto.randomUUID();
     const genNodeId = crypto.randomUUID();
-    const chatNodeId = crypto.randomUUID();
+    
     const briefContent = subtypeName
       ? `${typeName} → ${subtypeName}${userBrief ? `: ${userBrief}` : ''}`
       : `${typeName}${userBrief ? `: ${userBrief}` : ''}`;
