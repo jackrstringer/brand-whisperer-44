@@ -476,12 +476,10 @@ function ExpandedEditorRow({
     onSave(draftRef.current);
   }, [onSave]);
 
-  // Save on unmount
   useEffect(() => {
     return () => { doSave(); };
   }, [doSave]);
 
-  // Click outside to save
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -496,19 +494,21 @@ function ExpandedEditorRow({
     <div
       ref={containerRef}
       data-editing-overlay="true"
-      className="border-b border-border bg-card px-10 py-3"
+      className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg w-[340px] animate-in fade-in-0 zoom-in-95 duration-100"
     >
-      <textarea
-        ref={textareaRef}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') { savedRef.current = true; onCancel(); }
-          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) doSave();
-        }}
-        className="w-full min-h-[180px] max-h-[400px] resize-y bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
-        placeholder={`Enter ${fieldName.toLowerCase()}...`}
-      />
+      <div className="p-2">
+        <textarea
+          ref={textareaRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') { savedRef.current = true; onCancel(); }
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) doSave();
+          }}
+          className="w-full min-h-[140px] max-h-[300px] resize-y bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
+          placeholder={`Enter ${fieldName.toLowerCase()}...`}
+        />
+      </div>
     </div>
   );
 }
