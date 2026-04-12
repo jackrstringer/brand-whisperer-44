@@ -37,12 +37,12 @@ interface ColumnDef {
 }
 
 const ALL_COLUMNS: ColumnDef[] = [
-  { key: 'status', label: 'Status', defaultWidth: 100, minWidth: 70, editPattern: 'popover', locked: true },
-  { key: 'title', label: 'Title', defaultWidth: 360, minWidth: 120, editPattern: 'title', locked: true },
-  { key: 'send_date', label: 'Send Date', defaultWidth: 110, minWidth: 80, editPattern: 'popover', locked: true },
-  { key: 'campaign_info', label: 'Brief', defaultWidth: 160, minWidth: 80, editPattern: 'expanded' },
-  { key: 'copy_direction', label: 'Copy', defaultWidth: 140, minWidth: 80, editPattern: 'expanded' },
-  { key: 'design_notes', label: 'Design Notes', defaultWidth: 140, minWidth: 80, editPattern: 'expanded' },
+  { key: 'status', label: 'Status', defaultWidth: 70, minWidth: 70, editPattern: 'popover', locked: true },
+  { key: 'title', label: 'Title', defaultWidth: 440, minWidth: 120, editPattern: 'title', locked: true },
+  { key: 'send_date', label: 'Send Date', defaultWidth: 80, minWidth: 80, editPattern: 'popover', locked: true },
+  { key: 'campaign_info', label: 'Brief', defaultWidth: 260, minWidth: 80, editPattern: 'expanded' },
+  { key: 'copy_direction', label: 'Copy', defaultWidth: 240, minWidth: 80, editPattern: 'expanded' },
+  { key: 'design_notes', label: 'Design Notes', defaultWidth: 200, minWidth: 80, editPattern: 'expanded' },
 ];
 
 const STORAGE_KEY = 'task-list-columns';
