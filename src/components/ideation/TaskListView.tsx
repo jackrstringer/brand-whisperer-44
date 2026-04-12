@@ -198,7 +198,7 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
       )}
 
       {/* Horizontally scrollable table wrapper */}
-      <div className="flex-1 overflow-auto" style={{ scrollbarWidth: 'thin' }}>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden" style={{ scrollbarWidth: 'thin' }}>
         {/* Header */}
         <div className="flex items-center px-3 py-1.5 border-b border-border text-[10px] font-medium text-muted-foreground uppercase tracking-wider flex-shrink-0 select-none sticky top-0 bg-card z-10 min-w-max">
           <div className="w-7 flex-shrink-0 flex items-center justify-center">
