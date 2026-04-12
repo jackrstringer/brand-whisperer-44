@@ -323,14 +323,14 @@ export default function IdeatePage() {
           <div className="flex-1" />
 
           {/* Center: 3-way page mode selector */}
-          <div ref={modeContainerRef} className="relative inline-flex items-center rounded-lg bg-muted/50 p-0.5">
-            {/* Sliding highlight */}
+          <div ref={modeContainerRef} className="relative inline-flex items-center rounded-full border border-border bg-muted/40 p-1">
+            {/* Sliding inner pill */}
             <div
-              className="absolute top-0.5 bottom-0.5 rounded-md bg-card shadow-sm border border-border/50"
+              className="absolute top-1 bottom-1 rounded-full bg-card border border-border shadow-sm"
               style={{
                 width: pillStyle.width,
                 left: pillStyle.left,
-                transition: 'left 200ms cubic-bezier(0.22, 1, 0.36, 1), width 200ms cubic-bezier(0.22, 1, 0.36, 1)',
+                transition: 'left 180ms cubic-bezier(0.22, 1, 0.36, 1), width 180ms cubic-bezier(0.22, 1, 0.36, 1)',
               }}
             />
             {PAGE_MODES.map((mode, idx) => (
@@ -338,7 +338,7 @@ export default function IdeatePage() {
                 key={mode}
                 ref={(el) => { buttonRefs.current[idx] = el; }}
                 onClick={() => setPageMode(mode)}
-                className={`relative z-10 px-5 py-1.5 text-sm font-medium rounded-md transition-all duration-150 ${
+                className={`relative z-10 px-5 py-1.5 text-sm font-medium rounded-full transition-colors duration-150 ${
                   pageMode === mode
                     ? 'text-foreground'
                     : 'text-muted-foreground hover:text-foreground'
