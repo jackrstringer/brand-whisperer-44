@@ -9,7 +9,8 @@ export type IdeationNode =
   | { id: string; type: 'brief'; content: string; campaignType?: string; campaignSubtype?: string; timestamp: number }
   | { id: string; type: 'generation'; ideas: CampaignIdea[]; isStreaming: boolean; wasTurbo?: boolean; timestamp: number }
   | { id: string; type: 'feedback'; content: string; selectedIdeas: CampaignIdea[]; timestamp: number }
-  | { id: string; type: 'ai_response'; content: string; isStreaming: boolean; timestamp: number };
+  | { id: string; type: 'ai_response'; content: string; isStreaming: boolean; timestamp: number }
+  | { id: string; type: 'menu'; timestamp: number };
 
 interface UseIdeationState {
   sessionId: string | null;
@@ -63,7 +64,7 @@ export function useIdeation(brandId: string) {
         if (data && data.length > 0) {
           const session = data[0];
           const loadedNodes = (session.nodes as any[] || [])
-            .filter((n: any) => n.type !== 'ai_response')
+            .filter((n: any) => n.type !== 'ai_response' && n.type !== 'menu')
             .map((n: any) => ({
               ...n,
               isStreaming: false,
@@ -237,6 +238,15 @@ export function useIdeation(brandId: string) {
     const selected = Array.from(state.selectedIdeas.values());
     const hasSelections = selected.length > 0;
 
+    // If no message and no selections, re-generate with last preferences
+    if (!message.trim() && !hasSelections) {
+      if (state.activeType) {
+        generateForType(state.activeType, state.activeSubtype || undefined);
+        return;
+      }
+      return;
+    }
+
     let mode: 'initial' | 'variations' | 'feedback' | 'different' = 'initial';
     if (hasSelections && message.trim()) mode = 'feedback';
     else if (hasSelections && !message.trim()) mode = 'variations';
@@ -384,6 +394,26 @@ export function useIdeation(brandId: string) {
     }));
   }, []);
 
+  const insertMenuNode = useCallback((type: string, sub?: string) => {
+    // Remove any existing menu nodes, then generate
+    setState(s => ({ ...s, nodes: s.nodes.filter(n => n.type !== 'menu') }));
+    generateForType(type, sub);
+  }, [generateForType]);
+
+  const addMenuNode = useCallback(() => {
+    setState(s => ({
+      ...s,
+      nodes: [
+        ...s.nodes.filter(n => n.type !== 'menu'),
+        { id: crypto.randomUUID(), type: 'menu' as const, timestamp: Date.now() },
+      ],
+    }));
+  }, []);
+
+  const removeMenuNodes = useCallback(() => {
+    setState(s => ({ ...s, nodes: s.nodes.filter(n => n.type !== 'menu') }));
+  }, []);
+
   return {
     ...state,
     generateForType,
@@ -394,5 +424,8 @@ export function useIdeation(brandId: string) {
     toggleTurboMode,
     startNewSession,
     abort,
+    insertMenuNode,
+    addMenuNode,
+    removeMenuNodes,
   };
 }

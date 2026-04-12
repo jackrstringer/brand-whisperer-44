@@ -183,7 +183,7 @@ export default function IdeatePage() {
 
   const handleTypeFromMenu = (type: string, sub?: string) => {
     setMenuOpen(false);
-    ideation.generateForType(type, sub);
+    ideation.insertMenuNode(type, sub);
   };
 
   const handleClearChat = async () => {
@@ -227,8 +227,8 @@ export default function IdeatePage() {
 
   const ideationPanel = (
     <div className="flex flex-col h-full relative">
-      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-36">
-        <div className="max-w-5xl mx-auto">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-48">
+        <div className="max-w-[1400px] mx-auto">
           {!hasStarted && (
             <div className="px-6">
               <div className="text-center mt-16 mb-8">
@@ -254,12 +254,14 @@ export default function IdeatePage() {
               onAddToQueue={handleAddToQueue}
               onBuildNow={handleBuildNow}
               researchStatus={ideation.researchStatus}
+              onMenuSelect={handleTypeFromMenu}
+              activeType={ideation.activeType}
             />
           )}
         </div>
       </div>
 
-      <div className="absolute bottom-4 left-0 right-0 z-50 flex justify-center px-4">
+      <div className="absolute bottom-6 left-0 right-0 z-50 flex justify-center px-4">
         <div className="w-full max-w-3xl">
           <ChatBar
             onSend={ideation.sendChat}
@@ -274,24 +276,22 @@ export default function IdeatePage() {
             activeType={ideation.activeType}
             onStop={() => ideation.abort()}
             menuOpen={menuOpen}
-            onToggleMenu={() => setMenuOpen(!menuOpen)}
+            onToggleMenu={() => {
+              if (menuOpen) {
+                setMenuOpen(false);
+                ideation.removeMenuNodes();
+              } else {
+                setMenuOpen(true);
+                ideation.addMenuNode();
+              }
+            }}
             onClearChat={handleClearChat}
             onAddToQueue={handleAddSelectedToQueue}
           />
         </div>
       </div>
 
-      {menuOpen && (
-        <div className="absolute bottom-28 left-0 right-0 z-[60] flex justify-center px-4">
-          <div className="w-full max-w-3xl bg-card border border-border rounded-xl shadow-lg p-4">
-            <CampaignTypePicker
-              onSelectType={handleTypeFromMenu}
-              activeType={ideation.activeType}
-              isCompact={false}
-            />
-          </div>
-        </div>
-      )}
+
     </div>
   );
 
