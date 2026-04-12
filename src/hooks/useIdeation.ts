@@ -89,6 +89,37 @@ export function useIdeation(brandId: string) {
     }, 800);
   }, []);
 
+  // Batched streaming field updates — buffer tokens and flush at 60fps
+  const flushStreamBuffer = useCallback(() => {
+    rafRef.current = null;
+    const buffer = streamBufferRef.current;
+    if (buffer.size === 0) return;
+    const snapshot = new Map(buffer);
+    buffer.clear();
+    setState(s => {
+      const ideas = [...s.streamingIdeas];
+      for (const [key, fields] of snapshot) {
+        const idx = parseInt(key);
+        if (ideas[idx]) {
+          for (const [field, value] of Object.entries(fields)) {
+            (ideas[idx] as any)[field] = ((ideas[idx] as any)[field] || '') + value;
+          }
+        }
+      }
+      return { ...s, streamingIdeas: ideas };
+    });
+  }, []);
+
+  const bufferIdeaField = useCallback((index: number, field: string, token: string) => {
+    const key = String(index);
+    const existing = streamBufferRef.current.get(key) || {};
+    existing[field] = (existing[field] || '') + token;
+    streamBufferRef.current.set(key, existing);
+    if (!rafRef.current) {
+      rafRef.current = requestAnimationFrame(flushStreamBuffer);
+    }
+  }, [flushStreamBuffer]);
+
   const ensureSession = useCallback(async (): Promise<string> => {
     if (state.sessionId) return state.sessionId;
     if (!user) throw new Error('Not authenticated');
