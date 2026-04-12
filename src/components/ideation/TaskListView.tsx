@@ -38,7 +38,7 @@ interface ColumnDef {
 
 const ALL_COLUMNS: ColumnDef[] = [
   { key: 'status', label: 'Status', defaultWidth: 100, minWidth: 70, editPattern: 'popover', locked: true },
-  { key: 'title', label: 'Title', defaultWidth: 0, minWidth: 120, editPattern: 'title', locked: true },
+  { key: 'title', label: 'Title', defaultWidth: 360, minWidth: 120, editPattern: 'title', locked: true },
   { key: 'send_date', label: 'Send Date', defaultWidth: 110, minWidth: 80, editPattern: 'popover', locked: true },
   { key: 'campaign_info', label: 'Brief', defaultWidth: 160, minWidth: 80, editPattern: 'expanded' },
   { key: 'copy_direction', label: 'Copy', defaultWidth: 140, minWidth: 80, editPattern: 'expanded' },
@@ -211,14 +211,13 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
           {visibleCols.map((key, idx) => {
             const col = ALL_COLUMNS.find(c => c.key === key)!;
             const w = colConfig.widths[key] || col.defaultWidth;
-            const isFlex = w === 0 || key === 'title';
             const isLast = idx === visibleCols.length - 1;
 
             return (
               <div
                 key={key}
-                className={`relative px-2 ${isFlex ? 'flex-1 min-w-[120px]' : 'flex-shrink-0'}`}
-                style={isFlex ? undefined : { width: w }}
+                className="relative px-2 flex-shrink-0"
+                style={{ width: w || col.defaultWidth }}
               >
                 {col.label}
                 {!isLast && (
@@ -708,7 +707,8 @@ function SortableTaskRow({
           return (
             <div
               key={key}
-              className={`flex-1 min-w-[120px] px-2 flex items-center gap-1 ${editing ? 'ring-2 ring-primary rounded' : ''}`}
+              className={`flex-shrink-0 px-2 flex items-center gap-1 ${editing ? 'ring-2 ring-primary rounded' : ''}`}
+              style={{ width: w || 360 }}
             >
               {editing ? (
                 <InlineCellInput
