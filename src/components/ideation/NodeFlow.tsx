@@ -52,7 +52,7 @@ export function NodeFlow({
   }, [isGenerating]);
 
   return (
-    <div className="w-full max-w-full px-4 py-4 space-y-1">
+    <div className="w-full max-w-full px-4 py-4 space-y-4">
       {nodes.map(node => {
         switch (node.type) {
           case 'brief':
