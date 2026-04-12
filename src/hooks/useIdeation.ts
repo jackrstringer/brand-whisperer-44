@@ -330,7 +330,7 @@ export function useIdeation(brandId: string) {
     );
 
     await ideasPromise;
-  }, [ensureSession, brandId, state.selectedIdeas, state.activeType, state.activeSubtype, state.chaosMode, state.turboMode, state.nodes, saveNodes]);
+  }, [ensureSession, brandId, state.selectedIdeas, state.activeType, state.activeSubtype, state.chaosMode, state.turboMode, state.nodes, saveNodes, bufferIdeaField]);
 
   const toggleSelect = useCallback((idea: CampaignIdea) => {
     setState(s => {
