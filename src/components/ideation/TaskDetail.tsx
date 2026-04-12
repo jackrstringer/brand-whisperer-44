@@ -466,14 +466,11 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
           </div>
         </div>
 
-        {/* Title + meta row */}
+        {/* Title — large, bold, inline-editable */}
         <div className="px-6 pt-4 pb-2 border-b border-border shrink-0">
-          <Input
-            value={title}
-            onChange={e => setTitle(e.target.value)}
-            className="text-lg font-semibold bg-transparent border-none shadow-none px-0 py-0 h-auto focus-visible:ring-0 hover:bg-muted/40 rounded-md transition-colors"
-            placeholder="Untitled"
-          />
+          <div className="group/title">
+            <InlineText value={title} onChange={setTitle} placeholder="Untitled" />
+          </div>
           <div className="flex items-center gap-2 mt-2 pb-1">
             <Badge className={`text-[10px] ${STATUS_STYLES[item.status] || STATUS_STYLES.draft}`}>
               {item.status}
@@ -494,76 +491,53 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
         <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
           {/* Details section */}
           <Section title="Details">
-            <div className="space-y-1">
-              <PropRow label="Brief">
-                <Textarea
-                  value={campaignInfo}
-                  onChange={e => setCampaignInfo(e.target.value)}
-                  placeholder="Describe what this email should communicate..."
-                  rows={3}
-                  className="bg-transparent border-none shadow-none px-2 py-1.5 text-sm rounded-md hover:bg-muted/50 focus:bg-card transition-colors resize-none min-h-0"
-                />
+            <div className="space-y-0.5">
+              <PropRow label="Brief" icon={<FileText className="w-3.5 h-3.5" />}>
+                <InlineText value={campaignInfo} onChange={setCampaignInfo} placeholder="Empty" multiline />
               </PropRow>
-              <PropRow label="Subject Line">
-                <Input
-                  value={subjectLine}
-                  onChange={e => setSubjectLine(e.target.value)}
-                  placeholder="Email subject line"
-                  className="bg-transparent border-none shadow-none px-2 py-1 text-sm h-auto rounded-md hover:bg-muted/50 focus:bg-card transition-colors"
-                />
+              <PropRow label="Subject Line" icon={<Mail className="w-3.5 h-3.5" />}>
+                <InlineText value={subjectLine} onChange={setSubjectLine} placeholder="Empty" />
               </PropRow>
-              <PropRow label="Copy Direction">
-                <Textarea
-                  value={copyDirection}
-                  onChange={e => setCopyDirection(e.target.value)}
-                  placeholder="Tone, voice, hooks..."
-                  rows={3}
-                  className="bg-transparent border-none shadow-none px-2 py-1.5 text-sm rounded-md hover:bg-muted/50 focus:bg-card transition-colors resize-none min-h-0"
-                />
+              <PropRow label="Copy Direction" icon={<Pen className="w-3.5 h-3.5" />}>
+                <InlineText value={copyDirection} onChange={setCopyDirection} placeholder="Empty" multiline />
               </PropRow>
-              <PropRow label="Design Notes">
-                <Textarea
-                  value={designNotes}
-                  onChange={e => setDesignNotes(e.target.value)}
-                  placeholder="Additional design instructions..."
-                  rows={2}
-                  className="bg-transparent border-none shadow-none px-2 py-1.5 text-sm rounded-md hover:bg-muted/50 focus:bg-card transition-colors resize-none min-h-0"
-                />
+              <PropRow label="Design Notes" icon={<StickyNote className="w-3.5 h-3.5" />}>
+                <InlineText value={designNotes} onChange={setDesignNotes} placeholder="Empty" multiline />
               </PropRow>
-              <PropRow label="Send Date">
+              <PropRow label="Send Date" icon={<CalendarIcon className="w-3.5 h-3.5" />}>
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="ghost" size="sm" className="w-full justify-start text-left text-sm h-8 px-2 hover:bg-muted/50">
-                      <CalendarIcon className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-                      {sendDate
-                        ? sendDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                        : <span className="text-muted-foreground">Pick a date</span>}
-                    </Button>
+                    <button className="rounded-md px-2 py-0.5 -mx-2 hover:bg-muted/60 transition-colors text-left cursor-pointer">
+                      {sendDate ? (
+                        <span className="text-[13px] text-foreground">
+                          {sendDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                      ) : (
+                        <span className="text-[13px] text-muted-foreground/50">Empty</span>
+                      )}
+                    </button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar mode="single" selected={sendDate} onSelect={setSendDate} initialFocus />
                   </PopoverContent>
                 </Popover>
               </PropRow>
-              <PropRow label="Reference">
+              <PropRow label="Reference" icon={<ImageIcon className="w-3.5 h-3.5" />}>
                 <button
                   onClick={() => setRefPanelOpen(true)}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors text-left"
+                  className="flex items-center gap-2 rounded-md px-2 py-0.5 -mx-2 hover:bg-muted/60 transition-colors text-left"
                 >
                   {selectedRefs.length > 0 ? (
                     <>
                       <img
                         src={selectedRefs[0].thumbnail_url}
                         alt=""
-                        className="w-8 h-10 object-cover rounded border border-border"
+                        className="w-6 h-8 object-cover rounded border border-border"
                       />
-                      <span className="text-xs text-foreground truncate flex-1">{selectedRefs[0].title}</span>
+                      <span className="text-[13px] text-foreground truncate">{selectedRefs[0].title}</span>
                     </>
                   ) : (
-                    <>
-                      <ImageIcon className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground">Choose a reference...</span>
-                    </>
+                    <span className="text-[13px] text-muted-foreground/50">Empty</span>
                   )}
                 </button>
               </PropRow>
