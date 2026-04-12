@@ -60,15 +60,98 @@ function Section({ title, defaultOpen = true, children }: { title: string; defau
 }
 
 /* ------------------------------------------------------------------ */
-/*  Property Row                                                       */
+/*  Property Row — ClickUp-style inline field                          */
 /* ------------------------------------------------------------------ */
 
-function PropRow({ label, children }: { label: string; children: React.ReactNode }) {
+function PropRow({ label, icon, children }: { label: string; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="py-1.5">
-      <label className="text-[11px] font-medium text-muted-foreground mb-1.5 block">{label}</label>
-      <div className="min-w-0">{children}</div>
+    <div className="flex items-start gap-3 min-h-[32px] group/row hover:bg-muted/40 rounded-md -mx-1.5 px-1.5 transition-colors">
+      <div className="flex items-center gap-1.5 w-[130px] shrink-0 pt-[7px]">
+        {icon && <span className="text-muted-foreground">{icon}</span>}
+        <span className="text-[12px] text-muted-foreground select-none">{label}</span>
+      </div>
+      <div className="flex-1 min-w-0 py-[5px]">{children}</div>
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Inline editable text field — shows as plain text, edits on click   */
+/* ------------------------------------------------------------------ */
+
+function InlineText({
+  value,
+  onChange,
+  placeholder,
+  multiline = false,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  multiline?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const ref = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing && ref.current) {
+      ref.current.focus();
+      if (ref.current instanceof HTMLTextAreaElement) {
+        ref.current.style.height = 'auto';
+        ref.current.style.height = ref.current.scrollHeight + 'px';
+      }
+    }
+  }, [editing]);
+
+  if (editing) {
+    const sharedClass = "w-full bg-transparent text-[13px] text-foreground outline-none border border-border rounded-md px-2 py-1 focus:border-primary/50 transition-colors";
+    if (multiline) {
+      return (
+        <textarea
+          ref={ref as React.RefObject<HTMLTextAreaElement>}
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            e.target.style.height = 'auto';
+            e.target.style.height = e.target.scrollHeight + 'px';
+          }}
+          onBlur={() => setEditing(false)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setEditing(false);
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) setEditing(false);
+          }}
+          placeholder={placeholder}
+          className={`${sharedClass} resize-none min-h-[28px]`}
+          rows={1}
+        />
+      );
+    }
+    return (
+      <input
+        ref={ref as React.RefObject<HTMLInputElement>}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => setEditing(false)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' || e.key === 'Enter') setEditing(false);
+        }}
+        placeholder={placeholder}
+        className={`${sharedClass} h-7`}
+      />
+    );
+  }
+
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      className="w-full text-left rounded-md px-2 py-0.5 -mx-2 hover:bg-muted/60 transition-colors cursor-text group/field"
+    >
+      {value ? (
+        <span className="text-[13px] text-foreground whitespace-pre-wrap break-words">{value}</span>
+      ) : (
+        <span className="text-[13px] text-muted-foreground/50 group-hover/field:text-muted-foreground transition-colors">{placeholder}</span>
+      )}
+    </button>
   );
 }
 
