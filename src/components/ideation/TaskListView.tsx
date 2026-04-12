@@ -445,7 +445,7 @@ function DatePopover({
   );
 }
 
-function ExpandedEditor({
+function ExpandedEditorRow({
   fieldName,
   value,
   onSave,
@@ -476,7 +476,7 @@ function ExpandedEditor({
     onSave(draftRef.current);
   }, [onSave]);
 
-  // Save on unmount (covers global click-outside dismissal)
+  // Save on unmount
   useEffect(() => {
     return () => { doSave(); };
   }, [doSave]);
@@ -493,27 +493,22 @@ function ExpandedEditor({
   }, [doSave]);
 
   return (
-    <div ref={containerRef} data-editing-overlay="true" className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg w-[360px] animate-in fade-in-0 zoom-in-95 duration-100">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border">
-        <span className="text-xs font-medium text-foreground">{fieldName}</span>
-        <button onClick={() => { savedRef.current = true; onCancel(); }} className="text-muted-foreground hover:text-foreground text-xs">✕</button>
-      </div>
-      <div className="p-2">
-        <textarea
-          ref={textareaRef}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') { savedRef.current = true; onCancel(); }
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) doSave();
-          }}
-          className="w-full min-h-[120px] resize-none rounded border border-border bg-background p-2 text-sm text-foreground outline-none focus:ring-1 focus:ring-primary/40"
-        />
-      </div>
-      <div className="flex justify-end gap-2 px-3 py-2 border-t border-border">
-        <button onClick={() => { savedRef.current = true; onCancel(); }} className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted transition-colors">Cancel</button>
-        <button onClick={doSave} className="text-xs text-primary-foreground bg-primary hover:bg-primary/90 px-3 py-1 rounded transition-colors font-medium">Save</button>
-      </div>
+    <div
+      ref={containerRef}
+      data-editing-overlay="true"
+      className="border-b border-border bg-card px-10 py-3"
+    >
+      <textarea
+        ref={textareaRef}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') { savedRef.current = true; onCancel(); }
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) doSave();
+        }}
+        className="w-full min-h-[180px] max-h-[400px] resize-y bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
+        placeholder={`Enter ${fieldName.toLowerCase()}...`}
+      />
     </div>
   );
 }
