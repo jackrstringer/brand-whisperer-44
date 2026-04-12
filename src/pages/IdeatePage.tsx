@@ -274,7 +274,16 @@ export default function IdeatePage() {
             activeType={ideation.activeType}
             onStop={() => ideation.abort()}
             menuOpen={menuOpen}
-            onToggleMenu={() => setMenuOpen(!menuOpen)}
+            onToggleMenu={() => {
+              if (menuOpen) {
+                setMenuOpen(false);
+                ideation.removeMenuNodes();
+              } else {
+                setMenuOpen(true);
+                // Insert a menu node into the flow
+                setState_menuNode();
+              }
+            }}
             onClearChat={handleClearChat}
             onAddToQueue={handleAddSelectedToQueue}
           />
