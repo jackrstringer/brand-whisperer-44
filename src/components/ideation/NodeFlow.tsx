@@ -5,6 +5,7 @@ import { BriefNode } from './BriefNode';
 import { GenerationNode } from './GenerationNode';
 import { FeedbackNode } from './FeedbackNode';
 import { AiResponseNode } from './AiResponseNode';
+import { MenuNode } from './MenuNode';
 
 interface Props {
   nodes: IdeationNode[];
@@ -17,6 +18,8 @@ interface Props {
   onAddToQueue: (idea: CampaignIdea) => void;
   onBuildNow: (idea: CampaignIdea) => void;
   researchStatus?: string | null;
+  onMenuSelect?: (type: string, sub?: string) => void;
+  activeType?: string | null;
 }
 
 export function NodeFlow({
@@ -30,6 +33,8 @@ export function NodeFlow({
   onAddToQueue,
   onBuildNow,
   researchStatus,
+  onMenuSelect,
+  activeType,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const hasAutoScrolledRef = useRef(false);
