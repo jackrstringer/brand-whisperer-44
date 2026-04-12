@@ -87,11 +87,8 @@ function IdeaRow({
     disabled: isPartial,
   });
 
-  const hasExpandableContent = !!(
-    (idea.description && idea.description.length > 60) ||
-    idea.campaign_info ||
-    idea.copy_direction
-  );
+
+
 
   const handleRowClick = (e: React.MouseEvent) => {
     if (isPartial) return;
