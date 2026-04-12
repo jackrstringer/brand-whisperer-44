@@ -326,7 +326,7 @@ export default function IdeatePage() {
           <div ref={modeContainerRef} className="relative inline-flex items-center rounded-full border border-border bg-muted/40 p-1">
             {/* Sliding inner pill */}
             <div
-              className="absolute top-1 bottom-1 rounded-full bg-card border border-border shadow-sm"
+              className="absolute top-1 bottom-1 rounded-full bg-foreground shadow-sm"
               style={{
                 width: pillStyle.width,
                 left: pillStyle.left,
@@ -340,7 +340,7 @@ export default function IdeatePage() {
                 onClick={() => setPageMode(mode)}
                 className={`relative z-10 px-5 py-1.5 text-sm font-medium rounded-full transition-colors duration-150 ${
                   pageMode === mode
-                    ? 'text-foreground'
+                    ? 'text-background'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
