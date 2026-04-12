@@ -228,7 +228,7 @@ export function useIdeation(brandId: string) {
     );
 
     await ideasPromise;
-  }, [ensureSession, brandId, state.chaosMode, state.turboMode, state.nodes, saveNodes]);
+  }, [ensureSession, brandId, state.chaosMode, state.turboMode, state.nodes, saveNodes, bufferIdeaField]);
 
   const sendChat = useCallback(async (message: string) => {
     const sessionId = await ensureSession();
