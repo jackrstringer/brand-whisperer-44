@@ -64,7 +64,7 @@ export function useIdeation(brandId: string) {
         if (data && data.length > 0) {
           const session = data[0];
           const loadedNodes = (session.nodes as any[] || [])
-            .filter((n: any) => n.type !== 'ai_response')
+            .filter((n: any) => n.type !== 'ai_response' && n.type !== 'menu')
             .map((n: any) => ({
               ...n,
               isStreaming: false,
