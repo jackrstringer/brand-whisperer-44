@@ -18,6 +18,7 @@ interface Props {
   calendarData: Record<string, CalendarDayData>;
   onRequestMonths: (months: Date[]) => void;
   onPillClick: (item: DesignQueueItem) => void;
+  onDayClick?: (dateStr: string) => void;
   currentMonth: Date;
 }
 
@@ -31,7 +32,7 @@ function buildMonthGrid(year: number, month: number) {
   return cells;
 }
 
-export function TaskCalendarView({ calendarData, onPillClick, currentMonth }: Props) {
+export function TaskCalendarView({ calendarData, onPillClick, onDayClick, currentMonth }: Props) {
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
@@ -69,6 +70,7 @@ export function TaskCalendarView({ calendarData, onPillClick, currentMonth }: Pr
               isToday={isToday}
               dayData={dayData}
               onPillClick={onPillClick}
+              onDayClick={onDayClick}
             />
           );
         })}
@@ -83,12 +85,14 @@ function CalendarDayCell({
   isToday,
   dayData,
   onPillClick,
+  onDayClick,
 }: {
   dateStr: string;
   day: number;
   isToday: boolean;
   dayData?: CalendarDayData;
   onPillClick?: (item: DesignQueueItem) => void;
+  onDayClick?: (dateStr: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `calendar-day-${dateStr}` });
   const hasEvents = dayData?.events && dayData.events.length > 0;
@@ -96,7 +100,8 @@ function CalendarDayCell({
   return (
     <div
       ref={setNodeRef}
-      className={`border-b border-r border-border/30 p-1.5 overflow-y-auto transition-colors ${
+      onClick={() => onDayClick?.(dateStr)}
+      className={`border-b border-r border-border/30 p-1.5 overflow-y-auto transition-colors cursor-pointer hover:bg-muted/30 ${
         isOver ? 'bg-primary/10 ring-2 ring-inset ring-primary/40' : hasEvents ? 'bg-amber-50/30' : ''
       } ${isToday ? 'ring-1 ring-inset ring-blue-300 bg-blue-50/20' : ''}`}
     >

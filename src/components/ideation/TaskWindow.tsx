@@ -17,6 +17,7 @@ interface Props {
   onRequestMonths: (months: Date[]) => void;
   onRemove: (id: string) => void;
   onStatusChange: (id: string, status: string) => void;
+  onAddTask: (sendDate: string) => void;
   bulkEligibleCount: number;
   onBulkGenerate: () => void;
   bulkProgress: { completed: number; total: number } | null;
@@ -29,6 +30,7 @@ export function TaskWindow({
   onRequestMonths,
   onRemove,
   onStatusChange,
+  onAddTask,
   bulkEligibleCount,
   onBulkGenerate,
   bulkProgress,
@@ -158,6 +160,7 @@ export function TaskWindow({
             calendarData={calendarData}
             onRequestMonths={onRequestMonths}
             onPillClick={handleItemClick}
+            onDayClick={onAddTask}
             currentMonth={currentMonth}
           />
         )}

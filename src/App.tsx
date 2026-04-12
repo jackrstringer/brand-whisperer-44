@@ -22,6 +22,7 @@ import CampaignQA from "./pages/CampaignQA";
 import AppLayout from "./components/AppLayout";
 import AdminLibrary from "./pages/AdminLibrary";
 import IdeatePage from "./pages/IdeatePage";
+import FlowsPage from "./pages/FlowsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -58,6 +59,7 @@ function AppRoutes() {
       <Route path="/brands/:brandId/integrations" element={<ProtectedLayout><BrandIntegrations /></ProtectedLayout>} />
       <Route path="/brands/:brandId/preferences" element={<ProtectedLayout><BrandPreferences /></ProtectedLayout>} />
       <Route path="/brands/:brandId/ideate" element={<ProtectedLayout><IdeatePage /></ProtectedLayout>} />
+      <Route path="/brands/:brandId/flows" element={<ProtectedLayout><FlowsPage /></ProtectedLayout>} />
       <Route path="/brands/:brandId/campaigns/:campaignId" element={<ProtectedRoute><CampaignEditor /></ProtectedRoute>} />
       <Route path="/brands/:brandId/campaigns/:campaignId/qa" element={<ProtectedRoute><CampaignQA /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedLayout><GlobalSettings /></ProtectedLayout>} />
