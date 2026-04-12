@@ -298,6 +298,18 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 bg-card border border-border rounded-xl shadow-lg px-4 py-2.5 flex items-center gap-3 animate-in slide-in-from-bottom-2">
           <span className="text-xs font-medium text-foreground">{selectedCount} selected</span>
           <div className="h-4 w-px bg-border" />
+          {bulkEligibleCount > 0 && (
+            <>
+              <button
+                onClick={onBulkGenerate}
+                className="text-xs text-foreground hover:text-primary transition-colors font-medium flex items-center gap-1"
+              >
+                <Zap className="w-3 h-3" />
+                Bulk Generate ({bulkEligibleCount})
+              </button>
+              <div className="h-4 w-px bg-border" />
+            </>
+          )}
           <button
             onClick={() => {
               if (onBulkRemove) {
@@ -637,17 +649,31 @@ function SortableTaskRow({
       ref={setNodeRef}
       style={style}
       {...attributes}
-      {...listeners}
       className={`flex items-center px-3 py-2 border-b border-border/50 cursor-pointer transition-colors group ${
         isSelected ? 'bg-primary/[0.06]' : 'hover:bg-muted/50'
       }`}
     >
-      <div className="w-7 flex-shrink-0 flex items-center justify-center" onClick={(e) => { e.stopPropagation(); onSelect(e); }}>
-        <Checkbox
-          checked={isSelected}
-          className="w-3.5 h-3.5"
-          onCheckedChange={() => {}}
-        />
+      <div className="w-10 flex-shrink-0 flex items-center gap-0.5">
+        <div
+          {...listeners}
+          className={`cursor-grab active:cursor-grabbing text-muted-foreground transition-opacity ${
+            isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}
+        >
+          <GripVertical className="w-3 h-3" />
+        </div>
+        <div
+          onClick={(e) => { e.stopPropagation(); onSelect(e); }}
+          className={`flex items-center justify-center transition-opacity ${
+            isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}
+        >
+          <Checkbox
+            checked={isSelected}
+            className="w-3.5 h-3.5"
+            onCheckedChange={() => {}}
+          />
+        </div>
       </div>
 
       {visibleCols.map(key => {
