@@ -11,8 +11,9 @@ interface SegmentedControlProps {
 
 export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"], value, onChange }: SegmentedControlProps) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [coveredIndices, setCoveredIndices] = useState<Set<number>>(new Set());
+  const [coveredIndices, setCoveredIndices] = useState<Set<number>>(new Set([0]));
   const selected = value !== undefined ? options.indexOf(value) : activeIndex;
+  const safeSelected = selected >= 0 ? selected : 0;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLDivElement>(null);
@@ -22,7 +23,8 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
   const committedIndex = useRef(0);
   const hoveredIndex = useRef(-1);
   const metaRef = useRef<{ left: number; width: number; right: number; center: number }[]>([]);
-  const rafRef = useRef<number | null>(null);
+  const isAnimatingClickRef = useRef(false);
+  const animationTimeoutRef = useRef<number | null>(null);
 
   function calcMeta() {
     const seg = containerRef.current;
@@ -65,17 +67,23 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
 
   useEffect(() => {
     calcMeta();
-    restPill(selected, "none");
-  }, [selected, options]);
+    if (isAnimatingClickRef.current) {
+      updateCoveredButtons();
+      return;
+    }
+    restPill(safeSelected, "none");
+    setCoveredIndices(new Set([safeSelected]));
+  }, [safeSelected, options]);
 
   useEffect(() => {
     const onResize = () => {
       calcMeta();
-      restPill(selected, "none");
+      restPill(safeSelected, "none");
+      setCoveredIndices(new Set([safeSelected]));
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [selected]);
+  }, [safeSelected]);
 
   function updateCoveredButtons() {
     const pill = pillRef.current;
@@ -97,24 +105,50 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
 
   function snapTo(idx: number, blobby: boolean) {
     calcMeta();
-    const old = selected;
-    if (blobby && idx !== old) {
-      const right = idx > old;
-      const distance = Math.abs(idx - old);
+    const pill = pillRef.current;
+    const seg = containerRef.current;
+    if (!pill || !seg) return;
+
+    const currentLeft = parseFloat(pill.style.left || `${metaRef.current[safeSelected]?.left ?? 0}`);
+    const currentRight = parseFloat(pill.style.right || `${metaRef.current[safeSelected]?.right ?? 0}`);
+    const currentCenter = currentLeft + (seg.offsetWidth - currentLeft - currentRight) / 2;
+    const target = metaRef.current[idx];
+    const targetCenter = target.left + target.width / 2;
+
+    if (blobby && idx !== safeSelected) {
+      const right = targetCenter > currentCenter;
+      const distance = Math.abs(idx - safeSelected);
       const trailMs = 320 + distance * 60;
       const leadMs = 200 + distance * 40;
+      isAnimatingClickRef.current = true;
+      if (animationTimeoutRef.current) window.clearTimeout(animationTimeoutRef.current);
       setPill(
-        metaRef.current[idx].left,
-        metaRef.current[idx].right,
+        target.left,
+        target.right,
         right
           ? `left ${trailMs}ms cubic-bezier(0.4,0,0.2,1.4), right ${leadMs}ms cubic-bezier(0.4,0,0.2,1)`
           : `right ${trailMs}ms cubic-bezier(0.4,0,0.2,1.4), left ${leadMs}ms cubic-bezier(0.4,0,0.2,1)`
       );
+      const totalMs = Math.max(trailMs, leadMs);
+      const tickCovered = () => {
+        updateCoveredButtons();
+        if (!isAnimatingClickRef.current) return;
+        animationTimeoutRef.current = window.setTimeout(tickCovered, 16);
+      };
+      tickCovered();
+      window.setTimeout(() => {
+        isAnimatingClickRef.current = false;
+        if (animationTimeoutRef.current) {
+          window.clearTimeout(animationTimeoutRef.current);
+          animationTimeoutRef.current = null;
+        }
+        setCoveredIndices(new Set([idx]));
+      }, totalMs + 40);
     } else {
       restPill(idx, "left 220ms cubic-bezier(0.4,0,0.2,1), right 220ms cubic-bezier(0.4,0,0.2,1)");
+      setCoveredIndices(new Set([idx]));
     }
     hoveredIndex.current = -1;
-    setCoveredIndices(new Set([idx]));
     select(idx);
   }
 
@@ -127,19 +161,19 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
     const ease = "left 200ms cubic-bezier(0.3,0,0.2,1), right 200ms cubic-bezier(0.3,0,0.2,1)";
     const retract = "left 250ms cubic-bezier(0.3,0,0.2,1.15), right 250ms cubic-bezier(0.3,0,0.2,1.15)";
 
-    if (idx === -1) { restPill(cur, retract); return; }
+    if (idx === -1) { restPill(safeSelected, retract); return; }
 
-    if (idx === cur) {
+    if (idx === safeSelected) {
       const last = options.length - 1;
-      if (cur === 0) setPill(m[cur].left, m[cur].right - GROW, ease);
-      else if (cur === last) setPill(m[cur].left - GROW, m[cur].right, ease);
-      else setPill(m[cur].left - GROW, m[cur].right - GROW, ease);
+      if (safeSelected === 0) setPill(m[safeSelected].left, m[safeSelected].right - GROW, ease);
+      else if (safeSelected === last) setPill(m[safeSelected].left - GROW, m[safeSelected].right, ease);
+      else setPill(m[safeSelected].left - GROW, m[safeSelected].right - GROW, ease);
       return;
     }
 
-    const dir = idx > cur ? 1 : -1;
-    if (dir > 0) setPill(m[cur].left, m[cur].right - REACH, ease);
-    else setPill(m[cur].left - REACH, m[cur].right, ease);
+    const dir = idx > safeSelected ? 1 : -1;
+    if (dir > 0) setPill(m[safeSelected].left, m[safeSelected].right - REACH, ease);
+    else setPill(m[safeSelected].left - REACH, m[safeSelected].right, ease);
   }
 
   function onPointerDown(e: React.PointerEvent) {
@@ -241,7 +275,7 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
           key={label}
           ref={(el) => { btnRefs.current[i] = el; }}
           data-seg-btn={i}
-          className={`seg-btn ${coveredIndices.has(i) ? 'seg-btn-active' : ''}`}
+          className={`seg-btn ${i === safeSelected ? 'seg-btn-active' : ''} ${coveredIndices.has(i) ? 'seg-btn-covered' : ''}`}
         >
           {label}
         </button>
