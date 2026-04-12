@@ -62,10 +62,12 @@ export function useIdeation(brandId: string) {
       .then(({ data }) => {
         if (data && data.length > 0) {
           const session = data[0];
-          const loadedNodes = (session.nodes as any[] || []).map((n: any) => ({
-            ...n,
-            isStreaming: false,
-          }));
+          const loadedNodes = (session.nodes as any[] || [])
+            .filter((n: any) => n.type !== 'ai_response')
+            .map((n: any) => ({
+              ...n,
+              isStreaming: false,
+            }));
           setState(s => ({ ...s, sessionId: session.id, nodes: loadedNodes as IdeationNode[] }));
         }
       });
