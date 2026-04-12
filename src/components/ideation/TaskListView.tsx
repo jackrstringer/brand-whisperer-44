@@ -445,71 +445,121 @@ function DatePopover({
   );
 }
 
-function ExpandedEditorRow({
+function ExpandedEditorPopover({
   fieldName,
   value,
+  open,
   onSave,
   onCancel,
+  children,
 }: {
   fieldName: string;
   value: string;
+  open: boolean;
   onSave: (val: string) => void;
   onCancel: () => void;
+  children: React.ReactNode;
 }) {
   const [draft, setDraft] = useState(value);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const draftRef = useRef(draft);
-  draftRef.current = draft;
+  const draftRef = useRef(value);
   const savedRef = useRef(false);
+  const cancelledRef = useRef(false);
 
   useEffect(() => {
-    textareaRef.current?.focus();
-    if (textareaRef.current) {
-      textareaRef.current.selectionStart = textareaRef.current.value.length;
-    }
-  }, []);
+    draftRef.current = draft;
+  }, [draft]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    setDraft(value);
+    draftRef.current = value;
+    savedRef.current = false;
+    cancelledRef.current = false;
+
+    const frame = requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+      if (textareaRef.current) {
+        textareaRef.current.selectionStart = textareaRef.current.value.length;
+      }
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [open, value]);
 
   const doSave = useCallback(() => {
-    if (savedRef.current) return;
+    if (savedRef.current || cancelledRef.current) return;
     savedRef.current = true;
     onSave(draftRef.current);
   }, [onSave]);
 
-  useEffect(() => {
-    return () => { doSave(); };
-  }, [doSave]);
+  const doCancel = useCallback(() => {
+    cancelledRef.current = true;
+    savedRef.current = true;
+    onCancel();
+  }, [onCancel]);
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        doSave();
-      }
+    if (!open) return;
+    return () => {
+      if (!cancelledRef.current) doSave();
     };
-    document.addEventListener('mousedown', handler, true);
-    return () => document.removeEventListener('mousedown', handler, true);
-  }, [doSave]);
+  }, [open, doSave]);
 
   return (
-    <div
-      ref={containerRef}
-      data-editing-overlay="true"
-      className="absolute top-full left-0 mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg w-[340px] animate-in fade-in-0 zoom-in-95 duration-100"
-    >
-      <div className="p-2">
-        <textarea
-          ref={textareaRef}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') { savedRef.current = true; onCancel(); }
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) doSave();
-          }}
-          className="w-full min-h-[140px] max-h-[300px] resize-y bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground/50"
-          placeholder={`Enter ${fieldName.toLowerCase()}...`}
-        />
-      </div>
-    </div>
+    <Popover open={open} onOpenChange={(nextOpen) => { if (!nextOpen && open) doSave(); }}>
+      <PopoverTrigger asChild>{children}</PopoverTrigger>
+      <PopoverContent
+        data-editing-overlay="true"
+        align="start"
+        side="bottom"
+        sideOffset={8}
+        className="w-[min(760px,calc(100vw-4rem))] max-w-[760px] rounded-lg border border-border bg-popover p-0 shadow-lg"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <span className="text-sm font-medium text-foreground">{fieldName}</span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={doCancel}
+              className="rounded-md px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={doSave}
+              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:opacity-90"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+        <div className="p-4">
+          <textarea
+            ref={textareaRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                doCancel();
+              }
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                doSave();
+              }
+            }}
+            className="min-h-[280px] max-h-[520px] w-full resize-y overflow-y-auto rounded-md border border-border bg-background px-4 py-3 text-sm leading-6 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            placeholder={`Enter ${fieldName.toLowerCase()}...`}
+          />
+          <p className="mt-2 text-[11px] text-muted-foreground">Press Cmd/Ctrl + Enter to save. Clicking outside also saves.</p>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -688,28 +738,29 @@ function SortableTaskRow({
           );
         }
 
-        // Brief, Copy, Design Notes — floating editor anchored to cell
+        // Brief, Copy, Design Notes — ClickUp-style anchored flyout editor
         const val = getCellValue(key);
         return (
-          <div
+          <ExpandedEditorPopover
             key={key}
-            data-cell-key={key}
-            className={`flex-shrink-0 px-2 relative overflow-visible ${editing ? 'z-20 ring-2 ring-primary rounded' : ''}`}
-            style={{ width: w }}
-            onClick={(e) => handleCellClick(key, e)}
+            fieldName={colDef.label}
+            value={val}
+            open={editing}
+            onSave={(v) => handleSave(key, v)}
+            onCancel={onEndEdit}
           >
-            <span className={`text-xs block truncate ${val ? 'text-muted-foreground' : 'text-muted-foreground/0 group-hover:text-muted-foreground/50'}`}>
-              {val || 'Add a value'}
-            </span>
-            {editing && (
-              <ExpandedEditorRow
-                fieldName={colDef.label}
-                value={val}
-                onSave={(v) => handleSave(key, v)}
-                onCancel={onEndEdit}
-              />
-            )}
-          </div>
+            <div
+              data-cell-key={key}
+              className={`flex-shrink-0 px-2 relative overflow-visible ${editing ? 'z-20 ring-2 ring-primary rounded' : ''}`}
+              style={{ width: w }}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => handleCellClick(key, e)}
+            >
+              <span className={`text-xs block truncate ${val ? 'text-muted-foreground' : 'text-muted-foreground/0 group-hover:text-muted-foreground/50'}`}>
+                {val || 'Add a value'}
+              </span>
+            </div>
+          </ExpandedEditorPopover>
         );
       })}
 
