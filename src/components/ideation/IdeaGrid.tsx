@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { CampaignIdea } from '@/lib/types';
 import { useDraggable } from '@dnd-kit/core';
-import { Check, Plus, ArrowRight } from 'lucide-react';
+import { Check, Plus, ArrowRight, ChevronDown, ChevronUp } from 'lucide-react';
 import { CAMPAIGN_TYPES } from '@/lib/ideation/campaignTypes';
 
 interface Props {
@@ -26,11 +27,11 @@ export function IdeaGrid({ ideas, isStreaming, selectedIds, onToggleSelect, onAd
         <thead>
           <tr className="border-b border-border">
             <th className="w-10 p-2" />
-            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider w-[140px]">Type</th>
-            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider w-[25%]">Title</th>
+            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider w-[120px]">Type</th>
+            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider w-[30%]">Title</th>
             <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">Description</th>
-            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider hidden lg:table-cell w-[20%]">Subject Line</th>
-            <th className="w-16 p-2" />
+            <th className="text-left p-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider hidden lg:table-cell w-[18%]">Subject Line</th>
+            <th className="w-20 p-2" />
           </tr>
         </thead>
         <tbody>
@@ -53,7 +54,7 @@ export function IdeaGrid({ ideas, isStreaming, selectedIds, onToggleSelect, onAd
               <td className="p-2.5"><div className="w-32 h-4 bg-muted rounded animate-pulse" /></td>
               <td className="p-2.5 hidden md:table-cell"><div className="w-48 h-3 bg-muted rounded animate-pulse" /></td>
               <td className="p-2.5 hidden lg:table-cell"><div className="w-28 h-3 bg-muted rounded animate-pulse" /></td>
-              <td className="p-2.5 w-16" />
+              <td className="p-2.5 w-20" />
             </tr>
           ))}
         </tbody>
@@ -79,84 +80,148 @@ function IdeaRow({
   onAddToQueue: () => void;
   onBuildNow: () => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `idea-${idea.id || idea.title}`,
     data: { type: 'idea', idea },
     disabled: isPartial,
   });
 
+  const hasExpandableContent = !!(
+    (idea.description && idea.description.length > 60) ||
+    idea.campaign_info ||
+    idea.copy_direction
+  );
+
+  const handleRowClick = (e: React.MouseEvent) => {
+    if (isPartial) return;
+    // If clicking the expand area or the row itself, toggle selection
+    onToggleSelect();
+  };
+
+  const handleExpandToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpanded(!expanded);
+  };
+
   return (
-    <tr
-      ref={setNodeRef}
-      {...attributes}
-      {...listeners}
-      onClick={isPartial ? undefined : onToggleSelect}
-      className={`border-t border-border cursor-pointer transition-colors group select-none ${
-        isDragging ? 'opacity-50' : ''
-      } ${
-        isSelected
-          ? 'bg-primary/[0.06]'
-          : 'hover:bg-muted/50'
-      }`}
-    >
-      <td className="p-2.5 w-10 align-middle">
-        <div className={`w-4 h-4 rounded-full border flex items-center justify-center mx-auto transition-colors ${
-          isSelected ? 'bg-primary border-primary' : 'border-border'
-        }`}>
-          {isSelected && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
-        </div>
-      </td>
-
-      <td className="p-2.5 align-middle">
-        {idea.campaign_type && (
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getTypeColor(idea.campaign_type)}`} />
-            <span className="text-[11px] text-muted-foreground truncate">{idea.campaign_type}</span>
+    <>
+      <tr
+        ref={setNodeRef}
+        {...attributes}
+        {...listeners}
+        onClick={handleRowClick}
+        className={`border-t border-border cursor-pointer transition-all duration-100 group select-none ${
+          isDragging ? 'opacity-50' : ''
+        } ${
+          isSelected
+            ? 'bg-primary/[0.06]'
+            : 'hover:bg-muted/70'
+        }`}
+      >
+        <td className="p-2.5 w-10 align-middle">
+          <div className={`w-4 h-4 rounded-full border flex items-center justify-center mx-auto transition-colors ${
+            isSelected ? 'bg-primary border-primary' : 'border-border group-hover:border-muted-foreground/50'
+          }`}>
+            {isSelected && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
           </div>
-        )}
-      </td>
+        </td>
 
-      <td className="p-2.5 align-middle">
-        <span className="text-[13px] font-semibold text-foreground truncate block">
-          {idea.title || <span className="inline-block w-32 h-4 bg-muted rounded animate-pulse" />}
-          {isStreaming && !idea.id && (
-            <span className="inline-block w-[2px] h-[14px] bg-primary/70 animate-lucy-blink ml-0.5 align-middle" />
+        <td className="p-2.5 align-middle">
+          {idea.campaign_type && (
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getTypeColor(idea.campaign_type)}`} />
+              <span className="text-[11px] text-muted-foreground truncate">{idea.campaign_type}</span>
+            </div>
           )}
-        </span>
-      </td>
+        </td>
 
-      <td className="p-2.5 align-middle hidden md:table-cell">
-        <span className="text-[12px] text-muted-foreground line-clamp-2">
-          {idea.description || (isStreaming && !idea.id ? <span className="inline-block w-40 h-3 bg-muted rounded animate-pulse" /> : null)}
-        </span>
-      </td>
+        <td className="p-2.5 align-middle">
+          <span className="text-[13px] font-semibold text-foreground truncate block">
+            {idea.title || <span className="inline-block w-32 h-4 bg-muted rounded animate-pulse" />}
+            {isStreaming && !idea.id && (
+              <span className="inline-block w-[2px] h-[14px] bg-primary/70 animate-lucy-blink ml-0.5 align-middle" />
+            )}
+          </span>
+        </td>
 
-      <td className="p-2.5 align-middle hidden lg:table-cell">
-        <span className="text-[12px] text-muted-foreground truncate block">
-          {idea.subject_line || null}
-        </span>
-      </td>
+        <td className="p-2.5 align-middle hidden md:table-cell">
+          <span className="text-[12px] text-muted-foreground line-clamp-1">
+            {idea.description || (isStreaming && !idea.id ? <span className="inline-block w-40 h-3 bg-muted rounded animate-pulse" /> : null)}
+          </span>
+        </td>
 
-      <td className="p-2.5 w-16 align-middle">
-        {!isPartial && (
-          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-            <button
-              onClick={onAddToQueue}
-              className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-              title="Add to Queue"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={onBuildNow}
-              className="p-1 rounded-md bg-primary/10 text-foreground hover:bg-primary/20 transition-colors"
-              title="Build Now"
-            >
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-      </td>
-    </tr>
+        <td className="p-2.5 align-middle hidden lg:table-cell">
+          <span className="text-[12px] text-muted-foreground truncate block">
+            {idea.subject_line || null}
+          </span>
+        </td>
+
+        <td className="p-2.5 w-20 align-middle">
+          {!isPartial && (
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+              {hasExpandableContent && (
+                <button
+                  onClick={handleExpandToggle}
+                  className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                  title={expanded ? 'Collapse' : 'Expand'}
+                >
+                  {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+              )}
+              <button
+                onClick={onAddToQueue}
+                className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title="Add to Queue"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={onBuildNow}
+                className="p-1 rounded-md bg-primary/10 text-foreground hover:bg-primary/20 transition-colors"
+                title="Build Now"
+              >
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </td>
+      </tr>
+
+      {/* Expanded detail row */}
+      {expanded && !isPartial && (
+        <tr className={`border-t border-border/50 ${isSelected ? 'bg-primary/[0.04]' : 'bg-muted/30'}`}>
+          <td className="p-2.5 w-10" />
+          <td colSpan={5} className="px-3 py-3">
+            <div className="space-y-2.5 text-[12px]">
+              {idea.description && (
+                <div>
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Description</span>
+                  <p className="text-foreground/80 mt-0.5 leading-relaxed">{idea.description}</p>
+                </div>
+              )}
+              {idea.campaign_info && (
+                <div>
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Campaign Info</span>
+                  <p className="text-foreground/80 mt-0.5 leading-relaxed">{idea.campaign_info}</p>
+                </div>
+              )}
+              {idea.copy_direction && (
+                <div>
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Copy Direction</span>
+                  <p className="text-foreground/80 mt-0.5 leading-relaxed">{idea.copy_direction}</p>
+                </div>
+              )}
+              {idea.subject_line && (
+                <div>
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Subject Line</span>
+                  <p className="text-foreground/80 mt-0.5 leading-relaxed">{idea.subject_line}</p>
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }

@@ -259,7 +259,7 @@ export default function IdeatePage() {
         </div>
       </div>
 
-      <div className="absolute bottom-4 left-0 right-0 z-50 flex justify-center px-4">
+      <div className="absolute bottom-6 left-0 right-0 z-50 flex justify-center px-4">
         <div className="w-full max-w-3xl">
           <ChatBar
             onSend={ideation.sendChat}
