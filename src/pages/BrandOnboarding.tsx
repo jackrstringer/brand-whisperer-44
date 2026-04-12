@@ -292,7 +292,7 @@ export default function BrandOnboarding() {
           {/* Iframe preview */}
           {activeCampaign?.html ? (
             <div
-              className="bg-white rounded-lg shadow-sm border border-border"
+              className="bg-card rounded-lg shadow-sm border border-border"
               style={{ width: 470, maxWidth: "100%" }}
             >
               <iframe

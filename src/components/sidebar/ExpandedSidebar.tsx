@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTheme } from "next-themes";
 import { SidebarIcons } from "./SidebarIcons";
 
 interface SubItem {
@@ -31,6 +32,7 @@ export function ExpandedSidebar({
   brands, activeBrandId, activePath, onBrandClick, onItemClick,
   onCollapseClick, onHomeClick, onSettingsClick, onSignOut, onLibraryClick, isAdmin,
 }: Props) {
+  const { theme, setTheme } = useTheme();
   const [hoveredBrand, setHoveredBrand] = useState<string | null>(null);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [moonH, setMoonH] = useState(false);
@@ -42,13 +44,18 @@ export function ExpandedSidebar({
       onCollapseClick();
   };
 
+  const toggleTheme = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTheme(theme === "dark" ? "light" : "dark");
+  };
+
   return (
     <div
       data-bg="true"
       onClick={handleBgClick}
+      className="bg-sidebar border-r border-sidebar-border"
       style={{
         width: 240, minWidth: 240, height: "100vh",
-        background: "#fff", borderRight: "1px solid #E8E8E8",
         display: "flex", flexDirection: "column",
         transition: "width 0.3s cubic-bezier(0.25,0.46,0.45,0.94)",
         flexShrink: 0,
@@ -76,14 +83,11 @@ export function ExpandedSidebar({
                 onClick={(e) => { e.stopPropagation(); onBrandClick(b.id); }}
                 onMouseEnter={() => setHoveredBrand(b.id)}
                 onMouseLeave={() => setHoveredBrand(null)}
-                style={{
-                  padding: "10px 12px", fontSize: 14,
-                  fontWeight: isActive ? 600 : 400,
-                  color: isActive ? "#2B2B2B" : isH ? "#686868" : "#CDCDCD",
-                  cursor: "pointer", borderRadius: 8,
-                  background: isH && !isActive ? "#FAFAFA" : "transparent",
-                  transition: "color 0.15s ease, background 0.15s ease",
-                }}
+                className={`rounded-lg transition-colors duration-150 cursor-pointer ${
+                  isActive ? "text-foreground font-semibold" :
+                  isH ? "text-muted-foreground bg-muted/50" : "text-gray-3"
+                }`}
+                style={{ padding: "10px 12px", fontSize: 14 }}
               >
                 {b.name}
               </div>
@@ -99,19 +103,16 @@ export function ExpandedSidebar({
                         onClick={(e) => { e.stopPropagation(); onItemClick(item.path); }}
                         onMouseEnter={() => setHoveredItem(`${b.id}-${item.label}`)}
                         onMouseLeave={() => setHoveredItem(null)}
+                        className={`flex items-center gap-2.5 cursor-pointer transition-all duration-150 ${
+                          ia ? "bg-primary text-primary-foreground font-medium" :
+                          ih ? "bg-muted text-foreground translate-x-0.5" : "text-gray-1"
+                        }`}
                         style={{
-                          display: "flex", alignItems: "center", gap: 10,
                           padding: "9px 16px", margin: "0 4px 2px", borderRadius: 15, fontSize: 14,
-                          fontWeight: ia ? 500 : 400,
-                          color: ia ? "#fff" : ih ? "#2B2B2B" : "#686868",
-                          background: ia ? "#2B2B2B" : ih ? "#F2F2F2" : "transparent",
-                          cursor: "pointer",
-                          transition: "color 0.15s cubic-bezier(0.4,0,0.2,1), background 0.15s cubic-bezier(0.4,0,0.2,1), transform 0.15s cubic-bezier(0.4,0,0.2,1)",
-                          transform: ih && !ia ? "translateX(2px)" : "translateX(0)",
                         }}
                       >
                         <span style={{ display: "flex", width: 17, height: 17, flexShrink: 0 }}>
-                          {(SidebarIcons as any)[item.icon]?.(ia ? "#fff" : ih ? "#2B2B2B" : "#686868")}
+                          {(SidebarIcons as any)[item.icon]?.("currentColor")}
                         </span>
                         {item.label}
                       </div>
@@ -127,8 +128,8 @@ export function ExpandedSidebar({
       {/* Bottom */}
       <div
         data-bg="true"
+        className="border-t border-border/50"
         style={{
-          borderTop: "1px solid #F2F2F2",
           padding: "16px 20px 20px",
           display: "flex", flexDirection: "column", gap: 12,
         }}
@@ -138,40 +139,37 @@ export function ExpandedSidebar({
             onMouseEnter={() => setLibraryH(true)}
             onMouseLeave={() => setLibraryH(false)}
             onClick={(e) => { e.stopPropagation(); onLibraryClick(); }}
-            style={{
-              cursor: "pointer", padding: 4, width: "fit-content",
-              display: "flex", alignItems: "center", gap: 8,
-              transition: "transform 0.15s",
-              transform: libraryH ? "scale(1.05)" : "scale(1)",
-            }}
+            className={`cursor-pointer flex items-center gap-2 p-1 w-fit transition-transform duration-150 ${
+              libraryH ? "scale-105 text-foreground" : "text-muted-foreground"
+            }`}
           >
-            {SidebarIcons.library(libraryH ? "#2B2B2B" : "#9B9B9B")}
-            <span style={{ fontSize: 12, color: libraryH ? "#2B2B2B" : "#9B9B9B", transition: "color 0.15s" }}>Library</span>
+            {SidebarIcons.library("currentColor")}
+            <span className="text-xs">Library</span>
           </div>
         )}
         <div
           onMouseEnter={() => setMoonH(true)}
           onMouseLeave={() => setMoonH(false)}
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            cursor: "pointer", padding: 4, width: "fit-content",
-            transition: "transform 0.2s ease",
-            transform: moonH ? "scale(1.15)" : "scale(1)",
-          }}
+          onClick={toggleTheme}
+          className={`cursor-pointer p-1 w-fit transition-transform duration-200 ${
+            moonH ? "scale-115 text-foreground" : "text-muted-foreground"
+          }`}
         >
-          {SidebarIcons.moon(moonH ? "#2B2B2B" : "#9B9B9B")}
+          {SidebarIcons.moon("currentColor")}
         </div>
         <div
           onMouseEnter={() => setSettingsH(true)}
           onMouseLeave={() => setSettingsH(false)}
           onClick={(e) => { e.stopPropagation(); onSettingsClick(); }}
+          className={`cursor-pointer p-1 w-fit transition-transform duration-350 ${
+            settingsH ? "text-foreground" : "text-muted-foreground"
+          }`}
           style={{
-            cursor: "pointer", padding: 4, width: "fit-content",
-            transition: "transform 0.35s cubic-bezier(0.4,0,0.2,1)",
             transform: settingsH ? "rotate(60deg)" : "rotate(0deg)",
+            transition: "transform 0.35s cubic-bezier(0.4,0,0.2,1), color 0.15s",
           }}
         >
-          {SidebarIcons.settings(settingsH ? "#2B2B2B" : "#9B9B9B")}
+          {SidebarIcons.settings("currentColor")}
         </div>
       </div>
     </div>
@@ -185,13 +183,11 @@ function HoverTopIcon({ icon, onClick }: { icon: string; onClick: (e: React.Mous
       onMouseEnter={() => setH(true)}
       onMouseLeave={() => setH(false)}
       onClick={onClick}
-      style={{
-        cursor: "pointer",
-        transition: "transform 0.15s",
-        transform: h ? "scale(1.1)" : "scale(1)",
-      }}
+      className={`cursor-pointer transition-transform duration-150 ${
+        h ? "scale-110 text-foreground" : "text-gray-1"
+      }`}
     >
-      {(SidebarIcons as any)[icon]?.(h ? "#2B2B2B" : "#686868")}
+      {(SidebarIcons as any)[icon]?.("currentColor")}
     </div>
   );
 }

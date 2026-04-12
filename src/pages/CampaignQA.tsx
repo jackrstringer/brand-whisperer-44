@@ -263,7 +263,7 @@ export default function CampaignQA() {
               <iframe
                 srcDoc={campaign.html}
                 sandbox="allow-same-origin"
-                className="w-full border-0 bg-white shadow-lg rounded"
+                className="w-full border-0 bg-card shadow-lg rounded"
                 style={{ minHeight: 800 }}
                 title="Campaign Preview"
               />

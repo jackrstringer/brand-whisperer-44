@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import { useTheme } from "next-themes";
 import { SidebarIcons } from "./SidebarIcons";
 
 interface SubItem {
@@ -36,22 +37,20 @@ function PeekSubItem({ item, isActive, delay, onClick }: {
       onClick={(e) => { e.stopPropagation(); onClick(); }}
       onMouseEnter={() => setH(true)}
       onMouseLeave={() => setH(false)}
+      className={`flex items-center gap-2.5 cursor-pointer transition-colors duration-120 ${
+        isActive ? "bg-primary text-primary-foreground font-medium" :
+        h ? "bg-muted text-foreground" : "text-gray-1"
+      }`}
       style={{
-        display: "flex", alignItems: "center", gap: 10,
         height: 34, paddingLeft: 20, marginLeft: 40, marginRight: 12,
         borderRadius: 15, fontSize: 13,
-        fontWeight: isActive ? 500 : 400,
-        color: isActive ? "#fff" : h ? "#2B2B2B" : "#686868",
-        background: isActive ? "#2B2B2B" : h ? "#F2F2F2" : "transparent",
-        cursor: "pointer",
-        transition: "color 0.12s ease, background 0.12s ease",
         animation: `peekSlide 0.2s ease both`,
         animationDelay: `${delay}ms`,
         whiteSpace: "nowrap",
       }}
     >
       <span style={{ display: "flex", width: 17, height: 17, flexShrink: 0 }}>
-        {(SidebarIcons as any)[item.icon]?.(isActive ? "#fff" : h ? "#2B2B2B" : "#686868")}
+        {(SidebarIcons as any)[item.icon]?.("currentColor")}
       </span>
       {item.label}
     </div>
@@ -62,6 +61,7 @@ export function CollapsedStrip({
   brands, activeBrandId, activePath, onBrandClick, onItemClick,
   onExpandClick, onHomeClick, onSettingsClick, onSignOut, onLibraryClick, isAdmin,
 }: Props) {
+  const { theme, setTheme } = useTheme();
   const [mouseY, setMouseY] = useState<number | null>(null);
   const [peeking, setPeeking] = useState(false);
   const stripRef = useRef<HTMLDivElement>(null);
@@ -93,6 +93,11 @@ export function CollapsedStrip({
   const activeBrand = brands.find(b => b.id === activeBrandId);
   const activeSub = activeBrand?.sub || [];
 
+  const toggleTheme = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTheme(theme === "dark" ? "light" : "dark");
+  };
+
   return (
     <div
       ref={stripRef}
@@ -101,12 +106,11 @@ export function CollapsedStrip({
       onMouseLeave={handleMouseLeave}
       onClick={handleBgClick}
       data-bg="true"
+      className="bg-sidebar border-r border-sidebar-border"
       style={{
         width: peeking ? 264 : 56,
         minWidth: peeking ? 264 : 56,
         height: "100vh",
-        background: "#fff",
-        borderRight: "1px solid #E8E8E8",
         display: "flex",
         flexDirection: "column",
         transition: "width 0.3s cubic-bezier(0.25,0.46,0.45,0.94), min-width 0.3s cubic-bezier(0.25,0.46,0.45,0.94)",
@@ -146,25 +150,24 @@ export function CollapsedStrip({
               >
                 {/* Dot */}
                 <div style={{ width: 56, display: "flex", justifyContent: "center", flexShrink: 0 }}>
-                  <div style={{
-                    width: isActive ? 10 : 7,
-                    height: isActive ? 10 : 7,
-                    borderRadius: "50%",
-                    background: isActive ? "#2B2B2B" : "#CDCDCD",
-                    transform: `scale(${scale})`,
-                    transition: "transform 0.18s cubic-bezier(0.34,1.56,0.64,1)",
-                  }} />
+                  <div className={isActive ? "bg-foreground" : "bg-gray-3"}
+                    style={{
+                      width: isActive ? 10 : 7,
+                      height: isActive ? 10 : 7,
+                      borderRadius: "50%",
+                      transform: `scale(${scale})`,
+                      transition: "transform 0.18s cubic-bezier(0.34,1.56,0.64,1)",
+                    }} />
                 </div>
                 {/* Label (only in peek) */}
-                <div style={{
-                  fontSize: 14,
-                  fontWeight: isActive ? 600 : 400,
-                  color: isActive ? "#2B2B2B" : "#CDCDCD",
-                  whiteSpace: "nowrap",
-                  opacity: peeking ? 1 : 0,
-                  transform: peeking ? "translateX(0)" : "translateX(-10px)",
-                  transition: `opacity 0.22s ease ${idx * 25}ms, transform 0.22s ease ${idx * 25}ms`,
-                }}>
+                <div className={isActive ? "text-foreground font-semibold" : "text-gray-3"}
+                  style={{
+                    fontSize: 14,
+                    whiteSpace: "nowrap",
+                    opacity: peeking ? 1 : 0,
+                    transform: peeking ? "translateX(0)" : "translateX(-10px)",
+                    transition: `opacity 0.22s ease ${idx * 25}ms, transform 0.22s ease ${idx * 25}ms`,
+                  }}>
                   {b.name}
                 </div>
               </div>
@@ -191,8 +194,8 @@ export function CollapsedStrip({
       {/* Bottom */}
       <div
         data-bg="true"
+        className="border-t border-border/50"
         style={{
-          borderTop: "1px solid #F2F2F2",
           padding: "16px 0 20px",
           display: "flex",
           flexDirection: "column",
@@ -203,7 +206,7 @@ export function CollapsedStrip({
         {isAdmin && onLibraryClick && (
           <HoverIcon icon="library" onClick={(e) => { e.stopPropagation(); onLibraryClick(); }} />
         )}
-        <HoverIcon icon="moon" onClick={(e) => e.stopPropagation()} />
+        <HoverIcon icon="moon" onClick={toggleTheme} />
         <HoverIcon icon="settings" onClick={(e) => { e.stopPropagation(); onSettingsClick(); }} />
       </div>
     </div>
@@ -217,14 +220,11 @@ function HoverIcon({ icon, onClick }: { icon: string; onClick: (e: React.MouseEv
       onMouseEnter={() => setH(true)}
       onMouseLeave={() => setH(false)}
       onClick={onClick}
-      style={{
-        cursor: "pointer",
-        transition: "transform 0.15s",
-        transform: h ? "scale(1.1)" : "scale(1)",
-        padding: 4,
-      }}
+      className={`cursor-pointer transition-transform duration-150 p-1 ${
+        h ? "scale-110 text-foreground" : icon === "home" ? "text-gray-1" : "text-muted-foreground"
+      }`}
     >
-      {(SidebarIcons as any)[icon]?.(h ? "#2B2B2B" : icon === "home" ? "#686868" : "#9B9B9B")}
+      {(SidebarIcons as any)[icon]?.("currentColor")}
     </div>
   );
 }

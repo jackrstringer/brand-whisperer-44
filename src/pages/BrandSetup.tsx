@@ -922,7 +922,7 @@ export default function BrandSetup() {
           </div>
         )}
 
-        <div className="border border-border rounded-lg overflow-hidden bg-white max-w-5xl">
+        <div className="border border-border rounded-lg overflow-hidden bg-card max-w-5xl">
           <iframe
             ref={guideIframeRef}
             title="Brand Guide Preview"
