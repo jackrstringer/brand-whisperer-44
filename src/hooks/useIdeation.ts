@@ -425,6 +425,7 @@ export function useIdeation(brandId: string) {
     startNewSession,
     abort,
     insertMenuNode,
+    addMenuNode,
     removeMenuNodes,
   };
 }
