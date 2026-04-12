@@ -67,17 +67,23 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
 
   useEffect(() => {
     calcMeta();
-    restPill(selected, "none");
-  }, [selected, options]);
+    if (isAnimatingClickRef.current) {
+      updateCoveredButtons();
+      return;
+    }
+    restPill(safeSelected, "none");
+    setCoveredIndices(new Set([safeSelected]));
+  }, [safeSelected, options]);
 
   useEffect(() => {
     const onResize = () => {
       calcMeta();
-      restPill(selected, "none");
+      restPill(safeSelected, "none");
+      setCoveredIndices(new Set([safeSelected]));
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [selected]);
+  }, [safeSelected]);
 
   function updateCoveredButtons() {
     const pill = pillRef.current;
