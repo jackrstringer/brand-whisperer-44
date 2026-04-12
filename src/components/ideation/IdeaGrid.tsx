@@ -1,8 +1,6 @@
-import { useState } from 'react';
 import { CampaignIdea } from '@/lib/types';
 import { useDraggable } from '@dnd-kit/core';
-import { Check, Plus, ArrowRight } from 'lucide-react';
-import { CAMPAIGN_TYPES } from '@/lib/ideation/campaignTypes';
+import { Check, Plus, ArrowRight, GripVertical } from 'lucide-react';
 
 interface Props {
   ideas: CampaignIdea[];
@@ -11,11 +9,6 @@ interface Props {
   onToggleSelect: (idea: CampaignIdea) => void;
   onAddToQueue: (idea: CampaignIdea) => void;
   onBuildNow: (idea: CampaignIdea) => void;
-}
-
-function getTypeColor(typeName?: string): string {
-  const t = CAMPAIGN_TYPES.find(ct => ct.name === typeName);
-  return t?.color || 'bg-muted-foreground/30';
 }
 
 export function IdeaGrid({ ideas, isStreaming, selectedIds, onToggleSelect, onAddToQueue, onBuildNow }: Props) {
@@ -37,10 +30,6 @@ export function IdeaGrid({ ideas, isStreaming, selectedIds, onToggleSelect, onAd
       ))}
       {Array.from({ length: skeletonCount }).map((_, i) => (
         <div key={`skel-${i}`} className="px-4 py-3.5 space-y-2">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded-full border border-border flex-shrink-0" />
-            <div className="w-20 h-3 bg-muted rounded animate-pulse" />
-          </div>
           <div className="w-48 h-4 bg-muted rounded animate-pulse" />
           <div className="w-64 h-3 bg-muted rounded animate-pulse" />
         </div>
@@ -76,8 +65,7 @@ function IdeaCard({
     <div
       ref={setNodeRef}
       {...attributes}
-      {...listeners}
-      className={`group relative px-4 py-3 cursor-pointer transition-colors duration-100 select-none ${
+      className={`group relative flex gap-2 px-4 py-3 cursor-pointer transition-colors duration-100 select-none ${
         isDragging ? 'opacity-50' : ''
       } ${
         isSelected
@@ -90,67 +78,72 @@ function IdeaCard({
         <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-primary" />
       )}
 
-      {/* Row 1: Checkbox + Type + Actions */}
-      <div className="flex items-center gap-2 mb-1.5">
+      {/* Left controls: grab handle + checkbox, visible on hover or selected */}
+      <div
+        className={`flex items-center gap-0.5 flex-shrink-0 pt-0.5 transition-opacity ${
+          isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        }`}
+        onClick={e => e.stopPropagation()}
+      >
+        <div {...listeners} className="cursor-grab active:cursor-grabbing p-0.5 text-muted-foreground/50 hover:text-muted-foreground">
+          <GripVertical className="w-3.5 h-3.5" />
+        </div>
         <div
           className={`w-4 h-4 rounded-full border flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer ${
-            isSelected ? 'bg-primary border-primary' : 'border-border group-hover:border-muted-foreground/50'
+            isSelected ? 'bg-primary border-primary' : 'border-border hover:border-muted-foreground/50'
           }`}
-          onClick={(e) => { e.stopPropagation(); onToggleSelect(); }}
+          onClick={onToggleSelect}
         >
           {isSelected && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
         </div>
+      </div>
 
-        {idea.campaign_type && (
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getTypeColor(idea.campaign_type)}`} />
-            <span className="text-[11px] text-muted-foreground">{idea.campaign_type}</span>
-          </div>
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        {/* Title */}
+        <div className="text-sm font-semibold text-foreground leading-snug mb-0.5">
+          {idea.title || <span className="inline-block w-40 h-4 bg-muted rounded animate-pulse" />}
+          {isStreaming && !idea.id && (
+            <span className="inline-block w-[2px] h-[14px] bg-primary/70 animate-lucy-blink ml-0.5 align-middle" />
+          )}
+        </div>
+
+        {/* Description */}
+        {idea.description && (
+          <p className="text-[13px] text-muted-foreground leading-relaxed line-clamp-2 mb-0.5">
+            {idea.description}
+          </p>
+        )}
+        {isStreaming && !idea.id && !idea.description && (
+          <div className="w-52 h-3 bg-muted rounded animate-pulse mb-0.5" />
         )}
 
-        {!isPartial && (
-          <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-            <button
-              onClick={onAddToQueue}
-              className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-              title="Add to Queue"
-            >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={onBuildNow}
-              className="p-1 rounded-md bg-primary/10 text-foreground hover:bg-primary/20 transition-colors"
-              title="Build Now"
-            >
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+        {/* Subject line */}
+        {idea.subject_line && (
+          <p className="text-[13px] text-muted-foreground/70 truncate">
+            {idea.subject_line}
+          </p>
         )}
       </div>
 
-      {/* Row 2: Title */}
-      <div className="text-[13px] font-semibold text-foreground leading-snug mb-0.5">
-        {idea.title || <span className="inline-block w-40 h-4 bg-muted rounded animate-pulse" />}
-        {isStreaming && !idea.id && (
-          <span className="inline-block w-[2px] h-[14px] bg-primary/70 animate-lucy-blink ml-0.5 align-middle" />
-        )}
-      </div>
-
-      {/* Row 3: Description (if present) */}
-      {idea.description && (
-        <p className="text-[12px] text-muted-foreground leading-relaxed line-clamp-2 mb-0.5">
-          {idea.description}
-        </p>
-      )}
-      {isStreaming && !idea.id && !idea.description && (
-        <div className="w-52 h-3 bg-muted rounded animate-pulse mb-0.5" />
-      )}
-
-      {/* Row 4: Subject line (subtle, inline) */}
-      {idea.subject_line && (
-        <p className="text-[11px] text-muted-foreground/70 italic truncate">
-          ✉ {idea.subject_line}
-        </p>
+      {/* Right actions on hover */}
+      {!isPartial && (
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" onClick={e => e.stopPropagation()}>
+          <button
+            onClick={onAddToQueue}
+            className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            title="Add to Queue"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={onBuildNow}
+            className="p-1 rounded-md bg-primary/10 text-foreground hover:bg-primary/20 transition-colors"
+            title="Build Now"
+          >
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
       )}
     </div>
   );
