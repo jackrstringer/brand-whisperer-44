@@ -33,6 +33,7 @@ export default function IdeatePage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeDragItem, setActiveDragItem] = useState<any>(null);
   const seededRef = useRef(false);
+  const ideationScrollRef = useRef<HTMLDivElement>(null);
 
   // Lifted TaskWindow state
   const [taskView, setTaskView] = useState<ViewMode>(() => {
