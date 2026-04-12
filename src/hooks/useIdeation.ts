@@ -394,6 +394,16 @@ export function useIdeation(brandId: string) {
     }));
   }, []);
 
+  const insertMenuNode = useCallback((type: string, sub?: string) => {
+    // Remove any existing menu nodes, then generate
+    setState(s => ({ ...s, nodes: s.nodes.filter(n => n.type !== 'menu') }));
+    generateForType(type, sub);
+  }, [generateForType]);
+
+  const removeMenuNodes = useCallback(() => {
+    setState(s => ({ ...s, nodes: s.nodes.filter(n => n.type !== 'menu') }));
+  }, []);
+
   return {
     ...state,
     generateForType,
@@ -404,5 +414,7 @@ export function useIdeation(brandId: string) {
     toggleTurboMode,
     startNewSession,
     abort,
+    insertMenuNode,
+    removeMenuNodes,
   };
 }
