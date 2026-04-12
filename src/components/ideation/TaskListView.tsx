@@ -211,7 +211,6 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
           {visibleCols.map((key, idx) => {
             const col = ALL_COLUMNS.find(c => c.key === key)!;
             const w = colConfig.widths[key] || col.defaultWidth;
-            const isFlex = w === 0 || key === 'title';
             const isLast = idx === visibleCols.length - 1;
 
             return (
