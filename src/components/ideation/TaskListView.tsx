@@ -217,8 +217,8 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
             return (
               <div
                 key={key}
-                className={`relative px-2 ${isFlex ? 'flex-1 min-w-[120px]' : 'flex-shrink-0'}`}
-                style={isFlex ? undefined : { width: w }}
+                className="relative px-2 flex-shrink-0"
+                style={{ width: w || col.defaultWidth }}
               >
                 {col.label}
                 {!isLast && (
