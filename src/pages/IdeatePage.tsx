@@ -249,7 +249,7 @@ export default function IdeatePage() {
       onRemove={(id) => designQueue.removeFromQueue.mutate(id)}
       onStatusChange={(id, status) => designQueue.updateStatus.mutate({ id, status })}
       onAddTask={(sendDate) => {
-        handleAddToQueue({ title: 'Untitled Task', campaign_type: '', description: '', subject_line: '', campaign_info: '', copy_direction: '' }, sendDate);
+        handleAddToQueue({ id: crypto.randomUUID(), title: 'Untitled Task', campaign_type: '', description: '', subject_line: '', campaign_info: '', copy_direction: '' }, sendDate);
       }}
       bulkEligibleCount={eligibleForBulk.length}
       onBulkGenerate={() => setBulkConfirmOpen(true)}
