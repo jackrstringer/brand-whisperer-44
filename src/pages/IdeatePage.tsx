@@ -228,7 +228,7 @@ export default function IdeatePage() {
   const ideationPanel = (
     <div className="flex flex-col h-full relative">
       <div className="flex-1 overflow-y-auto overflow-x-hidden pb-36">
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-5xl mx-auto">
           {!hasStarted && (
             <div className="px-6">
               <div className="text-center mt-16 mb-8">

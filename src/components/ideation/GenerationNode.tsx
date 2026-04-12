@@ -31,7 +31,7 @@ export function GenerationNode({
   roundIndex = 0,
 }: Props) {
   const displayIdeas = isStreaming
-    ? [...ideas, ...streamingIdeas.filter(si => si.title && !ideas.find(i => i.id === si.id))]
+    ? [...ideas, ...streamingIdeas.filter(si => (si.title || si.description) && !ideas.find(i => i.id === si.id))]
     : ideas;
 
   const showResearch = isStreaming && researchStatus;

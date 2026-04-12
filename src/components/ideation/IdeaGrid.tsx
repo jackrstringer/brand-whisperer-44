@@ -18,7 +18,7 @@ function getTypeColor(typeName?: string): string {
 }
 
 export function IdeaGrid({ ideas, isStreaming, selectedIds, onToggleSelect, onAddToQueue, onBuildNow }: Props) {
-  const skeletonCount = isStreaming ? Math.max(0, 4 - ideas.length) : 0;
+  const skeletonCount = isStreaming ? Math.max(0, 2 - ideas.length) : 0;
 
   return (
     <div className="border border-border rounded-xl overflow-hidden bg-card w-full">
