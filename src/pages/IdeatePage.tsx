@@ -227,7 +227,7 @@ export default function IdeatePage() {
 
   const ideationPanel = (
     <div className="flex flex-col h-full relative">
-      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-48">
+      <div ref={ideationScrollRef} className="flex-1 overflow-y-auto overflow-x-hidden pb-48">
         <div className="max-w-[1400px] mx-auto">
           {!hasStarted && (
             <div className="px-6">
