@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { CampaignIdea } from '@/lib/types';
 import { CAMPAIGN_TYPES } from '@/lib/ideation/campaignTypes';
-import { streamIdeas, streamChat } from '@/lib/ideation/streamHelpers';
+import { streamIdeas } from '@/lib/ideation/streamHelpers';
 
 export type IdeationNode =
   | { id: string; type: 'brief'; content: string; campaignType?: string; campaignSubtype?: string; timestamp: number }
@@ -45,6 +45,8 @@ export function useIdeation(brandId: string) {
 
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const abortRef = useRef<AbortController | null>(null);
+  const streamBufferRef = useRef<Map<string, Record<string, string>>>(new Map());
+  const rafRef = useRef<number | null>(null);
 
   // Load existing session on mount
   useEffect(() => {
@@ -60,10 +62,12 @@ export function useIdeation(brandId: string) {
       .then(({ data }) => {
         if (data && data.length > 0) {
           const session = data[0];
-          const loadedNodes = (session.nodes as any[] || []).map((n: any) => ({
-            ...n,
-            isStreaming: false,
-          }));
+          const loadedNodes = (session.nodes as any[] || [])
+            .filter((n: any) => n.type !== 'ai_response')
+            .map((n: any) => ({
+              ...n,
+              isStreaming: false,
+            }));
           setState(s => ({ ...s, sessionId: session.id, nodes: loadedNodes as IdeationNode[] }));
         }
       });
@@ -86,6 +90,37 @@ export function useIdeation(brandId: string) {
         .then(() => {});
     }, 800);
   }, []);
+
+  // Batched streaming field updates — buffer tokens and flush at 60fps
+  const flushStreamBuffer = useCallback(() => {
+    rafRef.current = null;
+    const buffer = streamBufferRef.current;
+    if (buffer.size === 0) return;
+    const snapshot = new Map(buffer);
+    buffer.clear();
+    setState(s => {
+      const ideas = [...s.streamingIdeas];
+      for (const [key, fields] of snapshot) {
+        const idx = parseInt(key);
+        if (ideas[idx]) {
+          for (const [field, value] of Object.entries(fields)) {
+            (ideas[idx] as any)[field] = ((ideas[idx] as any)[field] || '') + value;
+          }
+        }
+      }
+      return { ...s, streamingIdeas: ideas };
+    });
+  }, []);
+
+  const bufferIdeaField = useCallback((index: number, field: string, token: string) => {
+    const key = String(index);
+    const existing = streamBufferRef.current.get(key) || {};
+    existing[field] = (existing[field] || '') + token;
+    streamBufferRef.current.set(key, existing);
+    if (!rafRef.current) {
+      rafRef.current = requestAnimationFrame(flushStreamBuffer);
+    }
+  }, [flushStreamBuffer]);
 
   const ensureSession = useCallback(async (): Promise<string> => {
     if (state.sessionId) return state.sessionId;
@@ -113,7 +148,7 @@ export function useIdeation(brandId: string) {
 
     const briefNodeId = crypto.randomUUID();
     const genNodeId = crypto.randomUUID();
-    const chatNodeId = crypto.randomUUID();
+    
     const briefContent = subtypeName
       ? `${typeName} → ${subtypeName}${userBrief ? `: ${userBrief}` : ''}`
       : `${typeName}${userBrief ? `: ${userBrief}` : ''}`;
@@ -121,7 +156,6 @@ export function useIdeation(brandId: string) {
     const newNodes: IdeationNode[] = [
       { id: briefNodeId, type: 'brief', content: briefContent, campaignType: typeName, campaignSubtype: subtypeName, timestamp: Date.now() },
       { id: genNodeId, type: 'generation', ideas: [], isStreaming: true, wasTurbo: state.turboMode, timestamp: Date.now() },
-      { id: chatNodeId, type: 'ai_response', content: '', isStreaming: true, timestamp: Date.now() },
     ];
 
     setState(s => ({
@@ -129,7 +163,7 @@ export function useIdeation(brandId: string) {
       activeType: typeName,
       activeSubtype: subtypeName || null,
       isGenerating: true,
-      isChatting: true,
+      isChatting: false,
       streamingIdeas: [],
       streamingNodeId: genNodeId,
       researchStatus: campaignType?.needsResearch ? 'Researching...' : null,
@@ -139,7 +173,7 @@ export function useIdeation(brandId: string) {
     const controller = new AbortController();
     abortRef.current = controller;
 
-    // Fire parallel streams
+    // Fire ideas stream only (no chat commentary)
     const ideasPromise = streamIdeas(
       {
         brand_id: brandId,
@@ -159,13 +193,7 @@ export function useIdeation(brandId: string) {
           }));
         },
         onIdeaField: (index, field, token) => {
-          setState(s => {
-            const ideas = [...s.streamingIdeas];
-            if (ideas[index]) {
-              (ideas[index] as any)[field] = ((ideas[index] as any)[field] || '') + token;
-            }
-            return { ...s, streamingIdeas: ideas };
-          });
+          bufferIdeaField(index, field, token);
         },
         onIdeaComplete: (index, idea) => {
           setState(s => {
@@ -201,52 +229,8 @@ export function useIdeation(brandId: string) {
       controller.signal,
     );
 
-    // Build history for chat
-    const historyForChat = state.nodes.slice(-10).map(n => ({
-      role: n.type === 'brief' || n.type === 'feedback' ? 'user' : 'assistant',
-      content: n.type === 'generation' ? `[Generated ${(n as any).ideas?.length || 0} ideas]` : (n as any).content || '',
-    }));
-
-    const chatPromise = streamChat(
-      {
-        brand_id: brandId,
-        message: userBrief || typeName,
-        history: historyForChat,
-      },
-      {
-        onToken: (token) => {
-          setState(s => {
-            const updatedNodes = s.nodes.map(n => {
-              if (n.id === chatNodeId && n.type === 'ai_response') {
-                return { ...n, content: n.content + token };
-              }
-              return n;
-            });
-            return { ...s, nodes: updatedNodes };
-          });
-        },
-        onDone: () => {
-          setState(s => {
-            const updatedNodes = s.nodes.map(n => {
-              if (n.id === chatNodeId && n.type === 'ai_response') {
-                return { ...n, isStreaming: false };
-              }
-              return n;
-            });
-            saveNodes(sessionId, updatedNodes);
-            return { ...s, isChatting: false, nodes: updatedNodes };
-          });
-        },
-        onError: (err) => {
-          console.error('[useIdeation] Chat error:', err);
-          setState(s => ({ ...s, isChatting: false }));
-        },
-      },
-      controller.signal,
-    );
-
-    await Promise.allSettled([ideasPromise, chatPromise]);
-  }, [ensureSession, brandId, state.chaosMode, state.turboMode, state.nodes, saveNodes]);
+    await ideasPromise;
+  }, [ensureSession, brandId, state.chaosMode, state.turboMode, state.nodes, saveNodes, bufferIdeaField]);
 
   const sendChat = useCallback(async (message: string) => {
     const sessionId = await ensureSession();
@@ -259,7 +243,6 @@ export function useIdeation(brandId: string) {
     else if (/\bdifferent\b/i.test(message)) mode = 'different';
 
     const genNodeId = crypto.randomUUID();
-    const chatNodeId = crypto.randomUUID();
 
     const newNodes: IdeationNode[] = [];
     if (hasSelections) {
@@ -279,12 +262,11 @@ export function useIdeation(brandId: string) {
       });
     }
     newNodes.push({ id: genNodeId, type: 'generation', ideas: [], isStreaming: true, wasTurbo: state.turboMode, timestamp: Date.now() });
-    newNodes.push({ id: chatNodeId, type: 'ai_response', content: '', isStreaming: true, timestamp: Date.now() });
 
     setState(s => ({
       ...s,
       isGenerating: true,
-      isChatting: true,
+      isChatting: false,
       streamingIdeas: [],
       streamingNodeId: genNodeId,
       nodes: [...s.nodes, ...newNodes],
@@ -319,13 +301,7 @@ export function useIdeation(brandId: string) {
           }));
         },
         onIdeaField: (index, field, token) => {
-          setState(s => {
-            const ideas = [...s.streamingIdeas];
-            if (ideas[index]) {
-              (ideas[index] as any)[field] = ((ideas[index] as any)[field] || '') + token;
-            }
-            return { ...s, streamingIdeas: ideas };
-          });
+          bufferIdeaField(index, field, token);
         },
         onIdeaComplete: (_index, idea) => {
           setState(s => ({
@@ -355,43 +331,8 @@ export function useIdeation(brandId: string) {
       controller.signal,
     );
 
-    const historyForChat = state.nodes.slice(-10).map(n => ({
-      role: n.type === 'brief' || n.type === 'feedback' ? 'user' : 'assistant',
-      content: n.type === 'generation' ? `[Generated ideas]` : (n as any).content || '',
-    }));
-
-    const chatPromise = streamChat(
-      { brand_id: brandId, message, history: historyForChat },
-      {
-        onToken: (token) => {
-          setState(s => ({
-            ...s,
-            nodes: s.nodes.map(n =>
-              n.id === chatNodeId && n.type === 'ai_response'
-                ? { ...n, content: n.content + token }
-                : n,
-            ),
-          }));
-        },
-        onDone: () => {
-          setState(s => {
-            const updatedNodes = s.nodes.map(n =>
-              n.id === chatNodeId && n.type === 'ai_response' ? { ...n, isStreaming: false } : n,
-            );
-            saveNodes(sessionId, updatedNodes);
-            return { ...s, isChatting: false, nodes: updatedNodes };
-          });
-        },
-        onError: (err) => {
-          console.error('[useIdeation] Chat error:', err);
-          setState(s => ({ ...s, isChatting: false }));
-        },
-      },
-      controller.signal,
-    );
-
-    await Promise.allSettled([ideasPromise, chatPromise]);
-  }, [ensureSession, brandId, state.selectedIdeas, state.activeType, state.activeSubtype, state.chaosMode, state.turboMode, state.nodes, saveNodes]);
+    await ideasPromise;
+  }, [ensureSession, brandId, state.selectedIdeas, state.activeType, state.activeSubtype, state.chaosMode, state.turboMode, state.nodes, saveNodes, bufferIdeaField]);
 
   const toggleSelect = useCallback((idea: CampaignIdea) => {
     setState(s => {
