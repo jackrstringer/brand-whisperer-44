@@ -60,7 +60,8 @@ export function ChatBar({
   const handleSend = () => {
     if (isBusy) return;
     const msg = input.trim();
-    if (!msg && selectedCount === 0) return;
+    // Allow empty sends — hook will re-generate with same preferences
+    if (!msg && selectedCount === 0 && !activeType) return;
     onSend(msg);
     setInput('');
   };
@@ -176,7 +177,7 @@ export function ChatBar({
               <>
                 <button
                   onClick={handleSend}
-                  disabled={!input.trim() && selectedCount === 0}
+                  disabled={!input.trim() && selectedCount === 0 && !activeType}
                   className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium transition-all border bg-muted border-border text-foreground hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
