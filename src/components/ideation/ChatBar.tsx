@@ -52,15 +52,14 @@ export function ChatBar({
 
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = '28px';
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px';
+      textareaRef.current.style.height = '32px';
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 140) + 'px';
     }
   }, [input]);
 
   const handleSend = () => {
     if (isBusy) return;
     const msg = input.trim();
-    // Allow empty sends — hook will re-generate with same preferences
     if (!msg && selectedCount === 0 && !activeType) return;
     onSend(msg);
     setInput('');
@@ -77,22 +76,22 @@ export function ChatBar({
     <div className="w-full">
       {/* Selection indicator */}
       {selectedCount > 0 && (
-        <div className="flex items-center gap-2 mb-2 justify-center">
-          <span className="text-xs font-medium text-foreground bg-muted px-2.5 py-1 rounded-full">
+        <div className="flex items-center gap-2.5 mb-2.5 justify-center">
+          <span className="text-sm font-medium text-foreground bg-muted px-3 py-1 rounded-full">
             {selectedCount} idea{selectedCount > 1 ? 's' : ''} selected
           </span>
           <button
             onClick={onClearSelection}
-            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"
+            className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors duration-150"
           >
-            <X className="w-3 h-3" /> Clear
+            <X className="w-3.5 h-3.5" /> Clear
           </button>
         </div>
       )}
 
       <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
         {/* Top row — textarea */}
-        <div className="px-4 pt-3 pb-2">
+        <div className="px-4 pt-3.5 pb-2.5">
           <textarea
             ref={textareaRef}
             value={input}
@@ -101,34 +100,34 @@ export function ChatBar({
             placeholder={placeholder}
             disabled={isBusy}
             rows={1}
-            className="w-full bg-transparent text-[15px] text-foreground placeholder:text-muted-foreground border-0 focus:outline-none disabled:opacity-50 resize-none overflow-hidden leading-[1.6]"
-            style={{ minHeight: '28px', maxHeight: '120px' }}
+            className="w-full bg-transparent text-[15px] text-foreground placeholder:text-muted-foreground/60 border-0 focus:outline-none disabled:opacity-50 resize-none overflow-hidden leading-[1.6]"
+            style={{ minHeight: '32px', maxHeight: '140px' }}
           />
         </div>
 
         {/* Bottom row — controls */}
-        <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-border flex-wrap gap-1.5">
-          <div className="flex items-center gap-1 flex-wrap">
+        <div className="flex items-center justify-between px-3.5 pb-3 pt-1.5 border-t border-border flex-wrap gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
             {/* Menu toggle */}
             <button
               onClick={onToggleMenu}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
                 menuOpen
                   ? 'bg-primary/10 border-primary/30 text-foreground'
-                  : 'text-muted-foreground hover:text-foreground border-transparent'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/60 border-transparent'
               }`}
             >
-              <LayoutGrid className="w-3.5 h-3.5" />
+              <LayoutGrid className="w-4 h-4" />
               Menu
             </button>
 
             {/* Turbo toggle */}
-            <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
               turboMode
-                ? 'bg-cyan-50 border-cyan-200 text-cyan-700'
-                : 'text-muted-foreground border-transparent'
+                ? 'bg-cyan-50 border-cyan-200 text-cyan-700 dark:bg-cyan-950 dark:border-cyan-800 dark:text-cyan-300'
+                : 'text-muted-foreground border-transparent hover:bg-muted/60'
             }`}>
-              <Rocket className="w-3.5 h-3.5" />
+              <Rocket className="w-4 h-4" />
               <span className="hidden sm:inline">Turbo</span>
               <Switch
                 checked={turboMode}
@@ -138,12 +137,12 @@ export function ChatBar({
             </div>
 
             {/* Chaos toggle */}
-            <div className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
               chaosMode
-                ? 'bg-amber-50 border-amber-200 text-amber-700'
-                : 'text-muted-foreground border-transparent'
+                ? 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-300'
+                : 'text-muted-foreground border-transparent hover:bg-muted/60'
             }`}>
-              <Zap className="w-3.5 h-3.5" />
+              <Zap className="w-4 h-4" />
               <span className="hidden sm:inline">Chaos</span>
               <Switch
                 checked={chaosMode}
@@ -156,21 +155,21 @@ export function ChatBar({
             {onClearChat && (
               <button
                 onClick={onClearChat}
-                className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all duration-150"
                 title="Clear chat"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
+                <RotateCcw className="w-4 h-4" />
               </button>
             )}
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             {isBusy ? (
               <button
                 onClick={onStop}
-                className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-red-50 border border-red-200 text-red-600 text-xs font-medium hover:bg-red-100 transition-colors"
+                className="flex items-center gap-1.5 h-9 px-4 rounded-lg bg-red-50 border border-red-200 text-red-600 text-sm font-medium hover:bg-red-100 dark:bg-red-950 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900 transition-all duration-150"
               >
-                <Square className="w-3.5 h-3.5" />
+                <Square className="w-4 h-4" />
                 Stop
               </button>
             ) : (
@@ -178,12 +177,12 @@ export function ChatBar({
                 <button
                   onClick={handleSend}
                   disabled={!input.trim() && selectedCount === 0 && !activeType}
-                  className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium transition-all border bg-muted border-border text-foreground hover:bg-accent disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="flex items-center gap-1.5 h-9 px-4 rounded-lg text-sm font-medium transition-all duration-150 border bg-muted border-border text-foreground hover:bg-accent hover:scale-[1.02] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100"
                 >
-                  <Sparkles className="w-3.5 h-3.5" />
+                  <Sparkles className="w-4 h-4" />
                   Ideate
                   {selectedCount > 0 && (
-                    <span className="rounded-full bg-primary/20 px-1.5 text-[10px] font-medium">
+                    <span className="rounded-full bg-primary/20 px-1.5 text-xs font-medium">
                       {selectedCount}
                     </span>
                   )}
@@ -192,13 +191,13 @@ export function ChatBar({
                 <button
                   onClick={() => selectedCount > 0 && onAddToQueue?.()}
                   disabled={selectedCount === 0}
-                  className={`flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium transition-all ${
+                  className={`flex items-center gap-1.5 h-9 px-4 rounded-lg text-sm font-medium transition-all duration-150 ${
                     selectedCount > 0
-                      ? 'bg-primary text-primary-foreground hover:opacity-90'
+                      ? 'bg-primary text-primary-foreground hover:opacity-90 hover:scale-[1.02]'
                       : 'bg-muted text-muted-foreground cursor-not-allowed'
                   }`}
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-4 h-4" />
                   Add to Queue
                 </button>
               </>

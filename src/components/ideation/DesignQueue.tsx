@@ -28,9 +28,9 @@ export function DesignQueue({ items, onRemove, onItemClick, bulkEligibleCount, o
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-foreground">Design Queue</h3>
+      <div className="px-4 py-3.5 border-b border-border flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <h3 className="text-[15px] font-semibold text-foreground">Design Queue</h3>
           {items.length > 0 && (
             <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
               {items.length}
@@ -38,8 +38,8 @@ export function DesignQueue({ items, onRemove, onItemClick, bulkEligibleCount, o
           )}
         </div>
         {onBulkGenerate && (bulkEligibleCount ?? 0) > 0 && !bulkProgress && (
-          <Button size="sm" variant="outline" onClick={onBulkGenerate} className="h-7 text-xs gap-1">
-            <Zap className="w-3 h-3" />
+          <Button size="sm" variant="outline" onClick={onBulkGenerate} className="h-8 text-xs gap-1.5 hover:scale-[1.02] transition-all duration-150">
+            <Zap className="w-3.5 h-3.5" />
             Bulk Generate ({bulkEligibleCount})
           </Button>
         )}
@@ -47,10 +47,10 @@ export function DesignQueue({ items, onRemove, onItemClick, bulkEligibleCount, o
 
       {/* Bulk progress */}
       {bulkProgress && (
-        <div className="px-4 py-2 border-b border-border">
-          <div className="flex items-center gap-2 mb-1">
-            <Loader2 className="w-3 h-3 animate-spin text-primary" />
-            <span className="text-xs text-muted-foreground">
+        <div className="px-4 py-2.5 border-b border-border">
+          <div className="flex items-center gap-2 mb-1.5">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+            <span className="text-sm text-muted-foreground">
               Generating {bulkProgress.completed}/{bulkProgress.total}...
             </span>
           </div>
@@ -60,13 +60,13 @@ export function DesignQueue({ items, onRemove, onItemClick, bulkEligibleCount, o
 
       <div
         ref={setNodeRef}
-        className={`flex-1 overflow-y-auto p-2 transition-colors ${
+        className={`flex-1 overflow-y-auto p-2.5 transition-colors ${
           isOver ? 'bg-foreground/[0.03]' : ''
         }`}
       >
         {items.length === 0 ? (
           <div className="flex items-center justify-center h-full text-center px-6">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Drag ideas here or click "Add to Queue" on any idea card
             </p>
           </div>
@@ -112,36 +112,36 @@ function SortableQueueItem({
       ref={setNodeRef}
       style={style}
       onClick={onClick}
-      className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-border mb-1.5 bg-card hover:border-foreground/20 cursor-pointer transition-colors group"
+      className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-border mb-2 bg-card hover:border-foreground/20 hover:shadow-sm cursor-pointer transition-all duration-150 group"
     >
-      <div {...attributes} {...listeners} className="cursor-grab text-muted-foreground hover:text-foreground">
-        <GripVertical className="w-3.5 h-3.5" />
+      <div {...attributes} {...listeners} className="cursor-grab text-muted-foreground/40 hover:text-muted-foreground transition-colors">
+        <GripVertical className="w-4 h-4" />
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-foreground truncate">{item.title}</p>
-        <div className="flex items-center gap-1.5 mt-0.5">
+        <p className="text-sm font-medium text-foreground truncate">{item.title}</p>
+        <div className="flex items-center gap-2 mt-0.5">
           {item.campaign_type && (
-            <span className="text-[10px] text-muted-foreground">{item.campaign_type}</span>
+            <span className="text-xs text-muted-foreground">{item.campaign_type}</span>
           )}
           {item.send_date && (
-            <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-              <Calendar className="w-2.5 h-2.5" />
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <Calendar className="w-3 h-3" />
               {new Date(item.send_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
             </span>
           )}
         </div>
       </div>
 
-      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${STATUS_STYLES[item.status] || STATUS_STYLES.queued}`}>
+      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[item.status] || STATUS_STYLES.queued}`}>
         {item.status}
       </span>
 
       <button
         onClick={e => { e.stopPropagation(); onRemove(); }}
-        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-opacity"
+        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground transition-all duration-150 hover:scale-110 p-0.5"
       >
-        <X className="w-3 h-3" />
+        <X className="w-3.5 h-3.5" />
       </button>
     </div>
   );
