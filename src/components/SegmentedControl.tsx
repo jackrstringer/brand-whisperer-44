@@ -11,6 +11,7 @@ interface SegmentedControlProps {
 
 export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"], value, onChange }: SegmentedControlProps) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [coveredIndices, setCoveredIndices] = useState<Set<number>>(new Set());
   const selected = value !== undefined ? options.indexOf(value) : activeIndex;
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -21,6 +22,7 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
   const committedIndex = useRef(0);
   const hoveredIndex = useRef(-1);
   const metaRef = useRef<{ left: number; width: number; right: number; center: number }[]>([]);
+  const rafRef = useRef<number | null>(null);
 
   function calcMeta() {
     const seg = containerRef.current;
@@ -75,6 +77,24 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
     return () => window.removeEventListener("resize", onResize);
   }, [selected]);
 
+  function updateCoveredButtons() {
+    const pill = pillRef.current;
+    const seg = containerRef.current;
+    if (!pill || !seg) return;
+    const pillLeft = parseFloat(pill.style.left || '0');
+    const pillRight = parseFloat(pill.style.right || '0');
+    const pillLeftEdge = pillLeft;
+    const pillRightEdge = seg.offsetWidth - pillRight;
+    const covered = new Set<number>();
+    metaRef.current.forEach((m, i) => {
+      const btnCenter = m.center;
+      if (btnCenter >= pillLeftEdge && btnCenter <= pillRightEdge) {
+        covered.add(i);
+      }
+    });
+    setCoveredIndices(covered);
+  }
+
   function snapTo(idx: number, blobby: boolean) {
     calcMeta();
     const old = selected;
@@ -84,13 +104,14 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
         metaRef.current[idx].left,
         metaRef.current[idx].right,
         right
-          ? "left 180ms cubic-bezier(0.4,0,0.2,1.4), right 100ms cubic-bezier(0.4,0,0.2,1)"
-          : "right 180ms cubic-bezier(0.4,0,0.2,1.4), left 100ms cubic-bezier(0.4,0,0.2,1)"
+          ? "left 280ms cubic-bezier(0.4,0,0.2,1.4), right 160ms cubic-bezier(0.4,0,0.2,1)"
+          : "right 280ms cubic-bezier(0.4,0,0.2,1.4), left 160ms cubic-bezier(0.4,0,0.2,1)"
       );
     } else {
-      restPill(idx, "left 150ms cubic-bezier(0.4,0,0.2,1), right 150ms cubic-bezier(0.4,0,0.2,1)");
+      restPill(idx, "left 220ms cubic-bezier(0.4,0,0.2,1), right 220ms cubic-bezier(0.4,0,0.2,1)");
     }
     hoveredIndex.current = -1;
+    setCoveredIndices(new Set([idx]));
     select(idx);
   }
 
@@ -156,7 +177,7 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
         }
       }
       pill.style.right = Math.max(0, leadR) + "px";
-      if (e.clientX === startX.current) return;
+      if (e.clientX === startX.current) { updateCoveredButtons(); return; }
       pill.style.left = meta[committedIndex.current].left + "px";
     } else {
       let leadL = Math.max(0, anchor.left + dx);
@@ -172,9 +193,10 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
         }
       }
       pill.style.left = Math.max(0, leadL) + "px";
-      if (e.clientX === startX.current) return;
+      if (e.clientX === startX.current) { updateCoveredButtons(); return; }
       pill.style.right = meta[committedIndex.current].right + "px";
     }
+    updateCoveredButtons();
   }
 
   function onPointerUp(e: React.PointerEvent) {
@@ -216,7 +238,7 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
           key={label}
           ref={(el) => { btnRefs.current[i] = el; }}
           data-seg-btn={i}
-          className={`seg-btn ${i === selected ? 'seg-btn-active' : ''}`}
+          className={`seg-btn ${coveredIndices.has(i) ? 'seg-btn-active' : ''}`}
         >
           {label}
         </button>
