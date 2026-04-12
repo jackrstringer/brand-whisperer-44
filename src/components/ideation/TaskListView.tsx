@@ -85,7 +85,7 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
   const selectedCount = selectedIds.size;
 
   const [colConfig, setColConfig] = useState(loadColumnConfig);
-  const resizingRef = useRef<{ col: string; startX: number; startWidthLeft: number; colRight: string; startWidthRight: number } | null>(null);
+  const resizingRef = useRef<{ col: string; startX: number; startWidth: number } | null>(null);
   const [editingCell, setEditingCell] = useState<EditingCell | null>(null);
 
   useEffect(() => { saveColumnConfig(colConfig); }, [colConfig]);
