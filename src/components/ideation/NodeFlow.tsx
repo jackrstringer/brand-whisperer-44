@@ -83,6 +83,10 @@ export function NodeFlow({
           }
           case 'feedback':
             return <FeedbackNode key={node.id} content={node.content} selectedIdeas={node.selectedIdeas} />;
+          case 'menu':
+            return onMenuSelect ? (
+              <MenuNode key={node.id} onSelectType={onMenuSelect} activeType={activeType || null} />
+            ) : null;
           default:
             return null;
         }
