@@ -290,8 +290,11 @@
   font-family: inherit;
 }
 
-.seg-btn-active {
+.seg-btn-covered {
   color: var(--background);
+}
+
+.seg-btn-active {
   cursor: grab;
 }
 
