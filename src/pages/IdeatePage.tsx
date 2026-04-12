@@ -281,17 +281,7 @@ export default function IdeatePage() {
         </div>
       </div>
 
-      {menuOpen && (
-        <div className="absolute bottom-28 left-0 right-0 z-[60] flex justify-center px-4">
-          <div className="w-full max-w-3xl bg-card border border-border rounded-xl shadow-lg p-4">
-            <CampaignTypePicker
-              onSelectType={handleTypeFromMenu}
-              activeType={ideation.activeType}
-              isCompact={false}
-            />
-          </div>
-        </div>
-      )}
+
     </div>
   );
 
