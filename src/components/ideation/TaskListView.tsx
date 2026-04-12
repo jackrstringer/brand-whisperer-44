@@ -5,7 +5,7 @@ import { DesignQueueItem } from '@/hooks/useDesignQueue';
 import { X, Loader2, Settings2, Pencil } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useMultiSelect } from '@/hooks/useMultiSelect';
-import { useCallback, useRef, useState, useEffect } from 'react';
+import { useCallback, useRef, useState, useEffect, useMemo } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
