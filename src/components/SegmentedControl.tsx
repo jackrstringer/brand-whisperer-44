@@ -100,12 +100,15 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
     const old = selected;
     if (blobby && idx !== old) {
       const right = idx > old;
+      const distance = Math.abs(idx - old);
+      const trailMs = 320 + distance * 60;
+      const leadMs = 200 + distance * 40;
       setPill(
         metaRef.current[idx].left,
         metaRef.current[idx].right,
         right
-          ? "left 280ms cubic-bezier(0.4,0,0.2,1.4), right 160ms cubic-bezier(0.4,0,0.2,1)"
-          : "right 280ms cubic-bezier(0.4,0,0.2,1.4), left 160ms cubic-bezier(0.4,0,0.2,1)"
+          ? `left ${trailMs}ms cubic-bezier(0.4,0,0.2,1.4), right ${leadMs}ms cubic-bezier(0.4,0,0.2,1)`
+          : `right ${trailMs}ms cubic-bezier(0.4,0,0.2,1.4), left ${leadMs}ms cubic-bezier(0.4,0,0.2,1)`
       );
     } else {
       restPill(idx, "left 220ms cubic-bezier(0.4,0,0.2,1), right 220ms cubic-bezier(0.4,0,0.2,1)");
