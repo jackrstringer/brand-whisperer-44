@@ -232,7 +232,7 @@ export default function IdeatePage() {
           {!hasStarted && (
             <div className="px-6">
               <div className="text-center mt-16 mb-8">
-                <p className="text-sm text-muted-foreground">Pick a campaign type to get started</p>
+                <p className="text-base text-muted-foreground">Pick a campaign type to get started</p>
               </div>
               <CampaignTypePicker
                 onSelectType={(type, sub) => ideation.generateForType(type, sub)}
@@ -318,7 +318,7 @@ export default function IdeatePage() {
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="h-screen flex flex-col bg-background text-foreground">
         {/* Single unified top bar */}
-        <div className="h-10 flex items-center justify-between px-3 border-b border-border flex-shrink-0">
+        <div className="h-12 flex items-center justify-between px-4 border-b border-border flex-shrink-0">
           {/* Left: spacer for balance */}
           <div className="flex-1" />
 
@@ -338,7 +338,7 @@ export default function IdeatePage() {
                 key={mode}
                 ref={(el) => { buttonRefs.current[idx] = el; }}
                 onClick={() => setPageMode(mode)}
-                className={`relative z-10 px-6 py-1.5 text-sm font-medium rounded-full transition-colors duration-150 ${
+                className={`relative z-10 px-7 py-2 text-sm font-medium rounded-full transition-all duration-150 ${
                   pageMode === mode
                     ? 'text-background'
                     : 'text-muted-foreground hover:text-foreground'
@@ -355,12 +355,12 @@ export default function IdeatePage() {
               <>
                 <button
                   onClick={() => setTaskView('list')}
-                  className={`p-1.5 rounded transition-colors ${
+                  className={`p-2 rounded-lg transition-all duration-150 ${
                     taskView === 'list' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                   }`}
                   title="List view"
                 >
-                  <List className="w-3.5 h-3.5" />
+                  <List className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleStarView(taskView)}
@@ -373,24 +373,24 @@ export default function IdeatePage() {
                 </button>
                 <button
                   onClick={() => setTaskView('calendar')}
-                  className={`p-1.5 rounded transition-colors ${
+                  className={`p-2 rounded-lg transition-all duration-150 ${
                     taskView === 'calendar' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                   }`}
                   title="Calendar view"
                 >
-                  <CalendarDays className="w-3.5 h-3.5" />
+                  <CalendarDays className="w-4 h-4" />
                 </button>
 
                 {taskView === 'calendar' && (
-                  <div className="flex items-center gap-0.5 ml-1">
-                    <button onClick={goToPrev} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                      <ChevronLeft className="w-3.5 h-3.5" />
+                  <div className="flex items-center gap-1 ml-2">
+                    <button onClick={goToPrev} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-all duration-150">
+                      <ChevronLeft className="w-4 h-4" />
                     </button>
-                    <span className="text-[10px] font-semibold text-foreground min-w-[90px] text-center">{monthLabel}</span>
-                    <button onClick={goToNext} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
-                      <ChevronRight className="w-3.5 h-3.5" />
+                    <span className="text-xs font-semibold text-foreground min-w-[100px] text-center">{monthLabel}</span>
+                    <button onClick={goToNext} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-all duration-150">
+                      <ChevronRight className="w-4 h-4" />
                     </button>
-                    <button onClick={goToToday} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5 rounded hover:bg-muted">
+                    <button onClick={goToToday} className="text-xs text-muted-foreground hover:text-foreground transition-all duration-150 px-2 py-1 rounded-lg hover:bg-muted">
                       Today
                     </button>
                   </div>
