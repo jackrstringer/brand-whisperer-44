@@ -7,7 +7,7 @@ import { CampaignTypePicker } from '@/components/ideation/CampaignTypePicker';
 import { NodeFlow } from '@/components/ideation/NodeFlow';
 import { ChatBar } from '@/components/ideation/ChatBar';
 import { TaskWindow } from '@/components/ideation/TaskWindow';
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import { SplitPane } from '@/components/ideation/SplitPane';
 import { CampaignIdea } from '@/lib/types';
 import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { Zap, List, CalendarDays, Star, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -403,14 +403,7 @@ export default function IdeatePage() {
         {/* Main content */}
         <div className="flex-1 min-h-0">
           {pageMode === 'split' ? (
-            <div className="flex h-full">
-              <div className="w-[50vw] min-w-[400px] flex-shrink-0 border-r border-border">
-                {ideationPanel}
-              </div>
-              <div className="flex-1 min-w-[300px]">
-                {taskPanel}
-              </div>
-            </div>
+            <SplitPane left={ideationPanel} right={taskPanel} />
           ) : pageMode === 'ideate' ? (
             <div className="h-full">{ideationPanel}</div>
           ) : (
