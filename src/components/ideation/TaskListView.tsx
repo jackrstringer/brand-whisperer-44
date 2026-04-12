@@ -200,12 +200,12 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
       {/* Horizontally scrollable table wrapper */}
       <div className="flex-1 overflow-auto" style={{ scrollbarWidth: 'none' }}>
         {/* Header */}
-        <div className="flex items-center px-3 py-1.5 border-b border-border text-[10px] font-medium text-muted-foreground uppercase tracking-wider flex-shrink-0 select-none sticky top-0 bg-card z-10 min-w-max">
-          <div className="w-7 flex-shrink-0 flex items-center justify-center">
+        <div className="flex items-center px-3 py-1.5 border-b border-border text-[10px] font-medium text-muted-foreground uppercase tracking-wider flex-shrink-0 select-none sticky top-0 bg-card z-10 min-w-max group/header">
+          <div className="w-10 flex-shrink-0 flex items-center justify-center">
             <Checkbox
               checked={allSelected}
               onCheckedChange={() => allSelected ? clearSelection() : selectAll()}
-              className="w-3.5 h-3.5"
+              className={`w-3.5 h-3.5 transition-opacity ${selectedCount > 0 ? 'opacity-100' : 'opacity-0 group-hover/header:opacity-100'}`}
             />
           </div>
           {visibleCols.map((key, idx) => {
