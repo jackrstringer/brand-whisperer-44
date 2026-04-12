@@ -473,9 +473,7 @@ export function TaskDetail({ item, brandId, onBack, onRemove, onStatusChange }: 
 
         {/* Title — large, bold, inline-editable */}
         <div className="px-6 pt-4 pb-2 border-b border-border shrink-0">
-          <div className="group/title">
-            <InlineText value={title} onChange={setTitle} placeholder="Untitled" />
-          </div>
+            <InlineText value={title} onChange={setTitle} placeholder="Untitled" large />
           <div className="flex items-center gap-2 mt-2 pb-1">
             <Badge className={`text-[10px] ${STATUS_STYLES[item.status] || STATUS_STYLES.draft}`}>
               {item.status}
