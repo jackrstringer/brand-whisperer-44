@@ -92,6 +92,16 @@ export default function IdeatePage() {
     localStorage.setItem('ideation-page-mode', pageMode);
   }, [pageMode]);
 
+  // Auto-scroll ideation panel to bottom when switching to it or when nodes change
+  useEffect(() => {
+    const el = ideationScrollRef.current;
+    if (el && (pageMode === 'ideate' || pageMode === 'split')) {
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+      });
+    }
+  }, [pageMode, ideation.nodes.length]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
