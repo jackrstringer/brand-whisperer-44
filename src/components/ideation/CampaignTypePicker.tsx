@@ -152,7 +152,7 @@ function TypeCard({
       className={cn(
         "text-left px-3 py-2.5 rounded-xl border transition-all opacity-0 animate-[fade-in-up_0.4s_ease-out_forwards]",
         "bg-card border-border hover:border-foreground/20 hover:bg-muted/50",
-        isExpanded && 'col-span-2',
+        
         isActive
           ? 'border-primary/40 bg-primary/[0.06] ring-1 ring-primary/20'
           : isExpanded
