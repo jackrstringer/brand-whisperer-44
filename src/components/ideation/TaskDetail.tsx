@@ -83,14 +83,18 @@ function InlineText({
   onChange,
   placeholder,
   multiline = false,
+  large = false,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
   multiline?: boolean;
+  large?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const ref = useRef<HTMLTextAreaElement | HTMLInputElement>(null);
+
+  const textSize = large ? 'text-lg font-semibold' : 'text-[13px]';
 
   useEffect(() => {
     if (editing && ref.current) {
@@ -103,8 +107,8 @@ function InlineText({
   }, [editing]);
 
   if (editing) {
-    const sharedClass = "w-full bg-transparent text-[13px] text-foreground outline-none border border-border rounded-md px-2 py-1 focus:border-primary/50 transition-colors";
-    if (multiline) {
+    const sharedClass = `w-full bg-transparent ${textSize} text-foreground outline-none border border-border rounded-md px-2 py-1 focus:border-primary/50 transition-colors`;
+    if (multiline || large) {
       return (
         <textarea
           ref={ref as React.RefObject<HTMLTextAreaElement>}
@@ -117,7 +121,8 @@ function InlineText({
           onBlur={() => setEditing(false)}
           onKeyDown={(e) => {
             if (e.key === 'Escape') setEditing(false);
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) setEditing(false);
+            if (!large && e.key === 'Enter' && (e.metaKey || e.ctrlKey)) setEditing(false);
+            if (large && e.key === 'Enter' && !e.shiftKey) setEditing(false);
           }}
           placeholder={placeholder}
           className={`${sharedClass} resize-none min-h-[28px]`}
@@ -146,9 +151,9 @@ function InlineText({
       className="w-full text-left rounded-md px-2 py-0.5 -mx-2 hover:bg-muted/60 transition-colors cursor-text group/field"
     >
       {value ? (
-        <span className="text-[13px] text-foreground whitespace-pre-wrap break-words">{value}</span>
+        <span className={`${textSize} text-foreground whitespace-pre-wrap break-words`}>{value}</span>
       ) : (
-        <span className="text-[13px] text-muted-foreground/50 group-hover/field:text-muted-foreground transition-colors">{placeholder}</span>
+        <span className={`${textSize} text-muted-foreground/50 group-hover/field:text-muted-foreground transition-colors`}>{placeholder}</span>
       )}
     </button>
   );
