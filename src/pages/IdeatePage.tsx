@@ -173,21 +173,21 @@ export default function IdeatePage() {
     <div className="flex flex-col h-full relative">
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden pb-36">
-        {!hasStarted && (
-          <div className="max-w-2xl mx-auto px-6">
-            <div className="text-center mt-16 mb-8">
-              <p className="text-sm text-muted-foreground">Pick a campaign type to get started</p>
+        <div className="max-w-3xl mx-auto">
+          {!hasStarted && (
+            <div className="px-6">
+              <div className="text-center mt-16 mb-8">
+                <p className="text-sm text-muted-foreground">Pick a campaign type to get started</p>
+              </div>
+              <CampaignTypePicker
+                onSelectType={(type, sub) => ideation.generateForType(type, sub)}
+                activeType={ideation.activeType}
+                isCompact={false}
+              />
             </div>
-            <CampaignTypePicker
-              onSelectType={(type, sub) => ideation.generateForType(type, sub)}
-              activeType={ideation.activeType}
-              isCompact={false}
-            />
-          </div>
-        )}
+          )}
 
-        {hasStarted && (
-          <>
+          {hasStarted && (
             <NodeFlow
               nodes={ideation.nodes}
               streamingIdeas={ideation.streamingIdeas}
@@ -200,35 +200,37 @@ export default function IdeatePage() {
               onBuildNow={handleBuildNow}
               researchStatus={ideation.researchStatus}
             />
-          </>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Floating ChatBar */}
-      <div className="absolute bottom-4 left-4 right-4 z-50">
-        <ChatBar
-          onSend={ideation.sendChat}
-          isGenerating={ideation.isGenerating}
-          isChatting={ideation.isChatting}
-          selectedCount={ideation.selectedIdeas.size}
-          onClearSelection={ideation.clearSelection}
-          chaosMode={ideation.chaosMode}
-          turboMode={ideation.turboMode}
-          onToggleChaos={ideation.toggleChaosMode}
-          onToggleTurbo={ideation.toggleTurboMode}
-          activeType={ideation.activeType}
-          onStop={() => ideation.abort()}
-          menuOpen={menuOpen}
-          onToggleMenu={() => setMenuOpen(!menuOpen)}
-          onClearChat={handleClearChat}
-          onAddToQueue={handleAddSelectedToQueue}
-        />
+      <div className="absolute bottom-4 left-0 right-0 z-50 flex justify-center px-4">
+        <div className="w-full max-w-3xl">
+          <ChatBar
+            onSend={ideation.sendChat}
+            isGenerating={ideation.isGenerating}
+            isChatting={ideation.isChatting}
+            selectedCount={ideation.selectedIdeas.size}
+            onClearSelection={ideation.clearSelection}
+            chaosMode={ideation.chaosMode}
+            turboMode={ideation.turboMode}
+            onToggleChaos={ideation.toggleChaosMode}
+            onToggleTurbo={ideation.toggleTurboMode}
+            activeType={ideation.activeType}
+            onStop={() => ideation.abort()}
+            menuOpen={menuOpen}
+            onToggleMenu={() => setMenuOpen(!menuOpen)}
+            onClearChat={handleClearChat}
+            onAddToQueue={handleAddSelectedToQueue}
+          />
+        </div>
       </div>
 
       {/* Menu overlay */}
       {menuOpen && (
-        <div className="absolute bottom-28 left-4 right-4 z-[60]">
-          <div className="bg-card border border-border rounded-xl shadow-lg p-4">
+        <div className="absolute bottom-28 left-0 right-0 z-[60] flex justify-center px-4">
+          <div className="w-full max-w-3xl bg-card border border-border rounded-xl shadow-lg p-4">
             <CampaignTypePicker
               onSelectType={handleTypeFromMenu}
               activeType={ideation.activeType}
