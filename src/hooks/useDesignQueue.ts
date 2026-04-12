@@ -84,7 +84,25 @@ export function useDesignQueue(brandId: string) {
       const { error } = await supabase.from('design_queue_items').update({ send_date: date }).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    onMutate: async ({ id, date }) => {
+      await queryClient.cancelQueries({ queryKey });
+      await queryClient.cancelQueries({ queryKey: ['calendar-queue', brandId] });
+      const prevQueue = queryClient.getQueryData<DesignQueueItem[]>(queryKey);
+      if (prevQueue) {
+        queryClient.setQueryData<DesignQueueItem[]>(queryKey, prev =>
+          prev?.map(i => i.id === id ? { ...i, send_date: date } : i) ?? []
+        );
+      }
+      // Also optimistically update calendar query
+      queryClient.setQueriesData<DesignQueueItem[]>({ queryKey: ['calendar-queue', brandId] }, prev =>
+        prev?.map(i => i.id === id ? { ...i, send_date: date } : i) ?? []
+      );
+      return { prevQueue };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prevQueue) queryClient.setQueryData(queryKey, ctx.prevQueue);
+    },
+    onSettled: invalidate,
   });
 
   const clearDate = useMutation({
@@ -92,7 +110,24 @@ export function useDesignQueue(brandId: string) {
       const { error } = await supabase.from('design_queue_items').update({ send_date: null }).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey });
+      await queryClient.cancelQueries({ queryKey: ['calendar-queue', brandId] });
+      const prevQueue = queryClient.getQueryData<DesignQueueItem[]>(queryKey);
+      if (prevQueue) {
+        queryClient.setQueryData<DesignQueueItem[]>(queryKey, prev =>
+          prev?.map(i => i.id === id ? { ...i, send_date: null } : i) ?? []
+        );
+      }
+      queryClient.setQueriesData<DesignQueueItem[]>({ queryKey: ['calendar-queue', brandId] }, prev =>
+        prev?.map(i => i.id === id ? { ...i, send_date: null } : i) ?? []
+      );
+      return { prevQueue };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prevQueue) queryClient.setQueryData(queryKey, ctx.prevQueue);
+    },
+    onSettled: invalidate,
   });
 
   const updateStatus = useMutation({
