@@ -11,10 +11,10 @@ const buttonVariants = cva(
       variant: {
         default: "bg-primary text-primary-foreground rounded-pill hover:opacity-85 hover:-translate-y-px",
         destructive: "bg-primary text-primary-foreground rounded-pill hover:opacity-85",
-        outline: "border border-border bg-transparent text-gray-1 rounded-pill hover:border-black hover:text-black",
+        outline: "border border-border bg-transparent text-muted-foreground rounded-pill hover:border-foreground hover:text-foreground",
         secondary: "bg-secondary text-secondary-foreground rounded-pill hover:opacity-85",
-        ghost: "hover:bg-gray-5 hover:text-black rounded-pill",
-        link: "text-black underline-offset-4 hover:underline",
+        ghost: "hover:bg-muted hover:text-foreground rounded-pill",
+        link: "text-foreground underline-offset-4 hover:underline",
       },
       size: {
         default: "h-10 px-6 py-2.5 text-sm font-medium",
