@@ -11,6 +11,7 @@ interface SegmentedControlProps {
 
 export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"], value, onChange }: SegmentedControlProps) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [coveredIndices, setCoveredIndices] = useState<Set<number>>(new Set());
   const selected = value !== undefined ? options.indexOf(value) : activeIndex;
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -21,6 +22,7 @@ export default function SegmentedControl({ options = ["Chat", "Cowork", "Code"],
   const committedIndex = useRef(0);
   const hoveredIndex = useRef(-1);
   const metaRef = useRef<{ left: number; width: number; right: number; center: number }[]>([]);
+  const rafRef = useRef<number | null>(null);
 
   function calcMeta() {
     const seg = containerRef.current;
