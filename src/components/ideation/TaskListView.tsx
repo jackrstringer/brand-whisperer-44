@@ -107,40 +107,29 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
 
   const visibleCols = colConfig.order.filter(k => colConfig.visible.includes(k));
 
-  const handleResizeStart = useCallback((colLeft: string, e: React.MouseEvent) => {
+  const handleResizeStart = useCallback((col: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
-    const leftIdx = visibleCols.indexOf(colLeft);
-    const rightCol = visibleCols[leftIdx + 1];
-    if (!rightCol) return;
+    const colDef = ALL_COLUMNS.find(c => c.key === col);
+    if (!colDef) return;
 
-    const leftDef = ALL_COLUMNS.find(c => c.key === colLeft);
-    const rightDef = ALL_COLUMNS.find(c => c.key === rightCol);
-    if (!leftDef || !rightDef) return;
-
-    const leftW = colConfig.widths[colLeft] || leftDef.defaultWidth;
-    const rightW = colConfig.widths[rightCol] || rightDef.defaultWidth;
+    const currentW = colConfig.widths[col] || colDef.defaultWidth;
 
     resizingRef.current = {
-      col: colLeft,
+      col,
       startX: e.clientX,
-      startWidthLeft: leftW,
-      colRight: rightCol,
-      startWidthRight: rightW,
+      startWidth: currentW,
     };
 
     const onMove = (ev: MouseEvent) => {
       const r = resizingRef.current;
       if (!r) return;
       const delta = ev.clientX - r.startX;
-      const leftMin = leftDef.minWidth;
-      const rightMin = rightDef.minWidth;
-      const newLeft = Math.max(leftMin, r.startWidthLeft + delta);
-      const newRight = Math.max(rightMin, r.startWidthRight - delta);
+      const newWidth = Math.max(colDef.minWidth, r.startWidth + delta);
       setColConfig(prev => ({
         ...prev,
-        widths: { ...prev.widths, [r.col]: newLeft, [r.colRight]: newRight },
+        widths: { ...prev.widths, [r.col]: newWidth },
       }));
     };
     const onUp = () => {
@@ -150,7 +139,7 @@ export function TaskListView({ items, onRemove, onBulkRemove, onItemClick, bulkE
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-  }, [colConfig, visibleCols]);
+  }, [colConfig]);
 
   const toggleColumn = (key: string) => {
     const col = ALL_COLUMNS.find(c => c.key === key);
