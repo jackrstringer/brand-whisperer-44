@@ -331,7 +331,7 @@ export default function IdeatePage() {
                 </button>
               </div>
             ) : (
-              <span className="text-xs text-muted-foreground font-medium px-1">ID8</span>
+              <span className="text-xs text-muted-foreground font-medium px-1" />
             )}
           </div>
 
