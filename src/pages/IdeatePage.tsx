@@ -254,6 +254,8 @@ export default function IdeatePage() {
               onAddToQueue={handleAddToQueue}
               onBuildNow={handleBuildNow}
               researchStatus={ideation.researchStatus}
+              onMenuSelect={handleTypeFromMenu}
+              activeType={ideation.activeType}
             />
           )}
         </div>
