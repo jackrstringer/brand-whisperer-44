@@ -45,6 +45,8 @@ export function useIdeation(brandId: string) {
 
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const abortRef = useRef<AbortController | null>(null);
+  const streamBufferRef = useRef<Map<string, Record<string, string>>>(new Map());
+  const rafRef = useRef<number | null>(null);
 
   // Load existing session on mount
   useEffect(() => {
