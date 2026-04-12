@@ -4,8 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { DesignQueueItem } from '@/hooks/useDesignQueue';
 import { useAuth } from '@/hooks/useAuth';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -14,6 +12,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import {
   ArrowLeft, CalendarIcon, Loader2, Trash2, Play, ExternalLink, ImageIcon,
   Maximize2, Minimize2, MoreHorizontal, X, ChevronDown, ChevronRight,
+  FileText, Mail, Pen, StickyNote, Tag,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import ReferencePanel, { SelectedReference } from '@/components/campaign/ReferencePanel';
