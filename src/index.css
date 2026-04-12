@@ -250,3 +250,51 @@
   from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Segmented Control */
+.seg-control {
+  position: relative;
+  display: inline-flex;
+  gap: 0;
+  padding: 4px;
+  background: var(--muted);
+  border-radius: 14px;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.seg-pill {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 11px;
+  background: var(--foreground);
+  pointer-events: none;
+  z-index: 0;
+  will-change: left, right;
+}
+
+.seg-btn {
+  position: relative;
+  z-index: 1;
+  padding: 7px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  border: none;
+  border-radius: 11px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--muted-foreground);
+  transition: color 120ms ease;
+  font-family: inherit;
+}
+
+.seg-btn-active {
+  color: var(--background);
+  cursor: grab;
+}
+
+.seg-btn-active:active {
+  cursor: grabbing;
+}
