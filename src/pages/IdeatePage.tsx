@@ -312,31 +312,14 @@ export default function IdeatePage() {
           <div className="flex-1" />
 
           {/* Center: 3-way page mode selector */}
-          <div ref={modeContainerRef} className="relative inline-flex items-center rounded-full border border-border bg-muted/40 p-1">
-            {/* Sliding inner pill */}
-            <div
-              className="absolute top-1 bottom-1 rounded-full bg-foreground shadow-sm"
-              style={{
-                width: pillStyle.width,
-                left: pillStyle.left,
-                transition: 'left 180ms cubic-bezier(0.22, 1, 0.36, 1), width 180ms cubic-bezier(0.22, 1, 0.36, 1)',
+          <SegmentedControl
+              options={pageModeOptions}
+              value={pageModeValue}
+              onChange={(v) => {
+                const mode = PAGE_MODES[pageModeOptions.indexOf(v)];
+                if (mode) setPageMode(mode);
               }}
             />
-            {PAGE_MODES.map((mode, idx) => (
-              <button
-                key={mode}
-                ref={(el) => { buttonRefs.current[idx] = el; }}
-                onClick={() => setPageMode(mode)}
-                className={`relative z-10 px-5 py-1.5 text-sm font-medium rounded-full transition-colors duration-150 ${
-                  pageMode === mode
-                    ? 'text-background'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {PAGE_MODE_LABELS[mode]}
-              </button>
-            ))}
-          </div>
 
           {/* Right: task view controls */}
           <div className="flex items-center gap-1 min-w-0 flex-1 justify-end">
