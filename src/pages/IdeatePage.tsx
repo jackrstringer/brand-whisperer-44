@@ -7,7 +7,7 @@ import { CampaignTypePicker } from '@/components/ideation/CampaignTypePicker';
 import { NodeFlow } from '@/components/ideation/NodeFlow';
 import { ChatBar } from '@/components/ideation/ChatBar';
 import { TaskWindow } from '@/components/ideation/TaskWindow';
-import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
+import { SplitPane } from '@/components/ideation/SplitPane';
 import { CampaignIdea } from '@/lib/types';
 import { useState, useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { Zap, List, CalendarDays, Star, ChevronLeft, ChevronRight } from 'lucide-react';
