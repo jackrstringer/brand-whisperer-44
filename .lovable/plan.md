@@ -1,41 +1,41 @@
 
+Goal
+- Fix hover darkening so every calendar day tile visibly darkens on hover.
+- Make the calendar fill the full task panel and become actually vertically scrollable.
 
-## Plan: Align Ideation UI with Spec
+What the code audit showed
+- The hover tint is broken because `TaskCalendarView` uses `backgroundColor: 'hsl(var(--muted) / 0.7)'`, but `--muted` is defined as a hex token in `src/index.css`, not an HSL channel. The browser drops that style, so the tile never darkens.
+- The current calendar only renders one month and does not use `onRequestMonths`, so it is not using the existing scrollable month-loading pattern at all.
+- With only 4–6 fixed `100px` week rows, the rendered month often stops around mid-panel, which is why it looks like it only takes up half the screen.
 
-Based on the detailed spec you provided, here are the gaps between the current implementation and the intended behavior. This plan fixes them without touching any hooks, edge functions, or backend code.
+Implementation plan
+1. Fix the hover state in `src/components/ideation/TaskCalendarView.tsx`
+   - Remove the broken inline HSL background logic.
+   - Add a dedicated `pointer-events-none` overlay layer inside each tile with explicit opacity transitions, so hover darkening always renders.
+   - Keep the `+` button opacity-based so nothing shifts.
+   - Make hover, today, and drag-over states layer cleanly instead of conflicting.
 
-### Issues Found
+2. Restore a real scrollable calendar layout
+   - Replace the single-month fixed grid with a scroll container that renders month sections, using the working pattern already present in `src/components/ideation/IdeationCalendar.tsx`.
+   - Wire `onRequestMonths` back in so visible months actually fetch data.
+   - Keep sticky weekday headers and month labels inside the scroll area.
 
-1. **TurboIdeaTable uses dark-theme classes** — all `text-white/40`, `bg-white/[0.03]`, `border-white/[0.06]` references need to become theme-aware (`text-muted-foreground`, `bg-muted`, `border-border`).
+3. Make it fill the full available height
+   - Tighten the wrapper sizing in `TaskCalendarView` and `TaskWindow` so the full parent chain uses `h-full min-h-0 overflow-hidden`.
+   - Remove the “content decides height” behavior that leaves dead space under the month.
+   - Ensure the scroll area owns the remaining height of the task panel.
 
-2. **Normal mode IdeaGrid missing columns** — spec says Normal mode shows: Checkbox | Type | Title | Description (hidden `<md`) | Subject Line (hidden `<lg`). Current implementation only has Checkbox | Type | Title | Actions.
+4. Keep navigation coherent
+   - Use `currentMonth` to scroll to the selected month when Prev / Next / Today is clicked.
+   - If needed, sync the visible month back to the top label while scrolling so the label stays accurate.
 
-3. **AI Response nodes never rendered** — `NodeFlow` returns `null` for `ai_response` nodes, so Lucy's commentary is generated and saved but invisible. These should render as left-aligned chat bubbles.
+Validation
+- Hover any day tile: it must visibly darken, including tiles with events and pills.
+- Hover must not move the day number or `+` button.
+- Calendar must occupy the full task panel in both Split and Campaigns-only modes.
+- Calendar must vertically scroll through months instead of stopping at a half-height single month.
 
-4. **Streaming token handling** — `onIdeaField` currently replaces the field value (`ideas[index][field] = value`) instead of appending (`ideas[index][field] += token`). This means only the last token shows, not accumulated text.
-
-5. **Auto-scroll reset logic** — current code resets `hasAutoScrolledRef` when node count *decreases*, but per spec it should reset when `isGenerating` becomes true (i.e., a new generation round starts).
-
-6. **Normal mode streaming cursor** — spec calls for `animate-lucy-blink` on the cursor after streaming title text. Current code uses generic `animate-pulse`.
-
-7. **Turbo skeleton styling** — ghost checkboxes and placeholder bars should use theme colors, not hardcoded white-alpha values.
-
-### Files Modified
-
-- **`src/components/ideation/TurboIdeaTable.tsx`** — Replace all dark-theme color classes with light-theme equivalents (`border-border`, `text-muted-foreground`, `bg-muted`, etc.). Fix ghost skeleton styling.
-
-- **`src/components/ideation/IdeaGrid.tsx`** — Add Description column (hidden `<md`) and Subject Line column (hidden `<lg`). Update streaming cursor to use `animate-lucy-blink`. Add skeleton rows that match the new column count.
-
-- **`src/components/ideation/NodeFlow.tsx`** — Render `ai_response` nodes as a left-aligned chat bubble (similar to BriefNode but left-justified) showing Lucy's commentary. Fix auto-scroll reset: trigger on `isGenerating` going true, not on node count decrease.
-
-- **`src/hooks/useIdeation.ts`** — Fix `onIdeaField` to append tokens instead of replace: change `ideas[index][field] = value` to `ideas[index][field] = (ideas[index][field] || '') + value`.
-
-- **`src/index.css`** (or `tailwind.config.ts`) — Add `animate-lucy-blink` keyframes if not already present: `opacity 1→0→1, 1s ease-in-out infinite`.
-
-### What Does NOT Change
-- No hooks logic changes (only the token append fix in useIdeation)
-- No edge functions or backend
-- No campaignTypes.ts
-- No GenerationDrawer, streamHelpers, bulkGenerate, seedCalendar
-- All features (drag-and-drop, turbo, chaos, streaming, bulk generate, queue, calendar) remain fully functional
-
+Technical details
+- Primary files: `src/components/ideation/TaskCalendarView.tsx`, `src/components/ideation/TaskWindow.tsx`
+- Likely reuse/reference: `src/components/ideation/IdeationCalendar.tsx`
+- No fake fallbacks: the fix will use valid, explicit styling and real scroll behavior.
