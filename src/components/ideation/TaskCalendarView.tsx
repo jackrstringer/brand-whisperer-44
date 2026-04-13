@@ -133,11 +133,11 @@ function CalendarDayCell({
       ref={setNodeRef}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className={`border-b border-r border-border/30 p-1.5 min-h-[100px] transition-colors relative ${
+      className={`border-b border-r border-border/30 p-1.5 min-h-[100px] transition-colors duration-150 relative ${
         isOver
           ? 'bg-primary/10 ring-2 ring-inset ring-primary/40'
           : hovered
-            ? 'bg-muted/40'
+            ? 'bg-muted/60'
             : ''
       } ${isToday ? 'ring-1 ring-inset ring-blue-300/60 bg-blue-50/10' : ''}`}
     >
@@ -155,18 +155,18 @@ function CalendarDayCell({
           {day}
         </span>
 
-        {/* Hover + button */}
-        {hovered && inMonth && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDayClick?.(dateStr);
-            }}
-            className="w-5 h-5 rounded-full flex items-center justify-center bg-primary/10 text-foreground hover:bg-primary/20 transition-all duration-100 hover:scale-110"
-          >
-            <Plus className="w-3 h-3" />
-          </button>
-        )}
+        {/* Always-present + button, visibility toggled to prevent layout shift */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDayClick?.(dateStr);
+          }}
+          className={`w-5 h-5 rounded-full flex items-center justify-center bg-primary/10 text-foreground hover:bg-primary/20 transition-all duration-100 hover:scale-110 ${
+            hovered && inMonth ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+        >
+          <Plus className="w-3 h-3" />
+        </button>
       </div>
 
       {/* Events */}
