@@ -1,5 +1,5 @@
 import { useDroppable, useDraggable } from '@dnd-kit/core';
-import { useMemo, useState } from 'react';
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { DesignQueueItem } from '@/hooks/useDesignQueue';
 import { CalendarDayData } from '@/hooks/useIdeationCalendar';
 import { Plus } from 'lucide-react';
@@ -22,11 +22,18 @@ interface Props {
   currentMonth: Date;
 }
 
+function getMonthsRange(centerDate: Date, spread: number): Date[] {
+  const months: Date[] = [];
+  for (let i = -spread; i <= spread; i++) {
+    months.push(new Date(centerDate.getFullYear(), centerDate.getMonth() + i, 1));
+  }
+  return months;
+}
+
 function buildMonthGrid(year: number, month: number) {
   const firstDayOfWeek = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  // Previous month trailing days
   const prevMonthDays = new Date(year, month, 0).getDate();
   const cells: { day: number; inMonth: boolean; year: number; month: number }[] = [];
 
@@ -41,7 +48,6 @@ function buildMonthGrid(year: number, month: number) {
     cells.push({ day: d, inMonth: true, year, month });
   }
 
-  // Next month leading days
   let nextDay = 1;
   while (cells.length % 7 !== 0) {
     const m = month + 1;
@@ -52,25 +58,91 @@ function buildMonthGrid(year: number, month: number) {
   return cells;
 }
 
-export function TaskCalendarView({ calendarData, onPillClick, onDayClick, currentMonth }: Props) {
+export function TaskCalendarView({ calendarData, onRequestMonths, onPillClick, onDayClick, currentMonth }: Props) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const monthRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const isLoadingMore = useRef(false);
+
+  const [months, setMonths] = useState(() => getMonthsRange(new Date(), 3));
+
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-  const year = currentMonth.getFullYear();
-  const month = currentMonth.getMonth();
-  const cells = useMemo(() => buildMonthGrid(year, month), [year, month]);
+  // Notify parent of visible months so it can fetch data
+  useEffect(() => {
+    onRequestMonths(months);
+  }, [months, onRequestMonths]);
 
-  const weeks = useMemo(() => {
-    const w: typeof cells[] = [];
-    for (let i = 0; i < cells.length; i += 7) {
-      w.push(cells.slice(i, i + 7));
+  // Scroll to currentMonth when it changes (prev/next/today buttons)
+  useEffect(() => {
+    const key = `${currentMonth.getFullYear()}-${currentMonth.getMonth()}`;
+    // Ensure the month exists in our list
+    setMonths(prev => {
+      const exists = prev.some(m => m.getFullYear() === currentMonth.getFullYear() && m.getMonth() === currentMonth.getMonth());
+      if (exists) return prev;
+      return getMonthsRange(currentMonth, 3);
+    });
+    requestAnimationFrame(() => {
+      const el = monthRefs.current.get(key);
+      if (el && scrollRef.current) {
+        el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+    });
+  }, [currentMonth]);
+
+  // Scroll to current month on mount
+  useEffect(() => {
+    const todayKey = `${today.getFullYear()}-${today.getMonth()}`;
+    requestAnimationFrame(() => {
+      const el = monthRefs.current.get(todayKey);
+      if (el && scrollRef.current) {
+        el.scrollIntoView({ block: 'start' });
+      }
+    });
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || isLoadingMore.current) return;
+
+    const nearTop = el.scrollTop < 200;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200;
+
+    if (nearTop) {
+      isLoadingMore.current = true;
+      const prevScrollHeight = el.scrollHeight;
+      setMonths(prev => {
+        const earliest = prev[0];
+        const newMonths: Date[] = [];
+        for (let i = 3; i >= 1; i--) {
+          newMonths.push(new Date(earliest.getFullYear(), earliest.getMonth() - i, 1));
+        }
+        return [...newMonths, ...prev];
+      });
+      requestAnimationFrame(() => {
+        const newScrollHeight = el.scrollHeight;
+        el.scrollTop += newScrollHeight - prevScrollHeight;
+        isLoadingMore.current = false;
+      });
+    } else if (nearBottom) {
+      isLoadingMore.current = true;
+      setMonths(prev => {
+        const latest = prev[prev.length - 1];
+        const newMonths: Date[] = [];
+        for (let i = 1; i <= 3; i++) {
+          newMonths.push(new Date(latest.getFullYear(), latest.getMonth() + i, 1));
+        }
+        return [...prev, ...newMonths];
+      });
+      requestAnimationFrame(() => {
+        isLoadingMore.current = false;
+      });
     }
-    return w;
-  }, [cells]);
+  }, []);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Day headers */}
+      {/* Day headers - sticky */}
       <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
         {DAYS.map(d => (
           <div key={d} className="text-center text-[11px] font-medium text-muted-foreground py-2">
@@ -79,30 +151,60 @@ export function TaskCalendarView({ calendarData, onPillClick, onDayClick, curren
         ))}
       </div>
 
-      {/* Scrollable grid */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-        {weeks.map((week, wi) => (
-          <div key={wi} className="grid grid-cols-7" style={{ minHeight: 100 }}>
-            {week.map((cell, ci) => {
-              const dateStr = `${cell.year}-${String(cell.month + 1).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}`;
-              const isToday = dateStr === todayStr;
-              const dayData = calendarData[dateStr];
+      {/* Scrollable multi-month grid */}
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto min-h-0"
+      >
+        {months.map(monthDate => {
+          const year = monthDate.getFullYear();
+          const month = monthDate.getMonth();
+          const key = `${year}-${month}`;
+          const cells = buildMonthGrid(year, month);
+          const monthLabel = monthDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
-              return (
-                <CalendarDayCell
-                  key={`${wi}-${ci}`}
-                  dateStr={dateStr}
-                  day={cell.day}
-                  inMonth={cell.inMonth}
-                  isToday={isToday}
-                  dayData={dayData}
-                  onPillClick={onPillClick}
-                  onDayClick={onDayClick}
-                />
-              );
-            })}
-          </div>
-        ))}
+          const weeks: typeof cells[] = [];
+          for (let i = 0; i < cells.length; i += 7) {
+            weeks.push(cells.slice(i, i + 7));
+          }
+
+          return (
+            <div
+              key={key}
+              ref={el => { if (el) monthRefs.current.set(key, el); }}
+            >
+              {/* Month label */}
+              <div className="sticky top-0 z-[5] px-3 py-1.5 bg-card/95 backdrop-blur-sm border-b border-border/50">
+                <span className="text-xs font-semibold text-foreground">{monthLabel}</span>
+              </div>
+
+              {/* Grid */}
+              {weeks.map((week, wi) => (
+                <div key={wi} className="grid grid-cols-7" style={{ minHeight: 100 }}>
+                  {week.map((cell, ci) => {
+                    const dateStr = `${cell.year}-${String(cell.month + 1).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}`;
+                    const isToday = dateStr === todayStr;
+                    const dayData = calendarData[dateStr];
+
+                    return (
+                      <CalendarDayCell
+                        key={`${key}-${wi}-${ci}`}
+                        dateStr={dateStr}
+                        day={cell.day}
+                        inMonth={cell.inMonth}
+                        isToday={isToday}
+                        dayData={dayData}
+                        onPillClick={onPillClick}
+                        onDayClick={onDayClick}
+                      />
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -126,22 +228,19 @@ function CalendarDayCell({
   onDayClick?: (dateStr: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `calendar-day-${dateStr}` });
-  const [hovered, setHovered] = useState(false);
 
   return (
     <div
       ref={setNodeRef}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      className={`border-b border-r border-border/30 p-1.5 min-h-[100px] transition-colors duration-150 relative ${
-        isOver
-          ? 'bg-primary/10 ring-2 ring-inset ring-primary/40'
-          : ''
+      className={`group/cell border-b border-r border-border/30 p-1.5 min-h-[100px] transition-colors duration-150 relative ${
+        isOver ? 'bg-primary/10 ring-2 ring-inset ring-primary/40' : ''
       } ${isToday ? 'ring-1 ring-inset ring-blue-300/60 bg-blue-50/10' : ''}`}
-      style={hovered && !isOver ? { backgroundColor: 'hsl(var(--muted) / 0.7)' } : undefined}
     >
+      {/* Hover darkening overlay — pure CSS, no JS state needed */}
+      <div className="absolute inset-0 bg-black/0 group-hover/cell:bg-black/[0.04] transition-colors duration-150 pointer-events-none" />
+
       {/* Day number + hover add button */}
-      <div className="flex items-center justify-between mb-0.5">
+      <div className="flex items-center justify-between mb-0.5 relative z-[1]">
         <span
           className={`text-[11px] font-medium leading-none ${
             isToday
@@ -154,14 +253,13 @@ function CalendarDayCell({
           {day}
         </span>
 
-        {/* Always-present + button, visibility toggled to prevent layout shift */}
         <button
           onClick={(e) => {
             e.stopPropagation();
             onDayClick?.(dateStr);
           }}
-          className={`w-5 h-5 rounded-full flex items-center justify-center bg-primary/10 text-foreground hover:bg-primary/20 transition-all duration-100 hover:scale-110 ${
-            hovered && inMonth ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          className={`w-5 h-5 rounded-full flex items-center justify-center bg-primary/10 text-foreground hover:bg-primary/20 transition-all duration-100 hover:scale-110 opacity-0 pointer-events-none group-hover/cell:opacity-100 group-hover/cell:pointer-events-auto ${
+            inMonth ? '' : 'hidden'
           }`}
         >
           <Plus className="w-3 h-3" />
@@ -169,20 +267,22 @@ function CalendarDayCell({
       </div>
 
       {/* Events */}
-      {dayData?.events?.map(evt => (
-        <div
-          key={evt.id}
-          className="text-[10px] text-muted-foreground/70 leading-tight truncate mb-0.5 italic"
-          title={evt.event_name}
-        >
-          {evt.event_name}
-        </div>
-      ))}
+      <div className="relative z-[1]">
+        {dayData?.events?.map(evt => (
+          <div
+            key={evt.id}
+            className="text-[10px] text-muted-foreground/70 leading-tight truncate mb-0.5 italic"
+            title={evt.event_name}
+          >
+            {evt.event_name}
+          </div>
+        ))}
 
-      {/* Queue pills */}
-      {dayData?.queueItems?.map(item => (
-        <DraggableCalendarPill key={item.id} item={item} onClick={() => onPillClick?.(item)} />
-      ))}
+        {/* Queue pills */}
+        {dayData?.queueItems?.map(item => (
+          <DraggableCalendarPill key={item.id} item={item} onClick={() => onPillClick?.(item)} />
+        ))}
+      </div>
     </div>
   );
 }
