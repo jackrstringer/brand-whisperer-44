@@ -181,7 +181,7 @@ export function TaskCalendarView({ calendarData, onRequestMonths, onPillClick, o
 
               {/* Grid */}
               {weeks.map((week, wi) => (
-                <div key={wi} className="grid grid-cols-7" style={{ minHeight: 100 }}>
+                <div key={wi} className="grid grid-cols-7" style={{ minHeight: 140 }}>
                   {week.map((cell, ci) => {
                     const dateStr = `${cell.year}-${String(cell.month + 1).padStart(2, '0')}-${String(cell.day).padStart(2, '0')}`;
                     const isToday = dateStr === todayStr;
@@ -232,12 +232,12 @@ function CalendarDayCell({
   return (
     <div
       ref={setNodeRef}
-      className={`group/cell border-b border-r border-border/30 p-1.5 min-h-[100px] transition-colors duration-150 relative ${
+      className={`group/cell border-b border-r border-border/30 p-1.5 min-h-[140px] transition-colors duration-150 relative cursor-pointer ${
         isOver ? 'bg-primary/10 ring-2 ring-inset ring-primary/40' : ''
       } ${isToday ? 'ring-1 ring-inset ring-blue-300/60 bg-blue-50/10' : ''}`}
     >
       {/* Hover darkening overlay — pure CSS, no JS state needed */}
-      <div className="absolute inset-0 bg-black/0 group-hover/cell:bg-black/[0.04] transition-colors duration-150 pointer-events-none" />
+      <div className="absolute inset-0 bg-transparent group-hover/cell:bg-muted/70 transition-colors duration-150 pointer-events-none rounded-sm" />
 
       {/* Day number + hover add button */}
       <div className="flex items-center justify-between mb-0.5 relative z-[1]">
