@@ -69,7 +69,7 @@ export function TaskCalendarView({ calendarData, onPillClick, onDayClick, curren
   }, [cells]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Day headers */}
       <div className="grid grid-cols-7 border-b border-border flex-shrink-0">
         {DAYS.map(d => (
