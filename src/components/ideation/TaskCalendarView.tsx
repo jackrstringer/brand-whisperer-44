@@ -297,7 +297,7 @@ function DraggableCalendarPill({ item, onClick }: { item: DesignQueueItem; onCli
       {...attributes}
       {...listeners}
       onClick={e => { e.stopPropagation(); onClick(); }}
-      className={`text-[11px] font-medium px-1.5 py-1 rounded-md cursor-grab active:cursor-grabbing mt-1 leading-tight break-words transition-all duration-150 hover:ring-1 hover:ring-primary/30 hover:shadow-sm ${
+      className={`text-[11px] font-medium px-1.5 py-1 rounded-md cursor-grab active:cursor-grabbing mt-1 leading-tight break-words transition-all duration-150 hover:ring-1 hover:ring-primary/30 hover:brightness-90 hover:scale-[1.02] ${
         STATUS_COLORS[item.status] || STATUS_COLORS.draft
       } ${isDragging ? 'opacity-40 scale-95' : ''}`}
       title={item.title}
