@@ -232,12 +232,10 @@ function CalendarDayCell({
   return (
     <div
       ref={setNodeRef}
-      className={`group/cell border-b border-r border-border/30 p-1.5 min-h-[140px] transition-colors duration-150 relative cursor-pointer ${
+      className={`group/cell border-b border-r border-border/30 p-1.5 min-h-[140px] transition-colors duration-150 relative cursor-pointer hover:bg-accent ${
         isOver ? 'bg-primary/10 ring-2 ring-inset ring-primary/40' : ''
       } ${isToday ? 'ring-1 ring-inset ring-blue-300/60 bg-blue-50/10' : ''}`}
     >
-      {/* Hover darkening overlay — pure CSS, no JS state needed */}
-      <div className="absolute inset-0 bg-transparent group-hover/cell:bg-muted/70 transition-colors duration-150 pointer-events-none rounded-sm" />
 
       {/* Day number + hover add button */}
       <div className="flex items-center justify-between mb-0.5 relative z-[1]">
