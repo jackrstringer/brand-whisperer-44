@@ -136,10 +136,9 @@ function CalendarDayCell({
       className={`border-b border-r border-border/30 p-1.5 min-h-[100px] transition-colors duration-150 relative ${
         isOver
           ? 'bg-primary/10 ring-2 ring-inset ring-primary/40'
-          : hovered
-            ? 'bg-muted/60'
-            : ''
+          : ''
       } ${isToday ? 'ring-1 ring-inset ring-blue-300/60 bg-blue-50/10' : ''}`}
+      style={hovered && !isOver ? { backgroundColor: 'hsl(var(--muted) / 0.7)' } : undefined}
     >
       {/* Day number + hover add button */}
       <div className="flex items-center justify-between mb-0.5">
