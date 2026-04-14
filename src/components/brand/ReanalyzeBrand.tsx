@@ -358,14 +358,41 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
     );
   }
 
-  if (phase === "fetching" || phase === "auditing" || phase === "generating_guide") {
+  if (phase === "fetching" || phase === "auditing") {
     return (
       <div className="space-y-6 py-8 text-center">
         <h3 className="text-lg font-semibold">
-          {phase === "fetching" ? "Loading References" : phase === "auditing" ? "Deep Visual Audit" : "Generating Brand Guide"}
+          {phase === "fetching" ? "Loading References" : "Deep Visual Audit"}
         </h3>
         <p className="text-sm text-muted-foreground">{progressMessage}</p>
         <Progress value={progressValue} className="h-1.5 max-w-md mx-auto" />
+      </div>
+    );
+  }
+
+  if (phase === "generating_guide") {
+    return (
+      <div className="space-y-6 py-8 flex flex-col items-center">
+        <ProcessingStatusPanel
+          brandId={brandId}
+          title="Re-processing Brand"
+          subtitle="Running full brand pipeline — spec extraction then guide generation. This takes 5–10 minutes."
+          onComplete={(guideHtml) => {
+            setBrandGuideHtml(guideHtml);
+            setProgressValue(100);
+            setProgressMessage("Guide ready!");
+            toast.success("Brand profile updated!");
+            setTimeout(() => setPhase("guide_review"), 500);
+          }}
+          onFailed={(error) => {
+            toast.error(error);
+            setPhase("idle");
+          }}
+          onTimeout={() => {
+            toast.error("Brand processing timed out after 15 minutes. Please try again.");
+            setPhase("idle");
+          }}
+        />
       </div>
     );
   }
