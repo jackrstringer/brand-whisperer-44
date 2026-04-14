@@ -47,6 +47,7 @@ export default function BrandProfile() {
     setAssets((brandAssets || []) as BrandAsset[]);
     const status = (profile as any)?.processing_status as string | null;
     setProcessingStatus(status || null);
+    setAuditFindings((profile as any)?.audit_findings || null);
     setGuideHtml((profile as any)?.brand_guide_html || null);
     setLoading(false);
 
