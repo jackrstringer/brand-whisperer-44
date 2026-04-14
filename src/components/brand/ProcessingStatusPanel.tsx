@@ -52,6 +52,8 @@ interface ProcessingStatusPanelProps {
   showDashboardLink?: boolean;
   onGoToDashboard?: () => void;
   maxPollMinutes?: number;
+  /** Seconds to wait before declaring stuck on idle (default 30) */
+  idleTimeoutSeconds?: number;
 }
 
 export default function ProcessingStatusPanel({
@@ -64,6 +66,7 @@ export default function ProcessingStatusPanel({
   showDashboardLink = false,
   onGoToDashboard,
   maxPollMinutes = 15,
+  idleTimeoutSeconds = 30,
 }: ProcessingStatusPanelProps) {
   const [dbStatus, setDbStatus] = useState<PipelineStatus>("idle");
   const [dbError, setDbError] = useState<string | null>(null);
@@ -71,6 +74,7 @@ export default function ProcessingStatusPanel({
   const [lastPollAt, setLastPollAt] = useState<Date | null>(null);
   const startTimeRef = useRef(Date.now());
   const [elapsed, setElapsed] = useState(0);
+  const hasLeftIdleRef = useRef(false);
 
   // Tick elapsed every second
   useEffect(() => {
@@ -101,6 +105,11 @@ export default function ProcessingStatusPanel({
         setPollCount((c) => c + 1);
         setLastPollAt(new Date());
 
+        // Track if we ever left idle
+        if (status && status !== "idle") {
+          hasLeftIdleRef.current = true;
+        }
+
         if (status === "failed") {
           onFailed(error || "Brand processing failed");
           return "stop";
@@ -109,6 +118,15 @@ export default function ProcessingStatusPanel({
         if (status === "complete" && profile?.brand_guide_html) {
           onComplete(profile.brand_guide_html, (profile as any)?.raw_extraction, profile.system_prompt || undefined);
           return "stop";
+        }
+
+        // Bug 3 fix: stuck-on-idle detection
+        if (status === "idle" && !hasLeftIdleRef.current) {
+          const elapsedMs = Date.now() - startTimeRef.current;
+          if (elapsedMs > idleTimeoutSeconds * 1000) {
+            onFailed("Brand analysis failed to start. The processing function may not have been invoked. Please try again.");
+            return "stop";
+          }
         }
 
         if (Date.now() - startTimeRef.current > MAX_POLL_TIME) {
@@ -132,7 +150,7 @@ export default function ProcessingStatusPanel({
     });
 
     return () => clearInterval(timer);
-  }, [brandId, maxPollMinutes, onComplete, onFailed, onTimeout]);
+  }, [brandId, maxPollMinutes, idleTimeoutSeconds, onComplete, onFailed, onTimeout]);
 
   const progressValue =
     dbStatus === "idle" ? 5 :
