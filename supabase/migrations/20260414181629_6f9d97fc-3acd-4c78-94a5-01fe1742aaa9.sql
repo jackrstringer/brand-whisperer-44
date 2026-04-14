@@ -1,0 +1,1 @@
+UPDATE brand_profiles SET processing_status = 'idle', processing_error = NULL WHERE brand_id = 'cb5af3de-70cb-4bb3-931b-47925bb83ce1';
