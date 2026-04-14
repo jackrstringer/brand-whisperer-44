@@ -386,73 +386,63 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (brandId) {
-      const mode = step === "guide" ? "guide" : step === "full" ? "full" : "spec";
-      const sb = getSupabaseAdmin();
+    if (!brandId) {
+      return new Response(JSON.stringify({ error: "brandId is required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
-      if (mode === "spec") {
+    const mode = step === "guide" ? "guide" : step === "full" ? "full" : "spec";
+    const sb = getSupabaseAdmin();
+
+    try {
+      if (mode === "spec" || mode === "full") {
         await sb.from("brand_profiles").update({
           processing_status: "running_spec",
           processing_error: null,
         }).eq("brand_id", brandId);
 
         await processSpecStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId, confirmed_properties);
+        console.log(`[extract-brand] Spec complete for ${brandName}`);
 
-        await sb.from("brand_profiles").update({ processing_status: "spec_complete" }).eq("brand_id", brandId);
-
-        return new Response(JSON.stringify({ status: "spec_complete", brandId }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        if (mode === "spec") {
+          await sb.from("brand_profiles").update({ processing_status: "spec_complete" }).eq("brand_id", brandId);
+          return new Response(JSON.stringify({ status: "spec_complete", brandId }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
       }
 
-      // For "guide" and "full" modes:
-      // Fire the background promise exactly like the working March 26 version.
-      // Do NOT use EdgeRuntime.waitUntil — it doesn't help and may interfere.
-      // Do NOT self-chain with a second HTTP request — just run directly.
       await sb.from("brand_profiles").update({
-        processing_status: mode === "full" ? "running_spec" : "running_guide",
+        processing_status: "running_guide",
         processing_error: null,
       }).eq("brand_id", brandId);
 
-      const promise = (async () => {
-        try {
-          if (mode === "full") {
-            await processSpecStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId, confirmed_properties);
-            console.log(`[extract-brand] Spec complete, starting guide`);
-            await sb.from("brand_profiles").update({ processing_status: "running_guide" }).eq("brand_id", brandId);
-          }
-          await processGuideStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId);
-          await sb.from("brand_profiles").update({ processing_status: "complete" }).eq("brand_id", brandId);
-          console.log(`[extract-brand] Full pipeline complete for brand ${brandId}`);
-        } catch (err: any) {
-          console.error(`[extract-brand] ${mode} background error:`, err);
-          try {
-            await sb.from("brand_profiles").update({
-              processing_status: "failed",
-              processing_error: err.message || "Unknown error",
-            }).eq("brand_id", brandId);
-          } catch (saveErr) {
-            console.error(`[extract-brand] Failed to save error status:`, saveErr);
-          }
-        }
-      })();
+      await processGuideStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId);
 
-      // Let the promise run in the background — do NOT await it
-      // This is the exact pattern that worked on March 26
-      promise.catch((err: any) => {
-        console.error(`[extract-brand] Unhandled background error:`, err);
+      await sb.from("brand_profiles").update({ processing_status: "complete" }).eq("brand_id", brandId);
+      console.log(`[extract-brand] Full pipeline complete for ${brandName}`);
+
+      return new Response(JSON.stringify({ status: "complete", brandId }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    } catch (err: any) {
+      console.error(`[extract-brand] ${mode} processing error:`, err);
 
-      return new Response(JSON.stringify({ status: `${mode}_processing`, brandId }), {
+      try {
+        await sb.from("brand_profiles").update({
+          processing_status: "failed",
+          processing_error: err.message || "Unknown error",
+        }).eq("brand_id", brandId);
+      } catch (saveErr) {
+        console.error(`[extract-brand] Failed to save error status:`, saveErr);
+      }
+
+      return new Response(JSON.stringify({ status: "failed", error: err.message, brandId }), {
+        status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    // Fallback: no brandId — run synchronously (original behavior)
-    const result = await processExtraction(ANTHROPIC_API_KEY, auditFindings, brandName, industry);
-    return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
   } catch (err) {
     console.error("Extract-brand error:", err);
     return new Response(JSON.stringify({ error: (err as Error).message }), {

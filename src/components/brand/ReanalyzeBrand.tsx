@@ -219,10 +219,15 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
         .eq("brand_id", brandId);
 
       setProgressMessage("Starting brand processing...");
-      const { error: processError } = await supabase.functions.invoke("extract-brand", {
+      void supabase.functions.invoke("extract-brand", {
         body: { auditFindings: effectiveFindings, brandName, industry, brandId, step: "full" },
+      }).then(({ error: processError }) => {
+        if (processError) {
+          console.error("[ReanalyzeBrand] extract-brand returned error:", processError.message);
+        }
+      }).catch((err) => {
+        console.log("[ReanalyzeBrand] extract-brand invoke returned/timed out:", err?.message);
       });
-      if (processError) throw new Error(processError.message || "Failed to start brand processing");
 
       // Poll processing_status for real progress
       const POLL_INTERVAL = 4000;
