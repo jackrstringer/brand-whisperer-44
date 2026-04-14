@@ -262,7 +262,7 @@ Return ONLY a JSON array. No other text, no markdown:
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
+        model: "claude-haiku-4-5-20241022",
         max_tokens: turbo_mode ? 8192 : 4096,
         temperature: 1.0,
         stream: true,

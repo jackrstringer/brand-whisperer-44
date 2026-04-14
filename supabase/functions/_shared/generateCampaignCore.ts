@@ -1493,7 +1493,7 @@ UNIVERSAL RULES FOR EVENT DATA:
           // Ask Claude to fix the specific Klaviyo error
           const fixResp = await callAnthropic(
             {
-              model: "claude-sonnet-4-6-20251101",
+              model: "claude-sonnet-4-20250514",
               max_tokens: 16384,
               system: `You are an expert Klaviyo email developer. Fix the Liquid template error below.
 Return ONLY the corrected complete HTML — no explanation, no markdown fences.
