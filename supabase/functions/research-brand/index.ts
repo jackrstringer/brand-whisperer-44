@@ -151,11 +151,16 @@ async function runResearch(brandId: string, brandName: string, domain: string) {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  // Mark as researching
-  await supabase.from("brand_intelligence").upsert({
+  // Mark as researching — now allowed by the updated trigger
+  const { error: statusError } = await supabase.from("brand_intelligence").upsert({
     brand_id: brandId,
     research_status: "researching",
   }, { onConflict: "brand_id" });
+
+  if (statusError) {
+    console.error("[research-brand] Failed to set researching status:", statusError);
+    // Don't throw — continue with research even if status write fails
+  }
 
   try {
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -187,6 +192,13 @@ async function runResearch(brandId: string, brandName: string, domain: string) {
     }
 
     const result = await resp.json();
+
+    // Check for truncation
+    if (result.stop_reason === "max_tokens") {
+      console.error("[research-brand] Response truncated (stop_reason=max_tokens)");
+      throw new Error("Research response was truncated — output exceeded token limit.");
+    }
+
     const textBlocks = (result.content || []).filter((b: any) => b.type === "text");
     const rawText = textBlocks.map((b: any) => b.text).join("\n");
 
@@ -203,10 +215,18 @@ async function runResearch(brandId: string, brandName: string, domain: string) {
         const start = rawText.indexOf("{");
         const end = rawText.lastIndexOf("}");
         if (start >= 0 && end > start) {
-          parsed = JSON.parse(rawText.substring(start, end + 1));
+          const candidate = rawText.substring(start, end + 1);
+          try {
+            parsed = JSON.parse(candidate);
+          } catch {
+            const openBraces = (candidate.match(/\{/g) || []).length;
+            const closeBraces = (candidate.match(/\}/g) || []).length;
+            console.error(`[research-brand] JSON parse failed. Braces: ${openBraces} open, ${closeBraces} close`);
+            throw new Error(`Malformed JSON in research output (${openBraces} open vs ${closeBraces} close braces)`);
+          }
         } else {
-          console.error("[research-brand] Could not parse JSON from:", rawText.substring(0, 500));
-          throw new Error("Could not parse JSON from AI response");
+          console.error("[research-brand] Could not find JSON in response:", rawText.substring(0, 500));
+          throw new Error("Could not find JSON in AI response");
         }
       }
     }
@@ -229,11 +249,11 @@ async function runResearch(brandId: string, brandName: string, domain: string) {
     console.log("[research-brand] Research completed successfully for", brandId);
   } catch (err: any) {
     console.error("[research-brand] Background research failed:", err);
-    // Mark as failed so UI can show error
+    // Mark as failed — now allowed by the updated trigger
     await supabase.from("brand_intelligence").upsert({
       brand_id: brandId,
       research_status: "failed",
-    }, { onConflict: "brand_id" });
+    }, { onConflict: "brand_id" }).catch((e) => console.error("[research-brand] Failed to set failed status:", e));
   }
 }
 
