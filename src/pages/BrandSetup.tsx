@@ -18,7 +18,7 @@ import type { BrandExtraction } from "@/lib/types";
 import { sliceAndUploadReferenceImages, saveSliceUrls } from "@/lib/imageSlicing";
 import ProcessingStatusPanel from "@/components/brand/ProcessingStatusPanel";
 
-type Step = "info" | "sources" | "uploads" | "auditing" | "audit_review" | "generating_guide" | "guide_review";
+type Step = "info" | "sources" | "uploads" | "auditing" | "audit_review" | "creating_brand" | "generating_guide" | "guide_review";
 
 const AUDIT_MESSAGES = [
   "Scanning layouts...",
@@ -338,22 +338,14 @@ export default function BrandSetup() {
     const extractionSrcs = sources || ["screenshots"];
     if (!auditData || !user) { toast.error("No audit data available"); return; }
 
-    setStep("generating_guide");
+    // Show intermediate loading state while uploading/creating brand
+    setStep("creating_brand");
     guideStartTimeRef.current = Date.now();
     setProgressValue(0);
-    setProgressMessage(GUIDE_MESSAGES[0]);
-
-    const guideStartTime = Date.now();
-    const interval = setInterval(() => {
-      const elapsed = (Date.now() - guideStartTime) / 1000;
-      const progress = Math.min(90, 25 * Math.log10(1 + elapsed / 8));
-      const msgIndex = Math.min(Math.floor(progress / 25), GUIDE_MESSAGES.length - 1);
-      setProgressMessage(GUIDE_MESSAGES[msgIndex]);
-      setProgressValue(progress);
-    }, 1000);
+    setProgressMessage("Preparing brand...");
 
     try {
-      // Step 1: Upload images and create brand + profile early
+      // Step 1: Upload images and create brand + profile
       let brandId = earlyBrandId;
       if (!brandId) {
         setProgressMessage("Uploading images...");
@@ -402,7 +394,6 @@ export default function BrandSetup() {
         }
 
         // Fire-and-forget: upload asset files and analyze with AI in background
-        // This does NOT block guide generation — results are needed later for campaign building
         const assetBrandId = brandId!;
         (async () => {
           try {
@@ -438,7 +429,6 @@ export default function BrandSetup() {
             await Promise.all(uploadPromises);
             if (assetInserts.length > 0) {
               const { data: insertedAssets } = await supabase.from("brand_assets").insert(assetInserts).select("id, url");
-              // Fire-and-forget: composition analysis for each asset
               if (insertedAssets) {
                 for (const asset of insertedAssets) {
                   supabase.functions.invoke("analyze-asset-composition", {
@@ -454,21 +444,31 @@ export default function BrandSetup() {
         })();
       }
 
-      // Start full processing and rely on polling for completion state
-      setProgressMessage("Starting brand processing...");
-      void supabase.functions.invoke("extract-brand", {
-        body: { auditFindings: auditData, brandName, industry, brandId, step: "full", confirmed_properties: props },
-      }).then(({ error: processError }) => {
-        if (processError) {
-          console.error("[BrandSetup] extract-brand returned error:", processError.message);
-        }
-      }).catch((err) => {
-        console.log("[BrandSetup] extract-brand invoke returned/timed out:", err?.message);
-      });
+      // NOW switch to generating_guide — brandId is guaranteed set
+      setStep("generating_guide");
 
-      // Polling is now handled by ProcessingStatusPanel
+      // Invoke extract-brand and handle errors explicitly (Bug 2 fix)
+      setProgressMessage("Starting brand processing...");
+      try {
+        const { error: invokeError } = await supabase.functions.invoke("extract-brand", {
+          body: { auditFindings: auditData, brandName, industry, brandId, step: "full", confirmed_properties: props },
+        });
+        if (invokeError) {
+          console.error("[BrandSetup] extract-brand invocation error:", invokeError.message);
+          // Mark as failed in DB so ProcessingStatusPanel picks it up
+          await supabase.from("brand_profiles").update({
+            processing_status: "failed",
+            processing_error: `Failed to start brand processing: ${invokeError.message}`,
+          } as any).eq("brand_id", brandId);
+        }
+      } catch (err: any) {
+        // Network timeout is expected for long-running synchronous calls — NOT a failure.
+        // The function is still running server-side. ProcessingStatusPanel will track real status.
+        console.log("[BrandSetup] extract-brand invoke returned/timed out (expected for long jobs):", err?.message);
+      }
+
+      // Polling is handled by ProcessingStatusPanel
     } catch (err: any) {
-      clearInterval(interval);
       toast.error(err.message || "Guide generation failed");
       setStep("uploads");
     }
