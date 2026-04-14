@@ -718,6 +718,19 @@ export default function BrandSetup() {
     );
   }
 
+  if (step === "creating_brand") {
+    return (
+      <div className="min-h-screen bg-background p-6 md:p-12 flex flex-col items-center justify-center">
+        <div className="max-w-md w-full space-y-6 text-center">
+          <h2 className="text-xl font-semibold">Setting Up Your Brand</h2>
+          <p className="text-sm text-muted-foreground">Uploading images and creating your brand profile...</p>
+          <Progress value={30} className="h-1.5" />
+          <p className="text-sm text-muted-foreground">{progressMessage}</p>
+        </div>
+      </div>
+    );
+  }
+
   if (step === "audit_review" && auditFindings) {
     return (
       <div className="min-h-screen bg-background p-6 md:p-12">
