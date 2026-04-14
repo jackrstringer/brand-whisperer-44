@@ -519,8 +519,20 @@ async function runSpecCall(
   try {
     return JSON.parse(specJsonMatch[0]);
   } catch (parseErr) {
-    const openBraces = (specJsonMatch[0].match(/\{/g) || []).length;
-    const closeBraces = (specJsonMatch[0].match(/\}/g) || []).length;
+    // Attempt JSON repair: add missing closing braces
+    let candidate = specJsonMatch[0];
+    const openBraces = (candidate.match(/\{/g) || []).length;
+    const closeBraces = (candidate.match(/\}/g) || []).length;
+    if (openBraces > closeBraces && openBraces - closeBraces <= 5) {
+      candidate += "}".repeat(openBraces - closeBraces);
+      try {
+        const repaired = JSON.parse(candidate);
+        console.log(`[extract-brand] JSON repaired: added ${openBraces - closeBraces} closing braces`);
+        return repaired;
+      } catch {
+        // Fall through to error
+      }
+    }
     console.error(`[extract-brand] JSON parse failed. Braces: ${openBraces} open, ${closeBraces} close. Length: ${specJsonMatch[0].length}`);
     throw new Error(`Unterminated JSON in spec output (${openBraces} open vs ${closeBraces} close braces). Model output may have been truncated.`);
   }

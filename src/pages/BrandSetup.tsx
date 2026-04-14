@@ -103,41 +103,7 @@ export default function BrandSetup() {
     setPreviews(previews.filter((_, i) => i !== index));
   };
 
-  const sliceImage = (
-    file: File,
-    maxSliceHeight = 1300,
-    maxWidth = 900,
-  ): Promise<Array<{ data: string; mediaType: string; sliceIndex: number; totalSlices: number }>> =>
-    new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > maxWidth) {
-          const ratio = maxWidth / width;
-          width = maxWidth;
-          height = Math.round(height * ratio);
-        }
-        const totalSlices = Math.max(1, Math.ceil(height / maxSliceHeight));
-        const sliceHeight = Math.ceil(height / totalSlices);
-        const results: Array<{ data: string; mediaType: string; sliceIndex: number; totalSlices: number }> = [];
-        for (let i = 0; i < totalSlices; i++) {
-          const sy = i * sliceHeight;
-          const sh = Math.min(sliceHeight, height - sy);
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = sh;
-          const ctx = canvas.getContext("2d")!;
-          const origRatio = img.naturalWidth / width;
-          ctx.drawImage(img, 0, sy * origRatio, img.naturalWidth, sh * origRatio, 0, 0, width, sh);
-          const dataUrl = canvas.toDataURL("image/png");
-          results.push({ data: dataUrl.split(",")[1], mediaType: "image/png", sliceIndex: i, totalSlices });
-        }
-        URL.revokeObjectURL(img.src);
-        resolve(results);
-      };
-      img.onerror = reject;
-      img.src = URL.createObjectURL(file);
-    });
+  // Image slicing is now done server-side via Vision API + Claude in audit-brand
 
   const getReferenceImageFiles = (): File[] => {
     const all: File[] = [];
@@ -158,6 +124,8 @@ export default function BrandSetup() {
 
   // === Audit callback for BrandProcessingScreen ===
   const handleRunAudit = useCallback(async (log: (msg: string, level?: "info" | "error" | "success") => void) => {
+    if (!user) throw new Error("Not authenticated");
+
     const extractionPromises: Promise<any>[] = [];
     const extractionSources: string[] = ["screenshots"];
 
@@ -193,7 +161,7 @@ export default function BrandSetup() {
       );
     }
 
-    // Image slicing
+    // Upload reference images to storage so the server can do intelligent slicing
     const refFiles = getReferenceImageFiles().slice(0, 8);
     if (refFiles.length === 0) {
       const fallbackFiles = Object.values(assetCategories)
@@ -202,17 +170,22 @@ export default function BrandSetup() {
       refFiles.push(...fallbackFiles);
     }
 
-    let slicedImages: any[] = [];
+    let refImageUrls: string[] = [];
     if (refFiles.length >= 3) {
-      log(`Slicing ${refFiles.length} reference images...`);
-      for (let ci = 0; ci < refFiles.length; ci++) {
-        log(`Slicing image ${ci + 1} of ${refFiles.length}...`);
-        const slices = await sliceImage(refFiles[ci]);
-        for (const slice of slices) {
-          slicedImages.push({ ...slice, campaignIndex: ci });
+      log(`Uploading ${refFiles.length} reference images for intelligent slicing...`);
+      for (let i = 0; i < refFiles.length; i++) {
+        const file = refFiles[i];
+        const path = `${user.id}/audit-refs/${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`;
+        const { error: uploadError } = await supabase.storage.from("brand-references").upload(path, file);
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from("brand-references").getPublicUrl(path);
+          refImageUrls.push(urlData.publicUrl);
+          log(`Uploaded ref image ${i + 1}/${refFiles.length}: ${file.name}`, "info");
+        } else {
+          log(`Failed to upload ${file.name}: ${uploadError.message}`, "error");
         }
       }
-      log(`Created ${slicedImages.length} slices total`, "success");
+      log(`${refImageUrls.length} images uploaded`, "success");
     }
 
     // Wait for parallel extractions
@@ -236,28 +209,41 @@ export default function BrandSetup() {
       }
     }
 
-    if (slicedImages.length === 0 && !merged) {
+    if (refImageUrls.length === 0 && !merged) {
       throw new Error("Need at least 3 reference images or a Figma/website source.");
     }
 
     // If no images but have confirmed props, skip visual audit
-    if (slicedImages.length === 0) {
+    if (refImageUrls.length === 0) {
       const minimalAudit = { confirmed_properties: merged, _note: "No screenshots provided, using Figma/website data only" };
       log("Using Figma/website data only (no screenshots)", "info");
       return { auditFindings: minimalAudit, confirmedProperties: merged, extractionSources };
     }
 
-    log(`Sending ${slicedImages.length} slices to Claude for visual audit...`);
+    // Send image URLs to audit-brand for server-side intelligent slicing (Vision API + Claude)
+    log(`Sending ${refImageUrls.length} images to audit-brand for intelligent slicing (Vision API + Claude)...`);
+    log(`This uses Google Vision OCR + whitespace detection + Claude Sonnet to find natural section breaks`, "info");
+
+    const auditStart = Date.now();
     const { data, error } = await supabase.functions.invoke("audit-brand", {
-      body: { images: slicedImages, brandName, industry, confirmed_properties: merged },
+      body: { imageUrls: refImageUrls, brandName, industry, confirmed_properties: merged },
     });
+
+    const auditDuration = ((Date.now() - auditStart) / 1000).toFixed(1);
 
     if (error) throw new Error(error.message || "Audit failed");
     if (data?.error) throw new Error(data.error);
 
-    log(`Audit found ${Object.keys(data.audit || {}).length} design categories`, "success");
+    // Log slicing details from server
+    if (data?.slicing_log && Array.isArray(data.slicing_log)) {
+      for (const entry of data.slicing_log) {
+        log(`[slicer] ${entry}`, "info");
+      }
+    }
+
+    log(`Audit complete in ${auditDuration}s — found ${Object.keys(data.audit || {}).length} design categories`, "success");
     return { auditFindings: data.audit, confirmedProperties: merged, extractionSources };
-  }, [selectedSources, figmaUrl, figmaToken, websiteUrl, assetCategories, brandName, industry, campaignFiles, brandDeckFiles, miscRefFiles, mockupFiles]);
+  }, [user, selectedSources, figmaUrl, figmaToken, websiteUrl, assetCategories, brandName, industry, campaignFiles, brandDeckFiles, miscRefFiles, mockupFiles]);
 
   // === Create brand callback for BrandProcessingScreen ===
   const handleCreateBrand = useCallback(async (

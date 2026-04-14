@@ -1,4 +1,9 @@
+// supabase/functions/audit-brand/index.ts
+// Performs visual audit of brand email campaigns using intelligent slicing.
+// Accepts either pre-sliced images (base64) OR image URLs for server-side intelligent slicing.
+
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { sliceEmailImage } from "../_shared/sliceEmailImage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -50,7 +55,7 @@ The "audit" object must contain:
     "secondary_mark_description": "description or null"
   },
   "cta_buttons": {
-    "cta_system_overview": "2-3 sentences describing the CTA system as a whole. e.g. 'Andar uses a single fixed CTA shape across all campaigns. Only the fill color changes to match the campaign theme.'",
+    "cta_system_overview": "2-3 sentences describing the CTA system as a whole.",
     "variants": [
       {
         "name": "primary",
@@ -69,7 +74,7 @@ The "audit" object must contain:
         "padding_horizontal": "approximate px",
         "width_behavior": "auto | full-width | constrained",
         "is_color_campaign_reactive": true or false,
-        "observed_colors_across_campaigns": ["#hex values seen for this variant across all campaigns"]
+        "observed_colors_across_campaigns": ["#hex values"]
       }
     ],
     "color_reactivity": {
@@ -82,7 +87,7 @@ The "audit" object must contain:
     "wraps_to_two_lines": false,
     "notes": "",
     "color_behavior": "fixed | campaign-reactive",
-    "color_behavior_description": "If buttons appear in many different fill colors across campaigns (beyond 2-3 variants), describe the pattern: e.g. 'CTA fill color matches the campaign's primary section background color' or 'CTA adapts to each campaign's color theme'. If buttons use a fixed set of 1-3 colors, set color_behavior to 'fixed'."
+    "color_behavior_description": "description"
   },
   "typography": {
     "headline_font_family": "exact name or [NEEDS CONFIRMATION]",
@@ -90,7 +95,7 @@ The "audit" object must contain:
     "headline_italic_pattern": "never | full headline | selective words (list which)",
     "headline_alignment": "centered | left-aligned | mixed",
     "headline_sizing_system": {
-      "rule_description": "NOT a range. Describe the actual pattern: e.g. 'Shorter headlines use larger type. 1-2 words at ~100px, 3-4 words at ~60px, 5+ words at ~48px.'",
+      "rule_description": "NOT a range. Describe the actual pattern.",
       "observed_examples": [
         { "text": "actual headline text", "approximate_size": "~60px" }
       ]
@@ -114,7 +119,7 @@ The "audit" object must contain:
     "text_muted": "#hex",
     "footer_background": "#hex",
     "footer_text": "#hex",
-    "star_rating_color": "#hex or null (NEVER default to gold #FFD700 -- use what is observed)",
+    "star_rating_color": "#hex or null (NEVER default to gold #FFD700)",
     "all_distinct_colors": [{"color": "#hex", "usage": "where used"}]
   },
   "spacing_and_sizing": {
@@ -123,7 +128,7 @@ The "audit" object must contain:
     "section_to_section_gap": "approximate px",
     "headline_to_subhead_gap": "approximate px",
     "body_to_cta_gap": "approximate px",
-    "cta_vertical_padding": "approximate px (space above/below button in its section)",
+    "cta_vertical_padding": "approximate px",
     "footer_padding": "approximate px",
     "image_treatment": "full-bleed | padded | mixed",
     "image_corner_radius": "0 | approximate px",
@@ -132,7 +137,7 @@ The "audit" object must contain:
     "card_shadow": "description or none"
   },
   "copy_patterns": {
-    "cta_label_patterns": ["action-oriented", "includes product name", "casual", etc.],
+    "cta_label_patterns": ["action-oriented", "includes product name", "casual"],
     "headline_formulas": [{"pattern": "name", "examples": ["actual headline text"]}],
     "body_bold_usage": "description of what gets bolded with examples",
     "emojis_used": false,
@@ -160,22 +165,19 @@ The "audit" object must contain:
 "needs_confirmation" -- array of objects: [{"element": "e.g. typography.headline_italic_pattern", "reason": "Could be JPEG compression artifact vs actual italic"}]
 
 CRITICAL RULES:
-- CTA font-style defaults to NORMAL. Only mark italic if unmistakable across many buttons. Bold sans-serif at small sizes or JPEG compression can appear to lean -- default to font-style:normal.
-- CTA has_border: Look VERY carefully at the button edges. If there is a visible outer stroke/border distinct from the fill, set has_border:true with exact border_color and border_weight. If there is NO visible stroke, set has_border:false. Do NOT guess -- zoom in mentally on every button edge.
+- CTA font-style defaults to NORMAL. Only mark italic if unmistakable across many buttons.
+- CTA has_border: Look VERY carefully at the button edges.
 - Star rating color: use what is OBSERVED. Never default to gold (#FFD700).
-- List every CTA label verbatim -- do not paraphrase or generalize.
-- Pull actual text content from the emails for component samples, headlines, etc.
+- List every CTA label verbatim.
+- Pull actual text content from the emails.
 - Do NOT invent or assume components that aren't visible.
-- For unified values across campaigns, use the MOST COMMON value (majority rules).
-- Note any inconsistencies between campaigns in the inconsistencies array.
+- For unified values across campaigns, use the MOST COMMON value.
+- Note any inconsistencies in the inconsistencies array.
 
-Campaign color system: Determine whether this brand uses full-color campaign immersion (entire email adopts one color — hero, CTAs, footer all inherit it) or a modular approach (white canvas with isolated color sections). This is the single most structurally important finding.
-
-Body text alignment: Examine each body text paragraph carefully. If the lines of text appear balanced around a center axis, report 'center'. Do not default to 'left' without verifying.
-
-Headline sizing: Do not report a range. Report the rule you observe. Look at how font size relates to headline length across campaigns.
-
-Logo: Note whether the logo sits in its own isolated bar (dedicated background, clear padding above and below) or integrates into the hero section sharing a background.
+Campaign color system: Determine whether this brand uses full-color campaign immersion or modular approach.
+Body text alignment: Examine each body text paragraph carefully.
+Headline sizing: Do not report a range. Report the rule you observe.
+Logo: Note whether the logo sits in its own isolated bar or integrates into the hero section.
 
 Return ONLY valid JSON. No markdown fences. No commentary.`;
 
@@ -187,10 +189,115 @@ Deno.serve(async (req) => {
   try {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
+    const GOOGLE_VISION_KEY = Deno.env.get("GOOGLE_CLOUD_VISION_API_KEY") ?? "";
 
-    const { images, brandName, industry, confirmed_properties } = await req.json();
-    if (!images || !Array.isArray(images) || images.length === 0) {
-      return new Response(JSON.stringify({ error: "No images provided" }), {
+    const { images, imageUrls, brandName, industry, confirmed_properties } = await req.json();
+
+    // Support two modes:
+    // 1. imageUrls: array of URLs → server-side intelligent slicing via Vision API + Claude
+    // 2. images: array of base64 slices → legacy mode (pre-sliced on client)
+    let campaignGroups = new Map<number, Array<{ data: string; mediaType: string; sliceIndex: number; totalSlices: number }>>();
+    const slicingLog: string[] = [];
+
+    if (imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0) {
+      // ── Intelligent server-side slicing ──
+      console.log(`[audit-brand] Intelligent slicing mode: ${imageUrls.length} image URLs`);
+      slicingLog.push(`Starting intelligent slicing for ${imageUrls.length} images`);
+
+      for (let ci = 0; ci < imageUrls.length; ci++) {
+        const url = imageUrls[ci];
+        try {
+          slicingLog.push(`[${ci + 1}/${imageUrls.length}] Slicing ${url.substring(0, 80)}...`);
+          console.log(`[audit-brand] Slicing campaign ${ci + 1}/${imageUrls.length}: ${url.substring(0, 100)}`);
+
+          const emailSlices = await sliceEmailImage(
+            { imageUrl: url },
+            GOOGLE_VISION_KEY,
+            ANTHROPIC_API_KEY,
+          );
+
+          slicingLog.push(`[${ci + 1}/${imageUrls.length}] Got ${emailSlices.length} intelligent slices (labels: ${emailSlices.map(s => s.label).join(", ")})`);
+          console.log(`[audit-brand] Campaign ${ci + 1}: ${emailSlices.length} slices`);
+
+          // Convert URL-based slices to base64 for the audit call
+          const sliceData: Array<{ data: string; mediaType: string; sliceIndex: number; totalSlices: number }> = [];
+          for (const slice of emailSlices) {
+            try {
+              const resp = await fetch(slice.url);
+              if (!resp.ok) {
+                slicingLog.push(`[${ci + 1}] Warning: Failed to fetch slice ${slice.label}: ${resp.status}`);
+                continue;
+              }
+              const buf = await resp.arrayBuffer();
+              const bytes = new Uint8Array(buf);
+              const b64 = btoa(String.fromCharCode(...bytes));
+              const ct = resp.headers.get("content-type")?.split(";")[0].trim() || "image/jpeg";
+              sliceData.push({
+                data: b64,
+                mediaType: ct,
+                sliceIndex: slice.index,
+                totalSlices: emailSlices.length,
+              });
+            } catch (fetchErr) {
+              slicingLog.push(`[${ci + 1}] Warning: Failed to download slice ${slice.label}: ${fetchErr}`);
+            }
+          }
+
+          if (sliceData.length > 0) {
+            campaignGroups.set(ci, sliceData);
+          }
+        } catch (sliceErr) {
+          slicingLog.push(`[${ci + 1}/${imageUrls.length}] Slicing failed: ${sliceErr}. Falling back to simple download.`);
+          console.warn(`[audit-brand] Slicing failed for campaign ${ci + 1}:`, sliceErr);
+
+          // Fallback: just download the full image as a single slice
+          try {
+            const resp = await fetch(url);
+            if (resp.ok) {
+              const buf = await resp.arrayBuffer();
+              const bytes = new Uint8Array(buf);
+              const b64 = btoa(String.fromCharCode(...bytes));
+              const ct = resp.headers.get("content-type")?.split(";")[0].trim() || "image/jpeg";
+              campaignGroups.set(ci, [{
+                data: b64,
+                mediaType: ct,
+                sliceIndex: 0,
+                totalSlices: 1,
+              }]);
+              slicingLog.push(`[${ci + 1}] Fallback: using full image as single slice`);
+            }
+          } catch {
+            slicingLog.push(`[${ci + 1}] Fallback download also failed, skipping`);
+          }
+        }
+      }
+
+      slicingLog.push(`Slicing complete: ${campaignGroups.size} campaigns, ${Array.from(campaignGroups.values()).reduce((s, v) => s + v.length, 0)} total slices`);
+
+    } else if (images && Array.isArray(images) && images.length > 0) {
+      // ── Legacy base64 mode ──
+      console.log(`[audit-brand] Legacy base64 mode: ${images.length} pre-sliced images`);
+      for (const img of images) {
+        const ci = img.campaignIndex ?? 0;
+        if (!campaignGroups.has(ci)) campaignGroups.set(ci, []);
+        campaignGroups.get(ci)!.push({
+          data: typeof img === "string" ? img : img.data,
+          mediaType: typeof img === "string" ? "image/jpeg" : (img.mediaType || "image/jpeg"),
+          sliceIndex: img.sliceIndex ?? 0,
+          totalSlices: img.totalSlices ?? 1,
+        });
+      }
+      for (const [, slices] of campaignGroups) {
+        slices.sort((a, b) => a.sliceIndex - b.sliceIndex);
+      }
+    } else {
+      return new Response(JSON.stringify({ error: "No images or imageUrls provided" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (campaignGroups.size === 0) {
+      return new Response(JSON.stringify({ error: "No valid campaign images could be processed" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -213,30 +320,13 @@ Deno.serve(async (req) => {
         const b = confirmed_properties.buttons;
         const radiusPart = b.border_radius != null ? `${b.border_radius}px` : "unknown";
         parts.push(`Advisory (non-email source) button values: radius ${radiusPart}, font-weight ${b.font_weight || "unknown"}, font-style ${b.font_style || "normal"}`);
-        parts.push(`Treat CTA border/radius/shape as VISUAL-EVIDENCE-FIRST from the email campaigns. If advisory values conflict with campaign screenshots, trust screenshots and note conflict under needs_confirmation.`);
+        parts.push(`Treat CTA border/radius/shape as VISUAL-EVIDENCE-FIRST from the email campaigns.`);
       }
-      parts.push("\nUse confirmed fonts/colors as ground truth. For CTA borders, radius, and variant shapes, prioritize what is visibly present in campaign screenshots. Focus your visual audit on: CTA label text, copy patterns, layout spacing, component structures, voice/tone, photography style.");
+      parts.push("\nUse confirmed fonts/colors as ground truth. For CTA borders, radius, and variant shapes, prioritize what is visibly present in campaign screenshots.");
       confirmedPrefix = parts.join("\n") + "\n\n";
     }
 
-    // Group slices by campaignIndex and build a single message
-    const campaignGroups = new Map<number, Array<{ data: string; mediaType: string; sliceIndex: number; totalSlices: number }>>();
-    for (const img of images) {
-      const ci = img.campaignIndex ?? 0;
-      if (!campaignGroups.has(ci)) campaignGroups.set(ci, []);
-      campaignGroups.get(ci)!.push({
-        data: typeof img === "string" ? img : img.data,
-        mediaType: typeof img === "string" ? "image/jpeg" : (img.mediaType || "image/jpeg"),
-        sliceIndex: img.sliceIndex ?? 0,
-        totalSlices: img.totalSlices ?? 1,
-      });
-    }
-
-    for (const [, slices] of campaignGroups) {
-      slices.sort((a, b) => a.sliceIndex - b.sliceIndex);
-    }
-
-    // Cap slices using BOTH count and payload budget
+    // Cap slices
     const MAX_TOTAL_SLICES = 80;
     const MAX_TOTAL_BASE64_BYTES = 24 * 1024 * 1024;
     const originalSliceCount = Array.from(campaignGroups.values()).reduce((sum, slices) => sum + slices.length, 0);
@@ -319,6 +409,8 @@ Deno.serve(async (req) => {
       text: `${confirmedPrefix}Brand: ${brandName}. Industry: ${industry || "not specified"}. ${campaignCount} campaigns shown above. Perform a comprehensive unified visual audit organized by the five rule categories. Return the full JSON with "audit", "inconsistencies", and "needs_confirmation" keys.`,
     });
 
+    console.log(`[audit-brand] Sending to Claude Opus... payload: ${campaignCount} campaigns, ${finalSliceCount} slices`);
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -341,7 +433,6 @@ Deno.serve(async (req) => {
 
     const result = await response.json();
 
-    // Check for truncation
     if (result.stop_reason === "max_tokens") {
       console.error(`[audit-brand] Response truncated (stop_reason=max_tokens)`);
       throw new Error("Audit response was truncated — output exceeded token limit. Try with fewer reference images.");
@@ -355,10 +446,23 @@ Deno.serve(async (req) => {
     try {
       parsed = JSON.parse(jsonMatch[0]);
     } catch {
-      const openBraces = (jsonMatch[0].match(/\{/g) || []).length;
-      const closeBraces = (jsonMatch[0].match(/\}/g) || []).length;
-      console.error(`[audit-brand] JSON parse failed. Braces: ${openBraces} open, ${closeBraces} close. Length: ${jsonMatch[0].length}`);
-      throw new Error(`Malformed JSON in audit output (${openBraces} open vs ${closeBraces} close braces). Model output may have been truncated.`);
+      // Attempt JSON repair: add missing closing braces
+      let candidate = jsonMatch[0];
+      const openBraces = (candidate.match(/\{/g) || []).length;
+      const closeBraces = (candidate.match(/\}/g) || []).length;
+      if (openBraces > closeBraces && openBraces - closeBraces <= 5) {
+        candidate += "}".repeat(openBraces - closeBraces);
+        try {
+          parsed = JSON.parse(candidate);
+          console.log(`[audit-brand] JSON repaired: added ${openBraces - closeBraces} closing braces`);
+        } catch {
+          console.error(`[audit-brand] JSON repair failed. Braces: ${openBraces} open, ${closeBraces} close. Length: ${candidate.length}`);
+          throw new Error(`Malformed JSON in audit output (${openBraces} open vs ${closeBraces} close braces). Model output may have been truncated.`);
+        }
+      } else {
+        console.error(`[audit-brand] JSON parse failed. Braces: ${openBraces} open, ${closeBraces} close. Length: ${jsonMatch[0].length}`);
+        throw new Error(`Malformed JSON in audit output (${openBraces} open vs ${closeBraces} close braces). Model output may have been truncated.`);
+      }
     }
 
     // Ensure expected structure
@@ -371,25 +475,23 @@ Deno.serve(async (req) => {
         };
         delete wrapped.audit.inconsistencies;
         delete wrapped.audit.needs_confirmation;
-        console.log(`Audit complete (single call, ${campaignCount} campaigns)`);
-        return new Response(JSON.stringify(wrapped), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        parsed = wrapped;
+      } else {
+        throw new Error("Audit response missing 'audit' key and doesn't contain expected fields");
       }
     }
 
-    console.log(`Audit complete (single call, ${campaignCount} campaigns)`);
+    console.log(`Audit complete (${campaignCount} campaigns)`);
 
     return new Response(JSON.stringify({
-      audit: parsed.audit || parsed,
-      inconsistencies: parsed.inconsistencies || [],
-      needs_confirmation: parsed.needs_confirmation || [],
+      ...parsed,
+      slicing_log: slicingLog,
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (err) {
-    console.error("Audit-brand error:", err);
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
+  } catch (err: any) {
+    console.error("Audit error:", err);
+    return new Response(JSON.stringify({ error: err.message || String(err) }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
