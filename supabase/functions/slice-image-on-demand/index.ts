@@ -1,7 +1,6 @@
 // supabase/functions/slice-image-on-demand/index.ts
-// On-demand Slicer wrapper for the QA pipeline (Agent 1 → Agent 4 bridge).
-// Accepts a raw base64 image, runs sliceEmailImage, and returns the slices.
-// No DB read or write — purely stateless, on-demand.
+// On-demand Slicer wrapper. Accepts imageUrl or imageBase64,
+// runs the full intelligent slicing pipeline (Vision + edges + Claude + refinement).
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { sliceEmailImage, type EmailSlice } from "../_shared/sliceEmailImage.ts";
@@ -45,7 +44,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    console.log("[slice-image-on-demand] Starting on-demand slice, mimeType:", mimeType, "mode:", imageUrl ? "url" : "base64");
+    console.log("[slice-image-on-demand] Starting intelligent slice pipeline, mode:", imageUrl ? "url" : "base64");
 
     const slices: EmailSlice[] = await sliceEmailImage(
       { imageBase64, imageUrl, mimeType },
@@ -53,9 +52,49 @@ Deno.serve(async (req: Request) => {
       Deno.env.get("ANTHROPIC_API_KEY") ?? ""
     );
 
-    console.log("[slice-image-on-demand] Produced", slices.length, "slices");
+    // For base64 mode, resolve any CROP_NEEDED placeholders
+    const resolvedSlices: EmailSlice[] = [];
+    for (const slice of slices) {
+      if (slice.url.startsWith("data:") && slice.url.includes("CROP_NEEDED:")) {
+        // Parse crop coords and do ImageScript crop
+        const match = slice.url.match(/CROP_NEEDED:(\d+):(\d+)/);
+        if (match && imageBase64) {
+          const yStart = parseInt(match[1]);
+          const yEnd = parseInt(match[2]);
+          const h = yEnd - yStart;
+          try {
+            const { Image } = await import("https://deno.land/x/imagescript@1.3.0/mod.ts");
+            const binary = atob(imageBase64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            const decoded = await Image.decode(bytes);
+            const cropped = decoded.clone().crop(0, yStart, decoded.width, Math.min(h, decoded.height - yStart));
+            const encoded = await cropped.encode(1);
+            let b64 = "";
+            const chunkSize = 8192;
+            for (let j = 0; j < encoded.length; j += chunkSize) {
+              b64 += String.fromCharCode(...encoded.subarray(j, j + chunkSize));
+            }
+            b64 = btoa(b64);
+            resolvedSlices.push({
+              ...slice,
+              url: `data:image/png;base64,${b64}`,
+            });
+          } catch (cropErr) {
+            console.warn(`[slice-image-on-demand] Crop failed for slice ${slice.index}:`, cropErr);
+            resolvedSlices.push(slice);
+          }
+        } else {
+          resolvedSlices.push(slice);
+        }
+      } else {
+        resolvedSlices.push(slice);
+      }
+    }
 
-    return new Response(JSON.stringify({ slices }), {
+    console.log("[slice-image-on-demand] Produced", resolvedSlices.length, "slices");
+
+    return new Response(JSON.stringify({ slices: resolvedSlices }), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
