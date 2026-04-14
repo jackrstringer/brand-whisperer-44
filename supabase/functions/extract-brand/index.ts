@@ -543,7 +543,9 @@ async function runGuideCall(
 ) {
   const auditJson = JSON.stringify(auditFindings, null, 2);
 
-  console.log(`[extract-brand] Call 2: Generating HTML guide for ${brandName}`);
+  console.log(`[extract-brand] Call 2: Generating HTML guide for ${brandName} (streaming)`);
+  const startTime = Date.now();
+
   const guideResponse = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -552,8 +554,9 @@ async function runGuideCall(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-opus-4-6",
-      max_tokens: 32000,
+      model: "claude-opus-4-6-20260801",
+      max_tokens: 64000,
+      stream: true,
       system: GUIDE_PROMPT,
       messages: [{
         role: "user",
@@ -567,17 +570,49 @@ async function runGuideCall(
     throw new Error(`Guide API error: ${guideResponse.status} - ${errText}`);
   }
 
-  const guideResult = await guideResponse.json();
-  const guideStopReason = guideResult.stop_reason;
-  let guideHtml = guideResult.content?.[0]?.text || "";
+  // Read SSE stream chunk by chunk — each read() keeps the Edge Function alive
+  let guideHtml = "";
+  const reader = guideResponse.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let chunkCount = 0;
 
-  if (guideStopReason === "max_tokens") {
-    console.error(`[extract-brand] Guide call truncated (stop_reason=max_tokens). Output length: ${guideHtml.length}`);
-    throw new Error("Guide generation was truncated — output exceeded token limit. The guide HTML is incomplete.");
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const data = line.slice(6).trim();
+      if (data === "[DONE]") continue;
+
+      try {
+        const event = JSON.parse(data);
+        if (event.type === "content_block_delta" && event.delta?.type === "text_delta") {
+          guideHtml += event.delta.text;
+          chunkCount++;
+        }
+        if (event.type === "error") {
+          throw new Error(`Anthropic stream error: ${JSON.stringify(event.error)}`);
+        }
+      } catch (e) {
+        if ((e as Error).message?.startsWith("Anthropic stream error:")) throw e;
+        // Skip non-JSON SSE lines (event: type markers, empty lines, etc)
+      }
+    }
   }
 
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`[extract-brand] Call 2 stream complete. ${chunkCount} chunks, ${guideHtml.length} chars, ${elapsed}s`);
+
+  // Clean up markdown fences if present
   guideHtml = guideHtml.replace(/^```html?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
 
+  // Find the actual HTML start if there's preamble text
   if (!guideHtml.startsWith("<!DOCTYPE") && !guideHtml.startsWith("<html")) {
     const docStart = guideHtml.indexOf("<!DOCTYPE");
     if (docStart > -1) guideHtml = guideHtml.substring(docStart);
@@ -585,7 +620,10 @@ async function runGuideCall(
 
   guideHtml = normalizeGuideHtmlSpacing(guideHtml);
 
-  console.log(`[extract-brand] Call 2 complete. Guide HTML length: ${guideHtml.length}`);
+  if (guideHtml.length < 500) {
+    throw new Error(`Guide HTML suspiciously short (${guideHtml.length} chars). Generation may have failed or been truncated.`);
+  }
+
   return guideHtml;
 }
 
