@@ -129,6 +129,47 @@ export default function ProcessingStatusPanel({
           return "stop";
         }
 
+        // Phase transition: spec_complete → trigger guide phase
+        if (status === "spec_complete" && !guideFiredRef.current) {
+          guideFiredRef.current = true;
+          specCompleteTimeRef.current = Date.now();
+          console.log("[ProcessingStatusPanel] spec_complete detected, firing guide phase");
+          
+          if (brandContext) {
+            supabase.functions.invoke("extract-brand", {
+              body: { 
+                auditFindings: brandContext.auditFindings, 
+                brandName: brandContext.brandName, 
+                industry: brandContext.industry, 
+                brandId, 
+                step: "guide" 
+              },
+            }).then(({ error: guideErr }) => {
+              if (guideErr) console.log("[ProcessingStatusPanel] guide invoke returned error (may still be running):", guideErr.message);
+            }).catch((err) => {
+              console.log("[ProcessingStatusPanel] guide invoke timed out (expected):", err?.message);
+            });
+          } else {
+            // No brandContext — trigger guide with minimal info, edge function will read from DB
+            supabase.functions.invoke("extract-brand", {
+              body: { brandId, step: "guide", brandName: "", industry: "", auditFindings: {} },
+            }).then(({ error: guideErr }) => {
+              if (guideErr) console.log("[ProcessingStatusPanel] guide invoke returned error:", guideErr.message);
+            }).catch((err) => {
+              console.log("[ProcessingStatusPanel] guide invoke timed out (expected):", err?.message);
+            });
+          }
+        }
+
+        // Stuck on spec_complete: guide never started after 30s
+        if (status === "spec_complete" && guideFiredRef.current && specCompleteTimeRef.current) {
+          const stuckMs = Date.now() - specCompleteTimeRef.current;
+          if (stuckMs > 60000) {
+            onFailed("Guide generation failed to start after spec completed. Please try again.");
+            return "stop";
+          }
+        }
+
         // Bug 3 fix: stuck-on-idle detection
         if (status === "idle" && !hasLeftIdleRef.current) {
           const elapsedMs = Date.now() - startTimeRef.current;
