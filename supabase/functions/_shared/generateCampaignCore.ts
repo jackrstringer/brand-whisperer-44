@@ -535,8 +535,8 @@ export async function generateCampaignCore(
   const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
   if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
-  const GENERATION_MODEL = "claude-opus-4-6";
-  const QA_MODEL = "claude-sonnet-4-6";
+  const GENERATION_MODEL = "claude-opus-4-20250514";
+  const QA_MODEL = "claude-sonnet-4-20250514";
 
   // Parallelize independent DB reads
   const [profileResult, brandResult, brandIntelResult] = await Promise.all([
@@ -1493,7 +1493,7 @@ UNIVERSAL RULES FOR EVENT DATA:
           // Ask Claude to fix the specific Klaviyo error
           const fixResp = await callAnthropic(
             {
-              model: "claude-sonnet-4-6-20251101",
+              model: "claude-sonnet-4-20250514",
               max_tokens: 16384,
               system: `You are an expert Klaviyo email developer. Fix the Liquid template error below.
 Return ONLY the corrected complete HTML — no explanation, no markdown fences.
