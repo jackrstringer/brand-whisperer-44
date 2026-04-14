@@ -340,11 +340,26 @@ Deno.serve(async (req) => {
     }
 
     const result = await response.json();
+
+    // Check for truncation
+    if (result.stop_reason === "max_tokens") {
+      console.error(`[audit-brand] Response truncated (stop_reason=max_tokens)`);
+      throw new Error("Audit response was truncated — output exceeded token limit. Try with fewer reference images.");
+    }
+
     const text = result.content?.[0]?.text || "";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("Failed to parse audit result - no JSON found");
+    if (!jsonMatch) throw new Error("Failed to parse audit result - no JSON found in response");
 
-    const parsed = JSON.parse(jsonMatch[0]);
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonMatch[0]);
+    } catch {
+      const openBraces = (jsonMatch[0].match(/\{/g) || []).length;
+      const closeBraces = (jsonMatch[0].match(/\}/g) || []).length;
+      console.error(`[audit-brand] JSON parse failed. Braces: ${openBraces} open, ${closeBraces} close. Length: ${jsonMatch[0].length}`);
+      throw new Error(`Malformed JSON in audit output (${openBraces} open vs ${closeBraces} close braces). Model output may have been truncated.`);
+    }
 
     // Ensure expected structure
     if (!parsed.audit || typeof parsed.audit !== "object") {

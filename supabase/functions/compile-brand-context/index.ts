@@ -69,6 +69,9 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    // Mark as compiling
+    await supabase.from("brand_intelligence").update({ research_status: "compiling" }).eq("brand_id", brand_id);
+
     // Fetch brand intelligence
     const { data: intel, error: fetchError } = await supabase
       .from("brand_intelligence")
@@ -147,6 +150,14 @@ Deno.serve(async (req) => {
     });
   } catch (err: any) {
     console.error("[compile-brand-context] Error:", err);
+    // Mark as failed so UI can detect
+    try {
+      const { brand_id } = await req.clone().json().catch(() => ({ brand_id: null }));
+      if (brand_id) {
+        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        await supabase.from("brand_intelligence").update({ research_status: "failed" }).eq("brand_id", brand_id);
+      }
+    } catch {}
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

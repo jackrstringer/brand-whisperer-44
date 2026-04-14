@@ -212,26 +212,20 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
     }, 500);
 
     try {
-      // Save current audit findings to profile first
+      // Save current audit findings and clear old guide, kick off full processing
       await supabase
         .from("brand_profiles")
-        .update({ audit_findings: effectiveFindings, brand_guide_html: null } as any)
+        .update({ audit_findings: effectiveFindings, brand_guide_html: null, processing_status: "idle", processing_error: null } as any)
         .eq("brand_id", brandId);
 
-      setProgressMessage("Building brand spec...");
-      const { error: specError } = await supabase.functions.invoke("extract-brand", {
-        body: { auditFindings: effectiveFindings, brandName, industry, brandId, step: "spec" },
+      setProgressMessage("Starting brand processing...");
+      const { error: processError } = await supabase.functions.invoke("extract-brand", {
+        body: { auditFindings: effectiveFindings, brandName, industry, brandId, step: "full" },
       });
-      if (specError) throw new Error(specError.message || "Failed to build brand spec");
+      if (processError) throw new Error(processError.message || "Failed to start brand processing");
 
-      setProgressMessage("Generating brand guide...");
-      const { error: guideStartError } = await supabase.functions.invoke("extract-brand", {
-        body: { auditFindings: effectiveFindings, brandName, industry, brandId, step: "guide" },
-      });
-      if (guideStartError) throw new Error(guideStartError.message || "Failed to start guide generation");
-
-      // Poll for results
-      const POLL_INTERVAL = 5000;
+      // Poll processing_status for real progress
+      const POLL_INTERVAL = 4000;
       const MAX_POLL_TIME = 15 * 60 * 1000;
       const startTime = Date.now();
 
@@ -239,20 +233,25 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
         try {
           const { data: profile } = await supabase
             .from("brand_profiles")
-            .select("brand_guide_html, audit_findings")
+            .select("processing_status, processing_error, brand_guide_html")
             .eq("brand_id", brandId)
             .single();
 
-          const findings = profile?.audit_findings as any;
-          if (findings?._error) {
+          const status = (profile as any)?.processing_status;
+          const error = (profile as any)?.processing_error;
+
+          if (status === "running_spec") setProgressMessage("Building brand spec...");
+          else if (status === "running_guide") setProgressMessage("Generating brand guide (3-5 min)...");
+
+          if (status === "failed") {
             clearInterval(pollTimer);
             clearInterval(interval);
-            toast.error(findings._error || "Guide generation failed");
+            toast.error(error || "Brand processing failed");
             setPhase("audit_review");
             return;
           }
 
-          if (profile?.brand_guide_html) {
+          if (status === "complete" && profile?.brand_guide_html) {
             clearInterval(pollTimer);
             clearInterval(interval);
             setBrandGuideHtml(profile.brand_guide_html);
@@ -266,7 +265,7 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
           if (Date.now() - startTime > MAX_POLL_TIME) {
             clearInterval(pollTimer);
             clearInterval(interval);
-            toast.error("Guide generation timed out. Please try again.");
+            toast.error("Brand processing timed out after 15 minutes. Please try again.");
             setPhase("audit_review");
           }
         } catch {
@@ -275,7 +274,7 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
       }, POLL_INTERVAL);
     } catch (err: any) {
       clearInterval(interval);
-      toast.error(err.message || "Guide generation failed");
+      toast.error(err.message || "Brand processing failed");
       setPhase("audit_review");
     }
   };

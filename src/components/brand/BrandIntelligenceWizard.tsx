@@ -268,18 +268,29 @@ export default function BrandIntelligenceWizard({ brandId, brandName, domain, ex
       });
       if (error) throw error;
 
-      // Poll for completion
-      let attempts = 0;
+      // Poll for completion — no fake success
+      const startTime = Date.now();
+      const MAX_COMPILE_TIME = 5 * 60 * 1000; // 5 minutes
       const poll = setInterval(async () => {
-        attempts++;
         const { data } = await supabase
           .from("brand_intelligence")
           .select("research_status")
           .eq("brand_id", brandId)
           .single();
-        if (data?.research_status === "complete" || attempts > 60) {
+
+        if (data?.research_status === "complete") {
           clearInterval(poll);
           setPhase("done");
+        } else if (data?.research_status === "failed") {
+          clearInterval(poll);
+          toast.error("Brand context compilation failed. Please try again.");
+          setPhase("survey");
+          setSaving(false);
+        } else if (Date.now() - startTime > MAX_COMPILE_TIME) {
+          clearInterval(poll);
+          toast.error("Compilation timed out after 5 minutes. Please try again.");
+          setPhase("survey");
+          setSaving(false);
         }
       }, 2000);
     } catch (err: any) {

@@ -133,7 +133,7 @@ export default function BrandSetup() {
   const sliceImage = (
     file: File,
     maxSliceHeight = 1300,
-    maxWidth = 600,
+    maxWidth = 900,
   ): Promise<Array<{ data: string; mediaType: string; sliceIndex: number; totalSlices: number }>> =>
     new Promise((resolve, reject) => {
       const img = new Image();
@@ -453,67 +453,64 @@ export default function BrandSetup() {
         })();
       }
 
-      setProgressMessage("Building brand spec...");
-      const { error: specError } = await supabase.functions.invoke("extract-brand", {
-        body: { auditFindings: auditData, brandName, industry, brandId, step: "spec", confirmed_properties: props },
+      // Kick off full processing (spec + guide) as a single background job
+      setProgressMessage("Starting brand processing...");
+      const { error: processError } = await supabase.functions.invoke("extract-brand", {
+        body: { auditFindings: auditData, brandName, industry, brandId, step: "full", confirmed_properties: props },
       });
-      if (specError) throw new Error(specError.message || "Failed to build brand spec");
+      if (processError) throw new Error(processError.message || "Failed to start brand processing");
 
-      setProgressMessage("Generating brand guide...");
-      const { error: guideStartError } = await supabase.functions.invoke("extract-brand", {
-        body: { auditFindings: auditData, brandName, industry, brandId, step: "guide" },
-      });
-      if (guideStartError) throw new Error(guideStartError.message || "Failed to start guide generation");
-
-      // Step 3: Poll brand_profiles for brand_guide_html
-      const POLL_INTERVAL = 5000;
-      const MAX_POLL_TIME = 15 * 60 * 1000; // 15 minutes
+      // Poll processing_status for real progress
+      const POLL_INTERVAL = 4000;
+      const MAX_POLL_TIME = 15 * 60 * 1000;
       const startTime = Date.now();
 
-      const pollForGuide = () => {
-        const pollTimer = setInterval(async () => {
-          try {
-            const { data: profile } = await supabase
-              .from("brand_profiles")
-              .select("brand_guide_html, system_prompt, raw_extraction, audit_findings")
-              .eq("brand_id", brandId!)
-              .single();
+      const pollTimer = setInterval(async () => {
+        try {
+          const { data: profile } = await supabase
+            .from("brand_profiles")
+            .select("processing_status, processing_error, brand_guide_html, system_prompt, raw_extraction")
+            .eq("brand_id", brandId!)
+            .single();
 
-            // Check for error state
-            const findings = profile?.audit_findings as any;
-            if (findings?._error) {
-              clearInterval(pollTimer);
-              clearInterval(interval);
-              toast.error(findings._error || "Guide generation failed");
-              setStep("uploads");
-              return;
-            }
+          const status = (profile as any)?.processing_status;
+          const error = (profile as any)?.processing_error;
 
-            if (profile?.brand_guide_html) {
-              clearInterval(pollTimer);
-              clearInterval(interval);
-              setExtraction(profile.raw_extraction as any);
-              setSystemPrompt(profile.system_prompt || "");
-              setBrandGuideHtml(profile.brand_guide_html);
-              setProgressValue(100);
-              setProgressMessage("Guide ready!");
-              setTimeout(() => setStep("guide_review"), 500);
-              return;
-            }
+          // Update progress message based on status
+          if (status === "running_spec") setProgressMessage("Building brand spec...");
+          else if (status === "running_guide") setProgressMessage("Generating brand guide (3-5 min)...");
+          else if (status === "spec_complete") setProgressMessage("Spec complete, generating guide...");
 
-            if (Date.now() - startTime > MAX_POLL_TIME) {
-              clearInterval(pollTimer);
-              clearInterval(interval);
-              toast.error("Guide generation timed out. Please try again.");
-              setStep("uploads");
-            }
-          } catch {
-            // Keep polling on transient errors
+          if (status === "failed") {
+            clearInterval(pollTimer);
+            clearInterval(interval);
+            toast.error(error || "Brand processing failed");
+            setStep("uploads");
+            return;
           }
-        }, POLL_INTERVAL);
-      };
 
-      pollForGuide();
+          if (status === "complete" && profile?.brand_guide_html) {
+            clearInterval(pollTimer);
+            clearInterval(interval);
+            setExtraction(profile.raw_extraction as any);
+            setSystemPrompt(profile.system_prompt || "");
+            setBrandGuideHtml(profile.brand_guide_html);
+            setProgressValue(100);
+            setProgressMessage("Guide ready!");
+            setTimeout(() => setStep("guide_review"), 500);
+            return;
+          }
+
+          if (Date.now() - startTime > MAX_POLL_TIME) {
+            clearInterval(pollTimer);
+            clearInterval(interval);
+            toast.error("Brand processing timed out after 15 minutes. Please try again.");
+            setStep("uploads");
+          }
+        } catch {
+          // Keep polling on transient errors
+        }
+      }, POLL_INTERVAL);
     } catch (err: any) {
       clearInterval(interval);
       toast.error(err.message || "Guide generation failed");

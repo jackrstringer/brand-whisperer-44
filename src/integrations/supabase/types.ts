@@ -222,6 +222,8 @@ export type Database = {
           created_at: string
           extraction_sources: string[] | null
           id: string
+          processing_error: string | null
+          processing_status: string
           qa_checklist: Json | null
           raw_extraction: Json | null
           reference_image_urls: string[] | null
@@ -238,6 +240,8 @@ export type Database = {
           created_at?: string
           extraction_sources?: string[] | null
           id?: string
+          processing_error?: string | null
+          processing_status?: string
           qa_checklist?: Json | null
           raw_extraction?: Json | null
           reference_image_urls?: string[] | null
@@ -254,6 +258,8 @@ export type Database = {
           created_at?: string
           extraction_sources?: string[] | null
           id?: string
+          processing_error?: string | null
+          processing_status?: string
           qa_checklist?: Json | null
           raw_extraction?: Json | null
           reference_image_urls?: string[] | null
