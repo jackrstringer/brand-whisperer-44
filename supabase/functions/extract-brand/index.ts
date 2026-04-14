@@ -476,7 +476,7 @@ async function runSpecCall(
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      max_tokens: 8000,
+      max_tokens: 16000,
       system: SPEC_PROMPT,
       messages: [{
         role: "user",
@@ -491,11 +491,25 @@ async function runSpecCall(
   }
 
   const specResult = await specResponse.json();
+  const stopReason = specResult.stop_reason;
   const specText = specResult.content?.[0]?.text || "";
+
+  if (stopReason === "max_tokens") {
+    console.error(`[extract-brand] Spec call truncated (stop_reason=max_tokens). Output length: ${specText.length}`);
+    throw new Error("Spec generation was truncated — output exceeded token limit. Please retry.");
+  }
+
   const specJsonMatch = specText.match(/\{[\s\S]*\}/);
   if (!specJsonMatch) throw new Error("Failed to parse spec result");
 
-  return JSON.parse(specJsonMatch[0]);
+  try {
+    return JSON.parse(specJsonMatch[0]);
+  } catch (parseErr) {
+    const openBraces = (specJsonMatch[0].match(/\{/g) || []).length;
+    const closeBraces = (specJsonMatch[0].match(/\}/g) || []).length;
+    console.error(`[extract-brand] JSON parse failed. Braces: ${openBraces} open, ${closeBraces} close. Length: ${specJsonMatch[0].length}`);
+    throw new Error(`Unterminated JSON in spec output (${openBraces} open vs ${closeBraces} close braces). Model output may have been truncated.`);
+  }
 }
 
 async function runGuideCall(
