@@ -54,6 +54,12 @@ interface ProcessingStatusPanelProps {
   maxPollMinutes?: number;
   /** Seconds to wait before declaring stuck on idle (default 30) */
   idleTimeoutSeconds?: number;
+  /** Audit findings + brand info needed to trigger guide phase */
+  brandContext?: {
+    auditFindings: any;
+    brandName: string;
+    industry: string;
+  };
 }
 
 export default function ProcessingStatusPanel({
