@@ -16,6 +16,7 @@ import ResourceUploader from "@/components/brand/ResourceUploader";
 import AssetCategoryUploader, { type AssetCategory } from "@/components/brand/AssetCategoryUploader";
 import type { BrandExtraction } from "@/lib/types";
 import { sliceAndUploadReferenceImages, saveSliceUrls } from "@/lib/imageSlicing";
+import ProcessingStatusPanel from "@/components/brand/ProcessingStatusPanel";
 
 type Step = "info" | "sources" | "uploads" | "auditing" | "audit_review" | "generating_guide" | "guide_review";
 
@@ -465,57 +466,7 @@ export default function BrandSetup() {
         console.log("[BrandSetup] extract-brand invoke returned/timed out:", err?.message);
       });
 
-      // Poll processing_status for real progress
-      const POLL_INTERVAL = 4000;
-      const MAX_POLL_TIME = 15 * 60 * 1000;
-      const startTime = Date.now();
-
-      const pollTimer = setInterval(async () => {
-        try {
-          const { data: profile } = await supabase
-            .from("brand_profiles")
-            .select("processing_status, processing_error, brand_guide_html, system_prompt, raw_extraction")
-            .eq("brand_id", brandId!)
-            .single();
-
-          const status = (profile as any)?.processing_status;
-          const error = (profile as any)?.processing_error;
-
-          // Update progress message based on status
-          if (status === "running_spec") setProgressMessage("Building brand spec...");
-          else if (status === "running_guide") setProgressMessage("Generating brand guide (3-5 min)...");
-          else if (status === "spec_complete") setProgressMessage("Spec complete, generating guide...");
-
-          if (status === "failed") {
-            clearInterval(pollTimer);
-            clearInterval(interval);
-            toast.error(error || "Brand processing failed");
-            setStep("uploads");
-            return;
-          }
-
-          if (status === "complete" && profile?.brand_guide_html) {
-            clearInterval(pollTimer);
-            clearInterval(interval);
-            setExtraction(profile.raw_extraction as any);
-            setSystemPrompt(profile.system_prompt || "");
-            setBrandGuideHtml(profile.brand_guide_html);
-            setProgressValue(100);
-            setProgressMessage("Guide ready!");
-            setTimeout(() => setStep("guide_review"), 500);
-            return;
-          }
-
-          if (Date.now() - startTime > MAX_POLL_TIME) {
-            clearInterval(pollTimer);
-            clearInterval(interval);
-            toast.error("Brand processing timed out after 15 minutes. Please try again.");
-            setStep("uploads");
-          }
-        } catch {
-          // Keep polling on transient errors
-        }
-      }, POLL_INTERVAL);
+      // Polling is now handled by ProcessingStatusPanel
     } catch (err: any) {
       clearInterval(interval);
       toast.error(err.message || "Guide generation failed");
@@ -848,39 +799,29 @@ export default function BrandSetup() {
     );
   }
 
-  if (step === "generating_guide") {
-    const elapsed = Math.round((Date.now() - (guideStartTimeRef.current || Date.now())) / 1000);
-    const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-    const phases = [
-      { label: "Analyzing campaigns", status: progressValue < 30 ? "running" : "complete" },
-      { label: "Building brand spec", status: progressValue < 30 ? "pending" : progressValue < 60 ? "running" : "complete" },
-      { label: "Generating brand guide (3-5 min)", status: progressValue < 60 ? "pending" : progressValue < 95 ? "running" : "complete" },
-    ];
+  if (step === "generating_guide" && earlyBrandId) {
     return (
       <div className="min-h-screen bg-background p-6 md:p-12 flex flex-col items-center justify-center">
-        <div className="max-w-lg w-full space-y-6 text-center">
-          <h2 className="text-xl font-semibold">Deep Brand Analysis</h2>
-          <p className="text-sm text-muted-foreground">
-            Deep brand analysis in progress. This typically takes 5-10 minutes for a complete brand guide. You can leave this page — we'll notify you here when it's ready.
-          </p>
-          <Progress value={progressValue} className="h-1.5" />
-          <div className="space-y-2 text-left">
-            {phases.map((p, i) => (
-              <div key={i} className="flex items-center gap-2 text-sm">
-                {p.status === "complete" && <Check className="w-4 h-4 text-green-500 shrink-0" />}
-                {p.status === "running" && <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin shrink-0" />}
-                {p.status === "pending" && <div className="w-4 h-4 rounded-full border border-muted-foreground/30 shrink-0" />}
-                <span className={p.status === "pending" ? "text-muted-foreground" : ""}>{p.label}</span>
-              </div>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground">Elapsed: {formatTime(elapsed)}</p>
-          {earlyBrandId && (
-            <Button variant="outline" onClick={() => navigate(`/brands/${earlyBrandId}`)} className="mt-2">
-              Go to dashboard
-            </Button>
-          )}
-        </div>
+        <ProcessingStatusPanel
+          brandId={earlyBrandId}
+          onComplete={(guideHtml, rawExtraction, sysPrompt) => {
+            setExtraction(rawExtraction as any);
+            setSystemPrompt(sysPrompt || "");
+            setBrandGuideHtml(guideHtml);
+            setProgressValue(100);
+            setTimeout(() => setStep("guide_review"), 500);
+          }}
+          onFailed={(error) => {
+            toast.error(error);
+            setStep("uploads");
+          }}
+          onTimeout={() => {
+            toast.error("Brand processing timed out after 15 minutes. Please try again.");
+            setStep("uploads");
+          }}
+          showDashboardLink
+          onGoToDashboard={() => navigate(`/brands/${earlyBrandId}`)}
+        />
       </div>
     );
   }
