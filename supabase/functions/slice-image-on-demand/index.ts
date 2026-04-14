@@ -45,10 +45,10 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    console.log("[slice-image-on-demand] Starting on-demand slice, mimeType:", mimeType);
+    console.log("[slice-image-on-demand] Starting on-demand slice, mimeType:", mimeType, "mode:", imageUrl ? "url" : "base64");
 
     const slices: EmailSlice[] = await sliceEmailImage(
-      { imageBase64, mimeType },
+      { imageBase64, imageUrl, mimeType },
       Deno.env.get("GOOGLE_CLOUD_VISION_API_KEY") ?? "",
       Deno.env.get("ANTHROPIC_API_KEY") ?? ""
     );
