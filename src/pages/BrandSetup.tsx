@@ -103,41 +103,7 @@ export default function BrandSetup() {
     setPreviews(previews.filter((_, i) => i !== index));
   };
 
-  const sliceImage = (
-    file: File,
-    maxSliceHeight = 1300,
-    maxWidth = 900,
-  ): Promise<Array<{ data: string; mediaType: string; sliceIndex: number; totalSlices: number }>> =>
-    new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > maxWidth) {
-          const ratio = maxWidth / width;
-          width = maxWidth;
-          height = Math.round(height * ratio);
-        }
-        const totalSlices = Math.max(1, Math.ceil(height / maxSliceHeight));
-        const sliceHeight = Math.ceil(height / totalSlices);
-        const results: Array<{ data: string; mediaType: string; sliceIndex: number; totalSlices: number }> = [];
-        for (let i = 0; i < totalSlices; i++) {
-          const sy = i * sliceHeight;
-          const sh = Math.min(sliceHeight, height - sy);
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = sh;
-          const ctx = canvas.getContext("2d")!;
-          const origRatio = img.naturalWidth / width;
-          ctx.drawImage(img, 0, sy * origRatio, img.naturalWidth, sh * origRatio, 0, 0, width, sh);
-          const dataUrl = canvas.toDataURL("image/png");
-          results.push({ data: dataUrl.split(",")[1], mediaType: "image/png", sliceIndex: i, totalSlices });
-        }
-        URL.revokeObjectURL(img.src);
-        resolve(results);
-      };
-      img.onerror = reject;
-      img.src = URL.createObjectURL(file);
-    });
+  // Image slicing is now done server-side via Vision API + Claude in audit-brand
 
   const getReferenceImageFiles = (): File[] => {
     const all: File[] = [];
