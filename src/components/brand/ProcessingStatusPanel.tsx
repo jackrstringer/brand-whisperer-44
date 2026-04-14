@@ -73,6 +73,7 @@ export default function ProcessingStatusPanel({
   onGoToDashboard,
   maxPollMinutes = 15,
   idleTimeoutSeconds = 30,
+  brandContext,
 }: ProcessingStatusPanelProps) {
   const [dbStatus, setDbStatus] = useState<PipelineStatus>("idle");
   const [dbError, setDbError] = useState<string | null>(null);
@@ -81,6 +82,8 @@ export default function ProcessingStatusPanel({
   const startTimeRef = useRef(Date.now());
   const [elapsed, setElapsed] = useState(0);
   const hasLeftIdleRef = useRef(false);
+  const guideFiredRef = useRef(false);
+  const specCompleteTimeRef = useRef<number | null>(null);
 
   // Tick elapsed every second
   useEffect(() => {
