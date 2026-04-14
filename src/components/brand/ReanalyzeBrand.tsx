@@ -220,14 +220,14 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
         .eq("brand_id", brandId);
 
       setProgressMessage("Starting brand processing...");
-      void supabase.functions.invoke("extract-brand", {
-        body: { auditFindings: effectiveFindings, brandName, industry, brandId, step: "full" },
+      supabase.functions.invoke("extract-brand", {
+        body: { auditFindings: effectiveFindings, brandName, industry, brandId, step: "spec" },
       }).then(({ error: processError }) => {
         if (processError) {
-          console.error("[ReanalyzeBrand] extract-brand returned error:", processError.message);
+          console.log("[ReanalyzeBrand] extract-brand spec invoke returned error (may still be running):", processError.message);
         }
       }).catch((err) => {
-        console.log("[ReanalyzeBrand] extract-brand invoke returned/timed out:", err?.message);
+        console.log("[ReanalyzeBrand] extract-brand spec invoke timed out (expected):", err?.message);
       });
 
       // Polling is now handled by ProcessingStatusPanel
@@ -377,6 +377,7 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
           brandId={brandId}
           title="Re-processing Brand"
           subtitle="Running full brand pipeline — spec extraction then guide generation. This takes 5–10 minutes."
+          brandContext={{ auditFindings: auditFindings, brandName, industry }}
           onComplete={(guideHtml) => {
             setBrandGuideHtml(guideHtml);
             setProgressValue(100);

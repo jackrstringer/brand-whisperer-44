@@ -447,25 +447,17 @@ export default function BrandSetup() {
       // NOW switch to generating_guide — brandId is guaranteed set
       setStep("generating_guide");
 
-      // Invoke extract-brand and handle errors explicitly (Bug 2 fix)
+      // Fire-and-forget: start spec phase only (guide triggered by ProcessingStatusPanel after spec_complete)
       setProgressMessage("Starting brand processing...");
-      try {
-        const { error: invokeError } = await supabase.functions.invoke("extract-brand", {
-          body: { auditFindings: auditData, brandName, industry, brandId, step: "full", confirmed_properties: props },
-        });
+      supabase.functions.invoke("extract-brand", {
+        body: { auditFindings: auditData, brandName, industry, brandId, step: "spec", confirmed_properties: props },
+      }).then(({ error: invokeError }) => {
         if (invokeError) {
-          console.error("[BrandSetup] extract-brand invocation error:", invokeError.message);
-          // Mark as failed in DB so ProcessingStatusPanel picks it up
-          await supabase.from("brand_profiles").update({
-            processing_status: "failed",
-            processing_error: `Failed to start brand processing: ${invokeError.message}`,
-          } as any).eq("brand_id", brandId);
+          console.log("[BrandSetup] extract-brand spec invoke returned error (may still be running):", invokeError.message);
         }
-      } catch (err: any) {
-        // Network timeout is expected for long-running synchronous calls — NOT a failure.
-        // The function is still running server-side. ProcessingStatusPanel will track real status.
-        console.log("[BrandSetup] extract-brand invoke returned/timed out (expected for long jobs):", err?.message);
-      }
+      }).catch((err: any) => {
+        console.log("[BrandSetup] extract-brand spec invoke timed out (expected):", err?.message);
+      });
 
       // Polling is handled by ProcessingStatusPanel
     } catch (err: any) {
@@ -817,6 +809,7 @@ export default function BrandSetup() {
       <div className="min-h-screen bg-background p-6 md:p-12 flex flex-col items-center justify-center">
         <ProcessingStatusPanel
           brandId={earlyBrandId}
+          brandContext={{ auditFindings: auditFindings, brandName, industry }}
           onComplete={(guideHtml, rawExtraction, sysPrompt) => {
             setExtraction(rawExtraction as any);
             setSystemPrompt(sysPrompt || "");

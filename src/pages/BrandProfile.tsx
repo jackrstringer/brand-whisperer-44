@@ -30,13 +30,14 @@ export default function BrandProfile() {
   const [assets, setAssets] = useState<BrandAsset[]>([]);
   const [guideHtml, setGuideHtml] = useState<string | null>(null);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
+  const [auditFindings, setAuditFindings] = useState<any>(null);
 
   const fetchData = async () => {
     if (!brandId) return;
     const [{ data: brand }, { data: brandAssets }, { data: profile }] = await Promise.all([
       supabase.from("brands").select("*").eq("id", brandId).single(),
       supabase.from("brand_assets").select("*").eq("brand_id", brandId),
-      supabase.from("brand_profiles").select("brand_guide_html, processing_status").eq("brand_id", brandId).single(),
+      supabase.from("brand_profiles").select("brand_guide_html, processing_status, audit_findings").eq("brand_id", brandId).single(),
     ]);
     if (brand) {
       setBrandName(brand.name);
@@ -46,6 +47,7 @@ export default function BrandProfile() {
     setAssets((brandAssets || []) as BrandAsset[]);
     const status = (profile as any)?.processing_status as string | null;
     setProcessingStatus(status || null);
+    setAuditFindings((profile as any)?.audit_findings || null);
     setGuideHtml((profile as any)?.brand_guide_html || null);
     setLoading(false);
 
@@ -88,6 +90,7 @@ export default function BrandProfile() {
           brandId={brandId}
           title="Brand Processing In Progress"
           subtitle="Your brand analysis is still running. You can stay on this page — it will update automatically when complete."
+          brandContext={auditFindings ? { auditFindings, brandName, industry } : undefined}
           onComplete={(html) => {
             setGuideHtml(html);
             setProcessingStatus("complete");
