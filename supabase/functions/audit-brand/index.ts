@@ -1,9 +1,9 @@
 // supabase/functions/audit-brand/index.ts
 // Performs visual audit of brand email campaigns using intelligent slicing.
 // Accepts either pre-sliced images (base64) OR image URLs for server-side intelligent slicing.
+// Slicing is delegated to slice-image-on-demand (separate worker) to avoid CPU limits.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { sliceEmailImage } from "../_shared/sliceEmailImage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
