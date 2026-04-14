@@ -74,8 +74,34 @@ export default function BrandProfile() {
     URL.revokeObjectURL(url);
   };
 
+  const isProcessing = processingStatus && !["idle", "complete", "failed"].includes(processingStatus);
+
   if (loading || !brandId) {
     return <div className="flex items-center justify-center h-full"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>;
+  }
+
+  if (isProcessing) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <ProcessingStatusPanel
+          brandId={brandId}
+          title="Brand Processing In Progress"
+          subtitle="Your brand analysis is still running. You can stay on this page — it will update automatically when complete."
+          onComplete={(html) => {
+            setGuideHtml(html);
+            setProcessingStatus("complete");
+          }}
+          onFailed={(error) => {
+            setProcessingStatus("failed");
+            toast.error(error);
+          }}
+          onTimeout={() => {
+            setProcessingStatus("failed");
+            toast.error("Brand processing timed out. Please try re-analyzing from the Analysis tab.");
+          }}
+        />
+      </div>
+    );
   }
 
   return (
