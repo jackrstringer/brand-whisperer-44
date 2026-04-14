@@ -1,0 +1,1 @@
+UPDATE brand_profiles SET processing_status = 'idle', processing_error = NULL WHERE brand_id = (SELECT id FROM brands WHERE name ILIKE '%larine%' LIMIT 1);
