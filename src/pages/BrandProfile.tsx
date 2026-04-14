@@ -28,26 +28,31 @@ export default function BrandProfile() {
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [assets, setAssets] = useState<BrandAsset[]>([]);
   const [guideHtml, setGuideHtml] = useState<string | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<string | null>(null);
+
+  const fetchData = async () => {
+    if (!brandId) return;
+    const [{ data: brand }, { data: brandAssets }, { data: profile }] = await Promise.all([
+      supabase.from("brands").select("*").eq("id", brandId).single(),
+      supabase.from("brand_assets").select("*").eq("brand_id", brandId),
+      supabase.from("brand_profiles").select("brand_guide_html, processing_status").eq("brand_id", brandId).single(),
+    ]);
+    if (brand) {
+      setBrandName(brand.name);
+      setIndustry(brand.industry || "");
+      setWebsiteUrl(brand.website_url || "");
+    }
+    setAssets((brandAssets || []) as BrandAsset[]);
+    const status = (profile as any)?.processing_status as string | null;
+    setProcessingStatus(status || null);
+    setGuideHtml((profile as any)?.brand_guide_html || null);
+    setLoading(false);
+
+    supabase.functions.invoke("reprocess-asset-compositions", { body: { brandId } }).catch(() => {});
+  };
 
   useEffect(() => {
-    if (!brandId) return;
-    (async () => {
-      const [{ data: brand }, { data: brandAssets }, { data: profile }] = await Promise.all([
-        supabase.from("brands").select("*").eq("id", brandId).single(),
-        supabase.from("brand_assets").select("*").eq("brand_id", brandId),
-        supabase.from("brand_profiles").select("brand_guide_html").eq("brand_id", brandId).single(),
-      ]);
-      if (brand) {
-        setBrandName(brand.name);
-        setIndustry(brand.industry || "");
-        setWebsiteUrl(brand.website_url || "");
-      }
-      setAssets((brandAssets || []) as BrandAsset[]);
-      setGuideHtml((profile as any)?.brand_guide_html || null);
-      setLoading(false);
-
-      supabase.functions.invoke("reprocess-asset-compositions", { body: { brandId } }).catch(() => {});
-    })();
+    fetchData();
   }, [brandId]);
 
   const guideSrcDoc = guideHtml ? guideHtml.replace("</head>", `<style>
