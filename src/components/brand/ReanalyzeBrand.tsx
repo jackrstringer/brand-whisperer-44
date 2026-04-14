@@ -377,6 +377,7 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
           brandId={brandId}
           title="Re-processing Brand"
           subtitle="Running full brand pipeline — spec extraction then guide generation. This takes 5–10 minutes."
+          brandContext={{ auditFindings: auditFindings, brandName, industry }}
           onComplete={(guideHtml) => {
             setBrandGuideHtml(guideHtml);
             setProgressValue(100);

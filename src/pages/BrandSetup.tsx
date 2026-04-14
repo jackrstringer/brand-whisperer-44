@@ -809,6 +809,7 @@ export default function BrandSetup() {
       <div className="min-h-screen bg-background p-6 md:p-12 flex flex-col items-center justify-center">
         <ProcessingStatusPanel
           brandId={earlyBrandId}
+          brandContext={{ auditFindings: auditFindings, brandName, industry }}
           onComplete={(guideHtml, rawExtraction, sysPrompt) => {
             setExtraction(rawExtraction as any);
             setSystemPrompt(sysPrompt || "");
