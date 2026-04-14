@@ -1,9 +1,9 @@
 // supabase/functions/audit-brand/index.ts
 // Performs visual audit of brand email campaigns using intelligent slicing.
 // Accepts either pre-sliced images (base64) OR image URLs for server-side intelligent slicing.
+// Slicing is delegated to slice-image-on-demand (separate worker) to avoid CPU limits.
 
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { sliceEmailImage } from "../_shared/sliceEmailImage.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -200,23 +200,39 @@ Deno.serve(async (req) => {
     const slicingLog: string[] = [];
 
     if (imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0) {
-      // ── Intelligent server-side slicing ──
+      // ── Intelligent server-side slicing via separate workers ──
       console.log(`[audit-brand] Intelligent slicing mode: ${imageUrls.length} image URLs`);
-      slicingLog.push(`Starting intelligent slicing for ${imageUrls.length} images`);
+      slicingLog.push(`Starting intelligent slicing for ${imageUrls.length} images (delegated to slice-image-on-demand workers)`);
+
+      const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+      const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+      const sliceFnUrl = `${SUPABASE_URL}/functions/v1/slice-image-on-demand`;
 
       for (let ci = 0; ci < imageUrls.length; ci++) {
         const url = imageUrls[ci];
         try {
           slicingLog.push(`[${ci + 1}/${imageUrls.length}] Slicing ${url.substring(0, 80)}...`);
-          console.log(`[audit-brand] Slicing campaign ${ci + 1}/${imageUrls.length}: ${url.substring(0, 100)}`);
+          console.log(`[audit-brand] Delegating slice ${ci + 1}/${imageUrls.length} to slice-image-on-demand`);
 
-          const emailSlices = await sliceEmailImage(
-            { imageUrl: url },
-            GOOGLE_VISION_KEY,
-            ANTHROPIC_API_KEY,
-          );
+          // Call the slice-image-on-demand edge function (separate worker = separate CPU budget)
+          const sliceResp = await fetch(sliceFnUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({ imageUrl: url }),
+          });
 
-          slicingLog.push(`[${ci + 1}/${imageUrls.length}] Got ${emailSlices.length} intelligent slices (labels: ${emailSlices.map(s => s.label).join(", ")})`);
+          if (!sliceResp.ok) {
+            const errText = await sliceResp.text();
+            throw new Error(`slice-image-on-demand returned ${sliceResp.status}: ${errText}`);
+          }
+
+          const sliceResult = await sliceResp.json();
+          const emailSlices = sliceResult.slices || [];
+
+          slicingLog.push(`[${ci + 1}/${imageUrls.length}] Got ${emailSlices.length} intelligent slices (labels: ${emailSlices.map((s: any) => s.label).join(", ")})`);
           console.log(`[audit-brand] Campaign ${ci + 1}: ${emailSlices.length} slices`);
 
           // Convert URL-based slices to base64 for the audit call
@@ -230,7 +246,12 @@ Deno.serve(async (req) => {
               }
               const buf = await resp.arrayBuffer();
               const bytes = new Uint8Array(buf);
-              const b64 = btoa(String.fromCharCode(...bytes));
+              let b64 = "";
+              const chunkSize = 8192;
+              for (let j = 0; j < bytes.length; j += chunkSize) {
+                b64 += String.fromCharCode(...bytes.subarray(j, j + chunkSize));
+              }
+              b64 = btoa(b64);
               const ct = resp.headers.get("content-type")?.split(";")[0].trim() || "image/jpeg";
               sliceData.push({
                 data: b64,
@@ -256,7 +277,12 @@ Deno.serve(async (req) => {
             if (resp.ok) {
               const buf = await resp.arrayBuffer();
               const bytes = new Uint8Array(buf);
-              const b64 = btoa(String.fromCharCode(...bytes));
+              let b64 = "";
+              const chunkSize = 8192;
+              for (let j = 0; j < bytes.length; j += chunkSize) {
+                b64 += String.fromCharCode(...bytes.subarray(j, j + chunkSize));
+              }
+              b64 = btoa(b64);
               const ct = resp.headers.get("content-type")?.split(";")[0].trim() || "image/jpeg";
               campaignGroups.set(ci, [{
                 data: b64,

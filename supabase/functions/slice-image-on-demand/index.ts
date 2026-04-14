@@ -24,16 +24,18 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  let imageBase64: string;
+  let imageBase64: string | undefined;
+  let imageUrl: string | undefined;
   let mimeType: string;
 
   try {
     const body = await req.json();
     imageBase64 = body.imageBase64;
+    imageUrl = body.imageUrl;
     mimeType = body.mimeType ?? "image/png";
 
-    if (!imageBase64) {
-      throw new Error("imageBase64 is required");
+    if (!imageBase64 && !imageUrl) {
+      throw new Error("imageBase64 or imageUrl is required");
     }
   } catch (err) {
     return new Response(JSON.stringify({ error: String(err) }), {
@@ -43,10 +45,10 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    console.log("[slice-image-on-demand] Starting on-demand slice, mimeType:", mimeType);
+    console.log("[slice-image-on-demand] Starting on-demand slice, mimeType:", mimeType, "mode:", imageUrl ? "url" : "base64");
 
     const slices: EmailSlice[] = await sliceEmailImage(
-      { imageBase64, mimeType },
+      { imageBase64, imageUrl, mimeType },
       Deno.env.get("GOOGLE_CLOUD_VISION_API_KEY") ?? "",
       Deno.env.get("ANTHROPIC_API_KEY") ?? ""
     );
