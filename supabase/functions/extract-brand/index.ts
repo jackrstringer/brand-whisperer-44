@@ -669,7 +669,9 @@ async function processGuideStep(
   }
 
   let extraction = profile?.raw_extraction;
-  const effectiveAudit = cleanedAudit ?? stripRuntimeKeys(profile?.audit_findings) ?? {};
+  const effectiveAudit = (cleanedAudit && Object.keys(cleanedAudit).length > 0)
+    ? cleanedAudit
+    : (stripRuntimeKeys(profile?.audit_findings) ?? {});
 
   if (!extraction) {
     const specParsed = await processSpecStep(apiKey, effectiveAudit, brandName, industry, brandId);

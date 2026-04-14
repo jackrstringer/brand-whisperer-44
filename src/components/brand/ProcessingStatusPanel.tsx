@@ -135,30 +135,28 @@ export default function ProcessingStatusPanel({
           specCompleteTimeRef.current = Date.now();
           console.log("[ProcessingStatusPanel] spec_complete detected, firing guide phase");
           
-          if (brandContext) {
-            supabase.functions.invoke("extract-brand", {
-              body: { 
-                auditFindings: brandContext.auditFindings, 
-                brandName: brandContext.brandName, 
-                industry: brandContext.industry, 
-                brandId, 
-                step: "guide" 
-              },
-            }).then(({ error: guideErr }) => {
-              if (guideErr) console.log("[ProcessingStatusPanel] guide invoke returned error (may still be running):", guideErr.message);
-            }).catch((err) => {
-              console.log("[ProcessingStatusPanel] guide invoke timed out (expected):", err?.message);
-            });
-          } else {
-            // No brandContext — trigger guide with minimal info, edge function will read from DB
-            supabase.functions.invoke("extract-brand", {
-              body: { brandId, step: "guide", brandName: "", industry: "", auditFindings: {} },
-            }).then(({ error: guideErr }) => {
-              if (guideErr) console.log("[ProcessingStatusPanel] guide invoke returned error:", guideErr.message);
-            }).catch((err) => {
-              console.log("[ProcessingStatusPanel] guide invoke timed out (expected):", err?.message);
-            });
-          }
+          // Always fetch fresh audit findings from DB rather than relying on prop
+          const { data: freshProfile } = await supabase
+            .from("brand_profiles")
+            .select("audit_findings")
+            .eq("brand_id", brandId)
+            .single();
+
+          const freshAudit = (freshProfile as any)?.audit_findings || brandContext?.auditFindings || {};
+
+          supabase.functions.invoke("extract-brand", {
+            body: {
+              auditFindings: freshAudit,
+              brandName: brandContext?.brandName || "",
+              industry: brandContext?.industry || "",
+              brandId,
+              step: "guide"
+            },
+          }).then(({ error: guideErr }) => {
+            if (guideErr) console.log("[ProcessingStatusPanel] guide invoke error:", guideErr.message);
+          }).catch((err) => {
+            console.log("[ProcessingStatusPanel] guide invoke timed out (expected):", err?.message);
+          });
         }
 
         // Stuck on spec_complete: guide never started after 30s
