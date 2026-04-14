@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Download, Loader2 } from "lucide-react";
@@ -8,6 +9,7 @@ import AssetManager from "@/components/brand/AssetManager";
 import ProductManager from "@/components/brand/ProductManager";
 import ShopifyProductGrid from "@/components/brand/ShopifyProductGrid";
 import ReanalyzeBrand from "@/components/brand/ReanalyzeBrand";
+import ProcessingStatusPanel from "@/components/brand/ProcessingStatusPanel";
 
 interface BrandAsset {
   id: string;
@@ -27,26 +29,31 @@ export default function BrandProfile() {
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [assets, setAssets] = useState<BrandAsset[]>([]);
   const [guideHtml, setGuideHtml] = useState<string | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<string | null>(null);
+
+  const fetchData = async () => {
+    if (!brandId) return;
+    const [{ data: brand }, { data: brandAssets }, { data: profile }] = await Promise.all([
+      supabase.from("brands").select("*").eq("id", brandId).single(),
+      supabase.from("brand_assets").select("*").eq("brand_id", brandId),
+      supabase.from("brand_profiles").select("brand_guide_html, processing_status").eq("brand_id", brandId).single(),
+    ]);
+    if (brand) {
+      setBrandName(brand.name);
+      setIndustry(brand.industry || "");
+      setWebsiteUrl(brand.website_url || "");
+    }
+    setAssets((brandAssets || []) as BrandAsset[]);
+    const status = (profile as any)?.processing_status as string | null;
+    setProcessingStatus(status || null);
+    setGuideHtml((profile as any)?.brand_guide_html || null);
+    setLoading(false);
+
+    supabase.functions.invoke("reprocess-asset-compositions", { body: { brandId } }).catch(() => {});
+  };
 
   useEffect(() => {
-    if (!brandId) return;
-    (async () => {
-      const [{ data: brand }, { data: brandAssets }, { data: profile }] = await Promise.all([
-        supabase.from("brands").select("*").eq("id", brandId).single(),
-        supabase.from("brand_assets").select("*").eq("brand_id", brandId),
-        supabase.from("brand_profiles").select("brand_guide_html").eq("brand_id", brandId).single(),
-      ]);
-      if (brand) {
-        setBrandName(brand.name);
-        setIndustry(brand.industry || "");
-        setWebsiteUrl(brand.website_url || "");
-      }
-      setAssets((brandAssets || []) as BrandAsset[]);
-      setGuideHtml((profile as any)?.brand_guide_html || null);
-      setLoading(false);
-
-      supabase.functions.invoke("reprocess-asset-compositions", { body: { brandId } }).catch(() => {});
-    })();
+    fetchData();
   }, [brandId]);
 
   const guideSrcDoc = guideHtml ? guideHtml.replace("</head>", `<style>
@@ -68,8 +75,34 @@ export default function BrandProfile() {
     URL.revokeObjectURL(url);
   };
 
+  const isProcessing = processingStatus && !["idle", "complete", "failed"].includes(processingStatus);
+
   if (loading || !brandId) {
     return <div className="flex items-center justify-center h-full"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>;
+  }
+
+  if (isProcessing) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <ProcessingStatusPanel
+          brandId={brandId}
+          title="Brand Processing In Progress"
+          subtitle="Your brand analysis is still running. You can stay on this page — it will update automatically when complete."
+          onComplete={(html) => {
+            setGuideHtml(html);
+            setProcessingStatus("complete");
+          }}
+          onFailed={(error) => {
+            setProcessingStatus("failed");
+            toast.error(error);
+          }}
+          onTimeout={() => {
+            setProcessingStatus("failed");
+            toast.error("Brand processing timed out. Please try re-analyzing from the Analysis tab.");
+          }}
+        />
+      </div>
+    );
   }
 
   return (
