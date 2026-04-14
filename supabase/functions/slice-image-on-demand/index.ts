@@ -24,16 +24,18 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  let imageBase64: string;
+  let imageBase64: string | undefined;
+  let imageUrl: string | undefined;
   let mimeType: string;
 
   try {
     const body = await req.json();
     imageBase64 = body.imageBase64;
+    imageUrl = body.imageUrl;
     mimeType = body.mimeType ?? "image/png";
 
-    if (!imageBase64) {
-      throw new Error("imageBase64 is required");
+    if (!imageBase64 && !imageUrl) {
+      throw new Error("imageBase64 or imageUrl is required");
     }
   } catch (err) {
     return new Response(JSON.stringify({ error: String(err) }), {
