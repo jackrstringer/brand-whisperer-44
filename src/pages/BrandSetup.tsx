@@ -522,8 +522,22 @@ export default function BrandSetup() {
           setSystemPrompt(sysPrompt || "");
           setBrandGuideHtml(guideHtml);
         }}
-        onRetry={() => {
+        onRetry={async () => {
+          // Clean up the failed brand record so we don't leave orphans
+          if (earlyBrandId) {
+            try {
+              // Delete profile first (FK), then brand
+              await supabase.from("brand_profiles").delete().eq("brand_id", earlyBrandId);
+              await supabase.from("brands").delete().eq("id", earlyBrandId);
+            } catch (e) {
+              console.warn("Failed to clean up failed brand:", e);
+            }
+          }
           setEarlyBrandId(null);
+          setBrandGuideHtml("");
+          setExtraction(null);
+          setSystemPrompt("");
+          // Bump key to remount — all files/sources are still in state
           setProcessingKey((k) => k + 1);
         }}
         onContinue={(bId) => {

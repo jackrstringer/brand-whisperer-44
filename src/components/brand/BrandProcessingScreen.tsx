@@ -493,10 +493,15 @@ export default function BrandProcessingScreen({
 
         {/* Failed state */}
         {isFailed && (
-          <div className="flex justify-center">
-            <Button variant="outline" onClick={onRetry} className="gap-1.5">
-              <RotateCcw className="w-4 h-4" /> Try Again
-            </Button>
+          <div className="space-y-3">
+            <div className="flex justify-center">
+              <Button onClick={onRetry} className="gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90">
+                <RotateCcw className="w-4 h-4" /> Retry with Same Files
+              </Button>
+            </div>
+            <p className="text-xs text-center text-muted-foreground">
+              All uploaded images and sources are preserved — this re-runs the full pipeline from scratch.
+            </p>
           </div>
         )}
       </div>
