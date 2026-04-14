@@ -453,12 +453,17 @@ export default function BrandSetup() {
         })();
       }
 
-      // Kick off full processing (spec + guide) as a single background job
+      // Start full processing and rely on polling for completion state
       setProgressMessage("Starting brand processing...");
-      const { error: processError } = await supabase.functions.invoke("extract-brand", {
+      void supabase.functions.invoke("extract-brand", {
         body: { auditFindings: auditData, brandName, industry, brandId, step: "full", confirmed_properties: props },
+      }).then(({ error: processError }) => {
+        if (processError) {
+          console.error("[BrandSetup] extract-brand returned error:", processError.message);
+        }
+      }).catch((err) => {
+        console.log("[BrandSetup] extract-brand invoke returned/timed out:", err?.message);
       });
-      if (processError) throw new Error(processError.message || "Failed to start brand processing");
 
       // Poll processing_status for real progress
       const POLL_INTERVAL = 4000;
