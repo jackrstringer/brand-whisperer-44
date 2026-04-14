@@ -72,7 +72,7 @@ export default function ProcessingStatusPanel({
   showDashboardLink = false,
   onGoToDashboard,
   maxPollMinutes = 15,
-  idleTimeoutSeconds = 30,
+  idleTimeoutSeconds = 90,
   brandContext,
 }: ProcessingStatusPanelProps) {
   const [dbStatus, setDbStatus] = useState<PipelineStatus>("idle");

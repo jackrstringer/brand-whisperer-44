@@ -216,7 +216,7 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
       // Save current audit findings and clear old guide, kick off full processing
       await supabase
         .from("brand_profiles")
-        .update({ audit_findings: effectiveFindings, brand_guide_html: null, processing_status: "idle", processing_error: null } as any)
+        .update({ audit_findings: effectiveFindings, brand_guide_html: null, processing_status: "running_spec", processing_error: null } as any)
         .eq("brand_id", brandId);
 
       setProgressMessage("Starting brand processing...");

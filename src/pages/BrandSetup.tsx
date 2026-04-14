@@ -376,6 +376,7 @@ export default function BrandSetup() {
           audit_findings: auditData,
           confirmed_properties: props || null,
           extraction_sources: extractionSrcs,
+          processing_status: "running_spec",
         } as any);
         if (profileError) throw profileError;
 
