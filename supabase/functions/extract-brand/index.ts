@@ -556,7 +556,7 @@ async function runGuideCall(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-opus-4-6-20260801",
+      model: "claude-opus-4-6",
       max_tokens: 64000,
       stream: true,
       system: GUIDE_PROMPT,
