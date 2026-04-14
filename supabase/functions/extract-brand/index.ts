@@ -398,27 +398,43 @@ Deno.serve(async (req) => {
     // Mark processing_status immediately
     const sb = getSupabaseAdmin();
     await sb.from("brand_profiles").update({
-      processing_status: mode === "spec" ? "running_spec" : mode === "guide" ? "running_guide" : "running_spec",
+      processing_status: mode === "guide" ? "running_guide" : "running_spec",
       processing_error: null,
     }).eq("brand_id", brandId);
 
-    // Background job
+    // Background job — each step runs in its own invocation to avoid the ~150s wall clock limit.
+    // For "full" mode: run spec here, then fire a NEW HTTP request for the guide step.
     const backgroundJob = async () => {
       try {
         if (mode === "spec") {
           await processSpecStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId, confirmed_properties);
           await sb.from("brand_profiles").update({ processing_status: "spec_complete" }).eq("brand_id", brandId);
         } else if (mode === "guide") {
-          await sb.from("brand_profiles").update({ processing_status: "running_guide" }).eq("brand_id", brandId);
           await processGuideStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId);
           await sb.from("brand_profiles").update({ processing_status: "complete" }).eq("brand_id", brandId);
         } else {
-          // full: spec then guide
-          await sb.from("brand_profiles").update({ processing_status: "running_spec" }).eq("brand_id", brandId);
+          // full: run spec in THIS invocation, then chain guide as a separate invocation
           await processSpecStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId, confirmed_properties);
+          console.log(`[extract-brand] Spec complete, chaining guide step via new invocation`);
           await sb.from("brand_profiles").update({ processing_status: "running_guide" }).eq("brand_id", brandId);
-          await processGuideStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId);
-          await sb.from("brand_profiles").update({ processing_status: "complete" }).eq("brand_id", brandId);
+          
+          // Fire a NEW HTTP request for the guide step — this gives it its own fresh ~150s window
+          const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+          const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+          const chainResponse = await fetch(`${supabaseUrl}/functions/v1/extract-brand`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${serviceKey}`,
+            },
+            body: JSON.stringify({ auditFindings, brandName, industry, brandId, step: "guide" }),
+          });
+          
+          if (!chainResponse.ok) {
+            const errText = await chainResponse.text();
+            throw new Error(`Failed to chain guide step: ${chainResponse.status} - ${errText}`);
+          }
+          // Guide step will run in its own invocation and update status to "complete" or "failed"
         }
       } catch (err: any) {
         console.error(`[extract-brand] ${mode} background error:`, err);
@@ -429,7 +445,7 @@ Deno.serve(async (req) => {
       }
     };
 
-    // Use waitUntil to keep the background job alive
+    // Use waitUntil to keep the background job alive for this step
     (globalThis as any).EdgeRuntime.waitUntil(backgroundJob());
 
     return new Response(JSON.stringify({ status: `${mode}_started`, brandId }), {
