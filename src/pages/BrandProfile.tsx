@@ -90,6 +90,7 @@ export default function BrandProfile() {
           brandId={brandId}
           title="Brand Processing In Progress"
           subtitle="Your brand analysis is still running. You can stay on this page — it will update automatically when complete."
+          brandContext={auditFindings ? { auditFindings, brandName, industry } : undefined}
           onComplete={(html) => {
             setGuideHtml(html);
             setProcessingStatus("complete");
