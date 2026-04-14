@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { AlertTriangle, Check, Download, Edit2, RefreshCw, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import ProcessingStatusPanel from "@/components/brand/ProcessingStatusPanel";
 
 const AUDIT_MESSAGES = [
   "Scanning layouts...",
@@ -229,54 +230,7 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
         console.log("[ReanalyzeBrand] extract-brand invoke returned/timed out:", err?.message);
       });
 
-      // Poll processing_status for real progress
-      const POLL_INTERVAL = 4000;
-      const MAX_POLL_TIME = 15 * 60 * 1000;
-      const startTime = Date.now();
-
-      const pollTimer = setInterval(async () => {
-        try {
-          const { data: profile } = await supabase
-            .from("brand_profiles")
-            .select("processing_status, processing_error, brand_guide_html")
-            .eq("brand_id", brandId)
-            .single();
-
-          const status = (profile as any)?.processing_status;
-          const error = (profile as any)?.processing_error;
-
-          if (status === "running_spec") setProgressMessage("Building brand spec...");
-          else if (status === "running_guide") setProgressMessage("Generating brand guide (3-5 min)...");
-
-          if (status === "failed") {
-            clearInterval(pollTimer);
-            clearInterval(interval);
-            toast.error(error || "Brand processing failed");
-            setPhase("audit_review");
-            return;
-          }
-
-          if (status === "complete" && profile?.brand_guide_html) {
-            clearInterval(pollTimer);
-            clearInterval(interval);
-            setBrandGuideHtml(profile.brand_guide_html);
-            setProgressValue(100);
-            setProgressMessage("Guide ready!");
-            toast.success("Brand profile updated!");
-            setTimeout(() => setPhase("guide_review"), 500);
-            return;
-          }
-
-          if (Date.now() - startTime > MAX_POLL_TIME) {
-            clearInterval(pollTimer);
-            clearInterval(interval);
-            toast.error("Brand processing timed out after 15 minutes. Please try again.");
-            setPhase("audit_review");
-          }
-        } catch {
-          // Keep polling on transient errors
-        }
-      }, POLL_INTERVAL);
+      // Polling is now handled by ProcessingStatusPanel
     } catch (err: any) {
       clearInterval(interval);
       toast.error(err.message || "Brand processing failed");
