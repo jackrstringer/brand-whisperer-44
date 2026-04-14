@@ -200,21 +200,20 @@ Deno.serve(async (req) => {
     const slicingLog: string[] = [];
 
     if (imageUrls && Array.isArray(imageUrls) && imageUrls.length > 0) {
-      // ── Intelligent server-side slicing via separate workers ──
-      console.log(`[audit-brand] Intelligent slicing mode: ${imageUrls.length} image URLs`);
-      slicingLog.push(`Starting intelligent slicing for ${imageUrls.length} images (delegated to slice-image-on-demand workers)`);
+      // ── Intelligent server-side slicing via PARALLEL workers ──
+      console.log(`[audit-brand] Intelligent slicing mode: ${imageUrls.length} image URLs (PARALLEL)`);
+      slicingLog.push(`Starting parallel intelligent slicing for ${imageUrls.length} images`);
 
       const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
       const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
       const sliceFnUrl = `${SUPABASE_URL}/functions/v1/slice-image-on-demand`;
 
-      for (let ci = 0; ci < imageUrls.length; ci++) {
-        const url = imageUrls[ci];
+      // Helper to process a single campaign image
+      async function sliceCampaign(ci: number, url: string) {
         try {
           slicingLog.push(`[${ci + 1}/${imageUrls.length}] Slicing ${url.substring(0, 80)}...`);
           console.log(`[audit-brand] Delegating slice ${ci + 1}/${imageUrls.length} to slice-image-on-demand`);
 
-          // Call the slice-image-on-demand edge function (separate worker = separate CPU budget)
           const sliceResp = await fetch(sliceFnUrl, {
             method: "POST",
             headers: {
@@ -235,14 +234,13 @@ Deno.serve(async (req) => {
           slicingLog.push(`[${ci + 1}/${imageUrls.length}] Got ${emailSlices.length} intelligent slices (labels: ${emailSlices.map((s: any) => s.label).join(", ")})`);
           console.log(`[audit-brand] Campaign ${ci + 1}: ${emailSlices.length} slices`);
 
-          // Convert URL-based slices to base64 for the audit call
-          const sliceData: Array<{ data: string; mediaType: string; sliceIndex: number; totalSlices: number }> = [];
-          for (const slice of emailSlices) {
+          // Fetch all slice images to base64 in parallel
+          const sliceFetches = emailSlices.map(async (slice: any) => {
             try {
               const resp = await fetch(slice.url);
               if (!resp.ok) {
                 slicingLog.push(`[${ci + 1}] Warning: Failed to fetch slice ${slice.label}: ${resp.status}`);
-                continue;
+                return null;
               }
               const buf = await resp.arrayBuffer();
               const bytes = new Uint8Array(buf);
@@ -253,25 +251,20 @@ Deno.serve(async (req) => {
               }
               b64 = btoa(b64);
               const ct = resp.headers.get("content-type")?.split(";")[0].trim() || "image/jpeg";
-              sliceData.push({
-                data: b64,
-                mediaType: ct,
-                sliceIndex: slice.index,
-                totalSlices: emailSlices.length,
-              });
+              return { data: b64, mediaType: ct, sliceIndex: slice.index, totalSlices: emailSlices.length };
             } catch (fetchErr) {
               slicingLog.push(`[${ci + 1}] Warning: Failed to download slice ${slice.label}: ${fetchErr}`);
+              return null;
             }
-          }
+          });
 
-          if (sliceData.length > 0) {
-            campaignGroups.set(ci, sliceData);
-          }
+          const results = await Promise.all(sliceFetches);
+          const sliceData = results.filter(Boolean) as Array<{ data: string; mediaType: string; sliceIndex: number; totalSlices: number }>;
+          return { ci, sliceData };
         } catch (sliceErr) {
-          slicingLog.push(`[${ci + 1}/${imageUrls.length}] Slicing failed: ${sliceErr}. Falling back to simple download.`);
+          slicingLog.push(`[${ci + 1}/${imageUrls.length}] Slicing failed: ${sliceErr}. Falling back.`);
           console.warn(`[audit-brand] Slicing failed for campaign ${ci + 1}:`, sliceErr);
 
-          // Fallback: just download the full image as a single slice
           try {
             const resp = await fetch(url);
             if (resp.ok) {
@@ -284,17 +277,21 @@ Deno.serve(async (req) => {
               }
               b64 = btoa(b64);
               const ct = resp.headers.get("content-type")?.split(";")[0].trim() || "image/jpeg";
-              campaignGroups.set(ci, [{
-                data: b64,
-                mediaType: ct,
-                sliceIndex: 0,
-                totalSlices: 1,
-              }]);
-              slicingLog.push(`[${ci + 1}] Fallback: using full image as single slice`);
+              return { ci, sliceData: [{ data: b64, mediaType: ct, sliceIndex: 0, totalSlices: 1 }] };
             }
-          } catch {
-            slicingLog.push(`[${ci + 1}] Fallback download also failed, skipping`);
-          }
+          } catch { /* skip */ }
+          return { ci, sliceData: [] as any[] };
+        }
+      }
+
+      // Run ALL slicing in parallel (each gets its own worker)
+      const sliceResults = await Promise.all(
+        imageUrls.map((url: string, ci: number) => sliceCampaign(ci, url))
+      );
+
+      for (const result of sliceResults) {
+        if (result.sliceData.length > 0) {
+          campaignGroups.set(result.ci, result.sliceData);
         }
       }
 
