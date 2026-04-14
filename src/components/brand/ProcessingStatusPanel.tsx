@@ -200,7 +200,7 @@ export default function ProcessingStatusPanel({
     });
 
     return () => clearInterval(timer);
-  }, [brandId, maxPollMinutes, idleTimeoutSeconds, onComplete, onFailed, onTimeout]);
+  }, [brandId, maxPollMinutes, idleTimeoutSeconds, onComplete, onFailed, onTimeout, brandContext]);
 
   const progressValue =
     dbStatus === "idle" ? 5 :
