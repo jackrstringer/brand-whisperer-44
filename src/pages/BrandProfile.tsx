@@ -8,6 +8,7 @@ import AssetManager from "@/components/brand/AssetManager";
 import ProductManager from "@/components/brand/ProductManager";
 import ShopifyProductGrid from "@/components/brand/ShopifyProductGrid";
 import ReanalyzeBrand from "@/components/brand/ReanalyzeBrand";
+import ProcessingStatusPanel from "@/components/brand/ProcessingStatusPanel";
 
 interface BrandAsset {
   id: string;
