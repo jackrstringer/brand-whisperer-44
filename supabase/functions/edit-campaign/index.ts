@@ -482,7 +482,7 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: moreVariants ? 8192 : 4096,
         system: systemMsg,
         messages: anthropicMessages,
@@ -665,7 +665,7 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
                         "anthropic-version": "2023-06-01",
                       },
                       body: JSON.stringify({
-                        model: "claude-sonnet-4-20250514",
+                        model: "claude-sonnet-4-6",
                         max_tokens: 16384,
                         system: `You are a surgical HTML email editor. Apply ONLY the user's specific requested edit and return the COMPLETE modified HTML wrapped in <email_html> tags. Also include a brief <reply> tag describing what you changed.
 

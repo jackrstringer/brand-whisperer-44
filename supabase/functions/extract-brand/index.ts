@@ -475,7 +475,7 @@ async function runSpecCall(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 8000,
       system: SPEC_PROMPT,
       messages: [{
@@ -516,7 +516,7 @@ async function runGuideCall(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-opus-4-20250514",
+      model: "claude-opus-4-6",
       max_tokens: 32000,
       system: GUIDE_PROMPT,
       messages: [{

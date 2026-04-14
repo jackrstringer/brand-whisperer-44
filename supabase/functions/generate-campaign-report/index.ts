@@ -119,7 +119,7 @@ async function generateReportHtml(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-opus-4-20250514",
+      model: "claude-opus-4-6",
       max_tokens: 32000,
       system: `You are a senior email marketing strategist generating a comprehensive performance analysis report. Output only a <style> block followed by valid HTML content — no <!DOCTYPE>, no <html>, no <head>, no <body> tags. No JavaScript. No anchor links. No sticky elements. Pure static long-scroll document. Import Google Fonts (DM Sans + Instrument Serif) via @import at the top of the <style> block. Use the monochrome color palette defined in the skill document.`,
       messages: [{

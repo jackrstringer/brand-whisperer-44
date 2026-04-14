@@ -93,7 +93,7 @@ Keep responses to 2-3 sentences max. Be direct, skip pleasantries. Reference the
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20241022",
+        model: "claude-haiku-4-5",
         max_tokens: 1024,
         temperature: 0.8,
         stream: true,
