@@ -173,8 +173,11 @@ export default function BrandProcessingScreen({
     const POLL_INTERVAL = 4000;
     const MAX_POLL_MS = 15 * 60 * 1000;
     const startTime = Date.now();
+    let pollNum = 0;
+    let lastStatus: PipelineStatus | null = null;
 
     const poll = async (): Promise<"stop" | "continue"> => {
+      pollNum++;
       try {
         const { data: profile } = await supabase
           .from("brand_profiles")
@@ -184,11 +187,17 @@ export default function BrandProcessingScreen({
 
         const status = (profile as any)?.processing_status as PipelineStatus;
         const error = (profile as any)?.processing_error as string | null;
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+
+        // Log every poll with status
+        if (status !== lastStatus) {
+          addLog(`DB status changed: ${lastStatus || "initial"} → ${status} (poll #${pollNum}, ${elapsed}s elapsed)`, "info");
+          lastStatus = status;
+        }
 
         if (status === "failed") {
           const msg = error || "Brand processing failed";
-          addLog(msg, "error");
-          // Fail the currently running phase
+          addLog(`Processing failed: ${msg}`, "error");
           const currentPhase = phases.find((p) => p.state === "running")?.key;
           if (currentPhase) failPhase(currentPhase, msg);
           setGlobalError(msg);
@@ -203,26 +212,37 @@ export default function BrandProcessingScreen({
           guideFiredRef.current = true;
           specCompleteTimeRef.current = Date.now();
           completePhase("spec");
-          addLog("Brand spec complete", "success");
+          addLog("Brand spec complete — raw_extraction and system_prompt saved to DB", "success");
+
+          // Log spec data summary
+          if ((profile as any)?.raw_extraction) {
+            const ext = (profile as any).raw_extraction;
+            const colorCount = ext.colors ? Object.keys(ext.colors).length : 0;
+            const hasButtons = !!ext.buttons;
+            const hasFonts = !!ext.fonts;
+            addLog(`Spec summary: ${colorCount} colors, fonts=${hasFonts}, buttons=${hasButtons}`, "info");
+          }
 
           startPhase("guide");
-          addLog("Firing brand guide generation (3–5 min)...");
+          addLog("Invoking extract-brand step=guide (Claude Opus, streaming, 3–5 min)...");
 
-          // Fetch fresh audit from DB
           const freshAudit = (profile as any)?.audit_findings || auditFindings || {};
+          const guidePayload = {
+            auditFindings: freshAudit,
+            brandName: brandContext?.brandName || brandName,
+            industry: brandContext?.industry || "",
+            brandId: bId,
+            step: "guide",
+          };
+          addLog(`Guide payload: brandName=${guidePayload.brandName}, auditKeys=${Object.keys(freshAudit).length}`, "info");
 
           supabase.functions.invoke("extract-brand", {
-            body: {
-              auditFindings: freshAudit,
-              brandName: brandContext?.brandName || brandName,
-              industry: brandContext?.industry || "",
-              brandId: bId,
-              step: "guide",
-            },
-          }).then(({ error: guideErr }) => {
+            body: guidePayload,
+          }).then(({ data: guideData, error: guideErr }) => {
             if (guideErr) addLog(`Guide invoke returned: ${guideErr.message}`, "info");
+            if (guideData?.status) addLog(`Guide response status: ${guideData.status}`, "info");
           }).catch((err) => {
-            addLog(`Guide invoke timed out (expected): ${err?.message}`, "info");
+            addLog(`Guide invoke timed out (expected for long Opus calls): ${err?.message}`, "info");
           });
         }
 
@@ -232,18 +252,23 @@ export default function BrandProcessingScreen({
 
         // Stuck on spec_complete
         if (status === "spec_complete" && guideFiredRef.current && specCompleteTimeRef.current) {
-          if (Date.now() - specCompleteTimeRef.current > 60000) {
+          const stuckMs = Date.now() - specCompleteTimeRef.current;
+          if (stuckMs > 60000) {
             const msg = "Guide generation failed to start after spec completed. Please try again.";
             addLog(msg, "error");
             failPhase("guide", msg);
             setGlobalError(msg);
             return "stop";
           }
+          if (stuckMs > 30000) {
+            addLog(`Still waiting for guide to start (${Math.floor(stuckMs / 1000)}s since spec_complete)...`, "info");
+          }
         }
 
         if (status === "complete" && profile?.brand_guide_html) {
+          const guideLen = profile.brand_guide_html.length;
           completePhase("guide");
-          addLog("Brand guide ready!", "success");
+          addLog(`Brand guide ready! (${guideLen} chars HTML)`, "success");
           setGuideHtml(profile.brand_guide_html);
           setRawExtraction((profile as any)?.raw_extraction);
           setSystemPrompt(profile.system_prompt || undefined);
@@ -253,25 +278,29 @@ export default function BrandProcessingScreen({
 
         // Idle too long
         if (status === "idle") {
-          if (Date.now() - startTime > 90000) {
+          const idleMs = Date.now() - startTime;
+          if (idleMs > 90000) {
             const msg = "Processing failed to start. Please try again.";
             addLog(msg, "error");
             failPhase("spec", msg);
             setGlobalError(msg);
             return "stop";
           }
+          if (idleMs > 30000 && pollNum % 3 === 0) {
+            addLog(`Still idle after ${Math.floor(idleMs / 1000)}s — waiting for spec to start...`, "info");
+          }
         }
 
         if (Date.now() - startTime > MAX_POLL_MS) {
-          const msg = "Processing timed out after 15 minutes.";
+          const msg = `Processing timed out after ${Math.floor((Date.now() - startTime) / 60000)} minutes.`;
           addLog(msg, "error");
           const currentPhase = phases.find((p) => p.state === "running")?.key;
           if (currentPhase) failPhase(currentPhase, msg);
           setGlobalError(msg);
           return "stop";
         }
-      } catch {
-        // Transient error, keep polling
+      } catch (pollErr: any) {
+        addLog(`Poll error (transient, retrying): ${pollErr?.message || "unknown"}`, "info");
       }
       return "continue";
     };
