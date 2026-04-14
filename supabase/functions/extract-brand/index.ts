@@ -517,7 +517,7 @@ async function runGuideCall(
     },
     body: JSON.stringify({
       model: "claude-opus-4-20250514",
-      max_tokens: 64000,
+      max_tokens: 32000,
       system: GUIDE_PROMPT,
       messages: [{
         role: "user",
