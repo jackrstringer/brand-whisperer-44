@@ -15,6 +15,7 @@ interface Props {
   onBuildNow: (idea: CampaignIdea) => void;
   researchStatus?: string | null;
   roundIndex?: number;
+  groupLabel?: string;
 }
 
 export function GenerationNode({
@@ -29,6 +30,7 @@ export function GenerationNode({
   onBuildNow,
   researchStatus,
   roundIndex = 0,
+  groupLabel,
 }: Props) {
   const displayIdeas = isStreaming
     ? [...ideas, ...streamingIdeas.filter(si => (si.title || si.description) && !ideas.find(i => i.id === si.id))]
