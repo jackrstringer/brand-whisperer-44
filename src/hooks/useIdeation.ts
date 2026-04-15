@@ -75,6 +75,7 @@ export function useIdeation(brandId: string) {
             .map((n: any) => ({
               ...n,
               isStreaming: false,
+              ...(n.type === 'calendar_dates' ? { selectedDates: new Set<string>(n.selectedDates || []) } : {}),
             }));
           setState(s => ({ ...s, sessionId: session.id, nodes: loadedNodes as IdeationNode[] }));
         }
