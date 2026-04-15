@@ -6,6 +6,21 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function formatResearchValue(value: unknown): string {
+  if (value == null) return "";
+  if (Array.isArray(value)) return value.map((item) => formatResearchValue(item)).filter(Boolean).join(", ");
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, nested]) => {
+        const formatted = formatResearchValue(nested);
+        return formatted ? `${key.replace(/_/g, " ")}: ${formatted}` : "";
+      })
+      .filter(Boolean)
+      .join("; ");
+  }
+  return String(value);
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -40,19 +55,22 @@ Deno.serve(async (req) => {
     const pastCampaigns = campaignsResult.data || [];
     const calendarEvents = calendarResult.data || [];
     const feedback = feedbackResult.data || [];
+    const aiResearch = (intel?.ai_research as Record<string, unknown> | null) || null;
 
     // --- SECTION A: Lucy's Identity ---
     const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
     let prompt = `You are Lucy, an elite AI creative director specializing in email marketing, brand strategy, and copywriting. You are the dedicated creative director for the brand described below. You've internalized their voice, audience, and positioning. Every idea you generate should feel like it came from someone embedded with this brand for months.
 
-Today is ${today}. Factor in seasonality, upcoming holidays, and cultural timing when generating ideas.\n\n`;
+Today is ${today}. Factor in seasonality, upcoming holidays, and cultural timing when generating ideas.
+Never drift into adjacent categories or invent products the brand does not sell. Stay literal to the brand's actual category, audience, and product universe.\n\n`;
 
     // --- SECTION B: Brand Intelligence ---
     prompt += `--- BRAND OVERVIEW ---\n`;
     if (brand) {
       prompt += `Brand: ${brand.name || "Unknown"}\n`;
       if (brand.industry) prompt += `Industry: ${brand.industry}\n`;
+      else if (aiResearch?.primary_category) prompt += `Industry: ${formatResearchValue(aiResearch.primary_category)}\n`;
       if (brand.website_url) prompt += `Website: ${brand.website_url}\n`;
     }
     prompt += `\n`;
@@ -60,6 +78,21 @@ Today is ${today}. Factor in seasonality, upcoming holidays, and cultural timing
     // Compiled context (the prose strategy brief from compile-brand-context)
     if (intel?.compiled_context) {
       prompt += `--- BRAND STRATEGY BRIEF ---\n${intel.compiled_context}\n\n`;
+    }
+
+    // AI research fallback / enrichment
+    if (aiResearch) {
+      prompt += `--- AI RESEARCH PROFILE ---\n`;
+      if (aiResearch.primary_category) prompt += `Category: ${formatResearchValue(aiResearch.primary_category)}\n`;
+      if (aiResearch.sub_category) prompt += `Sub-category: ${formatResearchValue(aiResearch.sub_category)}\n`;
+      if (aiResearch.brand_positioning) prompt += `Positioning: ${formatResearchValue(aiResearch.brand_positioning)}\n`;
+      if (aiResearch.mission_statement) prompt += `Mission: ${formatResearchValue(aiResearch.mission_statement)}\n`;
+      if (aiResearch.tagline_or_slogan) prompt += `Tagline: ${formatResearchValue(aiResearch.tagline_or_slogan)}\n`;
+      if (aiResearch.brand_story) prompt += `Brand story: ${formatResearchValue(aiResearch.brand_story)}\n`;
+      if (aiResearch.key_brand_values) prompt += `Brand values: ${formatResearchValue(aiResearch.key_brand_values)}\n`;
+      if (aiResearch.target_demographic) prompt += `Target demographic: ${formatResearchValue(aiResearch.target_demographic)}\n`;
+      if (aiResearch.brand_voice_and_tone) prompt += `Voice and tone: ${formatResearchValue(aiResearch.brand_voice_and_tone)}\n`;
+      prompt += `\nCATEGORY LOCK: Treat the category above as binding. Do not swap in adjacent categories like skincare, cosmetics, supplements, or apparel unless the research explicitly says the brand sells them.\n\n`;
     }
 
     // Klaviyo performance intelligence

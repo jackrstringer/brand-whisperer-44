@@ -155,7 +155,7 @@ Deno.serve(async (req) => {
 
     const { data: intel } = await supabase
       .from("brand_intelligence")
-      .select("research_status, last_researched_at, compiled_context, ai_research")
+      .select("research_status, last_researched_at, compiled_context, merged_profile, ai_research")
       .eq("brand_id", brand_id)
       .maybeSingle();
 
@@ -164,14 +164,29 @@ Deno.serve(async (req) => {
     const researchStatus = intel?.research_status || "pending";
     const researchComplete = ["ai_complete", "complete", "survey_complete"].includes(researchStatus);
 
+    const currentPrompt = brandData?.ideation_prompt || "";
+    const promptHasCoreBrandContext = [
+      "--- BRAND STRATEGY BRIEF ---",
+      "--- AI RESEARCH PROFILE ---",
+      "--- PRODUCTS ---",
+      "Target audience:",
+      "Hero products:",
+      "Category:",
+      "Positioning:",
+    ].some((marker) => currentPrompt.includes(marker));
+    const hasMergedProfile = !!intel?.merged_profile && typeof intel.merged_profile === "object" && Object.keys(intel.merged_profile as Record<string, unknown>).length > 0;
+    const hasAiResearch = !!intel?.ai_research && typeof intel.ai_research === "object" && Object.keys(intel.ai_research as Record<string, unknown>).length > 0;
+    const hasCoreResearchData = !!intel?.compiled_context || hasMergedProfile || hasAiResearch;
+
     // Check if ideation prompt needs building or rebuilding
     const promptIsMissing = !brandData?.ideation_prompt;
     const promptIsStale = researchComplete && brandData?.ideation_prompt_built_at && intel?.last_researched_at &&
       new Date(brandData.ideation_prompt_built_at) < new Date(intel.last_researched_at);
-    const promptIsThin = (brandData?.ideation_prompt?.length || 0) < 300;
+    const promptIsThin = currentPrompt.length < 300;
+    const promptMissingAvailableResearch = hasCoreResearchData && !promptHasCoreBrandContext;
 
-    if (promptIsMissing || promptIsStale || promptIsThin) {
-      console.log(`[generate-ideas] Building ideation prompt (missing=${promptIsMissing}, stale=${!!promptIsStale}, thin=${promptIsThin})`);
+    if (promptIsMissing || promptIsStale || promptIsThin || promptMissingAvailableResearch) {
+      console.log(`[generate-ideas] Building ideation prompt (missing=${promptIsMissing}, stale=${!!promptIsStale}, thin=${promptIsThin}, missing_core=${promptMissingAvailableResearch})`);
       const buildResp = await fetch(
         `${Deno.env.get("SUPABASE_URL")}/functions/v1/build-ideation-prompt`,
         {
@@ -196,18 +211,33 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Guard: if prompt is STILL thin and research hasn't completed, block generation
-    if ((brandData?.ideation_prompt?.length || 0) < 300 && !researchComplete) {
-      return new Response(JSON.stringify({ 
-        error: "Brand intelligence is still processing. Please wait a moment and try again.",
-        retry: true,
+    const rebuiltPrompt = brandData?.ideation_prompt || "";
+    const rebuiltPromptHasCoreBrandContext = [
+      "--- BRAND STRATEGY BRIEF ---",
+      "--- AI RESEARCH PROFILE ---",
+      "--- PRODUCTS ---",
+      "Target audience:",
+      "Hero products:",
+      "Category:",
+      "Positioning:",
+    ].some((marker) => rebuiltPrompt.includes(marker));
+
+    // Guard: never ideate from an ungrounded prompt
+    if (!rebuiltPromptHasCoreBrandContext) {
+      const message = researchComplete
+        ? "Ideation blocked: brand context is still too thin for reliable idea generation. Re-run brand intelligence or rebuild the ideation prompt."
+        : "Brand intelligence is still processing. Please wait a moment and try again.";
+      return new Response(JSON.stringify({
+        error: message,
+        retry: !researchComplete,
       }), {
-        status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: researchComplete ? 409 : 202,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     // Build system prompt
-    let systemPrompt = brandData?.ideation_prompt ||
+    let systemPrompt = rebuiltPrompt ||
       `You are a senior creative strategist at a top-tier email marketing agency. Today is ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.`;
 
     if (chaos_mode) {
