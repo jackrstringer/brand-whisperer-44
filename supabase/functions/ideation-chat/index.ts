@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
     ]);
 
     const brand = brandResult.data;
-    const intel = intelResult.data;
+    const intel = intelResult.data as any;
     const profile = profileResult.data;
     const pastCampaigns = campaignsResult.data || [];
 
