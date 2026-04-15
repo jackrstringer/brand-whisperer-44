@@ -72,7 +72,7 @@ async function researchCompetitor(name: string): Promise<string> {
           content:
             `Research ${name}'s email marketing program. Find: estimated send frequency per week, typical offer types (% off, free gift, etc), subject line patterns and tone, content themes, any recent notable campaigns. Be specific. 300 words max.`,
         }],
-        max_tokens: 500,
+        max_tokens: 4096,
       }),
     });
 
@@ -120,7 +120,7 @@ async function generateReportHtml(
     },
     body: JSON.stringify({
       model: "claude-opus-4-6",
-      max_tokens: 32000,
+      max_tokens: 64000,
       system: `You are a senior email marketing strategist generating a comprehensive performance analysis report. Output only a <style> block followed by valid HTML content — no <!DOCTYPE>, no <html>, no <head>, no <body> tags. No JavaScript. No anchor links. No sticky elements. Pure static long-scroll document. Import Google Fonts (DM Sans + Instrument Serif) via @import at the top of the <style> block. Use the monochrome color palette defined in the skill document.`,
       messages: [{
         role: "user",

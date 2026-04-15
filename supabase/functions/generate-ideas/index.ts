@@ -63,7 +63,7 @@ async function doResearch(
         model: "google/gemini-2.5-flash",
         messages: [{ role: "user", content: promptFn(brandName, industry, products, audience) }],
         temperature: 0.3,
-        max_tokens: 2000,
+        max_tokens: 8192,
       }),
     });
 
@@ -263,7 +263,7 @@ Return ONLY a JSON array. No other text, no markdown:
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5",
-        max_tokens: turbo_mode ? 8192 : 4096,
+        max_tokens: 16384,
         temperature: 1.0,
         stream: true,
         system: systemPrompt,

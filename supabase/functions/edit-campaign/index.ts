@@ -483,7 +483,7 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: moreVariants ? 8192 : 4096,
+        max_tokens: 16384,
         system: systemMsg,
         messages: anthropicMessages,
         stream: true,

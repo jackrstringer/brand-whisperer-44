@@ -103,7 +103,7 @@ async function requestReportChunk(
 ): Promise<string> {
   const stream = anthropic.messages.stream({
     model: "claude-opus-4-6",
-    max_tokens: 32000,
+    max_tokens: 64000,
     system: SYSTEM_PROMPT,
     messages: [
       {

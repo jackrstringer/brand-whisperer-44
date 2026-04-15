@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
             },
             body: JSON.stringify({
               model: "claude-sonnet-4-6",
-              max_tokens: 1024,
+              max_tokens: 16384,
               system: `You are classifying product images for an email marketing asset library.
 
 STRICT RULES:

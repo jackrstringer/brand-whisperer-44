@@ -38,7 +38,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash-lite",
-        max_tokens: 1500,
+        max_tokens: 8192,
         messages: [{
           role: "user",
           content: `Convert this Klaviyo performance report into a concise prose briefing optimized for injection into an AI email generation prompt. Write it as a strategist briefing a copywriter. Cover: what offer types and subject line patterns this audience responds to, best performing campaign types, what to avoid, send timing, and the top 3 subject line examples with their open rates. Max 800 tokens. Be specific.
