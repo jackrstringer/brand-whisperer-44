@@ -18,8 +18,6 @@ interface Props {
   onToggleMenu?: () => void;
   onClearChat?: () => void;
   onAddToQueue?: () => void;
-  calendarDateCount?: number;
-  onGenerateCalendarIdeas?: () => void;
 }
 
 export function ChatBar({
@@ -38,21 +36,16 @@ export function ChatBar({
   onToggleMenu,
   onClearChat,
   onAddToQueue,
-  calendarDateCount = 0,
-  onGenerateCalendarIdeas,
 }: Props) {
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isBusy = isGenerating || isChatting;
-  const hasCalendarDates = calendarDateCount > 0;
 
-  let placeholder = "Pick a campaign type above, or describe your idea...";
-  if (hasCalendarDates) {
-    placeholder = `Press Enter to generate ideas for ${calendarDateCount} date${calendarDateCount > 1 ? 's' : ''}...`;
-  } else if (selectedCount > 1) {
-    placeholder = "Add direction for the next round of variations...";
+  let placeholder = 'Pick a campaign type above, or describe your idea...';
+  if (selectedCount > 1) {
+    placeholder = 'Press Enter to ideate from these ideas, or add direction for the next round...';
   } else if (selectedCount === 1) {
-    placeholder = "Describe how to refine this idea, or press Enter to build...";
+    placeholder = 'Press Enter to ideate from this idea, or describe how to refine it...';
   } else if (activeType) {
     placeholder = `Add direction for more ${activeType} ideas...`;
   }
@@ -66,11 +59,6 @@ export function ChatBar({
 
   const handleSend = () => {
     if (isBusy) return;
-    // If calendar dates are selected, generate ideas for them
-    if (hasCalendarDates && !input.trim()) {
-      onGenerateCalendarIdeas?.();
-      return;
-    }
     const msg = input.trim();
     if (!msg && selectedCount === 0 && !activeType) return;
     onSend(msg);
@@ -86,7 +74,6 @@ export function ChatBar({
 
   return (
     <div className="w-full">
-      {/* Selection indicator */}
       {selectedCount > 0 && (
         <div className="flex items-center gap-2.5 mb-2.5 justify-center">
           <span className="text-sm font-medium text-foreground bg-muted px-3 py-1 rounded-full">
@@ -102,7 +89,6 @@ export function ChatBar({
       )}
 
       <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
-        {/* Top row — textarea */}
         <div className="px-4 pt-3.5 pb-2.5">
           <textarea
             ref={textareaRef}
@@ -117,10 +103,8 @@ export function ChatBar({
           />
         </div>
 
-        {/* Bottom row — controls */}
         <div className="flex items-center justify-between px-3.5 pb-3 pt-1.5 border-t border-border flex-wrap gap-2">
           <div className="flex items-center gap-1.5 flex-wrap">
-            {/* Menu toggle */}
             <button
               onClick={onToggleMenu}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
@@ -133,7 +117,6 @@ export function ChatBar({
               Menu
             </button>
 
-            {/* Turbo toggle */}
             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
               turboMode
                 ? 'bg-cyan-50 border-cyan-200 text-cyan-700 dark:bg-cyan-950 dark:border-cyan-800 dark:text-cyan-300'
@@ -148,7 +131,6 @@ export function ChatBar({
               />
             </div>
 
-            {/* Chaos toggle */}
             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-150 border ${
               chaosMode
                 ? 'bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950 dark:border-amber-800 dark:text-amber-300'
@@ -163,7 +145,6 @@ export function ChatBar({
               />
             </div>
 
-            {/* Clear chat */}
             {onClearChat && (
               <button
                 onClick={onClearChat}
@@ -188,22 +169,17 @@ export function ChatBar({
               <>
                 <button
                   onClick={handleSend}
-                  disabled={!input.trim() && selectedCount === 0 && !activeType && !hasCalendarDates}
+                  disabled={!input.trim() && selectedCount === 0 && !activeType}
                   className={`flex items-center gap-1.5 h-9 px-4 rounded-lg text-sm font-medium transition-all duration-150 border ${
-                    hasCalendarDates
-                      ? 'bg-primary text-primary-foreground hover:opacity-90 hover:scale-[1.02] border-primary'
+                    selectedCount > 0
+                      ? 'bg-primary text-primary-foreground border-primary hover:opacity-90 hover:scale-[1.02]'
                       : 'bg-muted border-border text-foreground hover:bg-accent hover:scale-[1.02] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100'
                   }`}
                 >
                   <Sparkles className="w-4 h-4" />
                   Ideate
-                  {hasCalendarDates && (
+                  {selectedCount > 0 && (
                     <span className="rounded-full bg-primary-foreground/20 px-1.5 text-xs font-medium">
-                      {calendarDateCount}
-                    </span>
-                  )}
-                  {selectedCount > 0 && !hasCalendarDates && (
-                    <span className="rounded-full bg-primary/20 px-1.5 text-xs font-medium">
                       {selectedCount}
                     </span>
                   )}
@@ -212,10 +188,10 @@ export function ChatBar({
                 <button
                   onClick={() => selectedCount > 0 && onAddToQueue?.()}
                   disabled={selectedCount === 0}
-                  className={`flex items-center gap-1.5 h-9 px-4 rounded-lg text-sm font-medium transition-all duration-150 ${
+                  className={`flex items-center gap-1.5 h-9 px-4 rounded-lg text-sm font-medium transition-all duration-150 border ${
                     selectedCount > 0
-                      ? 'bg-primary text-primary-foreground hover:opacity-90 hover:scale-[1.02]'
-                      : 'bg-muted text-muted-foreground cursor-not-allowed'
+                      ? 'bg-muted border-border text-foreground hover:bg-accent hover:scale-[1.02]'
+                      : 'bg-muted border-transparent text-muted-foreground cursor-not-allowed'
                   }`}
                 >
                   <Plus className="w-4 h-4" />
