@@ -189,7 +189,7 @@ ${datesList}`;
         body: JSON.stringify({
           model: "google/gemini-2.5-flash",
           messages: [
-            { role: "system", content: "You are an elite DTC ecommerce strategist. Return ONLY valid JSON via the tool call. Every idea must include specific products and a real promotion mechanic." },
+            { role: "system", content: "You are an elite DTC ecommerce strategist. Return ONLY valid JSON via the tool call. IMPORTANT: 4 of 5 ideas per date must be evergreen/non-promotional (no discounts, no sales, no offers). Only 1 idea can include a promotion." },
             { role: "user", content: prompt },
           ],
           tools: [
