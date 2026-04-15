@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,7 +10,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, CheckCircle, AlertTriangle, RefreshCw } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "@/components/ui/command";
+import {
+  Loader2,
+  CheckCircle,
+  AlertTriangle,
+  RefreshCw,
+  ShoppingCart,
+  Mail,
+  Zap,
+  CircleDot,
+  ChevronsUpDown,
+  Check,
+  CreditCard,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type { FlowConfig } from "@/lib/types";
@@ -19,11 +44,11 @@ interface TriggerMetric {
   metric_id: string;
   metric_name: string;
   description: string;
+  integration_name: string | null;
+  integration_category: string | null;
   priority: number;
-  is_transactional: boolean;
+  is_recommended: boolean;
   has_real_data: boolean;
-  sample_payload: any;
-  liquid_variables: string[];
 }
 
 interface FlowConfigPanelProps {
@@ -62,6 +87,18 @@ function relativeTime(dateStr: string | null | undefined): string {
   return `${days}d ago`;
 }
 
+/** Map integration source name to a Lucide icon */
+function IntegrationIcon({ name, className = "w-4 h-4" }: { name: string | null; className?: string }) {
+  const n = (name || "").toLowerCase();
+  if (n.includes("shopify")) return <ShoppingCart className={className} />;
+  if (n.includes("recharge")) return <RefreshCw className={className} />;
+  if (n.includes("stripe") || n.includes("payment")) return <CreditCard className={className} />;
+  if (n.includes("klaviyo")) return <Mail className={className} />;
+  if (n.includes("api") || n.includes("custom") || n.includes("webhook")) return <Zap className={className} />;
+  if (n) return <CircleDot className={className} />;
+  return <CircleDot className={className} />;
+}
+
 export default function FlowConfigPanel({
   brandId,
   flowConfig,
@@ -76,6 +113,8 @@ export default function FlowConfigPanel({
   const [accountName, setAccountName] = useState<string>("");
   const [productCount, setProductCount] = useState<number | null>(null);
   const [syncingProducts, setSyncingProducts] = useState(false);
+  const [triggerOpen, setTriggerOpen] = useState(false);
+  const [fetchingEvent, setFetchingEvent] = useState(false);
 
   useEffect(() => {
     fetchSchema();
@@ -107,22 +146,9 @@ export default function FlowConfigPanel({
 
       if (!flowConfig.trigger_metric_id && data.metrics?.length > 0) {
         const best = data.metrics[0];
-        onConfigChange({
-          ...flowConfig,
-          trigger_metric_id: best.metric_id,
-          trigger_metric_name: best.metric_name,
-          event_schema: best.sample_payload,
-          liquid_variables: best.liquid_variables,
-          klaviyo_synced_at: data.synced_at,
-          flow_type:
-            flowConfig.flow_type ||
-            TRIGGER_PREFILLS[best.metric_name] ||
-            "",
-          selected_product_preset: flowConfig.selected_product_preset || "best_sellers",
-        });
+        handleSelectMetric(best, false);
       }
 
-      // Auto-sync products if connected and no products exist
       if (data.connected) {
         triggerProductSync(false);
       }
@@ -185,11 +211,11 @@ export default function FlowConfigPanel({
     }
   };
 
-  const selectTrigger = (metric: TriggerMetric) => {
+  /** Select a metric and lazy-fetch its event data */
+  const handleSelectMetric = async (metric: TriggerMetric, fetchEvent = true) => {
     const newFlowType =
       !flowConfig.flow_type ||
-      flowConfig.flow_type ===
-        TRIGGER_PREFILLS[flowConfig.trigger_metric_name || ""]
+      flowConfig.flow_type === TRIGGER_PREFILLS[flowConfig.trigger_metric_name || ""]
         ? TRIGGER_PREFILLS[metric.metric_name] || ""
         : flowConfig.flow_type;
 
@@ -197,19 +223,65 @@ export default function FlowConfigPanel({
       ...flowConfig,
       trigger_metric_id: metric.metric_id,
       trigger_metric_name: metric.metric_name,
-      event_schema: metric.sample_payload,
-      liquid_variables: metric.liquid_variables,
       flow_type: newFlowType,
+      selected_product_preset: flowConfig.selected_product_preset || "best_sellers",
     });
+
+    setTriggerOpen(false);
+
+    if (!fetchEvent) return;
+
+    // Lazy fetch event data for this metric
+    setFetchingEvent(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/klaviyo-fetch-schema`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ brandId, fetchEventFor: metric.metric_id }),
+        }
+      );
+      if (resp.ok) {
+        const eventData = await resp.json();
+        onConfigChange({
+          ...flowConfig,
+          trigger_metric_id: metric.metric_id,
+          trigger_metric_name: metric.metric_name,
+          event_schema: eventData.sample_payload,
+          liquid_variables: eventData.liquid_variables,
+          flow_type: newFlowType,
+          selected_product_preset: flowConfig.selected_product_preset || "best_sellers",
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch event data:", err);
+      toast.error("Failed to load event schema for this trigger");
+    } finally {
+      setFetchingEvent(false);
+    }
   };
 
   const handlePresetChange = (value: string) => {
     onConfigChange({ ...flowConfig, selected_product_preset: value });
   };
 
+  const selectedMetric = useMemo(
+    () => metrics.find((m) => m.metric_id === flowConfig.trigger_metric_id),
+    [metrics, flowConfig.trigger_metric_id]
+  );
+
   const selectedPreset = FEED_PRESETS.find(
     (p) => p.key === (flowConfig.selected_product_preset || "best_sellers")
   );
+
+  const recommendedMetrics = useMemo(() => metrics.filter((m) => m.is_recommended), [metrics]);
+  const otherMetrics = useMemo(() => metrics.filter((m) => !m.is_recommended), [metrics]);
 
   return (
     <div className="space-y-5">
@@ -223,45 +295,80 @@ export default function FlowConfigPanel({
             Fetching your Klaviyo triggers...
           </div>
         ) : (
-          <div className="space-y-1.5">
-            {metrics.map((metric, idx) => {
-              const isSelected =
-                flowConfig.trigger_metric_id === metric.metric_id;
-              const isRecommended = idx === 0;
-              return (
-                <button
-                  key={metric.metric_id}
-                  onClick={() => selectTrigger(metric)}
-                  className={`w-full text-left px-3 py-2.5 rounded-lg border transition-colors ${
-                    isSelected
-                      ? "border-primary bg-primary/5"
-                      : "border-border bg-card hover:border-primary/30"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`w-2 h-2 rounded-full shrink-0 ${
-                        metric.has_real_data
-                          ? "bg-green-500"
-                          : "bg-muted-foreground/40"
-                      }`}
-                    />
-                    <span className="text-sm font-medium">
-                      {metric.metric_name}
-                    </span>
-                    {isRecommended && (
-                      <Badge className="text-[9px] bg-primary/20 text-primary ml-auto">
-                        Recommended
-                      </Badge>
+          <Popover open={triggerOpen} onOpenChange={setTriggerOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={triggerOpen}
+                className="w-full justify-between bg-card border-border h-auto py-2.5 px-3"
+              >
+                {selectedMetric ? (
+                  <div className="flex items-center gap-2 text-left">
+                    <IntegrationIcon name={selectedMetric.integration_name} className="w-4 h-4 shrink-0 text-muted-foreground" />
+                    <span className="text-sm font-medium truncate">{selectedMetric.metric_name}</span>
+                    {selectedMetric.is_recommended && (
+                      <Badge className="text-[9px] bg-primary/20 text-primary shrink-0">Recommended</Badge>
                     )}
+                    {fetchingEvent && <Loader2 className="w-3 h-3 animate-spin shrink-0 text-muted-foreground" />}
                   </div>
-                  <p className="text-[11px] text-muted-foreground ml-4 mt-0.5">
-                    {metric.description}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
+                ) : (
+                  <span className="text-sm text-muted-foreground">Choose a trigger metric...</span>
+                )}
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Search metrics..." />
+                <CommandList>
+                  <CommandEmpty>No metrics found.</CommandEmpty>
+                  {recommendedMetrics.length > 0 && (
+                    <CommandGroup heading="Recommended">
+                      {recommendedMetrics.map((metric) => (
+                        <CommandItem
+                          key={metric.metric_id}
+                          value={metric.metric_name}
+                          onSelect={() => handleSelectMetric(metric)}
+                          className="flex items-center gap-2 py-2"
+                        >
+                          <IntegrationIcon name={metric.integration_name} className="w-4 h-4 shrink-0 text-muted-foreground" />
+                          <span className="flex-1 truncate">{metric.metric_name}</span>
+                          {metric.integration_name && (
+                            <span className="text-[10px] text-muted-foreground/70 shrink-0">{metric.integration_name}</span>
+                          )}
+                          {flowConfig.trigger_metric_id === metric.metric_id && (
+                            <Check className="w-3.5 h-3.5 shrink-0 text-primary" />
+                          )}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  )}
+                  {otherMetrics.length > 0 && (
+                    <CommandGroup heading="All Metrics">
+                      {otherMetrics.map((metric) => (
+                        <CommandItem
+                          key={metric.metric_id}
+                          value={metric.metric_name}
+                          onSelect={() => handleSelectMetric(metric)}
+                          className="flex items-center gap-2 py-2"
+                        >
+                          <IntegrationIcon name={metric.integration_name} className="w-4 h-4 shrink-0 text-muted-foreground" />
+                          <span className="flex-1 truncate">{metric.metric_name}</span>
+                          {metric.integration_name && (
+                            <span className="text-[10px] text-muted-foreground/70 shrink-0">{metric.integration_name}</span>
+                          )}
+                          {flowConfig.trigger_metric_id === metric.metric_id && (
+                            <Check className="w-3.5 h-3.5 shrink-0 text-primary" />
+                          )}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  )}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         )}
 
         {connected !== null && (
