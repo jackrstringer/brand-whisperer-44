@@ -5,12 +5,15 @@ import { CampaignIdea } from '@/lib/types';
 import { CAMPAIGN_TYPES } from '@/lib/ideation/campaignTypes';
 import { streamIdeas } from '@/lib/ideation/streamHelpers';
 
+import { CalendarDateEntry } from '@/components/ideation/CalendarDatesNode';
+
 export type IdeationNode =
   | { id: string; type: 'brief'; content: string; campaignType?: string; campaignSubtype?: string; timestamp: number }
   | { id: string; type: 'generation'; ideas: CampaignIdea[]; isStreaming: boolean; wasTurbo?: boolean; timestamp: number }
   | { id: string; type: 'feedback'; content: string; selectedIdeas: CampaignIdea[]; timestamp: number }
   | { id: string; type: 'ai_response'; content: string; isStreaming: boolean; timestamp: number }
-  | { id: string; type: 'menu'; timestamp: number };
+  | { id: string; type: 'menu'; timestamp: number }
+  | { id: string; type: 'calendar_dates'; dates: CalendarDateEntry[]; isLoading: boolean; timestamp: number };
 
 interface UseIdeationState {
   sessionId: string | null;
@@ -416,6 +419,51 @@ export function useIdeation(brandId: string) {
     setState(s => ({ ...s, nodes: s.nodes.filter(n => n.type !== 'menu') }));
   }, []);
 
+  const generateCalendarDates = useCallback(async () => {
+    const sessionId = await ensureSession();
+    const nodeId = crypto.randomUUID();
+
+    setState(s => ({
+      ...s,
+      nodes: [
+        ...s.nodes,
+        { id: nodeId, type: 'calendar_dates' as const, dates: [], isLoading: true, timestamp: Date.now() },
+      ],
+    }));
+
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-calendar-dates', {
+        body: { brand_id: brandId },
+      });
+
+      if (error) throw new Error(error.message || 'Failed to generate calendar dates');
+      if (data?.error) throw new Error(data.error);
+
+      const dates = data?.dates || [];
+
+      setState(s => {
+        const updatedNodes = s.nodes.map(n =>
+          n.id === nodeId && n.type === 'calendar_dates'
+            ? { ...n, dates, isLoading: false }
+            : n,
+        );
+        saveNodes(sessionId, updatedNodes);
+        return { ...s, nodes: updatedNodes };
+      });
+    } catch (err) {
+      console.error('[useIdeation] Calendar dates error:', err);
+      setState(s => ({
+        ...s,
+        nodes: s.nodes.map(n =>
+          n.id === nodeId && n.type === 'calendar_dates'
+            ? { ...n, isLoading: false }
+            : n,
+        ),
+      }));
+      throw err;
+    }
+  }, [ensureSession, brandId, saveNodes]);
+
   return {
     ...state,
     generateForType,
@@ -429,5 +477,6 @@ export function useIdeation(brandId: string) {
     insertMenuNode,
     addMenuNode,
     removeMenuNodes,
+    generateCalendarDates,
   };
 }

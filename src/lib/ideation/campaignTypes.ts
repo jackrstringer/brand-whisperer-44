@@ -64,6 +64,9 @@ export const CAMPAIGN_TYPES: CampaignType[] = [
   { name: 'Press/"As Seen In"', description: "Media mentions and editorial", category: "research", needsResearch: true, color: "bg-sky-500" },
   { name: "Loyalty Program", description: "Rewards, points, VIP perks", category: "research", needsResearch: true, color: "bg-fuchsia-500" },
   { name: "Comparison", description: "Competitive differentiation", category: "research", needsResearch: true, color: "bg-stone-500" },
+
+  // SPECIAL TYPES
+  { name: "📅 Calendar Dates", description: "Upcoming holidays, events & moments", category: "direct", color: "bg-emerald-400" },
 ];
 
 // Hero order: Product Highlight, Sale/Promo, Social Proof first, then rest, Random last

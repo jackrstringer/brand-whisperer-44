@@ -6,6 +6,7 @@ import { GenerationNode } from './GenerationNode';
 import { FeedbackNode } from './FeedbackNode';
 import { AiResponseNode } from './AiResponseNode';
 import { MenuNode } from './MenuNode';
+import { CalendarDatesNode, CalendarDateEntry } from './CalendarDatesNode';
 
 interface Props {
   nodes: IdeationNode[];
@@ -20,6 +21,7 @@ interface Props {
   researchStatus?: string | null;
   onMenuSelect?: (type: string, sub?: string) => void;
   activeType?: string | null;
+  onIdeateDate?: (entry: CalendarDateEntry) => void;
 }
 
 export function NodeFlow({
@@ -35,6 +37,7 @@ export function NodeFlow({
   researchStatus,
   onMenuSelect,
   activeType,
+  onIdeateDate,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const hasAutoScrolledRef = useRef(false);
@@ -87,6 +90,15 @@ export function NodeFlow({
             return onMenuSelect ? (
               <MenuNode key={node.id} onSelectType={onMenuSelect} activeType={activeType || null} />
             ) : null;
+          case 'calendar_dates':
+            return (
+              <CalendarDatesNode
+                key={node.id}
+                dates={node.dates}
+                isLoading={node.isLoading}
+                onIdeateDate={onIdeateDate || (() => {})}
+              />
+            );
           default:
             return null;
         }
