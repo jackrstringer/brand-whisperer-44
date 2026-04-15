@@ -90,6 +90,19 @@ export function NodeFlow({
             return onMenuSelect ? (
               <MenuNode key={node.id} onSelectType={onMenuSelect} activeType={activeType || null} />
             ) : null;
+          case 'calendar_dates':
+            return (
+              <CalendarDatesNode
+                key={node.id}
+                nodeId={node.id}
+                dates={node.dates}
+                isLoading={node.isLoading}
+                selectedDates={node.selectedDates}
+                isGenerating={isGenerating}
+                onToggleDate={onToggleCalendarDate || (() => {})}
+                onGenerateIdeas={onGenerateCalendarIdeas || (() => {})}
+              />
+            );
           default:
             return null;
         }
