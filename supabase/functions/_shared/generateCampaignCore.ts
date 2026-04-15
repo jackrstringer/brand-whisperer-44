@@ -1489,6 +1489,13 @@ UNIVERSAL RULES FOR EVENT DATA:
 
         console.log(`[klaviyo-validate] Attempt ${attempt + 1} failed: ${validation.error}`);
 
+        // If the error is an auth/scope issue, no amount of HTML fixing will help — bail immediately
+        const scopeOrAuthError = /missing required scopes|unauthorized|forbidden|invalid api key|authentication/i.test(validation.error || "");
+        if (scopeOrAuthError) {
+          console.warn("[klaviyo-validate] Auth/scope error — skipping auto-fix, using current HTML");
+          break;
+        }
+
         if (attempt < 2) {
           // Ask Claude to fix the specific Klaviyo error
           const fixResp = await callAnthropic(

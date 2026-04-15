@@ -1,0 +1,1 @@
+UPDATE campaigns SET status = 'error' WHERE id = 'c344ec90-d5ef-4f9d-bd43-120dc7dbd3fa' AND status = 'generating'
