@@ -549,7 +549,7 @@ export function useIdeation(brandId: string) {
         });
         // Mark any remaining gen nodes as done
         updatedNodes = updatedNodes.map(n =>
-          genNodeIds.includes(n.id) && n.type === 'generation' && n.isStreaming
+          (genNodeIds as string[]).includes(n.id) && n.type === 'generation' && n.isStreaming
             ? { ...n, isStreaming: false }
             : n,
         );
@@ -562,7 +562,7 @@ export function useIdeation(brandId: string) {
         ...s,
         isGenerating: false,
         nodes: s.nodes.map(n =>
-          genNodeIds.includes(n.id) && n.type === 'generation'
+          (genNodeIds as string[]).includes(n.id) && n.type === 'generation'
             ? { ...n, isStreaming: false }
             : n,
         ),
