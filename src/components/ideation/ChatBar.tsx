@@ -44,6 +44,7 @@ export function ChatBar({
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isBusy = isGenerating || isChatting;
+  const hasCalendarDates = calendarDateCount > 0;
 
   let placeholder = "Pick a campaign type above, or describe your idea...";
   if (selectedCount > 1) {
@@ -63,6 +64,11 @@ export function ChatBar({
 
   const handleSend = () => {
     if (isBusy) return;
+    // If calendar dates are selected, generate ideas for them
+    if (hasCalendarDates && !input.trim()) {
+      onGenerateCalendarIdeas?.();
+      return;
+    }
     const msg = input.trim();
     if (!msg && selectedCount === 0 && !activeType) return;
     onSend(msg);
