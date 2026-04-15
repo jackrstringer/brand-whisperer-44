@@ -36,6 +36,9 @@ function buildResearchSection(ai: Record<string, any>): string {
   if (bo.key_brand_values) s += `Brand values: ${fmt(bo.key_brand_values)}\n`;
   if (bo.target_demographic) s += `Target demographic: ${fmt(bo.target_demographic)}\n`;
   if (bo.brand_voice_and_tone) s += `Voice and tone: ${fmt(bo.brand_voice_and_tone)}\n`;
+  if (bo.founding_story) s += `Founding story: ${fmt(bo.founding_story)}\n`;
+  if (bo.certifications) s += `Certifications: ${fmt(bo.certifications)}\n`;
+  if (bo.unique_selling_propositions) s += `USPs: ${fmt(bo.unique_selling_propositions)}\n`;
 
   // Products
   if (pl.hero_products && Array.isArray(pl.hero_products) && pl.hero_products.length > 0) {
@@ -71,7 +74,8 @@ function buildResearchSection(ai: Record<string, any>): string {
 
   // Customer intelligence
   if (ci.primary_pain_points_solved && Array.isArray(ci.primary_pain_points_solved) && ci.primary_pain_points_solved.length > 0) {
-    s += `\nPain points solved: ${fmt(ci.primary_pain_points_solved)}\n`;
+    s += `\n--- CUSTOMER INTELLIGENCE ---\n`;
+    s += `Pain points solved: ${fmt(ci.primary_pain_points_solved)}\n`;
   }
   if (ci.common_praise_in_reviews && Array.isArray(ci.common_praise_in_reviews) && ci.common_praise_in_reviews.length > 0) {
     s += `Customer praise: ${fmt(ci.common_praise_in_reviews)}\n`;
@@ -79,10 +83,17 @@ function buildResearchSection(ai: Record<string, any>): string {
   if (ci.repeat_purchase_drivers && Array.isArray(ci.repeat_purchase_drivers) && ci.repeat_purchase_drivers.length > 0) {
     s += `Repeat purchase drivers: ${fmt(ci.repeat_purchase_drivers)}\n`;
   }
+  if (ci.purchase_objections && Array.isArray(ci.purchase_objections) && ci.purchase_objections.length > 0) {
+    s += `Common objections: ${fmt(ci.purchase_objections)}\n`;
+  }
+  if (ci.customer_segments && Array.isArray(ci.customer_segments) && ci.customer_segments.length > 0) {
+    s += `Customer segments: ${fmt(ci.customer_segments)}\n`;
+  }
 
   // Marketing intelligence
   if (mi.content_themes && Array.isArray(mi.content_themes) && mi.content_themes.length > 0) {
-    s += `\nContent themes: ${fmt(mi.content_themes)}\n`;
+    s += `\n--- MARKETING INTELLIGENCE ---\n`;
+    s += `Content themes: ${fmt(mi.content_themes)}\n`;
   }
   if (mi.typical_offer_types && Array.isArray(mi.typical_offer_types) && mi.typical_offer_types.length > 0) {
     s += `Offer types: ${fmt(mi.typical_offer_types)}\n`;
@@ -90,18 +101,29 @@ function buildResearchSection(ai: Record<string, any>): string {
   if (mi.seasonal_moments && Array.isArray(mi.seasonal_moments) && mi.seasonal_moments.length > 0) {
     s += `Seasonal moments: ${fmt(mi.seasonal_moments)}\n`;
   }
+  if (mi.email_frequency) s += `Email frequency: ${fmt(mi.email_frequency)}\n`;
+  if (mi.social_proof_assets && Array.isArray(mi.social_proof_assets) && mi.social_proof_assets.length > 0) {
+    s += `Social proof assets: ${fmt(mi.social_proof_assets)}\n`;
+  }
 
   // Competitive landscape
   if (cl.direct_competitors && Array.isArray(cl.direct_competitors) && cl.direct_competitors.length > 0) {
-    s += `\nDirect competitors: ${fmt(cl.direct_competitors)}\n`;
+    s += `\n--- COMPETITIVE LANDSCAPE ---\n`;
+    s += `Direct competitors: ${fmt(cl.direct_competitors)}\n`;
   }
   if (cl.competitive_advantages && Array.isArray(cl.competitive_advantages) && cl.competitive_advantages.length > 0) {
     s += `Competitive advantages: ${fmt(cl.competitive_advantages)}\n`;
   }
+  if (cl.market_position) s += `Market position: ${fmt(cl.market_position)}\n`;
 
   // Sales model
-  if (sm.free_shipping_threshold) s += `\nFree shipping threshold: ${sm.free_shipping_threshold}\n`;
-  if (sm.subscription_discount_typical) s += `Subscription discount: ${sm.subscription_discount_typical}\n`;
+  if (sm.free_shipping_threshold || sm.subscription_discount_typical || sm.return_policy || sm.loyalty_program) {
+    s += `\n--- SALES MODEL ---\n`;
+    if (sm.free_shipping_threshold) s += `Free shipping threshold: ${sm.free_shipping_threshold}\n`;
+    if (sm.subscription_discount_typical) s += `Subscription discount: ${sm.subscription_discount_typical}\n`;
+    if (sm.return_policy) s += `Return policy: ${sm.return_policy}\n`;
+    if (sm.loyalty_program) s += `Loyalty program: ${fmt(sm.loyalty_program)}\n`;
+  }
 
   // Category lock
   const cat = bo.primary_category || bo.sub_category;
@@ -110,6 +132,34 @@ function buildResearchSection(ai: Record<string, any>): string {
   }
 
   return s;
+}
+
+/** Extract real copy examples from campaign HTML */
+function extractCopyFromHtml(html: string): { headlines: string[]; ctas: string[]; subheadlines: string[] } {
+  const headlines: string[] = [];
+  const ctas: string[] = [];
+  const subheadlines: string[] = [];
+
+  // Extract h1/h2 text
+  const h1Matches = html.matchAll(/<h1[^>]*>(.*?)<\/h1>/gis);
+  for (const m of h1Matches) {
+    const text = m[1].replace(/<[^>]+>/g, "").replace(/&[a-z]+;/gi, " ").trim();
+    if (text.length > 3 && text.length < 120 && !text.includes("{{")) headlines.push(text);
+  }
+  const h2Matches = html.matchAll(/<h2[^>]*>(.*?)<\/h2>/gis);
+  for (const m of h2Matches) {
+    const text = m[1].replace(/<[^>]+>/g, "").replace(/&[a-z]+;/gi, " ").trim();
+    if (text.length > 3 && text.length < 120 && !text.includes("{{")) subheadlines.push(text);
+  }
+
+  // Extract CTA text from buttons/links with button-like styling
+  const ctaMatches = html.matchAll(/<(?:a|td)[^>]*(?:class|style)[^>]*(?:button|btn|cta|background-color)[^>]*>(.*?)<\/(?:a|td)>/gis);
+  for (const m of ctaMatches) {
+    const text = m[1].replace(/<[^>]+>/g, "").replace(/&[a-z]+;/gi, " ").trim();
+    if (text.length > 2 && text.length < 50 && !text.includes("{{") && !text.includes("http")) ctas.push(text);
+  }
+
+  return { headlines, ctas, subheadlines };
 }
 
 Deno.serve(async (req) => {
@@ -128,15 +178,17 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Parallel fetch all brand data
-    const [brandResult, intelResult, profileResult, assetsResult, campaignsResult, calendarResult, feedbackResult] = await Promise.all([
+    // Parallel fetch all brand data — now includes campaign HTML for copy extraction
+    const [brandResult, intelResult, profileResult, assetsResult, campaignsResult, calendarResult, feedbackResult, decisionsResult, existingIdeasResult] = await Promise.all([
       supabase.from("brands").select("name, industry, website_url").eq("id", brand_id).single(),
-      supabase.from("brand_intelligence").select("compiled_context, merged_profile, ai_research, survey_answers, klaviyo_compiled").eq("brand_id", brand_id).single(),
+      supabase.from("brand_intelligence").select("compiled_context, merged_profile, ai_research, survey_answers, klaviyo_compiled, campaign_report_html").eq("brand_id", brand_id).single(),
       supabase.from("brand_profiles").select("raw_extraction, brand_instructions, system_prompt").eq("brand_id", brand_id).single(),
       supabase.from("brand_assets").select("category, description, url, ai_category").eq("brand_id", brand_id),
-      supabase.from("campaigns").select("name, brief, goal").eq("brand_id", brand_id).order("created_at", { ascending: false }).limit(20),
+      supabase.from("campaigns").select("name, brief, goal, html, subject_line").eq("brand_id", brand_id).order("created_at", { ascending: false }).limit(30),
       supabase.from("brand_calendar").select("event_name, event_date, event_type").eq("brand_id", brand_id).gte("event_date", new Date().toISOString().split("T")[0]).order("event_date").limit(15),
       supabase.from("brand_feedback").select("feedback").eq("brand_id", brand_id).order("created_at", { ascending: false }).limit(5),
+      supabase.from("creative_decisions").select("decision_type, value").eq("brand_id", brand_id).gte("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+      supabase.from("idea_bank").select("title").eq("brand_id", brand_id).in("status", ["new", "saved"]),
     ]);
 
     const brand = brandResult.data;
@@ -146,6 +198,8 @@ Deno.serve(async (req) => {
     const pastCampaigns = campaignsResult.data || [];
     const calendarEvents = calendarResult.data || [];
     const feedback = feedbackResult.data || [];
+    const decisions = decisionsResult.data || [];
+    const existingIdeas = existingIdeasResult.data || [];
     const aiResearch = (intel?.ai_research as Record<string, unknown> | null) || null;
 
     // --- SECTION A: Lucy's Identity ---
@@ -221,16 +275,54 @@ Never drift into adjacent categories or invent products the brand does not sell.
       prompt += `--- BRAND INSTRUCTIONS (from the user) ---\n${profile.brand_instructions}\n\n`;
     }
 
-    // --- SECTION C: Past Campaign Context ---
-    if (pastCampaigns.length > 0) {
-      prompt += `--- PAST CAMPAIGNS (most recent, for context) ---\n`;
-      pastCampaigns.slice(0, 10).forEach((c: any) => {
-        prompt += `- ${c.name}\n`;
-      });
-      prompt += `\nUse these to avoid repeating the same campaign themes. Generate fresh ideas.\n\n`;
+    // --- SECTION C: Real Copy Examples (extracted from past campaign HTML) ---
+    const allHeadlines: string[] = [];
+    const allCtas: string[] = [];
+    const allSubheadlines: string[] = [];
+    const allSubjectLines: string[] = [];
+
+    for (const c of pastCampaigns) {
+      if ((c as any).subject_line) allSubjectLines.push((c as any).subject_line);
+      if ((c as any).html) {
+        const copy = extractCopyFromHtml((c as any).html);
+        allHeadlines.push(...copy.headlines);
+        allCtas.push(...copy.ctas);
+        allSubheadlines.push(...copy.subheadlines);
+      }
     }
 
-    // --- SECTION D: Brand Assets ---
+    // Dedupe
+    const uniqueHeadlines = [...new Set(allHeadlines)].slice(0, 20);
+    const uniqueCtas = [...new Set(allCtas)].slice(0, 10);
+    const uniqueSubheadlines = [...new Set(allSubheadlines)].slice(0, 10);
+    const uniqueSubjectLines = [...new Set(allSubjectLines)].slice(0, 15);
+
+    if (uniqueHeadlines.length > 0 || uniqueCtas.length > 0 || uniqueSubjectLines.length > 0) {
+      prompt += `--- REAL COPY EXAMPLES (from past campaigns — use for voice reference) ---\n`;
+      if (uniqueHeadlines.length > 0) {
+        prompt += `Headlines:\n${uniqueHeadlines.map((h, i) => `${i + 1}. "${h}"`).join("\n")}\n\n`;
+      }
+      if (uniqueSubheadlines.length > 0) {
+        prompt += `Subheadlines:\n${uniqueSubheadlines.map(s => `- "${s}"`).join("\n")}\n\n`;
+      }
+      if (uniqueCtas.length > 0) {
+        prompt += `CTAs:\n${uniqueCtas.map(c => `- "${c}"`).join("\n")}\n\n`;
+      }
+      if (uniqueSubjectLines.length > 0) {
+        prompt += `Past subject lines:\n${uniqueSubjectLines.map(s => `- "${s}"`).join("\n")}\n\n`;
+      }
+    }
+
+    // --- SECTION D: Past Campaign Themes (names only) ---
+    if (pastCampaigns.length > 0) {
+      prompt += `--- PAST CAMPAIGNS (most recent, for context — avoid repeating) ---\n`;
+      pastCampaigns.slice(0, 15).forEach((c: any) => {
+        prompt += `- ${c.name}\n`;
+      });
+      prompt += `\nGenerate fresh ideas that don't repeat these themes.\n\n`;
+    }
+
+    // --- SECTION E: Brand Assets ---
     const heroShots = assets.filter((a: any) => a.category === "hero_shots" || a.ai_category === "hero");
     const lifestyle = assets.filter((a: any) => a.category === "lifestyle" || a.ai_category === "lifestyle");
     if (heroShots.length > 0 || lifestyle.length > 0) {
@@ -240,7 +332,7 @@ Never drift into adjacent categories or invent products the brand does not sell.
       prompt += `\n`;
     }
 
-    // --- SECTION E: Calendar Events ---
+    // --- SECTION F: Calendar Events ---
     if (calendarEvents.length > 0) {
       prompt += `--- UPCOMING CALENDAR EVENTS ---\n`;
       calendarEvents.forEach((e: any) => {
@@ -249,7 +341,7 @@ Never drift into adjacent categories or invent products the brand does not sell.
       prompt += `\nConsider these for timely, seasonal campaign ideas.\n\n`;
     }
 
-    // --- SECTION F: Brand Feedback ---
+    // --- SECTION G: Brand Feedback ---
     if (feedback.length > 0) {
       prompt += `--- RECENT BRAND FEEDBACK ---\n`;
       feedback.forEach((f: any) => {
@@ -257,6 +349,38 @@ Never drift into adjacent categories or invent products the brand does not sell.
           const fb = f.feedback as any;
           if (fb.notes) prompt += `- ${fb.notes}\n`;
         }
+      });
+      prompt += `\n`;
+    }
+
+    // --- SECTION H: Creative Fatigue (from decisions) ---
+    if (decisions.length > 0) {
+      const counts: Record<string, number> = {};
+      for (const d of decisions) {
+        const key = `${d.decision_type}:${d.value}`;
+        counts[key] = (counts[key] || 0) + 1;
+      }
+      const overused = Object.entries(counts)
+        .filter(([, count]) => count >= 3)
+        .map(([key]) => key.split(":").slice(1).join(":"));
+
+      const knownAngles = ["urgency", "scarcity", "social_proof", "educational", "behind_the_scenes", "seasonal", "product_launch"];
+      const usedAngles = new Set(decisions.filter((d: any) => d.decision_type === "angle").map((d: any) => d.value));
+      const freshAngles = knownAngles.filter(a => !usedAngles.has(a));
+
+      if (overused.length > 0 || freshAngles.length > 0) {
+        prompt += `--- CREATIVE FATIGUE ---\n`;
+        if (overused.length > 0) prompt += `AVOID (overused recently): ${overused.join(", ")}\n`;
+        if (freshAngles.length > 0) prompt += `EXPLORE (fresh angles): ${freshAngles.join(", ")}\n`;
+        prompt += `\n`;
+      }
+    }
+
+    // --- SECTION I: Existing Ideas (dedup) ---
+    if (existingIdeas.length > 0) {
+      prompt += `--- EXISTING IDEAS IN BANK (don't duplicate) ---\n`;
+      existingIdeas.slice(0, 30).forEach((i: any) => {
+        prompt += `- ${i.title}\n`;
       });
       prompt += `\n`;
     }

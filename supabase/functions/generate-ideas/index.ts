@@ -7,17 +7,69 @@ const corsHeaders = {
 };
 
 const CHAOS_ANCHORS = [
-  "Think vintage Apple — clean, aspirational, 'Think Different' energy",
-  "Channel Nike manifesto energy — bold declarations, active voice",
-  "Oatly irreverence — self-aware, slightly absurd, anti-corporate",
-  "Supreme drop energy — exclusivity, urgency, cultural cachet",
-  "Glossier community energy — inclusive, real, user-first",
-  "Patagonia purpose — environmental urgency meets understated confidence",
-  "Liquid Death absurdism — extreme personality, unexpected for the category",
-  "Aesop editorial — literary, intellectual, sensory language",
-  "Drunk Elephant transparency — ingredient-first, science-forward, no BS",
-  "Rhode minimalism — gen-z clean, effortless, golden-hour aesthetic",
+  "Channel the energy of vintage Apple advertising — bold, simple, iconic.",
+  "Think 90s infomercial confidence but with modern taste.",
+  "Wes Anderson art direction meets email — quirky, specific, beautifully composed.",
+  "Patagonia catalog vibes — earnest, outdoorsy, quietly anti-corporate.",
+  "Glossier's friend-to-friend intimacy.",
+  "Nike manifesto energy — declarative, empowering, rhythmic.",
+  "Oatly's irreverent, fourth-wall-breaking voice.",
+  "J. Peterman catalog storytelling — romantic, detailed, transporting.",
+  "Supreme drop energy — scarcity, coolness, zero explanation.",
+  "Mailchimp's playful warmth.",
+  "The Economist poster wit — smart, dry, rewards the reader.",
+  "Liquid Death's absurdist commitment to the bit.",
+  "Sony 90s campaign energy — cinematic, aspirational, emotionally charged.",
+  "VW 'Think Small' minimalism — honest, self-aware, understated confidence.",
+  "Got Milk? problem-first framing — make them feel the absence before the solution.",
+  "Old Spice absurdist confidence — over-the-top, self-aware, impossible to ignore.",
+  "Absolut Vodka visual concept commitment — one idea, executed endlessly.",
 ];
+
+// ─── URL ENRICHMENT ─────────────────────────────────────────────────────────
+
+const URL_REGEX = /https?:\/\/[^\s<>"')\]]+/gi;
+
+async function fetchUrlContent(url: string): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const resp = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; LucyBot/1.0)" },
+      signal: controller.signal,
+      redirect: "follow",
+    });
+    clearTimeout(timeout);
+    if (!resp.ok) return null;
+    const contentType = resp.headers.get("content-type") || "";
+    if (!contentType.includes("text/html") && !contentType.includes("text/plain")) return null;
+    let html = await resp.text();
+    html = html.replace(/<(script|style|nav|footer|header|noscript)[^>]*>[\s\S]*?<\/\1>/gi, "");
+    let text = html.replace(/<[^>]+>/g, " ");
+    text = text.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ");
+    text = text.replace(/\s+/g, " ").trim();
+    return text.slice(0, 4000);
+  } catch {
+    return null;
+  }
+}
+
+async function enrichTextWithUrls(text: string): Promise<string> {
+  const urls = text.match(URL_REGEX);
+  if (!urls || urls.length === 0) return text;
+  const unique = [...new Set(urls)].slice(0, 3);
+  const results = await Promise.all(unique.map(async (url) => {
+    const content = await fetchUrlContent(url);
+    return content ? { url, content } : null;
+  }));
+  const fetched = results.filter(Boolean) as { url: string; content: string }[];
+  if (fetched.length === 0) return text;
+  let enriched = text;
+  for (const r of fetched) {
+    enriched += `\n\n--- Content from ${r.url} ---\n${r.content}\n--- End content ---`;
+  }
+  return enriched;
+}
 
 const RESEARCH_PROMPTS: Record<string, (brand: string, industry: string, products: string, audience: string) => string> = {
   "Social Proof": (brand, industry, products, audience) =>
@@ -118,7 +170,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const {
+    let {
       brand_id,
       brief,
       parent_ideas,
@@ -131,6 +183,10 @@ Deno.serve(async (req) => {
       turbo_mode = false,
       stream = true,
     } = body;
+
+    // URL enrichment: fetch and inline content from any URLs in brief/feedback
+    if (brief) brief = await enrichTextWithUrls(brief);
+    if (feedback) feedback = await enrichTextWithUrls(feedback);
 
     if (!brand_id) {
       return new Response(JSON.stringify({ error: "brand_id required" }), {
@@ -273,12 +329,21 @@ Deno.serve(async (req) => {
     const ideaCount = turbo_mode ? 20 : 4;
     let userPrompt = "";
 
+    // Parse subtype from campaign_type_filter if colon-delimited
+    let parsedParentType = campaign_type_filter;
+    let parsedSubtype = campaign_subtype_filter;
+    if (campaign_type_filter && campaign_type_filter.includes(":") && !campaign_subtype_filter) {
+      const colonIndex = campaign_type_filter.indexOf(":");
+      parsedParentType = campaign_type_filter.slice(0, colonIndex).trim();
+      parsedSubtype = campaign_type_filter.slice(colonIndex + 1).trim();
+    }
+
     switch (mode) {
       case "initial":
       case "bank":
         userPrompt = `Generate ${ideaCount} email campaign ideas for ${brandName}.\n`;
-        if (campaign_type_filter) userPrompt += `Campaign type: ${campaign_type_filter}\n`;
-        if (campaign_subtype_filter) userPrompt += `Campaign subtype: ${campaign_subtype_filter}\n`;
+        if (parsedParentType) userPrompt += `Campaign type: ${parsedParentType}\n`;
+        if (parsedSubtype) userPrompt += `Campaign subtype: ${parsedSubtype}\n`;
         if (brief) userPrompt += `Direction: ${brief}\n`;
         break;
 
