@@ -47,7 +47,9 @@ export function ChatBar({
   const hasCalendarDates = calendarDateCount > 0;
 
   let placeholder = "Pick a campaign type above, or describe your idea...";
-  if (selectedCount > 1) {
+  if (hasCalendarDates) {
+    placeholder = `Press Enter to generate ideas for ${calendarDateCount} date${calendarDateCount > 1 ? 's' : ''}...`;
+  } else if (selectedCount > 1) {
     placeholder = "Add direction for the next round of variations...";
   } else if (selectedCount === 1) {
     placeholder = "Describe how to refine this idea, or press Enter to build...";
