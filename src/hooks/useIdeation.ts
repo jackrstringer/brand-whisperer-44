@@ -5,12 +5,19 @@ import { CampaignIdea } from '@/lib/types';
 import { CAMPAIGN_TYPES } from '@/lib/ideation/campaignTypes';
 import { streamIdeas } from '@/lib/ideation/streamHelpers';
 
+export interface CalendarDateEntry {
+  date: string;
+  name: string;
+  type: string;
+}
+
 export type IdeationNode =
   | { id: string; type: 'brief'; content: string; campaignType?: string; campaignSubtype?: string; timestamp: number }
-  | { id: string; type: 'generation'; ideas: CampaignIdea[]; isStreaming: boolean; wasTurbo?: boolean; timestamp: number }
+  | { id: string; type: 'generation'; ideas: CampaignIdea[]; isStreaming: boolean; wasTurbo?: boolean; groupLabel?: string; timestamp: number }
   | { id: string; type: 'feedback'; content: string; selectedIdeas: CampaignIdea[]; timestamp: number }
   | { id: string; type: 'ai_response'; content: string; isStreaming: boolean; timestamp: number }
-  | { id: string; type: 'menu'; timestamp: number };
+  | { id: string; type: 'menu'; timestamp: number }
+  | { id: string; type: 'calendar_dates'; dates: CalendarDateEntry[]; isLoading: boolean; selectedDates: Set<string>; timestamp: number };
 
 interface UseIdeationState {
   sessionId: string | null;
