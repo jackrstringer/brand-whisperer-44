@@ -1,43 +1,66 @@
+<final-text>Goal: stop ideation from ever defaulting to random categories, start intelligence research as soon as a brand is created, and block ideation with an in-context modal when intelligence is missing.
 
+What I found:
+- I did not find any hardcoded “Agent Nateur” bleed in the current ideation code.
+- The real failures are structural:
+  1. `BrandSetup.tsx` starts background research with `website_url`, but `research-brand` only accepts `domain`. So fresh-brand research is not actually kicking off there.
+  2. `build-ideation-prompt/index.ts` reads `ai_research.primary_category`, `brand_positioning`, etc. at the wrong level. `research-brand` stores those under nested keys like `ai_research.brand_overview.*` and `ai_research.product_landscape.*`.
+  3. `generate-ideas/index.ts` validates prompts too loosely, so a thin or malformed prompt can still pass and generate generic category drift.
+  4. `ideation-chat/index.ts` has the same nested-data bug, and the client-side `streamChat` path is currently unused/stale.
+  5. The Ideate UI has no hard blocker when intelligence is missing, so it tries to ideate anyway.
 
-## Fix: URL on First Screen + Background Research + Ideation Guard
+Implementation plan:
+1. Fix background research kickoff at brand creation
+- In `src/pages/BrandSetup.tsx`, make Website URL required on the first step.
+- Keep website selection on the branding-source step, but clearly separate:
+  - required URL for intelligence research
+  - optional website source for branding extraction
+- Change all `research-brand` calls there to send `{ domain: websiteUrl }`, not `{ website_url: ... }`.
 
-### Problem Summary
-Two issues:
-1. **URL not collected early enough**: Brand website URL is only gathered on step 2 ("sources"), meaning brand intelligence research can't start until later. It should be on step 1 ("info") so research runs in the background during the rest of setup.
-2. **Ideation generates garbage when brand context is thin**: The `build-ideation-prompt` function runs but produces an empty prompt when there's no intelligence data yet. The `generate-ideas` function then sends this empty prompt to Claude, which hallucinates random industry ideas. There's no guard.
+2. Fix prompt building so it uses the actual research schema
+- Refactor `supabase/functions/build-ideation-prompt/index.ts` to read:
+  - `brand_overview.primary_category`, `sub_category`, `brand_positioning`, `mission_statement`, `brand_story`, `brand_voice_and_tone`
+  - `product_landscape.hero_products`, `bestsellers`, `bundles_or_kits`, `new_launches`
+  - relevant `customer_intelligence`, `marketing_intelligence`, `competitive_landscape`, and `sales_model`
+- Strengthen the category/product grounding and keep the category lock tied to real extracted data, not missing fields.
 
-### Changes
+3. Make ideation fail loud instead of drifting
+- In `supabase/functions/generate-ideas/index.ts`, replace the current marker/length-based check with real context validation.
+- Only allow ideation if there is grounded brand context from compiled context, nested AI research, or merged profile.
+- If intelligence is missing or still processing, return a structured blocking response instead of generating generic ideas.
+- If research exists but the prompt is stale/bad, force a rebuild before ideation.
 
-#### 1. Move Website URL to Step 1 (BrandSetup.tsx — "info" step)
-- Add a **required** Website URL field to the "info" step (lines 690-710), below Industry
-- Keep the website URL field on the "sources" step too (for selecting it as a branding source), but pre-populate it from step 1
-- On clicking "Next" from step 1, if `websiteUrl` is provided, fire-and-forget `research-brand` immediately — no need to wait for a brand DB record. We'll need to create the brand record early (just name + industry + url + user_id) at this point so research has a `brand_id` to write to
+4. Update ideation chat/context paths too
+- Fix `supabase/functions/ideation-chat/index.ts` to use the same nested intelligence fields.
+- Extract a shared brand-context builder/helper so `generate-ideas` and `ideation-chat` cannot diverge again.
+- Keep visible AI commentary suppressed in the UI; this is a context fix, not a UX change toward chatty responses.
 
-#### 2. Create Brand Record Early (BrandSetup.tsx)
-- When user clicks "Next" on step 1, create the `brands` row immediately (name, industry, website_url, user_id)
-- Store the brand ID in `earlyBrandId` state
-- Fire off `research-brand` with this brand_id in the background
-- Also create `brand_intelligence` row with `research_status: 'pending'`
-- The existing code in `startSpecAndGuide` already checks for `earlyBrandId` and skips brand creation if it exists — this is compatible
+5. Add the ideation-side intelligence modal
+- On the Ideate page, load brand-intelligence status with the ideation state.
+- If the user tries to ideate without grounded intelligence, show a modal inside the ideation area.
+- Reuse the existing intelligence flow pieces so the user can:
+  - confirm/add URL if needed
+  - run research
+  - wait for completion
+- Once research completes and the ideation prompt rebuilds, automatically unblock the ideation flow so they can continue without leaving the page.
 
-#### 3. Guard Ideation Against Empty Context (generate-ideas/index.ts)
-- After auto-building the ideation prompt (lines 160-185), check if the resulting prompt is too short (< 300 chars or missing key sections)
-- If the prompt is empty/generic AND `brand_intelligence.research_status` is not `'complete'` or `'ai_complete'`, return an error: `"Brand intelligence is still processing. Please wait a moment and try again."`
-- If research IS complete but `ideation_prompt` is still thin, rebuild it (the data exists but the prompt wasn't built from it)
+6. Tighten related entry points
+- Review other research triggers and make sure they all use the same `domain` contract.
+- Make sure a later website URL change can trigger a fresh research run and prompt rebuild.
 
-#### 4. Rebuild Stale Ideation Prompts (generate-ideas/index.ts)
-- After fetching `brandData`, also check `brand_intelligence.research_status` and `ideation_prompt_built_at`
-- If `research_status` is `'ai_complete'` or `'complete'` but `ideation_prompt_built_at` is null or older than `last_researched_at`, force a rebuild via `build-ideation-prompt` — the research data exists but was never incorporated
-- This prevents the scenario where research completes after the prompt was already built with no data
+Files to update:
+- `src/pages/BrandSetup.tsx`
+- `src/pages/IdeatePage.tsx`
+- `src/hooks/useIdeation.ts`
+- `supabase/functions/build-ideation-prompt/index.ts`
+- `supabase/functions/generate-ideas/index.ts`
+- `supabase/functions/ideation-chat/index.ts`
+- likely one small new ideation modal component or shared hook
 
-#### 5. Fix ideation-chat Similarly (ideation-chat/index.ts)
-- The chat function (lines 30-40) loads brand context but has the same thin-context problem
-- Add a check: if `intel.compiled_context` is null AND `intel.ai_research` exists, inline the key fields from `ai_research` (brand_overview, product_landscape) into the system prompt as a fallback
+Verification:
+- Fresh brand: step 1 URL immediately starts research in the background.
+- Existing researched brand like Larine: prompt rebuild uses oral-health data and stops producing skincare.
+- No-intelligence edge case: Ideate blocks, opens modal, runs research, rebuilds prompt, then resumes.
+- No fake fallback behavior: missing context surfaces a clear blocker instead of hallucinated ideas.
 
-### Files Changed
-- `src/pages/BrandSetup.tsx` — URL field on step 1, early brand creation, fire research
-- `supabase/functions/generate-ideas/index.ts` — staleness check, context guard
-- `supabase/functions/ideation-chat/index.ts` — ai_research fallback for thin context
-- Deploy: `generate-ideas`, `ideation-chat`
-
+No schema migration appears necessary for this fix.</final-text>
