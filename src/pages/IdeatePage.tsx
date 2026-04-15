@@ -269,7 +269,10 @@ export default function IdeatePage() {
               researchStatus={ideation.researchStatus}
               onMenuSelect={handleTypeFromMenu}
               activeType={ideation.activeType}
-              
+              onToggleCalendarDate={ideation.toggleCalendarDate}
+              onGenerateCalendarIdeas={(nodeId) => {
+                ideation.generateCalendarIdeas(nodeId).catch(err => toast.error(err.message));
+              }}
             />
           )}
         </div>
