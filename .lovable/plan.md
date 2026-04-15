@@ -1,66 +1,58 @@
-<final-text>Goal: stop ideation from ever defaulting to random categories, start intelligence research as soon as a brand is created, and block ideation with an in-context modal when intelligence is missing.
 
-What I found:
-- I did not find any hardcoded “Agent Nateur” bleed in the current ideation code.
-- The real failures are structural:
-  1. `BrandSetup.tsx` starts background research with `website_url`, but `research-brand` only accepts `domain`. So fresh-brand research is not actually kicking off there.
-  2. `build-ideation-prompt/index.ts` reads `ai_research.primary_category`, `brand_positioning`, etc. at the wrong level. `research-brand` stores those under nested keys like `ai_research.brand_overview.*` and `ai_research.product_landscape.*`.
-  3. `generate-ideas/index.ts` validates prompts too loosely, so a thin or malformed prompt can still pass and generate generic category drift.
-  4. `ideation-chat/index.ts` has the same nested-data bug, and the client-side `streamChat` path is currently unused/stale.
-  5. The Ideate UI has no hard blocker when intelligence is missing, so it tries to ideate anyway.
 
-Implementation plan:
-1. Fix background research kickoff at brand creation
-- In `src/pages/BrandSetup.tsx`, make Website URL required on the first step.
-- Keep website selection on the branding-source step, but clearly separate:
-  - required URL for intelligence research
-  - optional website source for branding extraction
-- Change all `research-brand` calls there to send `{ domain: websiteUrl }`, not `{ website_url: ... }`.
+## Improve Ideation Quality: Port Brand DNA Studio's Richer Prompt Architecture
 
-2. Fix prompt building so it uses the actual research schema
-- Refactor `supabase/functions/build-ideation-prompt/index.ts` to read:
-  - `brand_overview.primary_category`, `sub_category`, `brand_positioning`, `mission_statement`, `brand_story`, `brand_voice_and_tone`
-  - `product_landscape.hero_products`, `bestsellers`, `bundles_or_kits`, `new_launches`
-  - relevant `customer_intelligence`, `marketing_intelligence`, `competitive_landscape`, and `sales_model`
-- Strengthen the category/product grounding and keep the category lock tied to real extracted data, not missing fields.
+### Problem
+The other project (Brand DNA Studio) produces better ideas because:
+1. **Richer system prompt**: It includes 50 real copy examples (headlines, CTAs, body copy) from past campaigns, full brand report markdown, AI identity insights, content assets (quizzes, referral programs, press mentions), and product data extracted from campaign analyses.
+2. **Better output format**: The user prompt asks for `campaign_info` and `copy_direction` fields here but the other project's prompts are more structured with chaos/entropy overlays and URL enrichment.
+3. **More data sources**: The other project pulls from `copy_library`, `brand_content_assets`, `brand_profiles.ai_insights`, `brand_report_markdown`, and campaign analysis data — none of which our `build-ideation-prompt` uses.
 
-3. Make ideation fail loud instead of drifting
-- In `supabase/functions/generate-ideas/index.ts`, replace the current marker/length-based check with real context validation.
-- Only allow ideation if there is grounded brand context from compiled context, nested AI research, or merged profile.
-- If intelligence is missing or still processing, return a structured blocking response instead of generating generic ideas.
-- If research exists but the prompt is stale/bad, force a rebuild before ideation.
+### What's Different (Side-by-Side)
 
-4. Update ideation chat/context paths too
-- Fix `supabase/functions/ideation-chat/index.ts` to use the same nested intelligence fields.
-- Extract a shared brand-context builder/helper so `generate-ideas` and `ideation-chat` cannot diverge again.
-- Keep visible AI commentary suppressed in the UI; this is a context fix, not a UX change toward chatty responses.
+| Feature | This Project | Brand DNA Studio |
+|---|---|---|
+| Copy examples from past campaigns | ❌ Only campaign names | ✅ 50 real headlines, CTAs, body copy with campaign attribution |
+| Brand report markdown | ❌ Not used | ✅ Full deep research report injected |
+| AI identity insights | ❌ Not used | ✅ Creative strengths, patterns, differentiation |
+| Content assets (quizzes, referral, press) | ❌ Not used | ✅ Full asset catalog with URLs and summaries |
+| Products from campaign analyses | ❌ Not used | ✅ Extracted product names from all past campaigns |
+| URL enrichment in briefs | ❌ | ✅ Fetches and inlines content from URLs in user briefs |
+| Chaos/entropy inspiration anchors | ✅ Basic (10 anchors) | ✅ Richer (17 anchors, more diverse) |
+| Creative fatigue tracking | ✅ Basic | ✅ Richer with per-type breakdown |
 
-5. Add the ideation-side intelligence modal
-- On the Ideate page, load brand-intelligence status with the ideation state.
-- If the user tries to ideate without grounded intelligence, show a modal inside the ideation area.
-- Reuse the existing intelligence flow pieces so the user can:
-  - confirm/add URL if needed
-  - run research
-  - wait for completion
-- Once research completes and the ideation prompt rebuilds, automatically unblock the ideation flow so they can continue without leaving the page.
+### Plan
 
-6. Tighten related entry points
-- Review other research triggers and make sure they all use the same `domain` contract.
-- Make sure a later website URL change can trigger a fresh research run and prompt rebuild.
+#### 1. Enrich `build-ideation-prompt` with more data sources
+- Pull **campaign analysis data** from past campaigns (headlines, copy, product focus) — equivalent to the other project's copy library
+- Include **brand report** prose if available (from `brand_intelligence.compiled_context` — already done, but also check for any markdown report)
+- Add **AI identity insights** from `brand_profiles.raw_extraction` (creative strengths, patterns, differentiation)
+- Expand the copy examples section: extract real headlines and CTAs from campaign HTML or analysis data to give Lucy actual voice examples
 
-Files to update:
-- `src/pages/BrandSetup.tsx`
-- `src/pages/IdeatePage.tsx`
-- `src/hooks/useIdeation.ts`
-- `supabase/functions/build-ideation-prompt/index.ts`
-- `supabase/functions/generate-ideas/index.ts`
-- `supabase/functions/ideation-chat/index.ts`
-- likely one small new ideation modal component or shared hook
+#### 2. Add URL enrichment to `generate-ideas`
+- When the user's `brief` or `feedback` contains URLs, fetch the page content (up to 4KB) and append it to the user prompt
+- This lets users paste product pages, blog posts, or competitor emails and get ideas grounded in that content
+- Port the `fetchUrlContent` and `enrichTextWithUrls` helpers from the other project
 
-Verification:
-- Fresh brand: step 1 URL immediately starts research in the background.
-- Existing researched brand like Larine: prompt rebuild uses oral-health data and stops producing skincare.
-- No-intelligence edge case: Ideate blocks, opens modal, runs research, rebuilds prompt, then resumes.
-- No fake fallback behavior: missing context surfaces a clear blocker instead of hallucinated ideas.
+#### 3. Expand inspiration anchors
+- Add the 7 missing anchors from the other project (Wes Anderson, J. Peterman, Sony 90s, VW Think Small, Got Milk?, Old Spice, Absolut Vodka)
+- These give Claude more creative diversity when chaos mode is active
 
-No schema migration appears necessary for this fix.</final-text>
+#### 4. Richer output format for non-turbo ideas
+- Already asking for `campaign_info` and `copy_direction` — this is actually ahead of the other project
+- No change needed here
+
+#### 5. Strengthen the `generate-ideas` user prompt
+- Add subtype extraction from `campaign_type_filter` (split on `:` for parent/subtype like the other project does)
+- Include existing idea bank titles in the "avoid" list to prevent duplicates
+
+### Files to Change
+- `supabase/functions/build-ideation-prompt/index.ts` — add campaign copy examples, AI insights, richer brand data
+- `supabase/functions/generate-ideas/index.ts` — URL enrichment, expanded anchors, subtype parsing, idea dedup
+- Deploy both functions
+
+### What This Won't Change
+- The `ideation-chat` function — it's a lightweight conversational layer, not the idea generator
+- The UI components — this is purely a prompt quality improvement
+- Database schema — no new tables needed, we're reading existing data better
+
