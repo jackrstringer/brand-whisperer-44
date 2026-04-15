@@ -185,6 +185,21 @@ export async function sliceEmailImage(
       aiBase64 = uint8ArrayToBase64(imageBytes);
       aiMediaType = mimeType;
     }
+  } else if (needsResize) {
+    // Non-ImageKit image that exceeds MAX_AI_DIMENSION — resize with ImageScript
+    try {
+      const { Image } = await import("https://deno.land/x/imagescript@1.3.0/mod.ts");
+      const decoded = await Image.decode(imageBytes);
+      const resized = decoded.resize(aiWidth, aiHeight);
+      const encoded = await resized.encodeJPEG(80);
+      aiBase64 = uint8ArrayToBase64(new Uint8Array(encoded));
+      aiMediaType = "image/jpeg";
+      console.log(`[sliceEmailImage] Resized ${originalWidth}x${originalHeight} → ${aiWidth}x${aiHeight} via ImageScript`);
+    } catch (resizeErr) {
+      console.warn(`[sliceEmailImage] ImageScript resize failed, sending original:`, resizeErr);
+      aiBase64 = uint8ArrayToBase64(imageBytes);
+      aiMediaType = mimeType;
+    }
   } else {
     aiBase64 = uint8ArrayToBase64(imageBytes);
     aiMediaType = mimeType;
