@@ -44,6 +44,11 @@ export function GenerationNode({
 
   return (
     <div className="mb-3 animate-[slide-up-section_0.5s_ease-out_forwards]">
+      {groupLabel && (
+        <div className="px-1 pb-2">
+          <span className="text-sm font-semibold text-foreground">{groupLabel}</span>
+        </div>
+      )}
       {showResearch && (
         <div className="flex items-center gap-3 py-4 px-4 justify-center animate-fade-in-up">
           <div className="relative">
