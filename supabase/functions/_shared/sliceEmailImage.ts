@@ -261,6 +261,15 @@ async function callDetectEdgesFunction(
   }
 
   try {
+    // Detect if the image is JPEG by checking the base64 header bytes
+    // JPEG starts with /9j/ in base64 (FF D8 FF). If not JPEG, skip edge detection
+    // since detect-edges uses jpeg-js which only handles JPEG.
+    const isJpeg = imageBase64.startsWith("/9j/") || imageBase64.startsWith("/9j+");
+    if (!isJpeg) {
+      console.log("[sliceEmailImage] Image is not JPEG — skipping pixel-level edge detection (jpeg-js only)");
+      return [];
+    }
+
     const resp = await fetch(`${supabaseUrl}/functions/v1/detect-edges`, {
       method: "POST",
       headers: {
@@ -465,7 +474,7 @@ Identify the semantic sections of this email and return module boundaries as JSO
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      max_tokens: 2048,
+      max_tokens: 16384,
       system: systemPrompt,
       messages: [{
         role: "user",
@@ -487,8 +496,24 @@ Identify the semantic sections of this email and return module boundaries as JSO
 
   let parsed: any;
   try {
-    const cleaned = rawText.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
-    parsed = JSON.parse(cleaned);
+    let cleaned = rawText.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+    // Attempt JSON recovery if truncated — try closing open braces/brackets
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      // Count open vs close braces and brackets
+      const openBraces = (cleaned.match(/{/g) || []).length;
+      const closeBraces = (cleaned.match(/}/g) || []).length;
+      const openBrackets = (cleaned.match(/\[/g) || []).length;
+      const closeBrackets = (cleaned.match(/\]/g) || []).length;
+      // Remove any trailing comma or partial key
+      cleaned = cleaned.replace(/,\s*$/, "").replace(/,\s*"[^"]*$/, "");
+      // Close any open brackets then braces
+      for (let i = 0; i < openBrackets - closeBrackets; i++) cleaned += "]";
+      for (let i = 0; i < openBraces - closeBraces; i++) cleaned += "}";
+      parsed = JSON.parse(cleaned);
+      console.warn(`[sliceEmailImage] Recovered truncated JSON (closed ${openBraces - closeBraces} braces, ${openBrackets - closeBrackets} brackets)`);
+    }
   } catch (e) {
     throw new Error(`Claude returned unparseable JSON: ${rawText.substring(0, 500)}\n${e}`);
   }
