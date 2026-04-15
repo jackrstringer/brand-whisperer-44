@@ -317,6 +317,7 @@ export default function IdeatePage() {
   );
 
   return (
+    <IntelligenceGate brandId={brandId!}>
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="h-screen flex flex-col bg-background text-foreground">
         {/* Single unified top bar */}
@@ -428,5 +429,6 @@ export default function IdeatePage() {
         </DialogContent>
       </Dialog>
     </DndContext>
+    </IntelligenceGate>
   );
 }
