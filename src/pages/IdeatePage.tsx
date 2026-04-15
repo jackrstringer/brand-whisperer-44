@@ -269,7 +269,7 @@ export default function IdeatePage() {
               researchStatus={ideation.researchStatus}
               onMenuSelect={handleTypeFromMenu}
               activeType={ideation.activeType}
-              onIdeateDate={handleIdeateDate}
+              
             />
           )}
         </div>
