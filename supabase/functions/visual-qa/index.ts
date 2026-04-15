@@ -110,6 +110,10 @@ function isBase64ImageOversized(base64Data: string, maxDim: number): boolean {
 
 /** Fetch a URL and return its content as base64. */
 async function fetchAsBase64(url: string): Promise<string> {
+  // Guard against non-HTTP URLs (e.g. crop://, blob://)
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    throw new Error(`Invalid URL scheme — expected http(s), got: ${url.substring(0, 40)}`);
+  }
   const r = await fetch(url);
   if (!r.ok) throw new Error(`Failed to fetch ${url}: ${r.status}`);
   const buf = await r.arrayBuffer();
