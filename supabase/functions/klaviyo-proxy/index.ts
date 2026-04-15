@@ -133,6 +133,14 @@ serve(async (req) => {
       
       if (upsertError) throw new Error(`Failed to save connection: ${upsertError.message}`);
 
+      // Clear stale Klaviyo intelligence data from any previous connection
+      await supabase.from("brand_intelligence").update({
+        klaviyo_raw: null,
+        klaviyo_report: null,
+        klaviyo_compiled: null,
+        klaviyo_last_synced_at: null,
+      }).eq("brand_id", brandId);
+
       return new Response(JSON.stringify({
         success: true,
         listCount: (listsData.data || []).length,
