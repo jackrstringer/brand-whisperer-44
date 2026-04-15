@@ -46,34 +46,43 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const prompt = `Today is ${todayStr}. You are an elite ecommerce email marketing strategist for "${brandName}", a ${categoryHint} brand.
+    // Build a concise product summary from context
+    const contextBlock = context ? context.slice(0, 4000) : "";
 
-${context ? `Brand context (use this to understand what they sell, their voice, their audience):\n${context.slice(0, 3000)}\n` : ""}
+    const prompt = `Today is ${todayStr}. You are an elite ecommerce email marketing strategist.
 
-Your job: Find every upcoming date in the next 30 days (${todayStr} to ${endStr}) that a smart ecom brand like "${brandName}" could build a campaign around. Then for EACH date, come up with a SPECIFIC, CREATIVE campaign idea — not "celebrate X with our products" but an actual promotion concept.
+## THE BRAND
+Brand name: "${brandName}"
+Industry/category: ${categoryHint || "unknown"}
+${contextBlock ? `\nFull brand context (READ THIS CAREFULLY — it tells you exactly what they sell):\n${contextBlock}\n` : ""}
+
+## YOUR TASK
+FIRST: Identify exactly what "${brandName}" sells from the brand context above. State it clearly to yourself before generating ideas.
+
+Then find every upcoming date between ${todayStr} and ${endStr} that this SPECIFIC brand could build a campaign around. For EACH date, create a campaign idea that is DIRECTLY tied to what "${brandName}" actually sells.
 
 INCLUDE dates like:
 - Federal/national holidays (Memorial Day, Tax Day, etc.)
 - Cultural events, awareness months/weeks/days
 - Social media holidays (#NationalPizzaDay, #WorldBookDay, etc.)
-- Niche observances relevant to this brand's industry
+- Niche observances relevant to THIS brand's actual products (e.g. National Oral Health Month for dental/oral care brands, National Coffee Day for coffee brands, etc.)
 - Tax deadlines, back-to-school, seasonal transitions
 - Pop culture moments, sporting events, award shows
-- Any brand-specific seasonal opportunities
 
-For EACH date, provide a SPECIFIC ecommerce campaign angle. Think like a DTC brand strategist:
-- "Tax Day: In the spirit of Tax Day, we're REFUNDING 15 random orders placed today 💰"
-- "National Coffee Day: Buy any bag, get a free cold brew starter kit"
-- "Earth Day: Trade in your old [product] for 20% off a new one"
-- "420 Day: Mystery boxes — $42.00 flat, worth up to $150"
-- "Mother's Day: Build-your-own gift bundle, free gift wrapping + handwritten note"
+## CAMPAIGN ANGLE RULES
+Every angle MUST reference the brand's actual products. Think like a DTC brand strategist:
 
-BAD examples (don't do this):
-- "Celebrate Earth Day with our eco-friendly products" ← too generic
-- "Treat yourself after managing your taxes" ← lazy, not a real campaign
+GOOD examples:
+- Coffee brand on Tax Day: "Tax Day: In the spirit of refunds, we're REFUNDING 15 random orders placed today 💰"
+- Oral care brand on National Smile Day: "Flash sale: 30% off whitening kits — show off that smile"
+- Pet brand on National Pet Day: "Buy any bag of treats, get a free bandana for your pup"
+
+BAD examples (NEVER do this):
+- "Celebrate Earth Day with our eco-friendly products" ← too generic, doesn't say WHAT products
+- "Treat yourself after managing your taxes" ← lazy, no actual offer
 - "Enjoy our products on this special day" ← useless
 
-The angle should be a SPECIFIC promotion, offer mechanic, or creative campaign hook that "${brandName}" could actually run. Include dollar amounts, percentages, mechanics (BOGO, mystery box, flash sale, giveaway, bundle, etc.) when possible.
+The angle should be a SPECIFIC promotion with real mechanics (BOGO, mystery box, flash sale, giveaway, bundle, % off, free gift, etc.) tied to the brand's ACTUAL products.
 
 Be thorough — include at least 15-25 dates. Real dates only.`;
 
@@ -86,7 +95,7 @@ Be thorough — include at least 15-25 dates. Real dates only.`;
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: "You are an elite DTC ecommerce strategist. Return ONLY valid JSON — an array of objects with keys: date, name, type, angle. The 'angle' must be a SPECIFIC campaign idea with a real promotion mechanic (discount, giveaway, bundle, flash sale, mystery box, etc.) — never generic filler like 'celebrate X with our products'. No markdown, no code fences, no commentary." },
+          { role: "system", content: `You are an elite DTC ecommerce strategist specializing in email marketing campaigns. You must CAREFULLY read the brand context to understand what the brand actually sells before generating ideas. Every campaign angle must reference the brand's real products — never generic filler. Return ONLY valid JSON — an array of objects with keys: date, name, type, angle. No markdown, no code fences, no commentary.` },
           { role: "user", content: prompt },
         ],
         tools: [
