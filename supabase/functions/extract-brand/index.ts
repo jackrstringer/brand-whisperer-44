@@ -218,7 +218,9 @@ WHAT NOT TO INCLUDE:
 - No social platform icons that weren't in the reference emails
 - No components that weren't observed in reference emails
 - No em dashes (use -- or reword)
-`;
+- Load ACTUAL brand fonts via Google Fonts (not fallbacks).
+- Avoid excessive whitespace: never use min-height:100vh and avoid large top/bottom blank regions around headings.
+- The guide must feel like a premium, lean design reference -- not a bloated brand book.`;
 
 const SPEC_PROMPT = `You are building a structured email brand spec from confirmed audit findings.
 
@@ -383,33 +385,62 @@ Deno.serve(async (req) => {
       });
     }
 
+    // Bug 1 fix: All modes are now synchronous — no detached promises
     if (brandId) {
       const mode = step === "guide" ? "guide" : step === "full" ? "full" : "spec";
+      const sb = getSupabaseAdmin();
 
-      if (mode === "spec") {
-        await processSpecStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId, confirmed_properties);
-        return new Response(JSON.stringify({ status: "spec_complete", brandId }), {
+      try {
+        if (mode === "spec" || mode === "full") {
+          await sb.from("brand_profiles").update({
+            processing_status: "running_spec",
+            processing_error: null,
+          }).eq("brand_id", brandId);
+
+          await processSpecStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId, confirmed_properties);
+
+          await sb.from("brand_profiles").update({
+            processing_status: "spec_complete",
+          }).eq("brand_id", brandId);
+
+          if (mode === "spec") {
+            return new Response(JSON.stringify({ status: "spec_complete", brandId }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        }
+
+        await sb.from("brand_profiles").update({
+          processing_status: "running_guide",
+          processing_error: null,
+        }).eq("brand_id", brandId);
+
+        await processGuideStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId);
+
+        await sb.from("brand_profiles").update({
+          processing_status: "complete",
+        }).eq("brand_id", brandId);
+
+        return new Response(JSON.stringify({ status: "complete", brandId }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (err: any) {
+        console.error(`[extract-brand] ${mode} error:`, err);
+        await sb.from("brand_profiles").update({
+          processing_status: "failed",
+          processing_error: err.message || "Unknown error",
+        }).eq("brand_id", brandId).catch(console.error);
+
+        return new Response(JSON.stringify({ status: "failed", error: err.message, brandId }), {
+          status: 500,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-
-      const promise = mode === "full"
-        ? processExtraction(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId)
-        : processGuideStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId);
-
-      promise.catch((err) => {
-        console.error(`[extract-brand] ${mode} background processing error:`, err);
-        saveError(brandId, err.message).catch(console.error);
-      });
-
-      return new Response(JSON.stringify({ status: `${mode}_processing`, brandId }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
     }
 
-    const result = await processExtraction(ANTHROPIC_API_KEY, auditFindings, brandName, industry);
-    return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    // No brandId — reject (dead code path from old architecture)
+    return new Response(JSON.stringify({ error: "brandId is required" }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
     console.error("Extract-brand error:", err);
@@ -424,23 +455,6 @@ function getSupabaseAdmin() {
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
-}
-
-async function saveError(brandId: string, errorMessage: string) {
-  const sb = getSupabaseAdmin();
-  const { data: existing } = await sb
-    .from("brand_profiles")
-    .select("audit_findings")
-    .eq("brand_id", brandId)
-    .maybeSingle();
-
-  const baseAudit = existing?.audit_findings && typeof existing.audit_findings === "object" && !Array.isArray(existing.audit_findings)
-    ? existing.audit_findings as Record<string, unknown>
-    : {};
-
-  await sb.from("brand_profiles").update({
-    audit_findings: { ...baseAudit, _error: errorMessage },
-  }).eq("brand_id", brandId);
 }
 
 function stripRuntimeKeys(auditFindings: any) {
@@ -497,6 +511,7 @@ async function runSpecCall(
   return JSON.parse(specJsonMatch[0]);
 }
 
+// Bug 2: Fixed model ID. Bug 3: Now uses streaming to keep isolate alive.
 async function runGuideCall(
   apiKey: string,
   auditFindings: any,
@@ -506,7 +521,9 @@ async function runGuideCall(
 ) {
   const auditJson = JSON.stringify(auditFindings, null, 2);
 
-  console.log(`[extract-brand] Call 2: Generating HTML guide for ${brandName}`);
+  console.log(`[extract-brand] Call 2: Generating HTML guide for ${brandName} (streaming)`);
+  const startTime = Date.now();
+
   const guideResponse = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -515,8 +532,9 @@ async function runGuideCall(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-opus-4-6-20260801",
+      model: "claude-opus-4-6",
       max_tokens: 64000,
+      stream: true,
       system: GUIDE_PROMPT,
       messages: [{
         role: "user",
@@ -530,8 +548,42 @@ async function runGuideCall(
     throw new Error(`Guide API error: ${guideResponse.status} - ${errText}`);
   }
 
-  const guideResult = await guideResponse.json();
-  let guideHtml = guideResult.content?.[0]?.text || "";
+  let guideHtml = "";
+  const reader = guideResponse.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let chunkCount = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const data = line.slice(6).trim();
+      if (data === "[DONE]") continue;
+
+      try {
+        const event = JSON.parse(data);
+        if (event.type === "content_block_delta" && event.delta?.type === "text_delta") {
+          guideHtml += event.delta.text;
+          chunkCount++;
+        }
+        if (event.type === "error") {
+          throw new Error(`Anthropic stream error: ${JSON.stringify(event.error)}`);
+        }
+      } catch (e) {
+        if ((e as Error).message?.startsWith("Anthropic stream error:")) throw e;
+      }
+    }
+  }
+
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`[extract-brand] Call 2 stream complete. ${chunkCount} chunks, ${guideHtml.length} chars, ${elapsed}s`);
 
   guideHtml = guideHtml.replace(/^```html?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
 
@@ -542,7 +594,10 @@ async function runGuideCall(
 
   guideHtml = normalizeGuideHtmlSpacing(guideHtml);
 
-  console.log(`[extract-brand] Call 2 complete. Guide HTML length: ${guideHtml.length}`);
+  if (guideHtml.length < 500) {
+    throw new Error(`Guide HTML suspiciously short (${guideHtml.length} chars). Generation may have failed.`);
+  }
+
   return guideHtml;
 }
 
@@ -617,46 +672,3 @@ async function processGuideStep(
     brand_guide_html: guideHtml,
   };
 }
-
-async function processExtraction(
-  apiKey: string,
-  auditFindings: any,
-  brandName: string,
-  industry: string,
-  brandId?: string,
-) {
-  const cleanedAudit = stripRuntimeKeys(auditFindings);
-  const specParsed = await runSpecCall(apiKey, cleanedAudit, brandName, industry);
-
-  if (brandId) {
-    const sb = getSupabaseAdmin();
-    await sb.from("brand_profiles").update({
-      system_prompt: specParsed.system_prompt,
-      raw_extraction: specParsed.extraction,
-      audit_findings: cleanedAudit,
-    }).eq("brand_id", brandId);
-    console.log(`[extract-brand] Spec saved for brand ${brandId}`);
-  }
-
-  const guideHtml = await runGuideCall(apiKey, cleanedAudit, brandName, industry, specParsed.extraction);
-
-  const result = {
-    extraction: specParsed.extraction,
-    system_prompt: specParsed.system_prompt,
-    brand_guide_html: guideHtml,
-  };
-
-  if (brandId) {
-    const sb = getSupabaseAdmin();
-    await sb.from("brand_profiles").update({
-      system_prompt: specParsed.system_prompt,
-      raw_extraction: specParsed.extraction,
-      brand_guide_html: guideHtml,
-      audit_findings: cleanedAudit,
-    }).eq("brand_id", brandId);
-    console.log(`[extract-brand] Full results saved for brand ${brandId}`);
-  }
-
-  return result;
-}
-
