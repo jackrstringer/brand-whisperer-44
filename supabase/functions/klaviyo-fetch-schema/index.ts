@@ -130,7 +130,11 @@ async function fetchAllMetrics(apiKey: string): Promise<any[]> {
 
   while (url) {
     const resp = await fetch(url, { headers: KLAVIYO_HEADERS(apiKey) });
-    if (!resp.ok) throw new Error(`Klaviyo metrics fetch failed: ${resp.status}`);
+    if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.error(`Klaviyo metrics fetch failed: ${resp.status}`, body);
+      throw new Error(`Klaviyo metrics fetch failed: ${resp.status} — ${body.slice(0, 300)}`);
+    }
     const data = await resp.json();
     all.push(...(data.data || []));
     url = data.links?.next || null;
