@@ -1,7 +1,6 @@
-import { CalendarDays, Loader2, Sparkles } from 'lucide-react';
+import { CalendarDays, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CalendarDateEntry } from '@/hooks/useIdeation';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 
 const TYPE_COLORS: Record<string, string> = {
