@@ -81,6 +81,7 @@ export function NodeFlow({
                 onAddToQueue={onAddToQueue}
                 onBuildNow={onBuildNow}
                 researchStatus={node.id === streamingNodeId ? researchStatus : null}
+                groupLabel={node.groupLabel}
               />
             );
           }
