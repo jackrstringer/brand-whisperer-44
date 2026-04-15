@@ -70,7 +70,6 @@ serve(async (req) => {
 
     if (!brandId) throw new Error("brandId is required");
 
-    // Verify brand ownership
     const { data: brand, error: brandError } = await supabase
       .from("brands")
       .select("id, user_id")
@@ -81,43 +80,19 @@ serve(async (req) => {
     if (action === "validate-key") {
       const { apiKey } = body;
       if (!apiKey) throw new Error("apiKey is required");
-      
-      // Validate key by fetching account info
+
       const accountData = await klaviyoFetch("/accounts/", apiKey, { revision: "2024-02-15" });
-      const account = accountData.data?.[0];
-      const accountName = account?.attributes?.contact_information?.organization_name
-        || account?.attributes?.contact_information?.default_sender_name
+      const accounts = Array.isArray(accountData?.data) ? accountData.data : [];
+      const resolvedAccount = accounts.length === 1 ? accounts[0] : null;
+      const accountName = resolvedAccount?.attributes?.contact_information?.organization_name
+        || resolvedAccount?.attributes?.contact_information?.default_sender_name
         || "Klaviyo Account";
-      const accountId = account?.id || "";
+      const accountId = resolvedAccount?.id || null;
 
-      // Check if this Klaviyo account is already connected to a different brand
-      if (accountId) {
-        const { data: existingConn } = await supabase
-          .from("klaviyo_connections")
-          .select("brand_id, klaviyo_account_name")
-          .eq("klaviyo_account_id", accountId)
-          .neq("brand_id", brandId)
-          .maybeSingle();
-
-        if (existingConn) {
-          // Get the other brand's name for a clear error
-          const { data: otherBrand } = await supabase
-            .from("brands")
-            .select("name")
-            .eq("id", existingConn.brand_id)
-            .single();
-          const otherName = otherBrand?.name || "another brand";
-          throw new Error(
-            `This Klaviyo account (${accountName}) is already connected to "${otherName}". Each Klaviyo account can only be linked to one brand. Disconnect it from "${otherName}" first, or use a different API key.`
-          );
-        }
-      }
-
-      // Fetch lists
       const listsData = await klaviyoFetch("/lists", apiKey);
       const lists = listsData.data || [];
-      
-      // Upsert connection
+      const now = new Date().toISOString();
+
       const { error: upsertError } = await supabase
         .from("klaviyo_connections")
         .upsert({
@@ -126,31 +101,37 @@ serve(async (req) => {
           klaviyo_account_id: accountId,
           klaviyo_account_name: accountName,
           cached_lists: lists,
-          cached_stats: { active_profiles: 0, campaigns_sent_l30d: 0, campaigns_sent_l365d: 0, total_revenue_l365d: 0 },
-          last_synced_at: new Date().toISOString(),
+          cached_segments: [],
+          cached_stats: {},
+          quick_stats: {},
+          active_profiles_segment_id: null,
+          connected_at: now,
+          last_synced_at: now,
           sync_status: "pending",
+          sync_error: null,
         }, { onConflict: "brand_id" });
-      
+
       if (upsertError) throw new Error(`Failed to save connection: ${upsertError.message}`);
 
-      // Clear stale Klaviyo intelligence data from any previous connection
-      await supabase.from("brand_intelligence").update({
-        klaviyo_raw: null,
-        klaviyo_report: null,
-        klaviyo_compiled: null,
-        klaviyo_last_synced_at: null,
-      }).eq("brand_id", brandId);
+      await Promise.all([
+        supabase.from("brand_intelligence").update({
+          klaviyo_raw: null,
+          klaviyo_report: null,
+          klaviyo_compiled: null,
+          klaviyo_last_synced_at: null,
+        }).eq("brand_id", brandId),
+        supabase.from("klaviyo_product_store").delete().eq("brand_id", brandId),
+      ]);
 
       return new Response(JSON.stringify({
         success: true,
-        listCount: (listsData.data || []).length,
+        listCount: lists.length,
         accountName,
       }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // For all other actions, get the stored API key
     const { data: connection, error: connError } = await supabase
       .from("klaviyo_connections")
       .select("*")
@@ -178,7 +159,6 @@ serve(async (req) => {
     }
 
     if (action === "sync-performance") {
-      // Fire klaviyo-sync as fire-and-forget
       fetch(`${supabaseUrl}/functions/v1/klaviyo-sync`, {
         method: "POST",
         headers: {
@@ -187,7 +167,7 @@ serve(async (req) => {
         },
         body: JSON.stringify({ brandId }),
       });
-      
+
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -247,7 +227,6 @@ serve(async (req) => {
         preview_text: normalizedPreviewText,
       };
 
-      // Step 1: Create template
       const templateData = await klaviyoFetch("/templates", apiKey, {
         method: "POST",
         revision: TEMPLATE_CREATE_REVISION,
@@ -371,7 +350,16 @@ serve(async (req) => {
     }
 
     if (action === "disconnect") {
-      await supabase.from("klaviyo_connections").delete().eq("brand_id", brandId);
+      await Promise.all([
+        supabase.from("klaviyo_connections").delete().eq("brand_id", brandId),
+        supabase.from("brand_intelligence").update({
+          klaviyo_raw: null,
+          klaviyo_report: null,
+          klaviyo_compiled: null,
+          klaviyo_last_synced_at: null,
+        }).eq("brand_id", brandId),
+        supabase.from("klaviyo_product_store").delete().eq("brand_id", brandId),
+      ]);
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
