@@ -6,6 +6,40 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function fmt(value: unknown): string {
+  if (value == null) return "";
+  if (Array.isArray(value)) return value.map(fmt).filter(Boolean).join(", ");
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([k, v]) => { const f = fmt(v); return f ? `${k.replace(/_/g, " ")}: ${f}` : ""; })
+      .filter(Boolean).join("; ");
+  }
+  return String(value);
+}
+
+function buildResearchExcerpt(ai: Record<string, any>): string {
+  const parts: string[] = [];
+  const bo = ai.brand_overview || {};
+  const pl = ai.product_landscape || {};
+  const ci = ai.customer_intelligence || {};
+
+  if (bo.primary_category) parts.push(`Category: ${fmt(bo.primary_category)}`);
+  if (bo.brand_positioning) parts.push(`Positioning: ${fmt(bo.brand_positioning)}`);
+  if (bo.brand_voice_and_tone) parts.push(`Voice: ${fmt(bo.brand_voice_and_tone)}`);
+  if (bo.target_demographic) parts.push(`Audience: ${fmt(bo.target_demographic)}`);
+
+  if (pl.hero_products && Array.isArray(pl.hero_products)) {
+    const names = pl.hero_products.map((p: any) => p.name).filter(Boolean);
+    if (names.length) parts.push(`Hero products: ${names.join(", ")}`);
+  }
+
+  if (ci.primary_pain_points_solved && Array.isArray(ci.primary_pain_points_solved)) {
+    parts.push(`Pain points: ${ci.primary_pain_points_solved.join(", ")}`);
+  }
+
+  return parts.length > 0 ? `\n\nBrand research:\n${parts.join("\n")}` : "";
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -59,20 +93,12 @@ Deno.serve(async (req) => {
       ? `\nRecent campaigns: ${pastCampaigns.map((c: any) => c.name).join(", ")}`
       : "";
 
-    // Use compiled_context if available, otherwise fall back to ai_research
+    // Use compiled_context if available, otherwise build excerpt from nested ai_research
     let compiledExcerpt = "";
     if (intel?.compiled_context) {
       compiledExcerpt = `\n\nBrand brief:\n${intel.compiled_context.slice(0, 1500)}`;
-    } else if (intel?.ai_research) {
-      const research = intel.ai_research as any;
-      const parts: string[] = [];
-      if (research.brand_overview) parts.push(`Brand overview: ${typeof research.brand_overview === "string" ? research.brand_overview : JSON.stringify(research.brand_overview)}`);
-      if (research.product_landscape) parts.push(`Products: ${typeof research.product_landscape === "string" ? research.product_landscape : JSON.stringify(research.product_landscape)}`);
-      if (research.target_audience) parts.push(`Audience: ${typeof research.target_audience === "string" ? research.target_audience : JSON.stringify(research.target_audience)}`);
-      if (research.competitive_positioning) parts.push(`Positioning: ${typeof research.competitive_positioning === "string" ? research.competitive_positioning : JSON.stringify(research.competitive_positioning)}`);
-      if (parts.length > 0) {
-        compiledExcerpt = `\n\nBrand research (raw):\n${parts.join("\n").slice(0, 1500)}`;
-      }
+    } else if (intel?.ai_research && typeof intel.ai_research === "object") {
+      compiledExcerpt = buildResearchExcerpt(intel.ai_research as Record<string, any>);
     }
 
     const systemPrompt = `You are a senior creative strategist at a top-tier agency, helping brainstorm email marketing campaigns for ${brandName}${industry}.
