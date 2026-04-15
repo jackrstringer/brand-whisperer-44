@@ -200,9 +200,10 @@ export default function IdeatePage() {
 
   const handleClearChat = async () => {
     if (ideation.sessionId) {
+      // Use 'locked' status (valid enum value) to prevent session from being reloaded
       await supabase
         .from('ideation_sessions')
-        .update({ nodes: [], status: 'completed' } as any)
+        .update({ nodes: [], status: 'locked' } as any)
         .eq('id', ideation.sessionId);
     }
     ideation.startNewSession();
