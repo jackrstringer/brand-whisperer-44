@@ -1,58 +1,52 @@
 
 
-## Improve Ideation Quality: Port Brand DNA Studio's Richer Prompt Architecture
+## Calendar Dates Feature in Ideation
 
-### Problem
-The other project (Brand DNA Studio) produces better ideas because:
-1. **Richer system prompt**: It includes 50 real copy examples (headlines, CTAs, body copy) from past campaigns, full brand report markdown, AI identity insights, content assets (quizzes, referral programs, press mentions), and product data extracted from campaign analyses.
-2. **Better output format**: The user prompt asks for `campaign_info` and `copy_direction` fields here but the other project's prompts are more structured with chaos/entropy overlays and URL enrichment.
-3. **More data sources**: The other project pulls from `copy_library`, `brand_content_assets`, `brand_profiles.ai_insights`, `brand_report_markdown`, and campaign analysis data — none of which our `build-ideation-prompt` uses.
+### What It Does
+Adds a "Calendar Dates" option to the CampaignTypePicker that, when clicked, calls an AI (Gemini with grounded search) to research and list all relevant upcoming dates for the next 30 days — holidays, social media days, cultural events, awareness months, niche observances (e.g. National Masturbation Day for sexual wellness brands, Tax Day, April Fools) — personalized to the brand's category. Results render as a structured list in the ideation flow with dates, names, and campaign angle suggestions.
 
-### What's Different (Side-by-Side)
+### Technical Plan
 
-| Feature | This Project | Brand DNA Studio |
-|---|---|---|
-| Copy examples from past campaigns | ❌ Only campaign names | ✅ 50 real headlines, CTAs, body copy with campaign attribution |
-| Brand report markdown | ❌ Not used | ✅ Full deep research report injected |
-| AI identity insights | ❌ Not used | ✅ Creative strengths, patterns, differentiation |
-| Content assets (quizzes, referral, press) | ❌ Not used | ✅ Full asset catalog with URLs and summaries |
-| Products from campaign analyses | ❌ Not used | ✅ Extracted product names from all past campaigns |
-| URL enrichment in briefs | ❌ | ✅ Fetches and inlines content from URLs in user briefs |
-| Chaos/entropy inspiration anchors | ✅ Basic (10 anchors) | ✅ Richer (17 anchors, more diverse) |
-| Creative fatigue tracking | ✅ Basic | ✅ Richer with per-type breakdown |
+#### 1. New edge function: `generate-calendar-dates`
+- Accepts `brand_id`
+- Fetches brand intelligence (category, products, audience) from `brand_intelligence` table
+- Calls Lovable AI Gateway (`google/gemini-2.5-flash`) with a grounded prompt:
+  - Current date injected
+  - "List ALL notable dates in the next 30 days relevant to a {category} brand: federal holidays, cultural events, social media holidays, awareness days/weeks/months, niche observances, tax deadlines, pop culture moments. Include the exact date, name, and a 1-sentence campaign angle for this brand."
+- Returns structured JSON array: `{ date: string, name: string, type: string, angle: string }[]`
+- Uses CORS headers, no JWT required
 
-### Plan
+#### 2. New node type: `calendar_dates`
+- Add to `IdeationNode` union in `useIdeation.ts`:
+  ```
+  { id: string; type: 'calendar_dates'; dates: CalendarDateEntry[]; isLoading: boolean; timestamp: number }
+  ```
+- New `generateCalendarDates` function in `useIdeation` that:
+  - Inserts a `calendar_dates` node (loading state)
+  - Calls `generate-calendar-dates` edge function
+  - Updates node with results
 
-#### 1. Enrich `build-ideation-prompt` with more data sources
-- Pull **campaign analysis data** from past campaigns (headlines, copy, product focus) — equivalent to the other project's copy library
-- Include **brand report** prose if available (from `brand_intelligence.compiled_context` — already done, but also check for any markdown report)
-- Add **AI identity insights** from `brand_profiles.raw_extraction` (creative strengths, patterns, differentiation)
-- Expand the copy examples section: extract real headlines and CTAs from campaign HTML or analysis data to give Lucy actual voice examples
+#### 3. New component: `CalendarDatesNode.tsx`
+- Renders the list of upcoming dates in a clean format
+- Each date entry shows: date badge, event name, type pill, campaign angle
+- Each entry has an "Ideate on this" button that feeds the date/event as a brief into `generateForType`
 
-#### 2. Add URL enrichment to `generate-ideas`
-- When the user's `brief` or `feedback` contains URLs, fetch the page content (up to 4KB) and append it to the user prompt
-- This lets users paste product pages, blog posts, or competitor emails and get ideas grounded in that content
-- Port the `fetchUrlContent` and `enrichTextWithUrls` helpers from the other project
+#### 4. Add to CampaignTypePicker
+- Add a "Calendar Dates" entry (with a calendar icon, distinct color like `bg-emerald-400`) to `CAMPAIGN_TYPES` as a special type
+- When clicked, instead of calling `generateForType`, it calls `generateCalendarDates`
 
-#### 3. Expand inspiration anchors
-- Add the 7 missing anchors from the other project (Wes Anderson, J. Peterman, Sony 90s, VW Think Small, Got Milk?, Old Spice, Absolut Vodka)
-- These give Claude more creative diversity when chaos mode is active
+#### 5. Wire into NodeFlow
+- Add `calendar_dates` case to `NodeFlow.tsx` rendering switch
 
-#### 4. Richer output format for non-turbo ideas
-- Already asking for `campaign_info` and `copy_direction` — this is actually ahead of the other project
-- No change needed here
+#### 6. Update `seedCalendar.ts` (no change needed — this is separate)
+The existing `seedCalendar` is for the task calendar. This feature is ideation-specific and AI-powered, so it's a different system entirely.
 
-#### 5. Strengthen the `generate-ideas` user prompt
-- Add subtype extraction from `campaign_type_filter` (split on `:` for parent/subtype like the other project does)
-- Include existing idea bank titles in the "avoid" list to prevent duplicates
-
-### Files to Change
-- `supabase/functions/build-ideation-prompt/index.ts` — add campaign copy examples, AI insights, richer brand data
-- `supabase/functions/generate-ideas/index.ts` — URL enrichment, expanded anchors, subtype parsing, idea dedup
-- Deploy both functions
-
-### What This Won't Change
-- The `ideation-chat` function — it's a lightweight conversational layer, not the idea generator
-- The UI components — this is purely a prompt quality improvement
-- Database schema — no new tables needed, we're reading existing data better
+### Files to Create/Edit
+- **Create**: `supabase/functions/generate-calendar-dates/index.ts`
+- **Create**: `src/components/ideation/CalendarDatesNode.tsx`
+- **Edit**: `src/hooks/useIdeation.ts` — add `calendar_dates` node type + `generateCalendarDates` method
+- **Edit**: `src/lib/ideation/campaignTypes.ts` — add Calendar Dates type
+- **Edit**: `src/components/ideation/NodeFlow.tsx` — render new node type
+- **Edit**: `src/pages/IdeatePage.tsx` — handle Calendar Dates type selection differently
+- **Deploy**: `generate-calendar-dates`
 
