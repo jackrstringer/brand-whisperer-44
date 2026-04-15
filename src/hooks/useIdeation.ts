@@ -90,6 +90,9 @@ export function useIdeation(brandId: string) {
         if (n.type === 'generation' || n.type === 'ai_response') {
           return { ...n, isStreaming: false };
         }
+        if (n.type === 'calendar_dates') {
+          return { ...n, isLoading: false, selectedDates: Array.from(n.selectedDates) };
+        }
         return n;
       });
       supabase
