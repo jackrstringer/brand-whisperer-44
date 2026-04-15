@@ -366,6 +366,8 @@ export function useIdeation(brandId: string) {
   }, []);
 
   const startNewSession = useCallback(() => {
+    // Cancel any pending debounced save to prevent it from restoring old nodes
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     setState(s => ({
       ...s,
       sessionId: null,
