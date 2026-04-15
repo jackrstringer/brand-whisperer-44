@@ -18,6 +18,8 @@ interface Props {
   onToggleMenu?: () => void;
   onClearChat?: () => void;
   onAddToQueue?: () => void;
+  calendarDateCount?: number;
+  onGenerateCalendarIdeas?: () => void;
 }
 
 export function ChatBar({
@@ -36,6 +38,8 @@ export function ChatBar({
   onToggleMenu,
   onClearChat,
   onAddToQueue,
+  calendarDateCount = 0,
+  onGenerateCalendarIdeas,
 }: Props) {
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
