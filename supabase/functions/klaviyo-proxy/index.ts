@@ -90,6 +90,29 @@ serve(async (req) => {
         || "Klaviyo Account";
       const accountId = account?.id || "";
 
+      // Check if this Klaviyo account is already connected to a different brand
+      if (accountId) {
+        const { data: existingConn } = await supabase
+          .from("klaviyo_connections")
+          .select("brand_id, klaviyo_account_name")
+          .eq("klaviyo_account_id", accountId)
+          .neq("brand_id", brandId)
+          .maybeSingle();
+
+        if (existingConn) {
+          // Get the other brand's name for a clear error
+          const { data: otherBrand } = await supabase
+            .from("brands")
+            .select("name")
+            .eq("id", existingConn.brand_id)
+            .single();
+          const otherName = otherBrand?.name || "another brand";
+          throw new Error(
+            `This Klaviyo account (${accountName}) is already connected to "${otherName}". Each Klaviyo account can only be linked to one brand. Disconnect it from "${otherName}" first, or use a different API key.`
+          );
+        }
+      }
+
       // Fetch lists
       const listsData = await klaviyoFetch("/lists", apiKey);
       const lists = listsData.data || [];
