@@ -170,7 +170,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const {
+    let {
       brand_id,
       brief,
       parent_ideas,
@@ -183,6 +183,10 @@ Deno.serve(async (req) => {
       turbo_mode = false,
       stream = true,
     } = body;
+
+    // URL enrichment: fetch and inline content from any URLs in brief/feedback
+    if (brief) brief = await enrichTextWithUrls(brief);
+    if (feedback) feedback = await enrichTextWithUrls(feedback);
 
     if (!brand_id) {
       return new Response(JSON.stringify({ error: "brand_id required" }), {
@@ -325,12 +329,21 @@ Deno.serve(async (req) => {
     const ideaCount = turbo_mode ? 20 : 4;
     let userPrompt = "";
 
+    // Parse subtype from campaign_type_filter if colon-delimited
+    let parsedParentType = campaign_type_filter;
+    let parsedSubtype = campaign_subtype_filter;
+    if (campaign_type_filter && campaign_type_filter.includes(":") && !campaign_subtype_filter) {
+      const colonIndex = campaign_type_filter.indexOf(":");
+      parsedParentType = campaign_type_filter.slice(0, colonIndex).trim();
+      parsedSubtype = campaign_type_filter.slice(colonIndex + 1).trim();
+    }
+
     switch (mode) {
       case "initial":
       case "bank":
         userPrompt = `Generate ${ideaCount} email campaign ideas for ${brandName}.\n`;
-        if (campaign_type_filter) userPrompt += `Campaign type: ${campaign_type_filter}\n`;
-        if (campaign_subtype_filter) userPrompt += `Campaign subtype: ${campaign_subtype_filter}\n`;
+        if (parsedParentType) userPrompt += `Campaign type: ${parsedParentType}\n`;
+        if (parsedSubtype) userPrompt += `Campaign subtype: ${parsedSubtype}\n`;
         if (brief) userPrompt += `Direction: ${brief}\n`;
         break;
 
