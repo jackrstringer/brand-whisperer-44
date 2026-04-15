@@ -15,7 +15,7 @@ export default function BrandIntegrations() {
       <div>
         <h3 className="text-lg font-semibold mb-1">Klaviyo</h3>
         <p className="text-sm text-gray-2 mb-4">Connect your Klaviyo account for list/segment targeting and campaign syncing.</p>
-        <KlaviyoSetup brandId={brandId} />
+        <KlaviyoSetup key={brandId} brandId={brandId} />
       </div>
 
       <div className="border-t border-border pt-6">
