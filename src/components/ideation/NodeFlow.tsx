@@ -6,6 +6,7 @@ import { GenerationNode } from './GenerationNode';
 import { FeedbackNode } from './FeedbackNode';
 import { AiResponseNode } from './AiResponseNode';
 import { MenuNode } from './MenuNode';
+import { CalendarDatesNode } from './CalendarDatesNode';
 
 interface Props {
   nodes: IdeationNode[];
@@ -20,6 +21,8 @@ interface Props {
   researchStatus?: string | null;
   onMenuSelect?: (type: string, sub?: string) => void;
   activeType?: string | null;
+  onToggleCalendarDate?: (nodeId: string, dateKey: string) => void;
+  onGenerateCalendarIdeas?: (nodeId: string) => void;
 }
 
 export function NodeFlow({
@@ -35,6 +38,8 @@ export function NodeFlow({
   researchStatus,
   onMenuSelect,
   activeType,
+  onToggleCalendarDate,
+  onGenerateCalendarIdeas,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const hasAutoScrolledRef = useRef(false);
@@ -76,6 +81,7 @@ export function NodeFlow({
                 onAddToQueue={onAddToQueue}
                 onBuildNow={onBuildNow}
                 researchStatus={node.id === streamingNodeId ? researchStatus : null}
+                groupLabel={node.groupLabel}
               />
             );
           }
@@ -85,6 +91,19 @@ export function NodeFlow({
             return onMenuSelect ? (
               <MenuNode key={node.id} onSelectType={onMenuSelect} activeType={activeType || null} />
             ) : null;
+          case 'calendar_dates':
+            return (
+              <CalendarDatesNode
+                key={node.id}
+                nodeId={node.id}
+                dates={node.dates}
+                isLoading={node.isLoading}
+                selectedDates={node.selectedDates}
+                isGenerating={isGenerating}
+                onToggleDate={onToggleCalendarDate || (() => {})}
+                onGenerateIdeas={onGenerateCalendarIdeas || (() => {})}
+              />
+            );
           default:
             return null;
         }
