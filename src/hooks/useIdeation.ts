@@ -585,5 +585,7 @@ export function useIdeation(brandId: string) {
     addMenuNode,
     removeMenuNodes,
     generateCalendarDates,
+    toggleCalendarDate,
+    generateCalendarIdeas,
   };
 }
