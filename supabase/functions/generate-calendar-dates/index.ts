@@ -29,13 +29,21 @@ serve(async (req) => {
     const context = intel?.compiled_context || "";
     const aiResearch = intel?.ai_research as Record<string, any> | null;
 
-    // Extract category/audience hints from research
+    // Extract category/audience from correct nested paths
     let categoryHint = industry;
+    let productSummary = "";
     if (aiResearch) {
-      const cat = aiResearch.category || aiResearch.industry || "";
-      const audience = aiResearch.target_audience || aiResearch.target_demographic || "";
-      if (cat) categoryHint = cat;
-      if (audience) categoryHint += ` (audience: ${audience})`;
+      const overview = aiResearch.brand_overview || {};
+      categoryHint = overview.primary_category || overview.sub_category || aiResearch.category || industry || "";
+      const demo = overview.target_demographic;
+      if (demo) {
+        categoryHint += ` (audience: ${typeof demo === 'object' ? (demo.psychographic_profile || demo.age_range || JSON.stringify(demo)) : demo})`;
+      }
+      // Build product summary from catalog so AI knows exactly what brand sells
+      const catalog = aiResearch.product_catalog;
+      if (catalog) {
+        productSummary = JSON.stringify(catalog).slice(0, 2000);
+      }
     }
 
     const today = new Date();
@@ -46,14 +54,25 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    // Build a concise product summary from context
-    const contextBlock = context ? context.slice(0, 4000) : "";
+    // Fall back to ai_research JSON when compiled_context is null
+    let contextBlock = "";
+    if (context) {
+      contextBlock = context.slice(0, 4000);
+    } else if (aiResearch) {
+      const fallback = {
+        brand_overview: aiResearch.brand_overview,
+        product_catalog: aiResearch.product_catalog,
+        competitive_landscape: aiResearch.competitive_landscape,
+      };
+      contextBlock = JSON.stringify(fallback, null, 2).slice(0, 4000);
+    }
 
     const prompt = `Today is ${todayStr}. You are an elite ecommerce email marketing strategist.
 
 ## THE BRAND
 Brand name: "${brandName}"
 Industry/category: ${categoryHint || "unknown"}
+${productSummary ? `\nPRODUCT CATALOG (what they actually sell):\n${productSummary}\n` : ""}
 ${contextBlock ? `\nFull brand context (READ THIS CAREFULLY — it tells you exactly what they sell):\n${contextBlock}\n` : ""}
 
 ## YOUR TASK
