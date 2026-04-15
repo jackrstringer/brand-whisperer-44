@@ -146,19 +146,32 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Load brand context
+    // Load brand context + intelligence status
     let { data: brandData } = await supabase
       .from("brands")
-      .select("name, industry, website_url, ideation_prompt")
+      .select("name, industry, website_url, ideation_prompt, ideation_prompt_built_at")
       .eq("id", brand_id)
       .single();
 
+    const { data: intel } = await supabase
+      .from("brand_intelligence")
+      .select("research_status, last_researched_at, compiled_context, ai_research")
+      .eq("brand_id", brand_id)
+      .maybeSingle();
+
     const brandName = brandData?.name || "Unknown Brand";
     const industry = brandData?.industry || "consumer products";
+    const researchStatus = intel?.research_status || "pending";
+    const researchComplete = ["ai_complete", "complete", "survey_complete"].includes(researchStatus);
 
-    // Auto-build ideation prompt if missing
-    if (!brandData?.ideation_prompt) {
-      console.log(`[generate-ideas] No ideation_prompt for brand ${brand_id}, building now...`);
+    // Check if ideation prompt needs building or rebuilding
+    const promptIsMissing = !brandData?.ideation_prompt;
+    const promptIsStale = researchComplete && brandData?.ideation_prompt_built_at && intel?.last_researched_at &&
+      new Date(brandData.ideation_prompt_built_at) < new Date(intel.last_researched_at);
+    const promptIsThin = (brandData?.ideation_prompt?.length || 0) < 300;
+
+    if (promptIsMissing || promptIsStale || promptIsThin) {
+      console.log(`[generate-ideas] Building ideation prompt (missing=${promptIsMissing}, stale=${!!promptIsStale}, thin=${promptIsThin})`);
       const buildResp = await fetch(
         `${Deno.env.get("SUPABASE_URL")}/functions/v1/build-ideation-prompt`,
         {
@@ -173,15 +186,24 @@ Deno.serve(async (req) => {
       if (!buildResp.ok) {
         console.error("[generate-ideas] Failed to build ideation prompt:", await buildResp.text());
       } else {
-        // Re-fetch brand data with the newly built prompt
         const { data: refreshed } = await supabase
           .from("brands")
-          .select("name, industry, website_url, ideation_prompt")
+          .select("name, industry, website_url, ideation_prompt, ideation_prompt_built_at")
           .eq("id", brand_id)
           .single();
         if (refreshed) brandData = refreshed;
         console.log(`[generate-ideas] Built ideation prompt, length: ${brandData?.ideation_prompt?.length || 0}`);
       }
+    }
+
+    // Guard: if prompt is STILL thin and research hasn't completed, block generation
+    if ((brandData?.ideation_prompt?.length || 0) < 300 && !researchComplete) {
+      return new Response(JSON.stringify({ 
+        error: "Brand intelligence is still processing. Please wait a moment and try again.",
+        retry: true,
+      }), {
+        status: 202, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Build system prompt

@@ -59,9 +59,21 @@ Deno.serve(async (req) => {
       ? `\nRecent campaigns: ${pastCampaigns.map((c: any) => c.name).join(", ")}`
       : "";
 
-    const compiledExcerpt = intel?.compiled_context
-      ? `\n\nBrand brief:\n${intel.compiled_context.slice(0, 1500)}`
-      : "";
+    // Use compiled_context if available, otherwise fall back to ai_research
+    let compiledExcerpt = "";
+    if (intel?.compiled_context) {
+      compiledExcerpt = `\n\nBrand brief:\n${intel.compiled_context.slice(0, 1500)}`;
+    } else if (intel?.ai_research) {
+      const research = intel.ai_research as any;
+      const parts: string[] = [];
+      if (research.brand_overview) parts.push(`Brand overview: ${typeof research.brand_overview === "string" ? research.brand_overview : JSON.stringify(research.brand_overview)}`);
+      if (research.product_landscape) parts.push(`Products: ${typeof research.product_landscape === "string" ? research.product_landscape : JSON.stringify(research.product_landscape)}`);
+      if (research.target_audience) parts.push(`Audience: ${typeof research.target_audience === "string" ? research.target_audience : JSON.stringify(research.target_audience)}`);
+      if (research.competitive_positioning) parts.push(`Positioning: ${typeof research.competitive_positioning === "string" ? research.competitive_positioning : JSON.stringify(research.competitive_positioning)}`);
+      if (parts.length > 0) {
+        compiledExcerpt = `\n\nBrand research (raw):\n${parts.join("\n").slice(0, 1500)}`;
+      }
+    }
 
     const systemPrompt = `You are a senior creative strategist at a top-tier agency, helping brainstorm email marketing campaigns for ${brandName}${industry}.
 
