@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
     );
 
     // Load brand context
-    const { data: brandData } = await supabase
+    let { data: brandData } = await supabase
       .from("brands")
       .select("name, industry, website_url, ideation_prompt")
       .eq("id", brand_id)
@@ -155,6 +155,34 @@ Deno.serve(async (req) => {
 
     const brandName = brandData?.name || "Unknown Brand";
     const industry = brandData?.industry || "consumer products";
+
+    // Auto-build ideation prompt if missing
+    if (!brandData?.ideation_prompt) {
+      console.log(`[generate-ideas] No ideation_prompt for brand ${brand_id}, building now...`);
+      const buildResp = await fetch(
+        `${Deno.env.get("SUPABASE_URL")}/functions/v1/build-ideation-prompt`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          },
+          body: JSON.stringify({ brand_id }),
+        },
+      );
+      if (!buildResp.ok) {
+        console.error("[generate-ideas] Failed to build ideation prompt:", await buildResp.text());
+      } else {
+        // Re-fetch brand data with the newly built prompt
+        const { data: refreshed } = await supabase
+          .from("brands")
+          .select("name, industry, website_url, ideation_prompt")
+          .eq("id", brand_id)
+          .single();
+        if (refreshed) brandData = refreshed;
+        console.log(`[generate-ideas] Built ideation prompt, length: ${brandData?.ideation_prompt?.length || 0}`);
+      }
+    }
 
     // Build system prompt
     let systemPrompt = brandData?.ideation_prompt ||
