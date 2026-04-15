@@ -575,6 +575,12 @@ export function useIdeation(brandId: string) {
     }
   }, [ensureSession, brandId, state.nodes, saveNodes]);
 
+  const calendarDateSelection = (() => {
+    const node = state.nodes.find(n => n.type === 'calendar_dates' && n.selectedDates.size > 0);
+    if (!node || node.type !== 'calendar_dates') return null;
+    return { nodeId: node.id, count: node.selectedDates.size };
+  })();
+
   return {
     ...state,
     generateForType,
@@ -591,5 +597,6 @@ export function useIdeation(brandId: string) {
     generateCalendarDates,
     toggleCalendarDate,
     generateCalendarIdeas,
+    calendarDateSelection,
   };
 }

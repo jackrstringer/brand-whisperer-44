@@ -35,12 +35,10 @@ interface Props {
   dates: CalendarDateEntry[];
   isLoading: boolean;
   selectedDates: Set<string>;
-  isGenerating: boolean;
   onToggleDate: (nodeId: string, dateKey: string) => void;
-  onGenerateIdeas: (nodeId: string) => void;
 }
 
-export function CalendarDatesNode({ nodeId, dates, isLoading, selectedDates, isGenerating, onToggleDate, onGenerateIdeas }: Props) {
+export function CalendarDatesNode({ nodeId, dates, isLoading, selectedDates, onToggleDate }: Props) {
   if (isLoading) {
     return (
       <div className="bg-card border border-border rounded-xl p-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
@@ -131,23 +129,6 @@ export function CalendarDatesNode({ nodeId, dates, isLoading, selectedDates, isG
         );
       })}
 
-      {selectedCount > 0 && (
-        <div className="pt-3 px-1">
-          <Button
-            onClick={() => onGenerateIdeas(nodeId)}
-            disabled={isGenerating}
-            className="w-full"
-            size="sm"
-          >
-            {isGenerating ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Sparkles className="w-4 h-4 mr-2" />
-            )}
-            Generate ideas for {selectedCount} date{selectedCount !== 1 ? 's' : ''}
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

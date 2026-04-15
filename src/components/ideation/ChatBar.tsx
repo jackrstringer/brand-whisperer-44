@@ -18,6 +18,8 @@ interface Props {
   onToggleMenu?: () => void;
   onClearChat?: () => void;
   onAddToQueue?: () => void;
+  calendarDateCount?: number;
+  onGenerateCalendarIdeas?: () => void;
 }
 
 export function ChatBar({
@@ -36,13 +38,18 @@ export function ChatBar({
   onToggleMenu,
   onClearChat,
   onAddToQueue,
+  calendarDateCount = 0,
+  onGenerateCalendarIdeas,
 }: Props) {
   const [input, setInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isBusy = isGenerating || isChatting;
+  const hasCalendarDates = calendarDateCount > 0;
 
   let placeholder = 'Pick a campaign type above, or describe your idea...';
-  if (selectedCount > 1) {
+  if (hasCalendarDates) {
+    placeholder = `Press Enter to generate ideas for ${calendarDateCount} date${calendarDateCount !== 1 ? 's' : ''}...`;
+  } else if (selectedCount > 1) {
     placeholder = 'Press Enter to ideate from these ideas, or add direction for the next round...';
   } else if (selectedCount === 1) {
     placeholder = 'Press Enter to ideate from this idea, or describe how to refine it...';
@@ -60,6 +67,11 @@ export function ChatBar({
   const handleSend = () => {
     if (isBusy) return;
     const msg = input.trim();
+    // Calendar dates selected + empty input → generate calendar ideas
+    if (hasCalendarDates && !msg) {
+      onGenerateCalendarIdeas?.();
+      return;
+    }
     if (!msg && selectedCount === 0 && !activeType) return;
     onSend(msg);
     setInput('');
@@ -169,18 +181,18 @@ export function ChatBar({
               <>
                 <button
                   onClick={handleSend}
-                  disabled={!input.trim() && selectedCount === 0 && !activeType}
+                  disabled={!input.trim() && selectedCount === 0 && !activeType && !hasCalendarDates}
                   className={`flex items-center gap-1.5 h-9 px-4 rounded-lg text-sm font-medium transition-all duration-150 border ${
-                    selectedCount > 0
+                    selectedCount > 0 || hasCalendarDates
                       ? 'bg-primary text-primary-foreground border-primary hover:opacity-90 hover:scale-[1.02]'
                       : 'bg-muted border-border text-foreground hover:bg-accent hover:scale-[1.02] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:scale-100'
                   }`}
                 >
                   <Sparkles className="w-4 h-4" />
                   Ideate
-                  {selectedCount > 0 && (
+                  {(selectedCount > 0 || hasCalendarDates) && (
                     <span className="rounded-full bg-primary-foreground/20 px-1.5 text-xs font-medium">
-                      {selectedCount}
+                      {hasCalendarDates ? calendarDateCount : selectedCount}
                     </span>
                   )}
                 </button>
