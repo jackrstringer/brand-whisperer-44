@@ -203,10 +203,6 @@ export default function IdeatePage() {
     ideation.insertMenuNode(type, sub);
   };
 
-  const handleIdeateDate = (entry: { date: string; name: string; angle: string }) => {
-    const brief = `${entry.name} (${entry.date}): ${entry.angle}`;
-    ideation.generateForType('', undefined, brief);
-  };
 
   const handleClearChat = async () => {
     if (ideation.sessionId) {

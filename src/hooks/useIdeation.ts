@@ -5,15 +5,12 @@ import { CampaignIdea } from '@/lib/types';
 import { CAMPAIGN_TYPES } from '@/lib/ideation/campaignTypes';
 import { streamIdeas } from '@/lib/ideation/streamHelpers';
 
-import { CalendarDateEntry } from '@/components/ideation/CalendarDatesNode';
-
 export type IdeationNode =
   | { id: string; type: 'brief'; content: string; campaignType?: string; campaignSubtype?: string; timestamp: number }
   | { id: string; type: 'generation'; ideas: CampaignIdea[]; isStreaming: boolean; wasTurbo?: boolean; timestamp: number }
   | { id: string; type: 'feedback'; content: string; selectedIdeas: CampaignIdea[]; timestamp: number }
   | { id: string; type: 'ai_response'; content: string; isStreaming: boolean; timestamp: number }
-  | { id: string; type: 'menu'; timestamp: number }
-  | { id: string; type: 'calendar_dates'; dates: CalendarDateEntry[]; isLoading: boolean; timestamp: number };
+  | { id: string; type: 'menu'; timestamp: number };
 
 interface UseIdeationState {
   sessionId: string | null;
@@ -421,13 +418,17 @@ export function useIdeation(brandId: string) {
 
   const generateCalendarDates = useCallback(async () => {
     const sessionId = await ensureSession();
-    const nodeId = crypto.randomUUID();
+    const briefNodeId = crypto.randomUUID();
+    const genNodeId = crypto.randomUUID();
 
+    // Add a brief node + a loading generation node
     setState(s => ({
       ...s,
+      isGenerating: true,
       nodes: [
         ...s.nodes,
-        { id: nodeId, type: 'calendar_dates' as const, dates: [], isLoading: true, timestamp: Date.now() },
+        { id: briefNodeId, type: 'brief' as const, content: 'Research upcoming calendar dates & events for the next 30 days', campaignType: '📅 Calendar Dates', timestamp: Date.now() },
+        { id: genNodeId, type: 'generation' as const, ideas: [], isStreaming: true, timestamp: Date.now() },
       ],
     }));
 
@@ -441,22 +442,33 @@ export function useIdeation(brandId: string) {
 
       const dates = data?.dates || [];
 
+      // Convert calendar dates into CampaignIdea objects
+      const ideas: CampaignIdea[] = dates.map((d: any) => ({
+        id: crypto.randomUUID(),
+        title: `${d.name} (${new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`,
+        description: d.angle,
+        campaign_type: d.type || 'calendar',
+        campaign_info: `Date: ${d.date} | Event: ${d.name} | Type: ${d.type}`,
+        subject_line: '',
+      }));
+
       setState(s => {
         const updatedNodes = s.nodes.map(n =>
-          n.id === nodeId && n.type === 'calendar_dates'
-            ? { ...n, dates, isLoading: false }
+          n.id === genNodeId && n.type === 'generation'
+            ? { ...n, ideas, isStreaming: false }
             : n,
         );
         saveNodes(sessionId, updatedNodes);
-        return { ...s, nodes: updatedNodes };
+        return { ...s, isGenerating: false, nodes: updatedNodes };
       });
     } catch (err) {
       console.error('[useIdeation] Calendar dates error:', err);
       setState(s => ({
         ...s,
+        isGenerating: false,
         nodes: s.nodes.map(n =>
-          n.id === nodeId && n.type === 'calendar_dates'
-            ? { ...n, isLoading: false }
+          n.id === genNodeId && n.type === 'generation'
+            ? { ...n, isStreaming: false }
             : n,
         ),
       }));

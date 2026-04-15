@@ -6,7 +6,6 @@ import { GenerationNode } from './GenerationNode';
 import { FeedbackNode } from './FeedbackNode';
 import { AiResponseNode } from './AiResponseNode';
 import { MenuNode } from './MenuNode';
-import { CalendarDatesNode, CalendarDateEntry } from './CalendarDatesNode';
 
 interface Props {
   nodes: IdeationNode[];
@@ -21,7 +20,6 @@ interface Props {
   researchStatus?: string | null;
   onMenuSelect?: (type: string, sub?: string) => void;
   activeType?: string | null;
-  onIdeateDate?: (entry: CalendarDateEntry) => void;
 }
 
 export function NodeFlow({
@@ -37,13 +35,11 @@ export function NodeFlow({
   researchStatus,
   onMenuSelect,
   activeType,
-  onIdeateDate,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const hasAutoScrolledRef = useRef(false);
   const prevNodeCountRef = useRef(nodes.length);
 
-  // One-shot auto-scroll when new nodes appear
   useEffect(() => {
     if (nodes.length > prevNodeCountRef.current && !hasAutoScrolledRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -52,7 +48,6 @@ export function NodeFlow({
     prevNodeCountRef.current = nodes.length;
   }, [nodes.length]);
 
-  // Reset scroll lock when a new generation round starts
   useEffect(() => {
     if (isGenerating) {
       hasAutoScrolledRef.current = false;
@@ -90,15 +85,6 @@ export function NodeFlow({
             return onMenuSelect ? (
               <MenuNode key={node.id} onSelectType={onMenuSelect} activeType={activeType || null} />
             ) : null;
-          case 'calendar_dates':
-            return (
-              <CalendarDatesNode
-                key={node.id}
-                dates={node.dates}
-                isLoading={node.isLoading}
-                onIdeateDate={onIdeateDate || (() => {})}
-              />
-            );
           default:
             return null;
         }
