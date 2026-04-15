@@ -499,7 +499,7 @@ export function useIdeation(brandId: string) {
     if (selectedDates.length === 0) return;
 
     // Create generation nodes for each date (will be populated after API call)
-    const genNodeIds = selectedDates.map(() => crypto.randomUUID());
+    const genNodeIds: string[] = selectedDates.map(() => crypto.randomUUID());
 
     setState(s => ({
       ...s,
