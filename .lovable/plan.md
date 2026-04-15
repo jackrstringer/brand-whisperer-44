@@ -1,59 +1,69 @@
 
 
-## Fix: Calendar Dates Not Using Brand Intelligence
+## Expand Flow Trigger to All Klaviyo Metrics
 
-### Root Cause
-Two failures:
-1. **`compiled_context` is NULL** for this brand — the function's primary context source is empty
-2. **`ai_research` extraction is broken** — code looks for `aiResearch.category` but the actual structure is `aiResearch.brand_overview.primary_category`. The category hint resolves to the `industry` column value (likely empty or generic)
+### What Changes
+Currently, `klaviyo-fetch-schema` filters metrics to only 9 hardcoded transactional names (Checkout Started, Placed Order, etc.). The UI renders them as stacked buttons. This limits users to a small subset.
 
-So the AI gets zero brand context and produces generic ideas.
+The change opens this up to **every metric** in the Klaviyo account, displayed in a **searchable combobox** with **integration source icons** (Shopify, Recharge, Klaviyo, custom, etc.).
 
-### Fix (single file: `generate-calendar-dates/index.ts`)
+### How It Works
 
-1. **Extract category from the correct nested path**: `aiResearch.brand_overview.primary_category`, `aiResearch.brand_overview.target_demographic`, etc.
+**1. Edge function (`klaviyo-fetch-schema/index.ts`)**
+- Remove the filter that only keeps known transactional metric names
+- Return ALL metrics from the Klaviyo API, paginating if needed
+- Extract the `integration` object from each metric (`attributes.integration.name` and `attributes.integration.object`) to pass source info to the frontend
+- Keep the priority sorting for known metrics (they float to top), but append all others alphabetically below
+- Still fetch sample event data for the selected metric on-demand (not for all — too many API calls). Add a new optional param `fetchEventFor` so the client can request sample data for a specific metric after selection
 
-2. **Fall back to `ai_research` JSON when `compiled_context` is null**: Stringify a curated subset of `ai_research` (brand_overview, product_catalog, competitive_landscape) as the context block instead of sending nothing.
+**2. Frontend (`FlowConfigPanel.tsx`)**
+- Replace the button list with a **Popover + Command** (cmdk) searchable combobox
+- Each item shows: integration icon, metric name, green dot if has real data
+- Integration icons mapped from `integration.name`:
+  - `shopify` → ShoppingCart icon
+  - `recharge` → RefreshCw icon  
+  - `klaviyo` → Mail icon (or a K badge)
+  - `api` / custom → Webhook/Zap icon
+  - Default → CircleDot icon
+- Known transactional metrics get a "Recommended" badge and sort first
+- On selection, fire a second call to fetch sample event data for that specific metric (lazy loading), then update `flowConfig`
+- Show the selected metric in the trigger with its icon and a change button
 
-3. **Build a product summary** from `ai_research.product_catalog` to explicitly list what the brand sells (e.g., "Remineralizing chewing gum, natural toothpaste") so the AI can't miss it.
+### Files
 
-### Specific Code Changes
+| File | Action |
+|------|--------|
+| `supabase/functions/klaviyo-fetch-schema/index.ts` | Edit: return all metrics with integration source, add lazy event fetch mode |
+| `src/components/campaign/FlowConfigPanel.tsx` | Edit: replace button list with searchable combobox + icons |
 
-```typescript
-// Fix category extraction from nested ai_research
-let categoryHint = industry;
-let productSummary = "";
-if (aiResearch) {
-  const overview = aiResearch.brand_overview || {};
-  categoryHint = overview.primary_category || overview.sub_category || industry || "";
-  const demo = overview.target_demographic;
-  if (demo) {
-    categoryHint += ` (audience: ${typeof demo === 'object' ? demo.psychographic_profile || '' : demo})`;
+### Technical Details
+
+**Metric shape from Klaviyo API:**
+```json
+{
+  "id": "abc123",
+  "attributes": {
+    "name": "Placed Order",
+    "integration": {
+      "id": "...",
+      "name": "Shopify",
+      "category": "ecommerce",
+      "object": "order"
+    }
   }
-  // Build product summary from catalog
-  const catalog = aiResearch.product_catalog;
-  if (catalog) {
-    productSummary = JSON.stringify(catalog).slice(0, 2000);
-  }
-}
-
-// Fall back to ai_research when compiled_context is null
-let contextBlock = "";
-if (context) {
-  contextBlock = context.slice(0, 4000);
-} else if (aiResearch) {
-  // Stringify key sections as fallback
-  const fallback = {
-    brand_overview: aiResearch.brand_overview,
-    product_catalog: aiResearch.product_catalog,
-    competitive_landscape: aiResearch.competitive_landscape,
-  };
-  contextBlock = JSON.stringify(fallback, null, 2).slice(0, 4000);
 }
 ```
 
-Then inject `productSummary` into the prompt so the AI explicitly sees the product list.
+**New response shape from edge function:**
+```typescript
+{
+  connected: true,
+  metrics: [
+    { metric_id, metric_name, description, integration_name, integration_category, priority, is_recommended, has_real_data }
+  ],
+  synced_at, account_name
+}
+```
 
-### Files
-- **Edit + deploy**: `supabase/functions/generate-calendar-dates/index.ts`
+**Lazy event fetch:** When user selects a metric, client calls `klaviyo-fetch-schema` with `{ brandId, fetchEventFor: metric_id }` — returns `{ sample_payload, liquid_variables }` for just that one metric. This avoids fetching events for 50+ metrics upfront.
 
