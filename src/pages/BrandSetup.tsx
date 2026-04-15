@@ -376,6 +376,16 @@ export default function BrandSetup() {
         brandId = brand.id;
         setEarlyBrandId(brandId);
 
+        // Create brand_intelligence row if not already created
+        try { await supabase.from("brand_intelligence").insert({ brand_id: brandId, research_status: "pending" } as any); } catch {}
+
+        // Fire research in background if URL provided and not already fired
+        if (websiteUrl.trim()) {
+          supabase.functions.invoke("research-brand", {
+            body: { brand_id: brandId, website_url: websiteUrl.trim(), brand_name: brandName, industry: industry || null },
+          }).catch((err: any) => console.warn("[BrandSetup] Background research failed:", err));
+        }
+
         // Create profile with audit findings
         const { error: profileError } = await supabase.from("brand_profiles").insert({
           brand_id: brandId,
@@ -687,6 +697,39 @@ export default function BrandSetup() {
 
   // ============ RENDER STEPS ============
 
+  // Create brand record early and fire research in background
+  const handleInfoNext = async () => {
+    if (!brandName.trim() || !user) return;
+    if (earlyBrandId) {
+      // Already created, just move on
+      setStep("sources");
+      return;
+    }
+    try {
+      const { data: brand, error: brandError } = await supabase
+        .from("brands")
+        .insert({ name: brandName, industry: industry || null, user_id: user.id, website_url: websiteUrl || null } as any)
+        .select()
+        .single();
+      if (brandError) throw brandError;
+      setEarlyBrandId(brand.id);
+
+      // Create brand_intelligence row
+      try { await supabase.from("brand_intelligence").insert({ brand_id: brand.id, research_status: "pending" } as any); } catch {}
+
+      // Fire research in background if URL provided
+      if (websiteUrl.trim()) {
+        supabase.functions.invoke("research-brand", {
+          body: { brand_id: brand.id, website_url: websiteUrl.trim(), brand_name: brandName, industry: industry || null },
+        }).catch((err: any) => console.warn("[BrandSetup] Background research failed:", err));
+      }
+
+      setStep("sources");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to create brand");
+    }
+  };
+
   if (step === "info") {
     return (
       <div className="min-h-screen bg-background p-6 md:p-12">
@@ -701,7 +744,12 @@ export default function BrandSetup() {
             <Label>Industry (optional)</Label>
             <Input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="E-commerce, SaaS..." className="bg-card border-border" />
           </div>
-          <Button onClick={() => setStep("sources")} disabled={!brandName.trim()} className="bg-primary text-primary-foreground hover:bg-primary/90">
+          <div className="space-y-2">
+            <Label>Website URL</Label>
+            <Input value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} placeholder="https://yourbrand.com" className="bg-card border-border" />
+            <p className="text-xs text-muted-foreground">We'll start researching your brand in the background while you continue setup.</p>
+          </div>
+          <Button onClick={handleInfoNext} disabled={!brandName.trim()} className="bg-primary text-primary-foreground hover:bg-primary/90">
             Next <ArrowRight className="w-4 h-4 ml-1" />
           </Button>
         </div>
