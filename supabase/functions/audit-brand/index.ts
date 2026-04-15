@@ -443,7 +443,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: "claude-opus-4-6",
-        max_tokens: 16000,
+        max_tokens: 64000,
         system: SINGLE_PASS_AUDIT_PROMPT,
         messages: [{ role: "user", content: imageContent }],
       }),

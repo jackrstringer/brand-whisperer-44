@@ -1390,7 +1390,7 @@ UNIVERSAL RULES FOR EVENT DATA:
 
       const qaResponse = await callAnthropic({
         model: QA_MODEL,
-        max_tokens: 4096,
+        max_tokens: 16384,
         system: QA_SYSTEM_PROMPT,
         messages: [{ role: "user", content: qaContent }],
       }, ANTHROPIC_API_KEY);

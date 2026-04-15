@@ -94,7 +94,7 @@ Keep responses to 2-3 sentences max. Be direct, skip pleasantries. Reference the
       },
       body: JSON.stringify({
         model: "claude-haiku-4-5",
-        max_tokens: 1024,
+        max_tokens: 16384,
         temperature: 0.8,
         stream: true,
         system: systemPrompt,
