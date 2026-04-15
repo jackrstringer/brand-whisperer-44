@@ -575,6 +575,13 @@ export function useIdeation(brandId: string) {
     }
   }, [ensureSession, brandId, state.nodes, saveNodes]);
 
+  // Compute selected calendar date count for ChatBar
+  const calendarDateSelection = (() => {
+    const calNode = state.nodes.find(n => n.type === 'calendar_dates' && n.selectedDates.size > 0);
+    if (!calNode || calNode.type !== 'calendar_dates') return { count: 0, nodeId: null as string | null };
+    return { count: calNode.selectedDates.size, nodeId: calNode.id };
+  })();
+
   return {
     ...state,
     generateForType,
@@ -591,5 +598,6 @@ export function useIdeation(brandId: string) {
     generateCalendarDates,
     toggleCalendarDate,
     generateCalendarIdeas,
+    calendarDateSelection,
   };
 }

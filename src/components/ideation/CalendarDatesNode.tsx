@@ -1,7 +1,6 @@
-import { CalendarDays, Loader2, Sparkles } from 'lucide-react';
+import { CalendarDays, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CalendarDateEntry } from '@/hooks/useIdeation';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 
 const TYPE_COLORS: Record<string, string> = {
@@ -37,10 +36,9 @@ interface Props {
   selectedDates: Set<string>;
   isGenerating: boolean;
   onToggleDate: (nodeId: string, dateKey: string) => void;
-  onGenerateIdeas: (nodeId: string) => void;
 }
 
-export function CalendarDatesNode({ nodeId, dates, isLoading, selectedDates, isGenerating, onToggleDate, onGenerateIdeas }: Props) {
+export function CalendarDatesNode({ nodeId, dates, isLoading, selectedDates, isGenerating, onToggleDate }: Props) {
   if (isLoading) {
     return (
       <div className="bg-card border border-border rounded-xl p-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
@@ -134,24 +132,6 @@ export function CalendarDatesNode({ nodeId, dates, isLoading, selectedDates, isG
         );
       })}
 
-      {/* Generate ideas button */}
-      {selectedCount > 0 && (
-        <div className="pt-3 px-1">
-          <Button
-            onClick={() => onGenerateIdeas(nodeId)}
-            disabled={isGenerating}
-            className="w-full"
-            size="sm"
-          >
-            {isGenerating ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Sparkles className="w-4 h-4 mr-2" />
-            )}
-            Generate ideas for {selectedCount} date{selectedCount !== 1 ? 's' : ''}
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
