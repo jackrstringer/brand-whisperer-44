@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
     // Load brand context
     const [brandResult, intelResult, profileResult, campaignsResult] = await Promise.all([
       supabase.from("brands").select("name, industry, website_url").eq("id", brand_id).single(),
-      supabase.from("brand_intelligence").select("compiled_context, merged_profile").eq("brand_id", brand_id).single(),
+      supabase.from("brand_intelligence").select("compiled_context, merged_profile, ai_research").eq("brand_id", brand_id).single(),
       supabase.from("brand_profiles").select("raw_extraction").eq("brand_id", brand_id).single(),
       supabase.from("campaigns").select("name").eq("brand_id", brand_id).order("created_at", { ascending: false }).limit(10),
     ]);
