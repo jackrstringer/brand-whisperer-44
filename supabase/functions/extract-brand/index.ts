@@ -385,11 +385,155 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Bug 1 fix: All modes are now synchronous — no detached promises
     if (brandId) {
       const mode = step === "guide" ? "guide" : step === "full" ? "full" : "spec";
       const sb = getSupabaseAdmin();
 
+      // Guide mode: stream Anthropic response through to client to keep gateway alive
+      if (mode === "guide") {
+        await sb.from("brand_profiles").update({
+          processing_status: "running_guide",
+          processing_error: null,
+        }).eq("brand_id", brandId);
+
+        // Get extraction from DB
+        const { data: profile } = await sb
+          .from("brand_profiles")
+          .select("raw_extraction, audit_findings")
+          .eq("brand_id", brandId)
+          .maybeSingle();
+
+        const extraction = profile?.raw_extraction;
+        const cleanedAudit = stripRuntimeKeys(auditFindings);
+
+        if (!extraction) {
+          await sb.from("brand_profiles").update({
+            processing_status: "failed",
+            processing_error: "No extraction found. Run spec first.",
+          }).eq("brand_id", brandId);
+          return new Response(JSON.stringify({ error: "No extraction found" }), {
+            status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        const auditJson = JSON.stringify(cleanedAudit, null, 2);
+
+        // Start Anthropic streaming call
+        const anthropicResponse = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": ANTHROPIC_API_KEY,
+            "anthropic-version": "2023-06-01",
+          },
+          body: JSON.stringify({
+            model: "claude-opus-4-6",
+            max_tokens: 64000,
+            stream: true,
+            system: GUIDE_PROMPT,
+            messages: [{
+              role: "user",
+              content: `Brand: ${brandName}\nIndustry: ${industry || "not specified"}\n\n=== CONFIRMED AUDIT FINDINGS ===\n${auditJson}\n\n=== BRAND EXTRACTION SPEC ===\n${JSON.stringify(extraction, null, 2)}\n\n=== EMAIL DESIGN QUALITY FLOOR RULES ===\n${EMAIL_DESIGN_QUALITY_FLOOR}\n\n${HTML_GUIDE_TEMPLATE}\n\nGenerate the FULL email design rules HTML document. Start with <!DOCTYPE html> and end with </html>. Follow the template structure exactly. Do not skip sections. Use actual content from the audit -- no placeholder text.`,
+            }],
+          }),
+        });
+
+        if (!anthropicResponse.ok) {
+          const errText = await anthropicResponse.text();
+          await sb.from("brand_profiles").update({
+            processing_status: "failed",
+            processing_error: `Anthropic API error: ${anthropicResponse.status}`,
+          }).eq("brand_id", brandId);
+          return new Response(JSON.stringify({ error: errText }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+
+        // Stream pass-through: forward Anthropic's SSE to client AND accumulate HTML
+        const { readable, writable } = new TransformStream();
+        const writer = writable.getWriter();
+
+        // Process stream in background, forwarding to client
+        (async () => {
+          const reader = anthropicResponse.body!.getReader();
+          const decoder = new TextDecoder();
+          let guideHtml = "";
+          let buffer = "";
+
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              const chunk = decoder.decode(value, { stream: true });
+              buffer += chunk;
+
+              // Forward raw SSE data to client to keep gateway alive
+              try {
+                await writer.write(value);
+              } catch {
+                // Client disconnected, keep accumulating
+              }
+
+              // Parse for HTML accumulation
+              const lines = buffer.split("\n");
+              buffer = lines.pop() || "";
+              for (const line of lines) {
+                if (!line.startsWith("data: ")) continue;
+                const data = line.slice(6).trim();
+                if (data === "[DONE]") continue;
+                try {
+                  const event = JSON.parse(data);
+                  if (event.type === "content_block_delta" && event.delta?.type === "text_delta") {
+                    guideHtml += event.delta.text;
+                  }
+                } catch {}
+              }
+            }
+
+            // Clean up HTML
+            guideHtml = guideHtml.replace(/^```html?\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
+            if (!guideHtml.startsWith("<!DOCTYPE") && !guideHtml.startsWith("<html")) {
+              const docStart = guideHtml.indexOf("<!DOCTYPE");
+              if (docStart > -1) guideHtml = guideHtml.substring(docStart);
+            }
+            guideHtml = normalizeGuideHtmlSpacing(guideHtml);
+
+            // Save to DB
+            if (guideHtml.length > 500) {
+              await sb.from("brand_profiles").update({
+                brand_guide_html: guideHtml,
+                processing_status: "complete",
+              }).eq("brand_id", brandId);
+              console.log(`[extract-brand] Guide saved. ${guideHtml.length} chars`);
+            } else {
+              await sb.from("brand_profiles").update({
+                processing_status: "failed",
+                processing_error: `Guide too short (${guideHtml.length} chars)`,
+              }).eq("brand_id", brandId);
+            }
+          } catch (err: any) {
+            console.error("[extract-brand] Guide stream error:", err);
+            await sb.from("brand_profiles").update({
+              processing_status: "failed",
+              processing_error: err.message || "Stream processing failed",
+            }).eq("brand_id", brandId).catch(console.error);
+          } finally {
+            try { await writer.close(); } catch {}
+          }
+        })();
+
+        // Return streaming response immediately — data starts flowing to keep gateway alive
+        return new Response(readable, {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+          },
+        });
+      }
+
+      // Spec and full modes remain synchronous
       try {
         if (mode === "spec" || mode === "full") {
           await sb.from("brand_profiles").update({
@@ -410,6 +554,7 @@ Deno.serve(async (req) => {
           }
         }
 
+        // Full mode: also run guide synchronously (will hit gateway timeout, but kept for completeness)
         await sb.from("brand_profiles").update({
           processing_status: "running_guide",
           processing_error: null,

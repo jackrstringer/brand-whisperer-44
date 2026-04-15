@@ -1,0 +1,1 @@
+UPDATE brand_profiles SET processing_status = 'idle', processing_error = NULL WHERE processing_status IN ('running_guide', 'running_spec');

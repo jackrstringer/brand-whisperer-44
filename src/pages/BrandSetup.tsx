@@ -445,10 +445,41 @@ export default function BrandSetup() {
       if (specError) throw new Error(specError.message || "Failed to build brand spec");
 
       setProgressMessage("Generating brand guide...");
-      const { error: guideStartError } = await supabase.functions.invoke("extract-brand", {
-        body: { auditFindings: auditData, brandName, industry, brandId, step: "guide" },
-      });
-      if (guideStartError) throw new Error(guideStartError.message || "Failed to start guide generation");
+      // Use fetch() directly — guide mode returns a stream, not JSON
+      try {
+        const session = await supabase.auth.getSession();
+        const accessToken = session.data.session?.access_token || "";
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+        
+        const guideResponse = await fetch(`${supabaseUrl}/functions/v1/extract-brand`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken}`,
+            "apikey": supabaseKey,
+          },
+          body: JSON.stringify({
+            auditFindings: auditData,
+            brandName,
+            industry,
+            brandId,
+            step: "guide",
+          }),
+        });
+
+        // Consume the stream to keep the connection alive
+        if (guideResponse.body) {
+          const reader = guideResponse.body.getReader();
+          while (true) {
+            const { done } = await reader.read();
+            if (done) break;
+          }
+        }
+      } catch (err: any) {
+        // Stream timeout or disconnect is OK — the edge function saves to DB
+        console.log("[BrandSetup] guide stream ended:", err?.message);
+      }
 
       // Step 3: Poll brand_profiles for brand_guide_html
       const POLL_INTERVAL = 5000;
