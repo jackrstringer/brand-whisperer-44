@@ -1,5 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { DndContext, DragEndEvent, DragOverlay, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
+import { IntelligenceGate } from '@/components/ideation/IntelligenceGate';
 import { useIdeation } from '@/hooks/useIdeation';
 import { useDesignQueue } from '@/hooks/useDesignQueue';
 import { useIdeationCalendar } from '@/hooks/useIdeationCalendar';
