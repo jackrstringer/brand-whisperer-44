@@ -125,8 +125,7 @@ Deno.serve(async (req) => {
 
 async function fetchAllMetrics(apiKey: string): Promise<MetricWithIntegration[]> {
   const metrics: MetricWithIntegration[] = [];
-  const integrationById = new Map<string, Record<string, any>>();
-  let url: string | null = `${KLAVIYO_API_BASE}/metrics?include=integration`;
+  let url: string | null = `${KLAVIYO_API_BASE}/metrics`;
 
   while (url) {
     const resp = await fetch(url, { headers: KLAVIYO_HEADERS(apiKey) });
@@ -137,12 +136,6 @@ async function fetchAllMetrics(apiKey: string): Promise<MetricWithIntegration[]>
     }
 
     const data = await resp.json();
-    for (const integration of data.included || []) {
-      if (integration?.type === "integration" && integration.id) {
-        integrationById.set(integration.id, integration.attributes || {});
-      }
-    }
-
     metrics.push(...(data.data || []));
 
     const next = data.links?.next || null;
@@ -150,13 +143,10 @@ async function fetchAllMetrics(apiKey: string): Promise<MetricWithIntegration[]>
     if (metrics.length > 500) break;
   }
 
-  return metrics.map((metric) => {
-    const integrationId = metric.relationships?.integration?.data?.id;
-    return {
-      ...metric,
-      integration: integrationId ? integrationById.get(integrationId) || null : null,
-    };
-  });
+  return metrics.map((metric) => ({
+    ...metric,
+    integration: metric.attributes?.integration || null,
+  }));
 }
 
 async function fetchEventDataForMetric(apiKey: string, metricId: string) {
