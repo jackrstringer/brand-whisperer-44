@@ -406,41 +406,35 @@ Deno.serve(async (req) => {
         console.log(`[extract-brand] Spec complete for ${brandName}`);
 
         if (mode === "spec") {
-          await sb.from("brand_profiles").update({ processing_status: "spec_complete" }).eq("brand_id", brandId);
-          return new Response(JSON.stringify({ status: "spec_complete", brandId }), {
+          // Spec done — immediately kick off guide in background, no second frontend call needed.
+          // Frontend polls DB and will see running_guide -> complete without making another invoke.
+          await sb.from("brand_profiles").update({ processing_status: "running_guide", processing_error: null }).eq("brand_id", brandId);
+
+          const { data: freshProfile } = await sb.from("brand_profiles").select("audit_findings").eq("brand_id", brandId).single();
+          const freshAudit = freshProfile?.audit_findings ?? auditFindings;
+
+          const guidePromise = processGuideStep(ANTHROPIC_API_KEY, freshAudit, brandName, industry, brandId)
+            .then(async () => {
+              await sb.from("brand_profiles").update({ processing_status: "complete" }).eq("brand_id", brandId);
+              console.log(`[extract-brand] Guide complete for ${brandName}`);
+            })
+            .catch(async (err: any) => {
+              console.error(`[extract-brand] Guide error:`, err);
+              await sb.from("brand_profiles").update({
+                processing_status: "failed",
+                processing_error: err.message || "Unknown error",
+              }).eq("brand_id", brandId);
+            });
+
+          if (typeof EdgeRuntime !== "undefined" && EdgeRuntime.waitUntil) {
+            EdgeRuntime.waitUntil(guidePromise);
+          }
+
+          return new Response(JSON.stringify({ status: "running_guide", brandId }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
       }
-
-      // Fire-and-forget — guide generation takes 3-5 min, longer than edge function timeout.
-      // Return immediately and let processGuideStep update the DB when done.
-      await sb.from("brand_profiles").update({
-        processing_status: "running_guide",
-        processing_error: null,
-      }).eq("brand_id", brandId);
-
-      const guidePromise = processGuideStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId)
-        .then(async () => {
-          await sb.from("brand_profiles").update({ processing_status: "complete" }).eq("brand_id", brandId);
-          console.log(`[extract-brand] Guide complete for ${brandName}`);
-        })
-        .catch(async (err: any) => {
-          console.error(`[extract-brand] Guide error:`, err);
-          await sb.from("brand_profiles").update({
-            processing_status: "failed",
-            processing_error: err.message || "Unknown error",
-          }).eq("brand_id", brandId);
-        });
-
-      // Use EdgeRuntime.waitUntil to keep the worker alive for the background task
-      if (typeof EdgeRuntime !== "undefined" && EdgeRuntime.waitUntil) {
-        EdgeRuntime.waitUntil(guidePromise);
-      }
-
-      return new Response(JSON.stringify({ status: "running_guide", brandId }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
     } catch (err: any) {
       console.error(`[extract-brand] ${mode} processing error:`, err);
 

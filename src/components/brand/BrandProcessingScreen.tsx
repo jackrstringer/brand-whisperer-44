@@ -212,9 +212,8 @@ export default function BrandProcessingScreen({
           guideFiredRef.current = true;
           specCompleteTimeRef.current = Date.now();
           completePhase("spec");
-          addLog("Brand spec complete — raw_extraction and system_prompt saved to DB", "success");
+          addLog("Brand spec complete — guide generation starting automatically in background", "success");
 
-          // Log spec data summary
           if ((profile as any)?.raw_extraction) {
             const ext = (profile as any).raw_extraction;
             const colorCount = ext.colors ? Object.keys(ext.colors).length : 0;
@@ -224,26 +223,9 @@ export default function BrandProcessingScreen({
           }
 
           startPhase("guide");
-          addLog("Invoking extract-brand step=guide (Claude Opus, streaming, 3–5 min)...");
-
-          const freshAudit = (profile as any)?.audit_findings || auditFindings || {};
-          const guidePayload = {
-            auditFindings: freshAudit,
-            brandName: brandContext?.brandName || brandName,
-            industry: brandContext?.industry || "",
-            brandId: bId,
-            step: "guide",
-          };
-          addLog(`Guide payload: brandName=${guidePayload.brandName}, auditKeys=${Object.keys(freshAudit).length}`, "info");
-
-          supabase.functions.invoke("extract-brand", {
-            body: guidePayload,
-          }).then(({ data: guideData, error: guideErr }) => {
-            if (guideErr) addLog(`Guide invoke returned: ${guideErr.message}`, "info");
-            if (guideData?.status) addLog(`Guide response status: ${guideData.status}`, "info");
-          }).catch((err) => {
-            addLog(`Guide invoke timed out (expected for long Opus calls): ${err?.message}`, "info");
-          });
+          addLog("Guide generation in progress (Claude Opus) — polling for completion...", "info");
+          // No second invoke needed — extract-brand spec step automatically fires guide in background.
+          // The DB will transition spec_complete -> running_guide -> complete on its own.
         }
 
         if (status === "running_guide") {
