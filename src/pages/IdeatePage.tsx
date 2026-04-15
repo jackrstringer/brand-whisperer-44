@@ -304,13 +304,6 @@ export default function IdeatePage() {
             }}
             onClearChat={handleClearChat}
             onAddToQueue={handleAddSelectedToQueue}
-            calendarDateCount={ideation.calendarDateSelection.count}
-            onGenerateCalendarIdeas={() => {
-              const nodeId = ideation.calendarDateSelection.nodeId;
-              if (nodeId) {
-                ideation.generateCalendarIdeas(nodeId).catch(err => toast.error(err.message));
-              }
-            }}
           />
         </div>
       </div>

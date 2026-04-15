@@ -101,6 +101,7 @@ export function NodeFlow({
                 selectedDates={node.selectedDates}
                 isGenerating={isGenerating}
                 onToggleDate={onToggleCalendarDate || (() => {})}
+                onGenerateIdeas={onGenerateCalendarIdeas || (() => {})}
               />
             );
           default:
