@@ -164,11 +164,15 @@ ${contextBlock ? `\nBRAND CONTEXT:\n${contextBlock}\n` : ""}
 ## YOUR TASK
 For EACH of the following dates, create exactly 5 distinct, high-quality campaign ideas specifically for "${brandName}".
 
+CRITICAL MIX RULE — out of the 5 ideas:
+- **4 ideas** must be EVERGREEN / non-promotional. These should be content-driven, storytelling, educational, community-oriented, or brand-awareness campaigns that simply piggyback off the date/theme. NO discounts, NO sales, NO promos, NO BOGO, NO bundles, NO free gifts. Think: behind-the-scenes, founder story, how-to guides, user-generated content spotlights, lifestyle content, product education, seasonal styling tips, mission-driven storytelling.
+- **1 idea** (and ONLY 1) can be a promotional campaign with a specific offer mechanic (flash sale, bundle, % off, BOGO, mystery box, free gift, limited edition, etc.)
+
 Each idea must:
-- Reference the brand's ACTUAL products by name
-- Include a specific promotion mechanic (BOGO, mystery box, flash sale, giveaway, bundle, % off, free gift, limited edition, etc.)
-- Be creative and varied — don't repeat the same mechanic across all 5
-- Feel like something a top DTC brand would actually run
+- Reference the brand's ACTUAL products by name where relevant
+- Be creative and varied — don't repeat similar angles
+- Feel like something a top DTC brand would actually send
+- The 4 non-promo ideas should still be compelling enough to drive opens and clicks without needing a discount
 
 Think like the best email marketing strategists at brands like Javy Coffee, Liquid Death, Dr. Squatch, or Glossier.
 
@@ -185,7 +189,7 @@ ${datesList}`;
         body: JSON.stringify({
           model: "google/gemini-2.5-flash",
           messages: [
-            { role: "system", content: "You are an elite DTC ecommerce strategist. Return ONLY valid JSON via the tool call. Every idea must include specific products and a real promotion mechanic." },
+            { role: "system", content: "You are an elite DTC ecommerce strategist. Return ONLY valid JSON via the tool call. IMPORTANT: 4 of 5 ideas per date must be evergreen/non-promotional (no discounts, no sales, no offers). Only 1 idea can include a promotion." },
             { role: "user", content: prompt },
           ],
           tools: [
