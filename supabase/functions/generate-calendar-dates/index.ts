@@ -72,6 +72,7 @@ serve(async (req) => {
 ## THE BRAND
 Brand name: "${brandName}"
 Industry/category: ${categoryHint || "unknown"}
+${productSummary ? `\nPRODUCT CATALOG (what they actually sell):\n${productSummary}\n` : ""}
 ${contextBlock ? `\nFull brand context (READ THIS CAREFULLY — it tells you exactly what they sell):\n${contextBlock}\n` : ""}
 
 ## YOUR TASK
