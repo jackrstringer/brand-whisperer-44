@@ -377,7 +377,7 @@ export default function BrandSetup() {
         setEarlyBrandId(brandId);
 
         // Create brand_intelligence row if not already created
-        await supabase.from("brand_intelligence").insert({ brand_id: brandId, research_status: "pending" } as any).then(() => {}).catch(() => {});
+        try { await supabase.from("brand_intelligence").insert({ brand_id: brandId, research_status: "pending" } as any); } catch {}
 
         // Fire research in background if URL provided and not already fired
         if (websiteUrl.trim()) {
@@ -715,7 +715,7 @@ export default function BrandSetup() {
       setEarlyBrandId(brand.id);
 
       // Create brand_intelligence row
-      await supabase.from("brand_intelligence").insert({ brand_id: brand.id, research_status: "pending" } as any).then(() => {}).catch(() => {});
+      try { await supabase.from("brand_intelligence").insert({ brand_id: brand.id, research_status: "pending" } as any); } catch {}
 
       // Fire research in background if URL provided
       if (websiteUrl.trim()) {
