@@ -46,26 +46,36 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const prompt = `Today is ${todayStr}. You are a marketing calendar researcher for "${brandName}", a ${categoryHint} brand.
+    const prompt = `Today is ${todayStr}. You are an elite ecommerce email marketing strategist for "${brandName}", a ${categoryHint} brand.
 
-${context ? `Brand context (abbreviated):\n${context.slice(0, 2000)}\n` : ""}
+${context ? `Brand context (use this to understand what they sell, their voice, their audience):\n${context.slice(0, 3000)}\n` : ""}
 
-List ALL notable dates between ${todayStr} and ${endStr} that are relevant for email marketing campaigns for this specific brand. Include:
-- Federal/national holidays (e.g. Memorial Day, Independence Day)
-- Cultural events and awareness months/weeks/days
+Your job: Find every upcoming date in the next 30 days (${todayStr} to ${endStr}) that a smart ecom brand like "${brandName}" could build a campaign around. Then for EACH date, come up with a SPECIFIC, CREATIVE campaign idea — not "celebrate X with our products" but an actual promotion concept.
+
+INCLUDE dates like:
+- Federal/national holidays (Memorial Day, Tax Day, etc.)
+- Cultural events, awareness months/weeks/days
 - Social media holidays (#NationalPizzaDay, #WorldBookDay, etc.)
-- Niche observances specifically relevant to this brand's industry (e.g. National Masturbation Day for sexual wellness, National Oral Health Month for dental, National Pet Day for pet brands)
+- Niche observances relevant to this brand's industry
 - Tax deadlines, back-to-school, seasonal transitions
 - Pop culture moments, sporting events, award shows
-- Any brand-specific opportunities (product launch windows, seasonal peaks)
+- Any brand-specific seasonal opportunities
 
-For EACH date, provide:
-- The exact date (YYYY-MM-DD)
-- The event/holiday name
-- A type classification: one of "holiday", "cultural", "social_media", "awareness", "niche", "seasonal", "pop_culture"
-- A specific 1-sentence campaign angle tailored to "${brandName}"
+For EACH date, provide a SPECIFIC ecommerce campaign angle. Think like a DTC brand strategist:
+- "Tax Day: In the spirit of Tax Day, we're REFUNDING 15 random orders placed today 💰"
+- "National Coffee Day: Buy any bag, get a free cold brew starter kit"
+- "Earth Day: Trade in your old [product] for 20% off a new one"
+- "420 Day: Mystery boxes — $42.00 flat, worth up to $150"
+- "Mother's Day: Build-your-own gift bundle, free gift wrapping + handwritten note"
 
-Be thorough — include at least 15-25 dates. Don't skip niche or quirky holidays. Real dates only — no made-up holidays.`;
+BAD examples (don't do this):
+- "Celebrate Earth Day with our eco-friendly products" ← too generic
+- "Treat yourself after managing your taxes" ← lazy, not a real campaign
+- "Enjoy our products on this special day" ← useless
+
+The angle should be a SPECIFIC promotion, offer mechanic, or creative campaign hook that "${brandName}" could actually run. Include dollar amounts, percentages, mechanics (BOGO, mystery box, flash sale, giveaway, bundle, etc.) when possible.
+
+Be thorough — include at least 15-25 dates. Real dates only.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
