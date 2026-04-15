@@ -196,7 +196,16 @@ export default function IdeatePage() {
 
   const handleTypeFromMenu = (type: string, sub?: string) => {
     setMenuOpen(false);
+    if (type === '📅 Calendar Dates') {
+      ideation.generateCalendarDates().catch(err => toast.error(err.message));
+      return;
+    }
     ideation.insertMenuNode(type, sub);
+  };
+
+  const handleIdeateDate = (entry: { date: string; name: string; angle: string }) => {
+    const brief = `${entry.name} (${entry.date}): ${entry.angle}`;
+    ideation.generateForType('', undefined, brief);
   };
 
   const handleClearChat = async () => {
@@ -237,7 +246,13 @@ export default function IdeatePage() {
                 <p className="text-base text-muted-foreground">Pick a campaign type to get started</p>
               </div>
               <CampaignTypePicker
-                onSelectType={(type, sub) => ideation.generateForType(type, sub)}
+                onSelectType={(type, sub) => {
+                  if (type === '📅 Calendar Dates') {
+                    ideation.generateCalendarDates().catch(err => toast.error(err.message));
+                  } else {
+                    ideation.generateForType(type, sub);
+                  }
+                }}
                 activeType={ideation.activeType}
                 isCompact={false}
               />
@@ -258,6 +273,7 @@ export default function IdeatePage() {
               researchStatus={ideation.researchStatus}
               onMenuSelect={handleTypeFromMenu}
               activeType={ideation.activeType}
+              onIdeateDate={handleIdeateDate}
             />
           )}
         </div>
