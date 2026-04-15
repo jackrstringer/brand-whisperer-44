@@ -86,7 +86,7 @@ Be thorough — include at least 15-25 dates. Real dates only.`;
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: "You are a marketing calendar researcher. Return ONLY valid JSON — an array of objects with keys: date, name, type, angle. No markdown, no code fences, no commentary." },
+          { role: "system", content: "You are an elite DTC ecommerce strategist. Return ONLY valid JSON — an array of objects with keys: date, name, type, angle. The 'angle' must be a SPECIFIC campaign idea with a real promotion mechanic (discount, giveaway, bundle, flash sale, mystery box, etc.) — never generic filler like 'celebrate X with our products'. No markdown, no code fences, no commentary." },
           { role: "user", content: prompt },
         ],
         tools: [
