@@ -37,10 +37,9 @@ interface Props {
   selectedDates: Set<string>;
   isGenerating: boolean;
   onToggleDate: (nodeId: string, dateKey: string) => void;
-  onGenerateIdeas: (nodeId: string) => void;
 }
 
-export function CalendarDatesNode({ nodeId, dates, isLoading, selectedDates, isGenerating, onToggleDate, onGenerateIdeas }: Props) {
+export function CalendarDatesNode({ nodeId, dates, isLoading, selectedDates, isGenerating, onToggleDate }: Props) {
   if (isLoading) {
     return (
       <div className="bg-card border border-border rounded-xl p-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
