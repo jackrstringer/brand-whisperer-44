@@ -133,24 +133,6 @@ export function CalendarDatesNode({ nodeId, dates, isLoading, selectedDates, isG
         );
       })}
 
-      {/* Generate ideas button */}
-      {selectedCount > 0 && (
-        <div className="pt-3 px-1">
-          <Button
-            onClick={() => onGenerateIdeas(nodeId)}
-            disabled={isGenerating}
-            className="w-full"
-            size="sm"
-          >
-            {isGenerating ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Sparkles className="w-4 h-4 mr-2" />
-            )}
-            Generate ideas for {selectedCount} date{selectedCount !== 1 ? 's' : ''}
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
