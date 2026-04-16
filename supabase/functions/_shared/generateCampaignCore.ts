@@ -507,6 +507,7 @@ export interface GenerateCampaignParams {
   designNotes?: string;
   shopifyProducts?: any[];
   reference?: any;
+  refreshCopy?: boolean;
   _isSubGeneration?: boolean;
   _variantIndex?: number;
   _runId?: string;
