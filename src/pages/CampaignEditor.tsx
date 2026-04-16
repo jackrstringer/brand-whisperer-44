@@ -144,6 +144,8 @@ export default function CampaignEditor() {
   const [ideateActive, setIdeateActive] = useState(false); // true while an ideate request is in flight (before variants arrive)
   const [activeVersionIndex, setActiveVersionIndex] = useState<number | null>(null); // null = latest
   const [matchProductColors, setMatchProductColors] = useState(false);
+  const [refDesignMode, setRefDesignMode] = useState<"reference" | "dupe">("reference");
+  const [refreshCopy, setRefreshCopy] = useState(false);
   const [selectedShopifyProducts, setSelectedShopifyProducts] = useState<SelectedShopifyProduct[]>([]);
   const [selectedElementContext, setSelectedElementContext] = useState<{ tagName: string; text: string; outerHTML: string; isRegion?: boolean; elements?: { tagName: string; text: string; outerHTML?: string }[] } | null>(null);
   const [designNotes, setDesignNotes] = useState("");
