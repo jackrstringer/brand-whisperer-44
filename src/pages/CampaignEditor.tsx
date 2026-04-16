@@ -4163,7 +4163,9 @@ export default function CampaignEditor() {
                   try {
                     const { data: refData } = await supabase.from("reference_campaigns").select("*").in("id", campaign.reference_campaign_ids);
                     if (refData?.length) {
-                      setSelectedReferences(refData.map((r: any) => ({ ...r, mode: campaign.reference_campaign_type === "dupe" ? "dupe" : "reference", strength: campaign.reference_strength ?? 5 })));
+                      const mode = campaign.reference_campaign_type === "dupe" ? "dupe" : "reference";
+                      setRefDesignMode(mode);
+                      setSelectedReferences(refData.map((r: any) => ({ ...r, mode, strength: campaign.reference_strength ?? 7 })));
                     }
                   } catch {}
                 }
