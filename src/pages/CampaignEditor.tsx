@@ -5078,7 +5078,7 @@ export default function CampaignEditor() {
                   <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-primary/5 text-xs">
                     <span className="text-muted-foreground">Generating with {selectedReferences.length > 1 ? `${selectedReferences.length} references` : "reference"}:</span>
                     <span className="font-medium truncate">{selectedReferences.map((r) => r.title).join(", ")}</span>
-                    <span className="text-muted-foreground">({selectedReferences[0].mode === "dupe" ? "Dupe" : "Reference"})</span>
+                    <span className="text-muted-foreground">({refDesignMode === "dupe" ? "Dupe" : "Inspo"})</span>
                   </div>
                 )}
                 {/* Flow Details Panel */}
