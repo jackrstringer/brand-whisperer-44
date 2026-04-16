@@ -144,6 +144,8 @@ export default function CampaignEditor() {
   const [ideateActive, setIdeateActive] = useState(false); // true while an ideate request is in flight (before variants arrive)
   const [activeVersionIndex, setActiveVersionIndex] = useState<number | null>(null); // null = latest
   const [matchProductColors, setMatchProductColors] = useState(false);
+  const [refDesignMode, setRefDesignMode] = useState<"reference" | "dupe">("reference");
+  const [refreshCopy, setRefreshCopy] = useState(false);
   const [selectedShopifyProducts, setSelectedShopifyProducts] = useState<SelectedShopifyProduct[]>([]);
   const [selectedElementContext, setSelectedElementContext] = useState<{ tagName: string; text: string; outerHTML: string; isRegion?: boolean; elements?: { tagName: string; text: string; outerHTML?: string }[] } | null>(null);
   const [designNotes, setDesignNotes] = useState("");
@@ -382,6 +384,8 @@ export default function CampaignEditor() {
         // Restore references from DB if we don't already have them in state
         const refIds = Array.isArray(campaign.reference_campaign_ids) ? campaign.reference_campaign_ids : [];
         if (refIds.length > 0 && selectedReferences.length === 0) {
+          const storedMode = (campaign as any).reference_campaign_type === "dupe" ? "dupe" : "reference";
+          setRefDesignMode(storedMode as "reference" | "dupe");
           try {
             const { data: refData } = await supabase.from("reference_campaigns").select("*").in("id", refIds);
             if (refData && refData.length > 0) {
@@ -394,8 +398,8 @@ export default function CampaignEditor() {
                   title: r.title,
                   thumbnail_url: r.thumbnail_url,
                   image_urls: r.image_urls || [],
-                  strength: 7,
-                  mode: "reference" as const,
+                  strength: storedMode === "dupe" ? 10 : 7,
+                  mode: storedMode as "reference" | "dupe",
                 }));
               if (restored.length > 0) setSelectedReferences(restored);
             }
@@ -1068,6 +1072,8 @@ export default function CampaignEditor() {
       send_list_ids: sendListIds.length > 0 ? sendListIds : null,
       send_segment_ids: sendSegmentIds.length > 0 ? sendSegmentIds : null,
       reference_campaign_ids: selectedReferences.length > 0 ? selectedReferences.map(r => r.id) : null,
+      reference_campaign_type: selectedReferences.length > 0 ? refDesignMode : null,
+      reference_strength: selectedReferences.length > 0 ? (refDesignMode === "dupe" ? 10 : 7) : null,
       campaign_mode: campaignMode,
       flow_config: campaignMode === "flow" ? flowConfig : null,
     } as any).eq("id", campaignId);
@@ -1093,9 +1099,10 @@ export default function CampaignEditor() {
             type: r.type,
             id: r.id,
             image_urls: r.image_urls,
-            strength: r.strength,
-            mode: r.mode,
+            strength: refDesignMode === "dupe" ? 10 : 7,
+            mode: refDesignMode,
           })) : undefined,
+          refreshCopy: refDesignMode === "dupe" ? refreshCopy : undefined,
           campaignMode,
           flowConfig: campaignMode === "flow" ? { ...flowConfig, referenceId: selectedReferences?.[0]?.id || null } : undefined,
           flowNotes: campaignMode === "flow" && flowNotes.trim() ? flowNotes.trim() : undefined,
@@ -4158,7 +4165,9 @@ export default function CampaignEditor() {
                   try {
                     const { data: refData } = await supabase.from("reference_campaigns").select("*").in("id", campaign.reference_campaign_ids);
                     if (refData?.length) {
-                      setSelectedReferences(refData.map((r: any) => ({ ...r, mode: campaign.reference_campaign_type === "dupe" ? "dupe" : "reference", strength: campaign.reference_strength ?? 5 })));
+                      const mode = campaign.reference_campaign_type === "dupe" ? "dupe" : "reference";
+                      setRefDesignMode(mode);
+                      setSelectedReferences(refData.map((r: any) => ({ ...r, mode, strength: campaign.reference_strength ?? 7 })));
                     }
                   } catch {}
                 }
@@ -4789,7 +4798,7 @@ export default function CampaignEditor() {
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-xs">
                     <span className="text-primary font-medium">{selectedReferences.length > 1 ? "References:" : "Reference:"}</span>
                     <span className="truncate">{selectedReferences.map((r) => r.title).join(", ")}</span>
-                    <Badge className="text-[9px] ml-auto bg-primary/20 text-primary">{selectedReferences[0].mode === "dupe" ? "Dupe" : "Reference"}</Badge>
+                    <Badge className="text-[9px] ml-auto bg-primary/20 text-primary">{refDesignMode === "dupe" ? "Dupe" : "Inspo"}</Badge>
                   </div>
                 )}
 
@@ -4891,13 +4900,24 @@ export default function CampaignEditor() {
                 ) : (
                   /* Flow mode config panel */
                   brandId ? (
-                    <FlowConfigPanel
-                      brandId={brandId}
-                      flowConfig={flowConfig}
-                      onConfigChange={setFlowConfig}
-                      additionalNotes={flowNotes}
-                      onNotesChange={setFlowNotes}
-                    />
+                    <>
+                      <FlowConfigPanel
+                        brandId={brandId}
+                        flowConfig={flowConfig}
+                        onConfigChange={setFlowConfig}
+                        additionalNotes={flowNotes}
+                        onNotesChange={setFlowNotes}
+                      />
+                      <div className="space-y-2">
+                        <label className="text-xs text-muted-foreground">Any specific copy to include? (optional)</label>
+                        <Textarea
+                          value={extraCopy}
+                          onChange={(e) => setExtraCopy(e.target.value)}
+                          placeholder="Paste specific copy, headlines, or CTAs you want used..."
+                          className="bg-card border-border"
+                        />
+                      </div>
+                    </>
                   ) : null
                 )}
 
@@ -4914,8 +4934,9 @@ export default function CampaignEditor() {
                   />
                 )}
 
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Reference images (optional)</label>
+                {/* Reference Design Section */}
+                <div className="space-y-3">
+                  <label className="text-xs text-muted-foreground font-medium">Reference Design (optional)</label>
                   <div
                     onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
                     onDrop={(e) => { e.preventDefault(); e.stopPropagation(); addDraftRefImages(Array.from(e.dataTransfer.files)); }}
@@ -4923,7 +4944,7 @@ export default function CampaignEditor() {
                     className="border border-dashed border-border rounded-lg p-4 text-center hover:border-primary/50 transition-colors cursor-pointer"
                   >
                     <ImageIcon className="w-4 h-4 mx-auto mb-1 text-muted-foreground" />
-                    <p className="text-[11px] text-muted-foreground">Drop reference images or click to browse</p>
+                    <p className="text-[11px] text-muted-foreground">Drop a design for reference or click to browse</p>
                     <input
                       ref={draftFileInputRef}
                       type="file"
@@ -4946,6 +4967,59 @@ export default function CampaignEditor() {
                           </button>
                         </div>
                       ))}
+                    </div>
+                  )}
+                  {/* Selected reference library items */}
+                  {selectedReferences.length > 0 && (
+                    <div className="flex gap-1.5 flex-wrap">
+                      {selectedReferences.map((ref) => (
+                        <div key={ref.id} className="relative group w-12 h-12 rounded border border-primary/30 overflow-hidden">
+                          <img src={ref.thumbnail_url} alt={ref.title} className="w-full h-full object-cover" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Inspo / Dupe toggle — show when any reference is present */}
+                  {(draftRefPreviews.length > 0 || selectedReferences.length > 0) && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                        <button
+                          onClick={() => { setRefDesignMode("reference"); setRefreshCopy(false); }}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            refDesignMode === "reference"
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Inspo
+                        </button>
+                        <button
+                          onClick={() => setRefDesignMode("dupe")}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            refDesignMode === "dupe"
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Dupe
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        {refDesignMode === "dupe"
+                          ? "Pixel-perfect replica — same layout, copy, sizing, and colors"
+                          : "Strong structural reference with your brand's identity applied"}
+                      </p>
+                      {refDesignMode === "dupe" && (
+                        <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={refreshCopy}
+                            onChange={(e) => setRefreshCopy(e.target.checked)}
+                            className="rounded border-border"
+                          />
+                          <span className="text-xs text-muted-foreground">Refresh copy</span>
+                        </label>
+                      )}
                     </div>
                   )}
                 </div>
@@ -5008,7 +5082,7 @@ export default function CampaignEditor() {
                   <div className="flex items-center gap-2 px-4 py-2 border-b border-border bg-primary/5 text-xs">
                     <span className="text-muted-foreground">Generating with {selectedReferences.length > 1 ? `${selectedReferences.length} references` : "reference"}:</span>
                     <span className="font-medium truncate">{selectedReferences.map((r) => r.title).join(", ")}</span>
-                    <span className="text-muted-foreground">({selectedReferences[0].mode === "dupe" ? "Dupe" : "Reference"})</span>
+                    <span className="text-muted-foreground">({refDesignMode === "dupe" ? "Dupe" : "Inspo"})</span>
                   </div>
                 )}
                 {/* Flow Details Panel */}
