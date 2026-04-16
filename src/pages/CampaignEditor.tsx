@@ -2903,19 +2903,29 @@ export default function CampaignEditor() {
     });
     return clone.outerHTML;
   }
+  var _dirtyEdits = false; /* Only sync when an actual edit happened */
   function emitHtmlNow(){
     clearTimeout(syncTimer);
+    if(!_dirtyEdits) return; /* No real content change — skip sync */
+    _dirtyEdits = false;
     window.parent.postMessage({ type: 'textEdited', html: serializeCleanHtml() }, '*');
   }
   function syncHtml(){
     clearTimeout(syncTimer);
     syncTimer = setTimeout(emitHtmlNow, 300);
   }
-  function syncHtmlImmediate(){ emitHtmlNow(); }
-  document.addEventListener('input', syncHtml);
+  function syncHtmlImmediate(){ _dirtyEdits = true; emitHtmlNow(); }
+  document.addEventListener('input', function(e){
+    /* Only mark dirty if the input came from a non-dynamic editable element */
+    var t = e.target;
+    if(t && t.hasAttribute && t.hasAttribute('data-liquid-protected')) return;
+    if(isDynamic(t)) return;
+    _dirtyEdits = true;
+    syncHtml();
+  });
   /* Flush on blur/focusout so navigating away always captures latest state */
   window.addEventListener('blur', emitHtmlNow);
-  document.addEventListener('focusout', function(){ clearTimeout(syncTimer); syncTimer = setTimeout(emitHtmlNow, 50); });
+  document.addEventListener('focusout', function(){ if(!_dirtyEdits) return; clearTimeout(syncTimer); syncTimer = setTimeout(emitHtmlNow, 50); });
 
   /* --- SELECTION PERSISTENCE --- */
   var savedRange = null;
