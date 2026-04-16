@@ -821,7 +821,11 @@ This is the reference layout. You must produce an IDENTICAL structural replica:
 - SAME image aspect ratios and sizing (if images are square, yours are square)
 - SAME section types (hero, text block, product grid, CTA, footer — match them 1:1)
 - SAME visual rhythm (spacing proportions between sections)
-- ONLY change: swap in the brand's colors, fonts, copy, and images. The skeleton stays identical.
+${refreshCopy
+  ? `- REFRESH COPY: Write new, original copy that conveys the same message and tone but with fresh wording. Keep the same structural placement.
+- Swap in the brand's colors, fonts, images, and the refreshed copy. The skeleton stays identical.`
+  : `- KEEP ALL COPY EXACTLY AS-IS: Replicate all text, headlines, CTAs, and body copy verbatim from the reference.
+- ONLY change: swap in the brand's colors, fonts, and images. The skeleton and copy stay identical.`}
 Do NOT add sections that don't exist in the reference. Do NOT remove sections that do exist. Do NOT rearrange anything.`
         : `This is the reference layout. Strongly follow its structure, section count, column layout, image sizing, and proportions. Apply the brand's colors, fonts, and copy on top. You may adapt minor details but keep the overall skeleton very close.`;
       userContent.push({ type: "text", text: dupeLabel });
