@@ -1071,8 +1071,26 @@ ${UNIVERSAL_EMAIL_RULES}`;
       }
     }
 
-    // Fetch product data from persistent product store
+    // Determine if this is a transactional trigger — transactional emails should NOT include
+    // product feeds, cross-sells, or recommendation grids (legally and contextually inappropriate).
+    const triggerNameLower = (flowConfig?.trigger_metric_name || "").toLowerCase();
+    const isTransactional = [
+      "placed order", "ordered product", "order confirmation",
+      "fulfilled", "shipment", "shipping",
+      "refund", "cancelled",
+      "subscription", "recharge",
+    ].some(kw => triggerNameLower.includes(kw));
+
+    // Fetch product data from persistent product store — only for non-transactional flows
     let productFeedsBlock = "";
+    if (isTransactional) {
+      console.log(`[generateCampaignCore] Transactional trigger "${flowConfig.trigger_metric_name}" — skipping product feeds`);
+      productFeedsBlock = `
+═══ PRODUCT CATALOG ═══
+This is a TRANSACTIONAL email. Do NOT add product recommendation grids, cross-sells, or upsells.
+Only display the items/data from the trigger event itself.
+═══ END PRODUCT CATALOG ═══`;
+    } else {
     try {
       const presetKey = flowConfig?.selected_product_preset || "best_sellers";
 
@@ -1148,6 +1166,7 @@ NEVER replace a product grid with testimonials, reviews, or other non-product co
     } catch (e) {
       console.warn("[generateCampaignCore] Failed to query product store:", e);
     }
+    }
 
     // Run semantic reference analysis if a reference is selected
     let referenceAnalysisBlock = "";
@@ -1176,14 +1195,24 @@ NEVER replace a product grid with testimonials, reviews, or other non-product co
           const analysis = await analysisResp.json();
           if (!analysis.skipped && analysis.sections?.length > 0) {
             console.log(`[generateCampaignCore] Reference analysis: ${analysis.sections.length} sections identified`);
-            const feedSections = analysis.sections.filter((s: any) => s.data_source === "product_feed");
+            
+            // For transactional emails, reclassify any "product_feed" sections as "static" 
+            // since cross-sells are inappropriate in transactional messages
+            const sections = analysis.sections.map((s: any) => {
+              if (isTransactional && s.data_source === "product_feed") {
+                return { ...s, data_source: "static", notes: `${s.notes || ""} (Reclassified from product_feed — transactional emails should not include cross-sells)` };
+              }
+              return s;
+            });
+            
+            const feedSections = sections.filter((s: any) => s.data_source === "product_feed");
             referenceAnalysisBlock = `
 ═══ REFERENCE EMAIL ARCHITECTURE ANALYSIS ═══
 The reference email has been analyzed. Each section's data source is identified below.
 This is your implementation blueprint — replicate the layout and design of each section
 using the correct Klaviyo data pattern. Never hardcode data that should be dynamic.
 
-${analysis.sections.map((s: any, i: number) => `SECTION ${i + 1}: ${s.label}
+${sections.map((s: any, i: number) => `SECTION ${i + 1}: ${s.label}
 Visual: ${s.visual_description}
 Data source: ${s.data_source}
 ${s.grid_columns > 1 ? `Grid: ${s.grid_columns} columns × ${s.grid_rows} rows` : ""}
@@ -1193,13 +1222,14 @@ ${s.recommended_feed ? `Use feed: "${s.recommended_feed}"` : ""}
 Notes: ${s.notes}`).join("\n---\n")}
 
 CRITICAL RULES FROM THIS ANALYSIS:
-- Any section marked "product_feed" MUST use {%- for item in feeds.FeedName|slice:N -%} syntax
+${isTransactional ? `- This is a TRANSACTIONAL email. Do NOT add product recommendation grids, cross-sells, or upsells.
+- Only display data from the trigger event. Any product grid in the reference should show ORDER ITEMS from the event data, not recommendations.` : `- Any section marked "product_feed" MUST use {%- for item in feeds.FeedName|slice:N -%} syntax
+- The number of products shown in the reference (${feedSections.map((s: any) => `${s.grid_columns * s.grid_rows} in ${s.label}`).join(", ") || "N/A"}) should match your implementation
+- ABSOLUTE RULE: If ANY section in this analysis has data_source "product_feed", you MUST include a product recommendation grid at that position. NEVER replace a product_feed section with testimonials, reviews, social proof, quotes, or any non-product content.`}
 - Any section marked "event_property" MUST use event.* variables — do not use catalog_lookup for these
 - Any section marked "static" should use brand assets from the asset catalog below
 - Never hardcode product images, names, prices, or URLs that belong in dynamic sections
-- The number of products shown in the reference (${feedSections.map((s: any) => `${s.grid_columns * s.grid_rows} in ${s.label}`).join(", ") || "N/A"}) should match your implementation
-- ABSOLUTE RULE: If ANY section in this analysis has data_source "product_feed", you MUST include a product recommendation grid at that position using {%- for item in feeds.FeedName|slice:N -%} syntax. NEVER replace a product_feed section with testimonials, reviews, social proof, quotes, or any non-product content. The product grid is NON-NEGOTIABLE — it must appear in the output.
-- The reference structure is SACRED. Every section identified above must appear in your output in the same order with the same purpose. A product grid stays a product grid. A hero stays a hero. A footer stays a footer.
+- The reference structure is SACRED. Every section identified above must appear in your output in the same order with the same purpose.
 ═══ END REFERENCE ANALYSIS ═══`;
           }
         }
