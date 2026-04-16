@@ -3532,6 +3532,18 @@ export default function CampaignEditor() {
     }
   }, true);
 
+  // Prevent caret/focus from entering protected dynamic elements on left-click
+  document.addEventListener('mousedown', function(e){
+    var t = e.target;
+    while(t && t !== document.body){
+      if(t.hasAttribute && t.hasAttribute('data-liquid-protected')){
+        e.preventDefault(); // block caret placement
+        return;
+      }
+      t = t.parentElement;
+    }
+  }, true);
+
   // Show toolbar on click for data-liquid-protected (dynamic) elements
   document.addEventListener('click', function(e){
     var t = e.target;
