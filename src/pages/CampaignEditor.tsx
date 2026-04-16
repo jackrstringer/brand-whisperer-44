@@ -4896,13 +4896,24 @@ export default function CampaignEditor() {
                 ) : (
                   /* Flow mode config panel */
                   brandId ? (
-                    <FlowConfigPanel
-                      brandId={brandId}
-                      flowConfig={flowConfig}
-                      onConfigChange={setFlowConfig}
-                      additionalNotes={flowNotes}
-                      onNotesChange={setFlowNotes}
-                    />
+                    <>
+                      <FlowConfigPanel
+                        brandId={brandId}
+                        flowConfig={flowConfig}
+                        onConfigChange={setFlowConfig}
+                        additionalNotes={flowNotes}
+                        onNotesChange={setFlowNotes}
+                      />
+                      <div className="space-y-2">
+                        <label className="text-xs text-muted-foreground">Any specific copy to include? (optional)</label>
+                        <Textarea
+                          value={extraCopy}
+                          onChange={(e) => setExtraCopy(e.target.value)}
+                          placeholder="Paste specific copy, headlines, or CTAs you want used..."
+                          className="bg-card border-border"
+                        />
+                      </div>
+                    </>
                   ) : null
                 )}
 
@@ -4919,8 +4930,9 @@ export default function CampaignEditor() {
                   />
                 )}
 
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">Reference images (optional)</label>
+                {/* Reference Design Section */}
+                <div className="space-y-3">
+                  <label className="text-xs text-muted-foreground font-medium">Reference Design (optional)</label>
                   <div
                     onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
                     onDrop={(e) => { e.preventDefault(); e.stopPropagation(); addDraftRefImages(Array.from(e.dataTransfer.files)); }}
@@ -4928,7 +4940,7 @@ export default function CampaignEditor() {
                     className="border border-dashed border-border rounded-lg p-4 text-center hover:border-primary/50 transition-colors cursor-pointer"
                   >
                     <ImageIcon className="w-4 h-4 mx-auto mb-1 text-muted-foreground" />
-                    <p className="text-[11px] text-muted-foreground">Drop reference images or click to browse</p>
+                    <p className="text-[11px] text-muted-foreground">Drop a design for reference or click to browse</p>
                     <input
                       ref={draftFileInputRef}
                       type="file"
@@ -4951,6 +4963,59 @@ export default function CampaignEditor() {
                           </button>
                         </div>
                       ))}
+                    </div>
+                  )}
+                  {/* Selected reference library items */}
+                  {selectedReferences.length > 0 && (
+                    <div className="flex gap-1.5 flex-wrap">
+                      {selectedReferences.map((ref) => (
+                        <div key={ref.id} className="relative group w-12 h-12 rounded border border-primary/30 overflow-hidden">
+                          <img src={ref.thumbnail_url} alt={ref.title} className="w-full h-full object-cover" />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* Inspo / Dupe toggle — show when any reference is present */}
+                  {(draftRefPreviews.length > 0 || selectedReferences.length > 0) && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                        <button
+                          onClick={() => { setRefDesignMode("reference"); setRefreshCopy(false); }}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            refDesignMode === "reference"
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Inspo
+                        </button>
+                        <button
+                          onClick={() => setRefDesignMode("dupe")}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            refDesignMode === "dupe"
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Dupe
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        {refDesignMode === "dupe"
+                          ? "Pixel-perfect replica — same layout, copy, sizing, and colors"
+                          : "Strong structural reference with your brand's identity applied"}
+                      </p>
+                      {refDesignMode === "dupe" && (
+                        <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-card cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={refreshCopy}
+                            onChange={(e) => setRefreshCopy(e.target.checked)}
+                            className="rounded border-border"
+                          />
+                          <span className="text-xs text-muted-foreground">Refresh copy</span>
+                        </label>
+                      )}
                     </div>
                   )}
                 </div>
