@@ -344,10 +344,10 @@ export default function FlowDetailsPanel({
   return (
     <div className="space-y-4 p-4 overflow-y-auto flex-1">
       {/* Connection status banner */}
-      {flowConfig?.klaviyo_synced_at ? (
+      {flowConfig?.klaviyo_synced_at || previewEvents.length > 0 ? (
         <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-green-500/10 border border-green-500/20 text-[11px] text-green-500">
           <CheckCircle className="w-3 h-3" />
-          Klaviyo data live · Synced {relativeTime(flowConfig.klaviyo_synced_at)} · {flowConfig.trigger_metric_name}
+          Klaviyo data live{flowConfig?.klaviyo_synced_at ? ` · Synced ${relativeTime(flowConfig.klaviyo_synced_at)}` : ""}{flowConfig?.trigger_metric_name ? ` · ${flowConfig.trigger_metric_name}` : ""}
         </div>
       ) : (
         <div className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-500">
