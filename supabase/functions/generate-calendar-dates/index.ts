@@ -153,33 +153,24 @@ Be thorough — include at least 15-25 dates. Real dates only. No made-up holida
 
       const datesList = selected_dates.map((d: any) => `- ${d.date}: ${d.name} (${d.type})`).join("\n");
 
-      const prompt = `You are an elite DTC ecommerce email marketing strategist.
-
-## THE BRAND
-Brand name: "${brandName}"
-Industry/category: ${categoryHint || "unknown"}
+      const prompt = `## THE BRAND
+Brand: "${brandName}"
+Category: ${categoryHint || "unknown"}
 ${productSummary ? `\nPRODUCT CATALOG:\n${productSummary}\n` : ""}
 ${contextBlock ? `\nBRAND CONTEXT:\n${contextBlock}\n` : ""}
 
-## YOUR TASK
-For EACH of the following dates, create exactly 5 distinct, high-quality campaign ideas specifically for "${brandName}".
+## THE DATES
+${datesList}
 
-CRITICAL MIX RULE — out of the 5 ideas:
-- **4 ideas** must be EVERGREEN / non-promotional. These should be content-driven, storytelling, educational, community-oriented, or brand-awareness campaigns that simply piggyback off the date/theme. NO discounts, NO sales, NO promos, NO BOGO, NO bundles, NO free gifts. Think: behind-the-scenes, founder story, how-to guides, user-generated content spotlights, lifestyle content, product education, seasonal styling tips, mission-driven storytelling.
-- **1 idea** (and ONLY 1) can be a promotional campaign with a specific offer mechanic (flash sale, bundle, % off, BOGO, mystery box, free gift, limited edition, etc.)
+## TASK
+For each date above, come up with 5 email campaign ideas for "${brandName}".
 
-Each idea must:
-- Reference the brand's ACTUAL products by name where relevant
-- Be creative and varied — don't repeat similar angles
-- Feel like something a top DTC brand would actually send
-- The 4 non-promo ideas should still be compelling enough to drive opens and clicks without needing a discount
+Find the natural, authentic connection between the brand/products and the occasion. Don't force it — if the link is tenuous, lean into humor or cleverness rather than pretending relevance.
 
-Think like the best email marketing strategists at brands like Javy Coffee, Liquid Death, Dr. Squatch, or Glossier.
+At most 1 out of 5 ideas may include a promotional mechanic (discount, sale, bundle, etc.). The rest should drive engagement without needing an offer.
 
-## DATES TO IDEATE ON
-${datesList}`;
+Reference the brand's actual products by name. Each idea should feel like something a top-tier DTC brand would actually send.`;
 
-      // Build the schema for structured output
       const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -187,9 +178,9 @@ ${datesList}`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
+          model: "google/gemini-2.5-pro",
           messages: [
-            { role: "system", content: "You are an elite DTC ecommerce strategist. Return ONLY valid JSON via the tool call. IMPORTANT: 4 of 5 ideas per date must be evergreen/non-promotional (no discounts, no sales, no offers). Only 1 idea can include a promotion." },
+            { role: "system", content: "You are an elite email marketing strategist for DTC ecommerce brands. Return ONLY valid JSON via the tool call." },
             { role: "user", content: prompt },
           ],
           tools: [
