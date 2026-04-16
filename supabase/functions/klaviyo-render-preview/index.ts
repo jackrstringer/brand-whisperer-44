@@ -169,6 +169,35 @@ function stripKlaviyoTags(html: string): string {
     return '';
   });
 
+  // Fix Klaviyo/Django convention: {% unless X %}...{% endif %} → {% endunless %}
+  // LiquidJS requires {% endunless %} to close {% unless %} blocks.
+  // Use a stack-based approach to match unless blocks closed by endif.
+  const tagPattern = /\{%-?\s*(if|unless|endif|endunless)\b[^%]*-?%\}/gi;
+  const stack: Array<{ type: string; index: number; length: number }> = [];
+  const replacements: Array<{ index: number; length: number; replacement: string }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = tagPattern.exec(result)) !== null) {
+    const keyword = m[1].toLowerCase();
+    if (keyword === "if" || keyword === "unless") {
+      stack.push({ type: keyword, index: m.index, length: m[0].length });
+    } else if (keyword === "endif" || keyword === "endunless") {
+      const opener = stack.pop();
+      if (opener?.type === "unless" && keyword === "endif") {
+        // Mismatch: replace {% endif %} with {% endunless %}
+        replacements.push({
+          index: m.index,
+          length: m[0].length,
+          replacement: m[0].replace(/endif/i, "endunless"),
+        });
+      }
+    }
+  }
+  // Apply replacements in reverse order to preserve indices
+  for (let ri = replacements.length - 1; ri >= 0; ri--) {
+    const r = replacements[ri];
+    result = result.slice(0, r.index) + r.replacement + result.slice(r.index + r.length);
+  }
+
   return result;
 }
 
