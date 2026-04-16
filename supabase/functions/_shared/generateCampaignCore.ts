@@ -527,7 +527,7 @@ export async function generateCampaignCore(
   const {
     brandId, campaignId, brief, goal, copy, productIds,
     pinnedAssetUrls: pinnedUrls, matchProductColors, designNotes,
-    shopifyProducts, reference, _isSubGeneration, _runId,
+    shopifyProducts, reference, refreshCopy, _isSubGeneration, _runId,
     campaignMode, flowConfig, flowNotes,
   } = params;
   const variantIdx = params._variantIndex ?? 0;
