@@ -384,6 +384,8 @@ export default function CampaignEditor() {
         // Restore references from DB if we don't already have them in state
         const refIds = Array.isArray(campaign.reference_campaign_ids) ? campaign.reference_campaign_ids : [];
         if (refIds.length > 0 && selectedReferences.length === 0) {
+          const storedMode = (campaign as any).reference_campaign_type === "dupe" ? "dupe" : "reference";
+          setRefDesignMode(storedMode as "reference" | "dupe");
           try {
             const { data: refData } = await supabase.from("reference_campaigns").select("*").in("id", refIds);
             if (refData && refData.length > 0) {
@@ -396,8 +398,8 @@ export default function CampaignEditor() {
                   title: r.title,
                   thumbnail_url: r.thumbnail_url,
                   image_urls: r.image_urls || [],
-                  strength: 7,
-                  mode: "reference" as const,
+                  strength: storedMode === "dupe" ? 10 : 7,
+                  mode: storedMode as "reference" | "dupe",
                 }));
               if (restored.length > 0) setSelectedReferences(restored);
             }
