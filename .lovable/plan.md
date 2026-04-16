@@ -1,39 +1,54 @@
 
 
-## Plan: Route Calendar Date Ideas Through the Ideate Button
+## Plan: Simplify Calendar Ideation Prompt
 
 ### Problem
-After generating calendar dates, the "Generate ideas for X dates" button is stuck at the bottom of a long list, requiring the user to scroll down. The Ideate button in the ChatBar (always visible at the bottom) sits idle during this flow.
+The prompt is over-engineered with rigid constraints (4 evergreen / 1 promo ratio, lists of banned mechanics, prescribed idea categories). This forces the AI into awkward territory — shoehorning unrelated angles into a date context instead of finding the natural connection between the brand and the occasion.
 
-### Solution
-Make the ChatBar's Ideate button and Enter key trigger `generateCalendarIdeas` when calendar dates are selected.
+### Approach
+Strip the prompt down to essentials: here's the brand, here are its products, here's the date — come up with smart campaign ideas. One simple guardrail: at most 1 idea can include a promotion/discount. Everything else is left to the AI's judgment.
 
 ### Changes
 
-**1. `src/hooks/useIdeation.ts`** — Expose a helper that returns the active calendar node info:
-- Add a computed property `calendarDateSelection` that scans `state.nodes` for a `calendar_dates` node with `selectedDates.size > 0`
-- Returns `{ nodeId, count }` or `null`
-- Export it in the return object
+**`supabase/functions/generate-calendar-dates/index.ts`** — Rewrite the ideation prompt (lines 156-180) and system message (line 192):
 
-**2. `src/components/ideation/ChatBar.tsx`** — Accept and use calendar date state:
-- Add props: `calendarDateCount?: number`, `onGenerateCalendarIdeas?: () => void`
-- In `handleSend`: if `calendarDateCount > 0` and input is empty, call `onGenerateCalendarIdeas()` instead of the normal send
-- Light up the Ideate button (primary color) when `calendarDateCount > 0` (same treatment as `selectedCount > 0`)
-- Show the count badge on Ideate when calendar dates are selected
-- Update placeholder to mention "Press Enter to generate ideas for X dates..."
+**New system message:**
+```
+You are an elite email marketing strategist for DTC ecommerce brands.
+Return ONLY valid JSON via the tool call.
+```
 
-**3. `src/pages/IdeatePage.tsx`** — Wire the new props:
-- Read `ideation.calendarDateSelection`
-- Pass `calendarDateCount` and `onGenerateCalendarIdeas` to `ChatBar`
-- The callback calls `ideation.generateCalendarIdeas(nodeId)`
+**New prompt (simplified):**
+```
+## THE BRAND
+Brand: "{brandName}"
+Category: {categoryHint}
+{product catalog if available}
+{brand context if available}
 
-**4. `src/components/ideation/CalendarDatesNode.tsx`** — Remove the bottom "Generate ideas" button:
-- Delete lines 134-150 (the conditional button block)
-- Remove `onGenerateIdeas` from props and `isGenerating` if no longer needed locally
+## THE DATES
+{datesList}
 
-### Behavior Summary
-- User picks "Calendar Dates" → dates load in the node
-- User checks dates → Ideate button lights up with count badge, placeholder updates
-- User presses Enter or clicks Ideate → triggers `generateCalendarIdeas`
-- No more scrolling to find a buried button
+## TASK
+For each date above, come up with 5 email campaign ideas for {brandName}.
+
+Find the natural, authentic connection between the brand/products and the occasion. Don't force it — if the link is tenuous, lean into humor or cleverness rather than pretending relevance.
+
+At most 1 out of 5 ideas may include a promotional mechanic (discount, sale, bundle, etc.). The rest should drive engagement without needing an offer.
+
+Reference the brand's actual products by name. Each idea should feel like something a top-tier DTC brand would actually send.
+```
+
+This removes:
+- The prescriptive "4 evergreen / 1 promo" categories with banned mechanics lists
+- The forced idea archetypes (UGC, founder story, how-to, etc.)
+- The "think like Javy Coffee, Liquid Death" comparisons
+- The redundant system message reinforcement
+
+Also upgrade the model from `gemini-2.5-flash` to `google/gemini-2.5-pro` for ideation quality — this is a creative task where reasoning matters.
+
+### Files
+| File | Change |
+|------|--------|
+| `supabase/functions/generate-calendar-dates/index.ts` | Simplify ideation prompt, upgrade model to gemini-2.5-pro |
 
