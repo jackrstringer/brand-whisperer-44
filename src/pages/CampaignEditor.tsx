@@ -1070,6 +1070,8 @@ export default function CampaignEditor() {
       send_list_ids: sendListIds.length > 0 ? sendListIds : null,
       send_segment_ids: sendSegmentIds.length > 0 ? sendSegmentIds : null,
       reference_campaign_ids: selectedReferences.length > 0 ? selectedReferences.map(r => r.id) : null,
+      reference_campaign_type: selectedReferences.length > 0 ? refDesignMode : null,
+      reference_strength: selectedReferences.length > 0 ? (refDesignMode === "dupe" ? 10 : 7) : null,
       campaign_mode: campaignMode,
       flow_config: campaignMode === "flow" ? flowConfig : null,
     } as any).eq("id", campaignId);
