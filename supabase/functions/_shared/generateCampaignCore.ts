@@ -1231,8 +1231,6 @@ ${isTransactional ? `- This is a TRANSACTIONAL email. Do NOT add product recomme
 - Never hardcode product images, names, prices, or URLs that belong in dynamic sections
 - The reference structure is SACRED. Every section identified above must appear in your output in the same order with the same purpose.
 ═══ END REFERENCE ANALYSIS ═══`;
-- The reference structure is SACRED. Every section identified above must appear in your output in the same order with the same purpose. A product grid stays a product grid. A hero stays a hero. A footer stays a footer.
-═══ END REFERENCE ANALYSIS ═══`;
           }
         }
       } catch (err) {
