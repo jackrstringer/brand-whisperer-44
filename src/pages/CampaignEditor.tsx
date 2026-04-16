@@ -3607,8 +3607,9 @@ export default function CampaignEditor() {
       menu.appendChild(sep);
     }
 
-    /* Edit text — focus the element */
-    if(el.isContentEditable || /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL)$/i.test(el.tagName)){
+    /* Edit text — focus the element (skip dynamic/protected elements) */
+    var elIsDynamic = isDynamic(el) || (el.hasAttribute && el.hasAttribute('data-liquid-protected'));
+    if(!elIsDynamic && (el.isContentEditable || /^(H[1-6]|P|SPAN|A|LI|BUTTON|LABEL)$/i.test(el.tagName))){
       addItem('Edit Text', '✏️', function(){
         el.contentEditable = 'true';
         el.focus();
