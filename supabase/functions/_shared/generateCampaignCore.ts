@@ -1071,8 +1071,26 @@ ${UNIVERSAL_EMAIL_RULES}`;
       }
     }
 
-    // Fetch product data from persistent product store
+    // Determine if this is a transactional trigger — transactional emails should NOT include
+    // product feeds, cross-sells, or recommendation grids (legally and contextually inappropriate).
+    const triggerNameLower = (flowConfig?.trigger_metric_name || "").toLowerCase();
+    const isTransactional = [
+      "placed order", "ordered product", "order confirmation",
+      "fulfilled", "shipment", "shipping",
+      "refund", "cancelled",
+      "subscription", "recharge",
+    ].some(kw => triggerNameLower.includes(kw));
+
+    // Fetch product data from persistent product store — only for non-transactional flows
     let productFeedsBlock = "";
+    if (isTransactional) {
+      console.log(`[generateCampaignCore] Transactional trigger "${flowConfig.trigger_metric_name}" — skipping product feeds`);
+      productFeedsBlock = `
+═══ PRODUCT CATALOG ═══
+This is a TRANSACTIONAL email. Do NOT add product recommendation grids, cross-sells, or upsells.
+Only display the items/data from the trigger event itself.
+═══ END PRODUCT CATALOG ═══`;
+    } else {
     try {
       const presetKey = flowConfig?.selected_product_preset || "best_sellers";
 
@@ -1147,6 +1165,7 @@ NEVER replace a product grid with testimonials, reviews, or other non-product co
       }
     } catch (e) {
       console.warn("[generateCampaignCore] Failed to query product store:", e);
+    }
     }
 
     // Run semantic reference analysis if a reference is selected
