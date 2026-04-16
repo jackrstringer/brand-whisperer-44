@@ -2803,21 +2803,28 @@ export default function CampaignEditor() {
 (function(){
   /* --- TEXT EDITING --- */
   var blocks = ['TABLE','TR','TD','TH','DIV','UL','OL','IMG'];
-  /* Check if element or ancestor has data-liquid (dynamic content) */
+  /* Check if element, ancestor, or any descendant has data-liquid (dynamic content) */
   function isDynamic(el){
     var n = el;
     while(n && n !== document.body){
       if(n.hasAttribute && (n.hasAttribute('data-liquid') || n.hasAttribute('data-liquid-loop') || n.hasAttribute('data-liquid-attr'))) return true;
       n = n.parentElement;
     }
+    /* Also check descendants — a parent wrapper around dynamic spans is dynamic too */
+    if(el.querySelector && (el.querySelector('[data-liquid]') || el.querySelector('[data-liquid-attr]') || el.querySelector('[data-liquid-loop]'))) return true;
     return false;
   }
-  /* Find the nearest data-liquid attribute path for an element */
+  /* Find the nearest data-liquid attribute path for an element — check self, ancestors, then descendants */
   function getLiquidPath(el){
     var n = el;
     while(n && n !== document.body){
       if(n.hasAttribute && n.hasAttribute('data-liquid')) return n.getAttribute('data-liquid');
       n = n.parentElement;
+    }
+    /* Check first dynamic descendant */
+    if(el.querySelector){
+      var desc = el.querySelector('[data-liquid]');
+      if(desc) return desc.getAttribute('data-liquid');
     }
     return null;
   }
@@ -3522,6 +3529,18 @@ export default function CampaignEditor() {
     if(e.target && e.target.isContentEditable){
       clearTimeout(ftbBlurTimer);
       showFtb(e.target);
+    }
+  }, true);
+
+  // Prevent caret/focus from entering protected dynamic elements on left-click
+  document.addEventListener('mousedown', function(e){
+    var t = e.target;
+    while(t && t !== document.body){
+      if(t.hasAttribute && t.hasAttribute('data-liquid-protected')){
+        e.preventDefault(); // block caret placement
+        return;
+      }
+      t = t.parentElement;
     }
   }, true);
 
