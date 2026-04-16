@@ -1,54 +1,82 @@
 
+## Plan: Fully lock left-click text editing for dynamic flow fields
 
-## Plan: Simplify Calendar Ideation Prompt
+### What’s actually wrong
+This is not primarily a backend/rendering issue. The bug is in the injected iframe editor logic inside `src/pages/CampaignEditor.tsx`.
 
-### Problem
-The prompt is over-engineered with rigid constraints (4 evergreen / 1 promo ratio, lists of banned mechanics, prescribed idea categories). This forces the AI into awkward territory — shoehorning unrelated angles into a date context instead of finding the natural connection between the brand and the occasion.
+Right now, dynamic Liquid markers are injected onto inner spans like `{{ event... }}`, but the parent text element (`p`, `h1`, `a`, etc.) can still be marked `contentEditable="true"` because the current `isDynamic()` check only looks at the element and its ancestors, not dynamic descendants.
 
-### Approach
-Strip the prompt down to essentials: here's the brand, here are its products, here's the date — come up with smart campaign ideas. One simple guardrail: at most 1 idea can include a promotion/discount. Everything else is left to the AI's judgment.
-
-### Changes
-
-**`supabase/functions/generate-calendar-dates/index.ts`** — Rewrite the ideation prompt (lines 156-180) and system message (line 192):
-
-**New system message:**
+So for a line like:
+```text
+Qty: {{ event.qty }} · ${{ event.price }}
 ```
-You are an elite email marketing strategist for DTC ecommerce brands.
-Return ONLY valid JSON via the tool call.
-```
+the parent text block is still editable on left click, which lets the caret enter that block and can corrupt the live rendered preview state.
 
-**New prompt (simplified):**
-```
-## THE BRAND
-Brand: "{brandName}"
-Category: {categoryHint}
-{product catalog if available}
-{brand context if available}
+The current parent-side save guard (`if (flowPreviewHtml) return`) is not enough, because it only blocks persistence after the DOM was already made editable. The fix needs to happen inside the iframe before editing can start.
 
-## THE DATES
-{datesList}
+## Changes
 
-## TASK
-For each date above, come up with 5 email campaign ideas for {brandName}.
+### 1) Harden dynamic-field detection in the iframe editor
+Update the injected editor script in `src/pages/CampaignEditor.tsx` so a text element is treated as protected if it:
+- is dynamic itself
+- has a dynamic ancestor
+- contains dynamic descendants like:
+  - `[data-liquid]`
+  - `[data-liquid-attr]`
+  - `[data-liquid-loop]`
 
-Find the natural, authentic connection between the brand/products and the occasion. Don't force it — if the link is tenuous, lean into humor or cleverness rather than pretending relevance.
+This means any mixed static/dynamic text block gets locked as a whole, which is the safer behavior.
 
-At most 1 out of 5 ideas may include a promotional mechanic (discount, sale, bundle, etc.). The rest should drive engagement without needing an offer.
+### 2) Prevent left-click from entering text-edit mode on protected blocks
+For protected dynamic elements:
+- do not set `contentEditable`
+- block caret placement/focus on normal left click
+- keep them selectable so the floating toolbar can still appear
+- keep right-click “Edit Text” unavailable
 
-Reference the brand's actual products by name. Each idea should feel like something a top-tier DTC brand would actually send.
-```
+This will make dynamic fields feel non-editable immediately, which matches the expected UX.
 
-This removes:
-- The prescriptive "4 evergreen / 1 promo" categories with banned mechanics lists
-- The forced idea archetypes (UGC, founder story, how-to, etc.)
-- The "think like Javy Coffee, Liquid Death" comparisons
-- The redundant system message reinforcement
+### 3) Preserve formatting controls for dynamic fields
+Keep dynamic fields style-editable, but only through source-aware updates:
+- use the toolbar for allowed formatting changes
+- route those changes through `flowStyleEdit`
+- patch the source Liquid HTML, then re-render the preview with live event data
 
-Also upgrade the model from `gemini-2.5-flash` to `google/gemini-2.5-pro` for ideation quality — this is a creative task where reasoning matters.
+I’ll extend this so dynamic fields do not fall back to `syncHtmlImmediate()` for style actions that should be supported. The goal is:
+- no content editing
+- formatting still works
+- switching preview events still updates the values correctly
 
-### Files
-| File | Change |
-|------|--------|
-| `supabase/functions/generate-calendar-dates/index.ts` | Simplify ideation prompt, upgrade model to gemini-2.5-pro |
+### 4) Improve Liquid-path targeting for mixed dynamic blocks
+Add a helper so protected parent blocks can resolve a usable Liquid path from:
+- their own marker, or
+- the first descendant dynamic marker
 
+That gives the style patcher a stable way to find the correct source tag even when the clicked element is the parent wrapper rather than the exact inner span.
+
+### 5) Keep serialization clean
+If any new protection/helper attributes are added in the iframe, strip them during serialization just like the existing editor-only attributes.
+
+## Files to update
+- `src/pages/CampaignEditor.tsx`
+  - injected iframe editor script:
+    - dynamic detection
+    - editable/protected assignment
+    - left-click interception
+    - toolbar routing for protected fields
+    - clean serialization
+  - parent message handling for `flowStyleEdit` if needed to support the protected-field formatting actions cleanly
+
+## Technical details
+- Root cause: `isDynamic(el)` is ancestor-only, so parent text wrappers around injected Liquid spans remain editable.
+- Correct fix: lock the whole containing text block if it contains dynamic content anywhere inside it.
+- Important behavior change: in flow preview, protected dynamic blocks should never enter native text-edit mode at all.
+- Safety rule: if a style patch cannot be mapped back to source Liquid HTML, it should fail visibly rather than silently turning into a direct text edit.
+
+## Verification
+After implementation, I’ll verify:
+1. Left-clicking a dynamic field does not place a caret.
+2. Typing cannot alter dynamic content blocks.
+3. Toolbar formatting still works on protected dynamic fields.
+4. Switching between preview events updates the values correctly.
+5. Static text remains normally editable.
