@@ -23,6 +23,7 @@ export const CAMPAIGN_TYPES: CampaignType[] = [
   {
     name: "Product Highlight", description: "Spotlight a product or collection", category: "subtype", popular: true, color: "bg-blue-500",
     subtypes: [
+      { name: "Hero Highlight", description: "Spotlight the brand's #1 hero product" },
       { name: "Deep Dive", description: "Everything about one product" },
       { name: 'The "Why"', description: "Why this product exists" },
       { name: "Problem → Solution", description: "Pain point to product" },
@@ -31,6 +32,7 @@ export const CAMPAIGN_TYPES: CampaignType[] = [
       { name: "The Science Behind It", description: "Clinical or technical angle" },
       { name: "Gift-Worthy", description: "Gifting angle" },
       { name: "Beginner's Guide", description: "New customer onboarding" },
+      { name: "Comparison", description: "Competitive differentiation vs alternatives" },
     ],
   },
   {
@@ -63,7 +65,6 @@ export const CAMPAIGN_TYPES: CampaignType[] = [
   { name: "FAQ/Overcoming Objections", description: "Address hesitations head-on", category: "research", needsResearch: true, color: "bg-yellow-500" },
   { name: 'Press/"As Seen In"', description: "Media mentions and editorial", category: "research", needsResearch: true, color: "bg-sky-500" },
   { name: "Loyalty Program", description: "Rewards, points, VIP perks", category: "research", needsResearch: true, color: "bg-fuchsia-500" },
-  { name: "Comparison", description: "Competitive differentiation", category: "research", needsResearch: true, color: "bg-stone-500" },
 
   // SPECIAL TYPES
   { name: "📅 Calendar Dates", description: "Upcoming holidays, events & moments", category: "direct", color: "bg-emerald-400" },

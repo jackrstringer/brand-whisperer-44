@@ -249,17 +249,18 @@ export function useIdeation(brandId: string) {
     const selected = Array.from(state.selectedIdeas.values());
     const hasSelections = selected.length > 0;
 
-    // If no message and no selections, re-generate with last preferences
+    // Blank Enter with no selections → evergreen mixed-type brand ideas
     if (!message.trim() && !hasSelections) {
       if (state.activeType) {
         generateForType(state.activeType, state.activeSubtype || undefined);
         return;
       }
-      return;
+      // Fall through with mode='evergreen' to generate a general brand mix
     }
 
-    let mode: 'initial' | 'variations' | 'feedback' | 'different' = 'initial';
-    if (hasSelections && message.trim()) mode = 'feedback';
+    let mode: 'initial' | 'variations' | 'feedback' | 'different' | 'evergreen' = 'initial';
+    if (!message.trim() && !hasSelections) mode = 'evergreen';
+    else if (hasSelections && message.trim()) mode = 'feedback';
     else if (hasSelections && !message.trim()) mode = 'variations';
     else if (/\bdifferent\b/i.test(message)) mode = 'different';
 
@@ -278,7 +279,7 @@ export function useIdeation(brandId: string) {
       newNodes.push({
         id: crypto.randomUUID(),
         type: 'brief',
-        content: message,
+        content: mode === 'evergreen' ? 'Evergreen brand mix — variety of campaign types & angles' : message,
         timestamp: Date.now(),
       });
     }

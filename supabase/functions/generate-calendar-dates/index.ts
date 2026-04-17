@@ -16,7 +16,9 @@ serve(async (req) => {
     if (!brand_id) throw new Error("brand_id required");
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured (required for web-searched calendar dates)");
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -35,78 +37,76 @@ serve(async (req) => {
 
       const industry = brand?.industry || "";
 
-      const prompt = `Today is ${todayStr}. List every noteworthy date between ${todayStr} and ${endStr} that an ecommerce brand${industry ? ` in the ${industry} space` : ""} could potentially build a campaign around.
+      const prompt = `Today is ${todayStr}. Use the web_search tool to find every noteworthy date between ${todayStr} and ${endStr} that an ecommerce brand${industry ? ` in the ${industry} space` : ""} could potentially build a campaign around.
 
-Include:
-- Federal/national holidays (Memorial Day, Tax Day, etc.)
-- Cultural events and awareness months/weeks/days
+Search the web for:
+- US federal/national holidays in this date range
+- Cultural events and awareness months/weeks/days currently running
 - Social media holidays (#NationalPizzaDay, #WorldBookDay, etc.)
-- Niche observances (National Oral Health Month, National Coffee Day, etc.)
+- Niche observances${industry ? ` relevant to the ${industry} space` : ""}
 - Tax deadlines, back-to-school, seasonal transitions
-- Pop culture moments, sporting events, award shows
-- Fun/quirky holidays (National Masturbation Day, Talk Like a Pirate Day, etc.)
+- Pop culture moments, sporting events, award shows happening in this window
+- Fun/quirky national days
 
-Be thorough — include at least 15-25 dates. Real dates only. No made-up holidays.`;
+Run multiple web searches as needed. Be thorough — include at least 15-25 REAL, VERIFIED dates that fall between ${todayStr} and ${endStr}. Do not make up dates. Do not include dates outside this window.
 
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+After researching, return your final answer ONLY via the return_calendar_dates tool — no commentary.`;
+
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            { role: "system", content: "You are a calendar research assistant. Return ONLY valid JSON via the tool call. No markdown, no commentary." },
-            { role: "user", content: prompt },
-          ],
+          model: "claude-haiku-4-5",
+          max_tokens: 4096,
+          system: "You are a calendar research assistant. Use the web_search tool to find real, verified dates. Never invent holidays. Return final results only via the return_calendar_dates tool.",
           tools: [
+            { type: "web_search_20250305", name: "web_search", max_uses: 6 },
             {
-              type: "function",
-              function: {
-                name: "return_calendar_dates",
-                description: "Return the list of upcoming calendar dates",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    dates: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          date: { type: "string", description: "YYYY-MM-DD format" },
-                          name: { type: "string", description: "Event or holiday name" },
-                          type: { type: "string", enum: ["holiday", "cultural", "social_media", "awareness", "niche", "seasonal", "pop_culture"] },
-                        },
-                        required: ["date", "name", "type"],
-                        additionalProperties: false,
+              name: "return_calendar_dates",
+              description: "Return the final list of upcoming calendar dates",
+              input_schema: {
+                type: "object",
+                properties: {
+                  dates: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        date: { type: "string", description: "YYYY-MM-DD format" },
+                        name: { type: "string", description: "Event or holiday name" },
+                        type: { type: "string", enum: ["holiday", "cultural", "social_media", "awareness", "niche", "seasonal", "pop_culture"] },
                       },
+                      required: ["date", "name", "type"],
                     },
                   },
-                  required: ["dates"],
-                  additionalProperties: false,
                 },
+                required: ["dates"],
               },
             },
           ],
-          tool_choice: { type: "function", function: { name: "return_calendar_dates" } },
+          messages: [{ role: "user", content: prompt }],
         }),
       });
 
       if (!response.ok) {
         const errText = await response.text();
-        console.error("AI gateway error:", response.status, errText);
+        console.error("Anthropic calendar error:", response.status, errText);
         if (response.status === 429) return new Response(JSON.stringify({ error: "Rate limited, please try again shortly." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        if (response.status === 402) return new Response(JSON.stringify({ error: "AI credits exhausted." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-        throw new Error(`AI error: ${response.status}`);
+        throw new Error(`Anthropic error: ${response.status} ${errText.slice(0, 200)}`);
       }
 
       const result = await response.json();
-      const toolCall = result.choices?.[0]?.message?.tool_calls?.[0];
-      if (!toolCall?.function?.arguments) throw new Error("No structured output from AI");
+      const toolUseBlock = (result.content || []).find((b: any) => b.type === "tool_use" && b.name === "return_calendar_dates");
+      if (!toolUseBlock?.input?.dates) {
+        console.error("No return_calendar_dates tool call in response:", JSON.stringify(result).slice(0, 500));
+        throw new Error("AI did not return calendar dates via the structured tool call");
+      }
 
-      const parsed = JSON.parse(toolCall.function.arguments);
-      const dates = (parsed.dates || []).sort((a: any, b: any) => a.date.localeCompare(b.date));
+      const dates = (toolUseBlock.input.dates || []).sort((a: any, b: any) => a.date.localeCompare(b.date));
 
       return new Response(JSON.stringify({ dates }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

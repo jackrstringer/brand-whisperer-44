@@ -46,7 +46,7 @@ export function ChatBar({
   const isBusy = isGenerating || isChatting;
   const hasCalendarDates = calendarDateCount > 0;
 
-  let placeholder = 'Pick a campaign type above, or describe your idea...';
+  let placeholder = 'Press Enter for evergreen ideas, pick a type above, or describe your idea...';
   if (hasCalendarDates) {
     placeholder = `Press Enter to generate ideas for ${calendarDateCount} date${calendarDateCount !== 1 ? 's' : ''}...`;
   } else if (selectedCount > 1) {
@@ -72,7 +72,7 @@ export function ChatBar({
       onGenerateCalendarIdeas?.();
       return;
     }
-    if (!msg && selectedCount === 0 && !activeType) return;
+    // Allow blank Enter with no context → triggers evergreen brand-mix ideation in useIdeation.sendChat
     onSend(msg);
     setInput('');
   };
