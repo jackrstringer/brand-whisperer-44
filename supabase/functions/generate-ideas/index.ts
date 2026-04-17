@@ -343,7 +343,7 @@ Deno.serve(async (req) => {
         : "various products";
       const audience = mp.target_audience || "general consumers";
 
-      researchData = await doResearch(campaign_type_filter, brandName, industry, products, audience);
+      researchData = await doResearch(campaign_type_filter, brandName, industry, products, audience, brandData?.website_url || "");
     }
 
     // Build user prompt based on mode
@@ -360,6 +360,11 @@ Deno.serve(async (req) => {
     }
 
     switch (mode) {
+      case "evergreen":
+        userPrompt = `Generate ${ideaCount} EVERGREEN email campaign ideas for ${brandName} — a deliberately VARIED MIX of campaign types and angles (product highlight, blog/editorial, social proof, brand values, listicle, bundle, sale, FAQ, etc.). No two ideas should share the same campaign_type. Lean into the brand's actual products and positioning. These should feel like a strong evergreen lineup that could be sent any week of the year.\n`;
+        if (brief) userPrompt += `Direction: ${brief}\n`;
+        break;
+
       case "initial":
       case "bank":
         userPrompt = `Generate ${ideaCount} email campaign ideas for ${brandName}.\n`;
