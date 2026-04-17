@@ -3,8 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArrowLeft, Loader2, Download, Sparkles, MessageSquare, GitFork } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -15,7 +13,11 @@ import {
 } from "@/lib/flows/skeletonParser";
 import { SplitPane } from "@/components/ideation/SplitPane";
 import { FlowAgentChat } from "@/components/flows/FlowAgentChat";
-import { SkeletonViewer, FlowEmailRow } from "@/components/flows/SkeletonViewer";
+import {
+  SkeletonViewer,
+  FlowEmailRow,
+  FlowEmailMeta,
+} from "@/components/flows/SkeletonViewer";
 
 interface FlowRow {
   id: string;
