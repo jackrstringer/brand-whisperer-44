@@ -35,6 +35,22 @@ export default function FlowsListPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<FlowRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const { error } = await supabase.from("flows").delete().eq("id", deleteTarget.id);
+    setDeleting(false);
+    if (error) {
+      toast({ title: "Failed to delete flow", description: error.message, variant: "destructive" });
+      return;
+    }
+    setFlows((prev) => prev.filter((f) => f.id !== deleteTarget.id));
+    setDeleteTarget(null);
+    toast({ title: "Flow deleted" });
+  };
 
   useEffect(() => {
     if (!brandId) return;
