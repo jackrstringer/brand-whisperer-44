@@ -94,38 +94,59 @@ async function doResearch(
   industry: string,
   products: string,
   audience: string,
+  websiteUrl: string,
 ): Promise<string | null> {
   const promptFn = RESEARCH_PROMPTS[campaignType];
   if (!promptFn) return null;
 
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    console.warn("[generate-ideas] LOVABLE_API_KEY not set, skipping research");
+  const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!ANTHROPIC_API_KEY) {
+    console.error("[generate-ideas] ANTHROPIC_API_KEY not set — cannot run web research");
     return null;
   }
 
+  // Build a research prompt that forces real web search anchored to the brand domain
+  const domainHint = websiteUrl ? ` (official site: ${websiteUrl})` : "";
+  const basePrompt = promptFn(brandName, industry, products, audience);
+  const userPrompt = `${basePrompt}
+
+CRITICAL: Use the web_search tool to find REAL, CURRENT information. Do not hallucinate.
+- The brand is "${brandName}"${domainHint}.
+- Always include the brand name${websiteUrl ? ` and/or domain (${websiteUrl})` : ""} in your search queries to disambiguate from unrelated companies with similar names.
+- If you cannot find real evidence after multiple searches, say so explicitly — do not invent press mentions, reviews, competitors, or program details.
+
+Return a concise factual brief (≤500 words) with bullet points and direct quotes/links where useful. No fluff.`;
+
   try {
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{ role: "user", content: promptFn(brandName, industry, products, audience) }],
-        temperature: 0.3,
-        max_tokens: 8192,
+        model: "claude-haiku-4-5",
+        max_tokens: 4096,
+        system: "You are a marketing researcher. Use the web_search tool aggressively to find real, current, brand-specific information. Never fabricate facts. Always disambiguate brands with generic names by including the official domain in queries.",
+        tools: [
+          { type: "web_search_20250305", name: "web_search", max_uses: 8 },
+        ],
+        messages: [{ role: "user", content: userPrompt }],
       }),
     });
 
     if (!resp.ok) {
-      console.error("[generate-ideas] Research API error:", resp.status);
+      const errText = await resp.text();
+      console.error("[generate-ideas] Anthropic web_search error:", resp.status, errText);
       return null;
     }
 
     const result = await resp.json();
-    return result.choices?.[0]?.message?.content || null;
+    const textBlocks = (result.content || []).filter((b: any) => b.type === "text");
+    const text = textBlocks.map((b: any) => b.text).join("\n").trim();
+    console.log(`[generate-ideas] Web research complete for "${campaignType}" — ${text.length} chars`);
+    return text || null;
   } catch (err) {
     console.error("[generate-ideas] Research error:", err);
     return null;
