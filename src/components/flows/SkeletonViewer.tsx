@@ -90,10 +90,11 @@ export function SkeletonViewer(props: Props) {
         minScale={0.35}
         maxScale={2.2}
         limitToBounds={false}
-        wheel={{ step: 0.08 }}
+        wheel={{ step: 0.04, smoothStep: 0.004 }}
         doubleClick={{ disabled: true }}
-        panning={{ velocityDisabled: true, excluded: ["input", "textarea", "button"] }}
-        pinch={{ step: 5 }}
+        panning={{ velocityDisabled: false, excluded: ["input", "textarea", "button"] }}
+        pinch={{ step: 2 }}
+        smooth
       >
         {() => (
           <>
