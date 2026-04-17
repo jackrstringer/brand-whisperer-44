@@ -223,9 +223,8 @@ Deno.serve(async (req) => {
       })
       .eq("brand_id", brand_id);
 
-    // Run pipeline in background — do not await
-    const promise = runPipeline(supabase, brand_id);
-    promise.catch(async (err: any) => {
+    // Run pipeline in background — keep isolate alive via waitUntil
+    const bgTask = runPipeline(supabase, brand_id).catch(async (err: any) => {
       console.error("[campaign-report] Pipeline error:", err);
       await supabase
         .from("brand_intelligence")
@@ -235,6 +234,12 @@ Deno.serve(async (req) => {
         })
         .eq("brand_id", brand_id);
     });
+
+    // @ts-ignore — EdgeRuntime is available in Supabase Edge Runtime
+    if (typeof EdgeRuntime !== "undefined" && EdgeRuntime.waitUntil) {
+      // @ts-ignore
+      EdgeRuntime.waitUntil(bgTask);
+    }
 
     // Return immediately — frontend polls campaign_report_status
     return new Response(
