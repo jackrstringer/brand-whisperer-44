@@ -153,7 +153,7 @@ function ZoomToolbar() {
 
 function CanvasContent({
   nodes,
-  meta,
+  meta = {},
   flowType,
   emails,
   campaignMeta = {},
