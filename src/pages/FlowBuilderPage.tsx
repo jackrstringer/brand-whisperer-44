@@ -7,6 +7,7 @@ import { ArrowLeft, Loader2, Download, Sparkles, MessageSquare, GitFork } from "
 import { toast } from "@/hooks/use-toast";
 import {
   parseSkeleton,
+  parseSkeletonMeta,
   ParsedFlowNode,
   FLOW_TRIGGERS,
   FLOW_TYPE_META,
@@ -112,6 +113,10 @@ export default function FlowBuilderPage() {
 
   const parsedNodes = useMemo(
     () => parseSkeleton(flow?.skeleton_markdown),
+    [flow?.skeleton_markdown]
+  );
+  const parsedMeta = useMemo(
+    () => parseSkeletonMeta(flow?.skeleton_markdown),
     [flow?.skeleton_markdown]
   );
   const emailNodes = useMemo(
