@@ -18,6 +18,36 @@ interface Props {
   initialMessages: Msg[];
   currentSkeleton: string | null;
   onSkeletonUpdated: () => void;
+  /** When true, constrain chat to a centered, narrower column (used pre-skeleton). */
+  centered?: boolean;
+}
+
+interface FlowQuestion {
+  question: string;
+  options?: string[];
+  allow_other?: boolean;
+}
+
+const QUESTION_FENCE = /```flow-question\s*([\s\S]*?)```/;
+const SKELETON_FENCE = /```flow-skeleton[\s\S]*?```/;
+
+function extractQuestion(content: string): FlowQuestion | null {
+  const m = content.match(QUESTION_FENCE);
+  if (!m) return null;
+  try {
+    const parsed = JSON.parse(m[1].trim());
+    if (parsed && typeof parsed.question === "string") return parsed as FlowQuestion;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function stripFences(content: string): string {
+  return content
+    .replace(QUESTION_FENCE, "")
+    .replace(SKELETON_FENCE, "_(skeleton updated — see the canvas)_")
+    .trim();
 }
 
 export function FlowAgentChat({
@@ -27,6 +57,7 @@ export function FlowAgentChat({
   initialMessages,
   currentSkeleton,
   onSkeletonUpdated,
+  centered = false,
 }: Props) {
   const [messages, setMessages] = useState<Msg[]>(initialMessages);
   const [input, setInput] = useState("");
@@ -35,7 +66,6 @@ export function FlowAgentChat({
   const initFired = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Auto-init if no messages yet
   useEffect(() => {
     if (initFired.current) return;
     if (initialMessages.length === 0 && !streaming) {
@@ -112,11 +142,7 @@ export function FlowAgentChat({
         }
       }
 
-      setMessages((m) => [
-        ...m,
-        ...(isInit && initialMessages.length === 0 ? [] : []),
-        { role: "assistant", content: full },
-      ]);
+      setMessages((m) => [...m, { role: "assistant", content: full }]);
       setStreamBuf("");
       if (skeletonUpdated) onSkeletonUpdated();
     } catch (err: any) {
@@ -131,30 +157,66 @@ export function FlowAgentChat({
     }
   };
 
+  // Find the latest assistant message — only render its question chips (older ones are answered)
+  const lastAssistantIdx = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "assistant") return i;
+    }
+    return -1;
+  })();
+
   return (
     <div className="flex flex-col h-full bg-background">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-        {messages.length === 0 && !streaming && (
-          <div className="text-sm text-muted-foreground text-center py-8">
-            Starting agent…
-          </div>
-        )}
-        {messages.map((m, i) => (
-          <MessageBubble key={i} role={m.role} content={m.content} />
-        ))}
-        {streaming && streamBuf && <MessageBubble role="assistant" content={streamBuf} streaming />}
-        {streaming && !streamBuf && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Thinking…
-          </div>
-        )}
+      <div
+        ref={scrollRef}
+        className={`flex-1 overflow-y-auto px-5 py-6 ${
+          centered ? "flex justify-center" : ""
+        }`}
+      >
+        <div className={`w-full ${centered ? "max-w-2xl" : ""} space-y-4`}>
+          {messages.length === 0 && !streaming && (
+            <div className="text-sm text-muted-foreground text-center py-8">
+              Starting agent…
+            </div>
+          )}
+          {messages.map((m, i) => {
+            const isLastAssistant = i === lastAssistantIdx;
+            const question = m.role === "assistant" ? extractQuestion(m.content) : null;
+            return (
+              <MessageBubble
+                key={i}
+                role={m.role}
+                content={m.content}
+                question={question}
+                showQuestionChips={isLastAssistant && !streaming}
+                onAnswer={(answer) => sendMessage(answer)}
+                disabled={streaming}
+              />
+            );
+          })}
+          {streaming && streamBuf && (
+            <MessageBubble
+              role="assistant"
+              content={streamBuf}
+              streaming
+              question={null}
+              showQuestionChips={false}
+              disabled
+            />
+          )}
+          {streaming && !streamBuf && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Thinking…
+            </div>
+          )}
+        </div>
       </div>
-      <div className="border-t border-border p-3">
-        <div className="flex gap-2">
+      <div className={`border-t border-border p-3 ${centered ? "flex justify-center" : ""}`}>
+        <div className={`flex gap-2 w-full ${centered ? "max-w-2xl" : ""}`}>
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Reply to the agent…"
+            placeholder="Type your answer…"
             disabled={streaming}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -182,10 +244,18 @@ function MessageBubble({
   role,
   content,
   streaming,
+  question,
+  showQuestionChips,
+  onAnswer,
+  disabled,
 }: {
   role: string;
   content: string;
   streaming?: boolean;
+  question: FlowQuestion | null;
+  showQuestionChips: boolean;
+  onAnswer?: (answer: string) => void;
+  disabled?: boolean;
 }) {
   const isUser = role === "user";
   const isSystem = role === "system";
@@ -196,8 +266,9 @@ function MessageBubble({
       </div>
     );
   }
-  // Hide raw flow-skeleton blocks from chat — the visualizer renders them.
-  const cleanContent = content.replace(/```flow-skeleton[\s\S]*?```/g, "_(skeleton updated — see the canvas)_");
+
+  const cleanContent = stripFences(content);
+
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
@@ -207,11 +278,106 @@ function MessageBubble({
             : "bg-muted text-foreground"
         }`}
       >
-        <div className="prose prose-sm dark:prose-invert max-w-none [&>*]:my-1.5">
-          <ReactMarkdown>{cleanContent}</ReactMarkdown>
-        </div>
+        {/* Render the question prompt (from JSON if present, else the assistant's prose) */}
+        {question ? (
+          <div className="font-medium text-foreground mb-2">{question.question}</div>
+        ) : cleanContent ? (
+          <div className="prose prose-sm dark:prose-invert max-w-none [&>*]:my-1.5">
+            <ReactMarkdown>{cleanContent}</ReactMarkdown>
+          </div>
+        ) : null}
+
+        {/* Optional follow-up prose if both question + extra content exist */}
+        {question && cleanContent && (
+          <div className="prose prose-sm dark:prose-invert max-w-none [&>*]:my-1.5 mt-2 text-muted-foreground">
+            <ReactMarkdown>{cleanContent}</ReactMarkdown>
+          </div>
+        )}
+
+        {/* Question chips */}
+        {question && showQuestionChips && onAnswer && (
+          <QuestionChips
+            options={question.options || []}
+            allowOther={question.allow_other !== false}
+            onAnswer={onAnswer}
+            disabled={disabled}
+          />
+        )}
+
         {streaming && <span className="inline-block w-1.5 h-3 bg-current ml-0.5 animate-pulse" />}
       </div>
+    </div>
+  );
+}
+
+function QuestionChips({
+  options,
+  allowOther,
+  onAnswer,
+  disabled,
+}: {
+  options: string[];
+  allowOther: boolean;
+  onAnswer: (answer: string) => void;
+  disabled?: boolean;
+}) {
+  const [showOther, setShowOther] = useState(false);
+  const [otherText, setOtherText] = useState("");
+
+  return (
+    <div className="mt-3 space-y-2">
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((opt) => (
+          <button
+            key={opt}
+            disabled={disabled}
+            onClick={() => onAnswer(opt)}
+            className="px-3 py-1.5 text-xs font-medium rounded-full bg-background border border-border hover:bg-accent hover:border-primary/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-foreground"
+          >
+            {opt}
+          </button>
+        ))}
+        {allowOther && !showOther && (
+          <button
+            disabled={disabled}
+            onClick={() => setShowOther(true)}
+            className="px-3 py-1.5 text-xs font-medium rounded-full bg-background border border-dashed border-border hover:border-primary/40 transition-colors disabled:opacity-50 text-muted-foreground"
+          >
+            Something else?
+          </button>
+        )}
+      </div>
+      {showOther && (
+        <div className="flex gap-1.5">
+          <input
+            autoFocus
+            value={otherText}
+            onChange={(e) => setOtherText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && otherText.trim()) {
+                onAnswer(otherText.trim());
+                setOtherText("");
+                setShowOther(false);
+              }
+            }}
+            disabled={disabled}
+            placeholder="Type your answer…"
+            className="flex-1 px-3 py-1.5 text-xs rounded-full bg-background border border-border focus:outline-none focus:border-primary/60 text-foreground"
+          />
+          <Button
+            size="sm"
+            disabled={disabled || !otherText.trim()}
+            onClick={() => {
+              onAnswer(otherText.trim());
+              setOtherText("");
+              setShowOther(false);
+            }}
+            className="h-7 px-3 text-xs rounded-full"
+          >
+            Send
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
