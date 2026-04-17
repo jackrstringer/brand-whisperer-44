@@ -56,6 +56,14 @@ export function useIdeation(brandId: string) {
   const streamBufferRef = useRef<Map<string, Record<string, string>>>(new Map());
   const rafRef = useRef<number | null>(null);
 
+  // Hydrate turbo mode from localStorage (persists across sessions & accounts)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('lucy:turboMode');
+      if (saved === 'true') setState(s => (s.turboMode ? s : { ...s, turboMode: true }));
+    } catch {}
+  }, []);
+
   // Load existing session on mount
   useEffect(() => {
     if (!user || !brandId) return;
@@ -374,7 +382,11 @@ export function useIdeation(brandId: string) {
   }, []);
 
   const toggleTurboMode = useCallback(() => {
-    setState(s => ({ ...s, turboMode: !s.turboMode }));
+    setState(s => {
+      const next = !s.turboMode;
+      try { localStorage.setItem('lucy:turboMode', next ? 'true' : 'false'); } catch {}
+      return { ...s, turboMode: next };
+    });
   }, []);
 
   const startNewSession = useCallback(() => {
