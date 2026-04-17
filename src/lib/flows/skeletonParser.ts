@@ -17,10 +17,21 @@ export interface ParsedFlowNode {
 
 function detectType(line: string): FlowNodeType | null {
   const upper = line.trim().toUpperCase();
+  // Bracket format (preferred)
   if (upper.startsWith("[EMAIL")) return "email";
   if (upper.startsWith("[DELAY")) return "delay";
   if (upper.startsWith("[CONDITIONAL SPLIT") || upper.startsWith("[SPLIT")) return "split";
   if (upper.startsWith("[SMS")) return "sms";
+  // Markdown header fallback (defense-in-depth)
+  // Matches "## EMAIL 1:", "### Email 2 -", "## DELAY", etc.
+  const headerMatch = upper.match(/^#+\s*(EMAIL|DELAY|SPLIT|CONDITIONAL\s+SPLIT|SMS)\b/);
+  if (headerMatch) {
+    const kind = headerMatch[1];
+    if (kind.startsWith("EMAIL")) return "email";
+    if (kind.startsWith("DELAY")) return "delay";
+    if (kind.includes("SPLIT")) return "split";
+    if (kind === "SMS") return "sms";
+  }
   return null;
 }
 
