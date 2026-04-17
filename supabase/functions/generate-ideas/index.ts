@@ -410,18 +410,19 @@ Deno.serve(async (req) => {
 
     // Output format
     if (turbo_mode) {
-      userPrompt += `\n\nFor each idea, give me ONLY a title and campaign_type. Keep titles punchy and specific.\nReturn ONLY a JSON array:\n[{ "title": "…", "campaign_type": "…" }]`;
+      userPrompt += `\n\nFor each idea, give me ONLY a title, campaign_type, and featured_design_elements (1–3 slugs from the library).\nReturn ONLY a JSON array:\n[{ "title": "…", "campaign_type": "…", "featured_design_elements": ["slug-1"] }]`;
     } else {
       userPrompt += `\n\nFor each idea, return a JSON object with these fields:
 - "title": Campaign name (punchy, specific, max 8 words)
 - "description": One-sentence summary (max 15 words, punchy and clear)
 - "subject_line": Email subject line
 - "campaign_type": The campaign type category (e.g., "Product Highlight", "Sale/Promo")
-- "campaign_info": 2-3 sentences describing what this email should contain — the key message, product focus, offer details, and structural approach. This will pre-fill the campaign brief field in the generation screen.
-- "copy_direction": 1-2 sentences describing the tone, voice angle, and any specific copy hooks to use. This will pre-fill the copy guidance field.
+- "featured_design_elements": Array of 1–3 EXACT slugs from the design element library above (e.g. ["feature-checklist-matrix","founder-expert-quote-card"]) — the named visual blocks this email leads with.
+- "campaign_info": 2-3 sentences describing what this email should contain — the key message, product focus, offer details, and structural approach. Reference the chosen design elements by name where useful. This will pre-fill the campaign brief field in the generation screen.
+- "copy_direction": 1-2 sentences describing the tone, voice angle, and any specific copy hooks to use.
 
 Return ONLY a JSON array. No other text, no markdown:
-[{ "title": "…", "description": "…", "subject_line": "…", "campaign_type": "…", "campaign_info": "…", "copy_direction": "…" }]`;
+[{ "title": "…", "description": "…", "subject_line": "…", "campaign_type": "…", "featured_design_elements": ["…"], "campaign_info": "…", "copy_direction": "…" }]`;
     }
 
     // Call Claude Haiku 4.5
@@ -530,7 +531,7 @@ Return ONLY a JSON array. No other text, no markdown:
                       const trimmed = jsonBuffer.trim();
                       if (parsingFieldValue) {
                         // Emit the complete field
-                        const streamableFields = ["title", "description", "subject_line", "campaign_type", "campaign_info", "copy_direction"];
+                        const streamableFields = ["title", "description", "subject_line", "campaign_type", "campaign_info", "copy_direction", "featured_design_elements"];
                         if (streamableFields.includes(currentFieldKey)) {
                           controller.enqueue(encoder.encode(sseEncode("idea_field", {
                             index: ideaIndex,

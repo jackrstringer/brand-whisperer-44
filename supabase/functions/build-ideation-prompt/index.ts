@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { DESIGN_ELEMENT_LIBRARY_COMPACT } from "../_shared/emailCopywriterSkill.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -384,6 +385,9 @@ Never drift into adjacent categories or invent products the brand does not sell.
       });
       prompt += `\n`;
     }
+
+    // --- SECTION J: Design Element Library (so Lucy proposes specific named visual blocks) ---
+    prompt += `--- DESIGN ELEMENT LIBRARY ---\n${DESIGN_ELEMENT_LIBRARY_COMPACT}\n\nWhen generating ideas, anchor each one to 1–3 specific named blocks from the library (use exact slugs in featured_design_elements). Ideas should be expressed in terms of the visual blocks they lead with, not generic angles.\n\n`;
 
     // Save compiled prompt
     await supabase.from("brands").update({
