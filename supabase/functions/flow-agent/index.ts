@@ -202,15 +202,15 @@ Deno.serve(async (req) => {
         })
       : brandIntel;
 
-    const systemPrompt = `You are an elite Klaviyo email flow strategist for DTC brands. You build complete, implementable email flow skeletons through a tight, low-friction conversation.
+    const systemPrompt = `You are an elite Klaviyo email flow strategist for DTC brands. You build BRIEF, structural flow skeletons — NOT copy.
 
-SKILL DOCUMENTS:
+SKILL DOCUMENTS (reference only — strategic principles, not copy templates):
 ${baseSkill}
 
-FLOW-SPECIFIC SKILL:
+FLOW-SPECIFIC SKILL (reference only — extract structure, IGNORE the per-email "Subject line direction / Sections / Copy spec" verbose format; use the BRACKET FORMAT below instead):
 ${flowSkills.filter(Boolean).join("\n\n---\n\n")}
 
-DESIGN ELEMENT LIBRARY:
+DESIGN ELEMENT LIBRARY (reference only — name elements, do not write copy):
 ${designLibrary}
 
 BRAND:
@@ -280,10 +280,38 @@ Output exactly one fenced code block per turn:
 - Omit the block (plain text) only for genuinely open-ended questions.
 - Never repeat the question text outside the block.
 
-SKELETON GENERATION:
-- When you have enough info, output the complete flow skeleton in the format from base-flow.md, wrapped in \`\`\`flow-skeleton.
-- When a skeleton exists and the user requests changes, return the FULL updated skeleton in the same fence.
-- Reference design elements by their exact names from the library.
+SKELETON GENERATION — STRICT BRACKET FORMAT (CRITICAL):
+When you have enough info, output the skeleton inside a \`\`\`flow-skeleton fence. Use ONLY this exact format:
+
+\`\`\`flow-skeleton
+[EMAIL 1 — Short label like "Welcome + offer"]
+Timing: Immediate
+Job: One sentence on what this email accomplishes.
+Subject direction: Angle or hook direction (NOT an actual subject line).
+Sections:
+- Hero block — what it shows (1 line)
+- Proof element — what kind (1 line)
+- CTA — destination (1 line)
+Notes: ≤1 line if needed.
+
+---
+
+[DELAY] — 24h
+
+---
+
+[EMAIL 2 — Label]
+...
+\`\`\`
+
+ABSOLUTE RULES FOR THE SKELETON:
+- BRACKET headers only: \`[EMAIL N — Label]\`, \`[DELAY] — duration\`, \`[CONDITIONAL SPLIT — condition]\`, \`[SMS — Label]\`. NEVER \`## EMAIL\` or \`### Email\`.
+- Separate every node with a line containing only \`---\`.
+- DO NOT write actual subject lines. DO NOT write preview text. DO NOT write any body copy, hero copy, headlines, CTAs copy, or PS lines.
+- "Subject direction" is an ANGLE description (e.g. "Curiosity hook around dentist surprise"), not a real SL.
+- Sections are 3–5 short BULLETS describing what each block IS, not what it SAYS.
+- Total skeleton ≤80 lines. If you find yourself writing a paragraph, stop — it belongs in copy generation later.
+- When updating an existing skeleton, return the FULL updated skeleton in the same bracket format.
 
 CURRENT SKELETON:
 ${current_skeleton || "(none yet — build from scratch when ready)"}`;
@@ -326,7 +354,7 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
             },
             body: JSON.stringify({
               model: "claude-sonnet-4-5-20250929",
-              max_tokens: 8000,
+              max_tokens: 2500,
               system: systemPrompt,
               messages,
               stream: true,
@@ -344,6 +372,52 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
           const reader = res.body.getReader();
           const dec = new TextDecoder();
           let buf = "";
+          // Track whether we're currently inside a ```flow-skeleton fence so we
+          // can route those tokens to a separate SSE event (canvas-only, not chat).
+          let inSkeletonFence = false;
+          let pendingTail = ""; // small lookahead buffer for fence-marker detection
+          const SKELETON_OPEN = "```flow-skeleton";
+          const FENCE_CLOSE = "```";
+
+          const flushChunk = (chunk: string) => {
+            if (!chunk) return;
+            // Combine with any pending tail from the previous chunk so we never
+            // miss a fence marker that straddles two deltas.
+            let working = pendingTail + chunk;
+            pendingTail = "";
+
+            while (working.length > 0) {
+              if (!inSkeletonFence) {
+                const openIdx = working.indexOf(SKELETON_OPEN);
+                if (openIdx === -1) {
+                  // Hold back the last few chars in case a fence marker is starting
+                  const safeLen = Math.max(0, working.length - (SKELETON_OPEN.length - 1));
+                  if (safeLen > 0) send({ type: "text", content: working.slice(0, safeLen) });
+                  pendingTail = working.slice(safeLen);
+                  return;
+                }
+                if (openIdx > 0) send({ type: "text", content: working.slice(0, openIdx) });
+                inSkeletonFence = true;
+                send({ type: "skeleton_start" });
+                working = working.slice(openIdx + SKELETON_OPEN.length);
+              } else {
+                const closeIdx = working.indexOf(FENCE_CLOSE);
+                if (closeIdx === -1) {
+                  const safeLen = Math.max(0, working.length - (FENCE_CLOSE.length - 1));
+                  if (safeLen > 0)
+                    send({ type: "skeleton_chunk", content: working.slice(0, safeLen) });
+                  pendingTail = working.slice(safeLen);
+                  return;
+                }
+                if (closeIdx > 0)
+                  send({ type: "skeleton_chunk", content: working.slice(0, closeIdx) });
+                inSkeletonFence = false;
+                send({ type: "skeleton_end" });
+                working = working.slice(closeIdx + FENCE_CLOSE.length);
+              }
+            }
+          };
+
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -359,10 +433,16 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
                 if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
                   const chunk = evt.delta.text || "";
                   fullText += chunk;
-                  send({ type: "text", content: chunk });
+                  flushChunk(chunk);
                 }
               } catch {}
             }
+          }
+          // Flush any remaining tail text (only matters for non-fence content)
+          if (pendingTail) {
+            if (inSkeletonFence) send({ type: "skeleton_chunk", content: pendingTail });
+            else send({ type: "text", content: pendingTail });
+            pendingTail = "";
           }
 
           // Persist conversation + extract skeleton

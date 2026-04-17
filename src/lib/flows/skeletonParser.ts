@@ -17,10 +17,21 @@ export interface ParsedFlowNode {
 
 function detectType(line: string): FlowNodeType | null {
   const upper = line.trim().toUpperCase();
+  // Bracket format (preferred)
   if (upper.startsWith("[EMAIL")) return "email";
   if (upper.startsWith("[DELAY")) return "delay";
   if (upper.startsWith("[CONDITIONAL SPLIT") || upper.startsWith("[SPLIT")) return "split";
   if (upper.startsWith("[SMS")) return "sms";
+  // Markdown header fallback (defense-in-depth)
+  // Matches "## EMAIL 1:", "### Email 2 -", "## DELAY", etc.
+  const headerMatch = upper.match(/^#+\s*(EMAIL|DELAY|SPLIT|CONDITIONAL\s+SPLIT|SMS)\b/);
+  if (headerMatch) {
+    const kind = headerMatch[1];
+    if (kind.startsWith("EMAIL")) return "email";
+    if (kind.startsWith("DELAY")) return "delay";
+    if (kind.includes("SPLIT")) return "split";
+    if (kind === "SMS") return "sms";
+  }
   return null;
 }
 
@@ -47,18 +58,47 @@ function extractSections(block: string): string[] | undefined {
 }
 
 function extractLabel(firstLine: string): string {
-  // [EMAIL 1 — Welcome + Offer]  →  "Welcome + Offer"  (or whole bracket content if no dash)
-  const inner = firstLine.match(/\[([^\]]+)\]/)?.[1] ?? firstLine;
-  const dashSplit = inner.split(/[—–-]/);
-  return (dashSplit.length > 1 ? dashSplit.slice(1).join("-") : inner).trim();
+  // Bracket: [EMAIL 1 — Welcome + Offer] → "Welcome + Offer"
+  const bracket = firstLine.match(/\[([^\]]+)\]/)?.[1];
+  if (bracket) {
+    const dashSplit = bracket.split(/[—–-]/);
+    return (dashSplit.length > 1 ? dashSplit.slice(1).join("-") : bracket).trim();
+  }
+  // Markdown header: "## EMAIL 1: Welcome + Offer" or "## Email 1 - Welcome"
+  const stripped = firstLine.replace(/^#+\s*/, "").replace(/^(EMAIL|DELAY|SPLIT|CONDITIONAL SPLIT|SMS)\s*\d*\s*[:\-—–]?\s*/i, "");
+  return stripped.trim() || firstLine.trim();
+}
+
+function splitIntoBlocks(markdown: string): string[] {
+  // Primary: split on `---` separators
+  const dashSplit = markdown
+    .split(/\n\s*---+\s*\n/)
+    .map((b) => b.trim())
+    .filter(Boolean);
+  if (dashSplit.length > 1) return dashSplit;
+
+  // Fallback: split on bracket headers OR markdown headers (## EMAIL, etc.)
+  const lines = markdown.split("\n");
+  const blocks: string[] = [];
+  let current: string[] = [];
+  const isHeader = (l: string) =>
+    /^\s*\[(EMAIL|DELAY|CONDITIONAL\s+SPLIT|SPLIT|SMS)/i.test(l) ||
+    /^\s*#+\s*(EMAIL|DELAY|SPLIT|CONDITIONAL\s+SPLIT|SMS)\b/i.test(l);
+  for (const line of lines) {
+    if (isHeader(line) && current.length > 0) {
+      blocks.push(current.join("\n").trim());
+      current = [line];
+    } else {
+      current.push(line);
+    }
+  }
+  if (current.length > 0) blocks.push(current.join("\n").trim());
+  return blocks.filter(Boolean);
 }
 
 export function parseSkeleton(markdown: string | null | undefined): ParsedFlowNode[] {
   if (!markdown?.trim()) return [];
-  const blocks = markdown
-    .split(/\n\s*---+\s*\n/)
-    .map((b) => b.trim())
-    .filter(Boolean);
+  const blocks = splitIntoBlocks(markdown);
 
   const nodes: ParsedFlowNode[] = [];
   for (const block of blocks) {

@@ -98,6 +98,7 @@ export function FlowAgentChat({
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [streamBuf, setStreamBuf] = useState("");
+  const [skeletonStreaming, setSkeletonStreaming] = useState(false);
   const [stages, setStages] = useState<{ key: string; status: "active" | "done" }[]>([]);
   const initFired = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -132,6 +133,7 @@ export function FlowAgentChat({
     }
     setStreaming(true);
     setStreamBuf("");
+    setSkeletonStreaming(false);
     setStages([]);
 
     try {
@@ -177,6 +179,19 @@ export function FlowAgentChat({
                 next.push({ key: evt.stage, status: "active" });
                 return next;
               });
+            } else if (evt.type === "skeleton_start") {
+              setSkeletonStreaming(true);
+              setStages((prev) => {
+                const next: { key: string; status: "active" | "done" }[] =
+                  prev.map((s) => ({ key: s.key, status: "done" }));
+                next.push({ key: "drafting", status: "active" });
+                return next;
+              });
+            } else if (evt.type === "skeleton_chunk") {
+              // Skeleton text is routed to the canvas via realtime DB updates
+              // when the function persists. We only show a UI hint here.
+            } else if (evt.type === "skeleton_end") {
+              setSkeletonStreaming(false);
             } else if (evt.type === "text") {
               if (!firstTextReceived) {
                 firstTextReceived = true;
@@ -203,6 +218,7 @@ export function FlowAgentChat({
       setMessages((m) => [...m, { role: "assistant", content: full }]);
       setStreamBuf("");
       setStages([]);
+      setSkeletonStreaming(false);
       if (skeletonUpdated) onSkeletonUpdated();
     } catch (err: any) {
       console.error("[FlowAgentChat]", err);
@@ -212,6 +228,7 @@ export function FlowAgentChat({
       ]);
       setStreamBuf("");
       setStages([]);
+      setSkeletonStreaming(false);
     } finally {
       setStreaming(false);
     }
@@ -265,6 +282,15 @@ export function FlowAgentChat({
                 />
               )}
             </>
+          )}
+          {streaming && skeletonStreaming && (
+            <div className="rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3 flex items-center gap-2.5 animate-fade-in max-w-md">
+              <Sparkles className="w-3.5 h-3.5 text-primary animate-pulse" />
+              <span className="text-xs font-medium text-foreground">
+                Drafting skeleton on the canvas →
+              </span>
+              <PulseDots />
+            </div>
           )}
           {streaming && !streamBuf && stages.length === 0 && (
             <ProgressStages stages={[{ key: "reading", status: "active" }]} />

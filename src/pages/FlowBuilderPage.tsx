@@ -3,8 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArrowLeft, Loader2, Download, Sparkles, MessageSquare, GitFork } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -15,7 +13,11 @@ import {
 } from "@/lib/flows/skeletonParser";
 import { SplitPane } from "@/components/ideation/SplitPane";
 import { FlowAgentChat } from "@/components/flows/FlowAgentChat";
-import { SkeletonViewer, FlowEmailRow } from "@/components/flows/SkeletonViewer";
+import {
+  SkeletonViewer,
+  FlowEmailRow,
+  FlowEmailMeta,
+} from "@/components/flows/SkeletonViewer";
 
 interface FlowRow {
   id: string;
@@ -32,12 +34,11 @@ export default function FlowBuilderPage() {
   const navigate = useNavigate();
   const [flow, setFlow] = useState<FlowRow | null>(null);
   const [emails, setEmails] = useState<FlowEmailRow[]>([]);
+  const [campaignMeta, setCampaignMeta] = useState<Record<string, FlowEmailMeta>>({});
   const [loading, setLoading] = useState(true);
   const [generatingIndex, setGeneratingIndex] = useState<number | null>(null);
   const [bulkGenerating, setBulkGenerating] = useState(false);
-  const [editingNodeIndex, setEditingNodeIndex] = useState<number | null>(null);
-  const [editDraft, setEditDraft] = useState<Partial<ParsedFlowNode>>({});
-  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [mobileTab, setMobileTab] = useState<"canvas" | "chat">("canvas");
   const [nameDraft, setNameDraft] = useState("");
   const [editingName, setEditingName] = useState(false);
@@ -56,7 +57,26 @@ export default function FlowBuilderPage() {
       setFlow(f as FlowRow);
       setNameDraft(f.name);
     }
-    setEmails((e as FlowEmailRow[]) || []);
+    const emailRows = (e as FlowEmailRow[]) || [];
+    setEmails(emailRows);
+
+    // Pull campaign meta (subject_line, preview_text) for any linked campaigns
+    const campaignIds = emailRows
+      .map((row) => row.campaign_id)
+      .filter((id): id is string => !!id);
+    if (campaignIds.length > 0) {
+      const { data: camps } = await supabase
+        .from("campaigns")
+        .select("id, subject_line, preview_text")
+        .in("id", campaignIds);
+      if (camps) {
+        const map: Record<string, FlowEmailMeta> = {};
+        for (const c of camps as { id: string; subject_line: string | null; preview_text: string | null }[]) {
+          map[c.id] = { subject_line: c.subject_line, preview_text: c.preview_text };
+        }
+        setCampaignMeta(map);
+      }
+    }
     setLoading(false);
   };
 
@@ -271,33 +291,18 @@ Notes: ${node.notes || "none"}`;
     URL.revokeObjectURL(url);
   };
 
-  const openEditNode = (idx: number) => {
+  const saveNodeEdit = async (idx: number, patch: Partial<ParsedFlowNode>) => {
+    if (!flow) return;
     const node = emailNodes[idx];
     if (!node) return;
-    setEditingNodeIndex(idx);
-    setEditDraft({
-      label: node.label,
-      timing: node.timing,
-      job: node.job,
-      subject_direction: node.subject_direction,
-      notes: node.notes,
-      sections: node.sections,
-    });
-  };
-
-  const saveNodeEdit = async () => {
-    if (editingNodeIndex === null || !flow) return;
-    const idx = editingNodeIndex;
-    const node = emailNodes[idx];
-    if (!node) return;
-    let emailRow = emails.find((e) => e.sequence_index === idx);
+    const emailRow = emails.find((e) => e.sequence_index === idx);
     const payload = {
-      label: editDraft.label || node.label,
-      timing: editDraft.timing,
-      job: editDraft.job,
-      subject_direction: editDraft.subject_direction,
-      notes: editDraft.notes,
-      sections: editDraft.sections,
+      label: patch.label || node.label,
+      timing: patch.timing,
+      job: patch.job,
+      subject_direction: patch.subject_direction,
+      notes: patch.notes,
+      sections: patch.sections,
     };
     if (emailRow) {
       await supabase.from("flow_emails").update(payload).eq("id", emailRow.id);
@@ -310,8 +315,6 @@ Notes: ${node.notes || "none"}`;
         ...payload,
       });
     }
-    setEditingNodeIndex(null);
-    setEditDraft({});
     await loadAll();
   };
 
@@ -430,10 +433,13 @@ Notes: ${node.notes || "none"}`;
                 <SkeletonViewer
                   nodes={parsedNodes}
                   emails={emails}
+                  campaignMeta={campaignMeta}
+                  expandedIndex={expandedIndex}
+                  onToggleExpand={setExpandedIndex}
                   onGenerateNode={generateSingleEmail}
-                  onEditNode={openEditNode}
-                  onPreviewNode={setPreviewIndex}
+                  onSaveNodeEdit={saveNodeEdit}
                   generatingIndex={generatingIndex}
+                  drafting={flow.status === "draft" || flow.status === "generating"}
                 />
               }
               right={
@@ -455,10 +461,13 @@ Notes: ${node.notes || "none"}`;
               <SkeletonViewer
                 nodes={parsedNodes}
                 emails={emails}
+                campaignMeta={campaignMeta}
+                expandedIndex={expandedIndex}
+                onToggleExpand={setExpandedIndex}
                 onGenerateNode={generateSingleEmail}
-                onEditNode={openEditNode}
-                onPreviewNode={setPreviewIndex}
+                onSaveNodeEdit={saveNodeEdit}
                 generatingIndex={generatingIndex}
+                drafting={flow.status === "draft" || flow.status === "generating"}
               />
             ) : (
               <FlowAgentChat
@@ -473,101 +482,6 @@ Notes: ${node.notes || "none"}`;
           </div>
         </>
       )}
-
-      {/* Edit Brief dialog */}
-      <Dialog
-        open={editingNodeIndex !== null}
-        onOpenChange={(o) => !o && setEditingNodeIndex(null)}
-      >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              Edit Email {editingNodeIndex !== null ? editingNodeIndex + 1 : ""}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Field label="Label">
-              <Input
-                value={editDraft.label || ""}
-                onChange={(e) => setEditDraft((d) => ({ ...d, label: e.target.value }))}
-              />
-            </Field>
-            <Field label="Timing">
-              <Input
-                value={editDraft.timing || ""}
-                onChange={(e) => setEditDraft((d) => ({ ...d, timing: e.target.value }))}
-              />
-            </Field>
-            <Field label="Job">
-              <Textarea
-                value={editDraft.job || ""}
-                onChange={(e) => setEditDraft((d) => ({ ...d, job: e.target.value }))}
-                rows={2}
-              />
-            </Field>
-            <Field label="Subject direction">
-              <Input
-                value={editDraft.subject_direction || ""}
-                onChange={(e) =>
-                  setEditDraft((d) => ({ ...d, subject_direction: e.target.value }))
-                }
-              />
-            </Field>
-            <Field label="Sections (one per line)">
-              <Textarea
-                value={(editDraft.sections || []).join("\n")}
-                onChange={(e) =>
-                  setEditDraft((d) => ({
-                    ...d,
-                    sections: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean),
-                  }))
-                }
-                rows={4}
-              />
-            </Field>
-            <Field label="Notes">
-              <Textarea
-                value={editDraft.notes || ""}
-                onChange={(e) => setEditDraft((d) => ({ ...d, notes: e.target.value }))}
-                rows={2}
-              />
-            </Field>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" onClick={() => setEditingNodeIndex(null)}>
-                Cancel
-              </Button>
-              <Button onClick={saveNodeEdit}>Save</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Preview dialog */}
-      <Dialog open={previewIndex !== null} onOpenChange={(o) => !o && setPreviewIndex(null)}>
-        <DialogContent className="max-w-[440px] p-0 overflow-hidden">
-          <DialogHeader className="px-4 py-3 border-b border-border">
-            <DialogTitle className="text-sm">
-              Email {previewIndex !== null ? previewIndex + 1 : ""} preview
-            </DialogTitle>
-          </DialogHeader>
-          {previewIndex !== null && (
-            <iframe
-              srcDoc={emails.find((e) => e.sequence_index === previewIndex)?.html || ""}
-              sandbox="allow-same-origin"
-              style={{ width: 390, height: "70vh", border: 0, background: "white" }}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="text-xs font-medium text-foreground/80 mb-1 block">{label}</label>
-      {children}
     </div>
   );
 }
