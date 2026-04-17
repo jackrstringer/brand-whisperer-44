@@ -382,68 +382,36 @@ Notes: ${node.notes || "none"}`;
         </div>
       </div>
 
-      {/* Mobile tabs */}
-      <div className="md:hidden flex border-b border-border">
-        <button
-          onClick={() => setMobileTab("canvas")}
-          className={`flex-1 py-2 text-sm flex items-center justify-center gap-1.5 ${
-            mobileTab === "canvas"
-              ? "border-b-2 border-primary text-foreground font-medium"
-              : "text-muted-foreground"
-          }`}
-        >
-          <GitFork className="w-3.5 h-3.5" /> Canvas
-        </button>
-        <button
-          onClick={() => setMobileTab("chat")}
-          className={`flex-1 py-2 text-sm flex items-center justify-center gap-1.5 ${
-            mobileTab === "chat"
-              ? "border-b-2 border-primary text-foreground font-medium"
-              : "text-muted-foreground"
-          }`}
-        >
-          <MessageSquare className="w-3.5 h-3.5" /> Agent
-        </button>
-      </div>
+      {/* Mobile tabs (only when skeleton exists) */}
+      {flow.skeleton_markdown && (
+        <div className="md:hidden flex border-b border-border">
+          <button
+            onClick={() => setMobileTab("canvas")}
+            className={`flex-1 py-2 text-sm flex items-center justify-center gap-1.5 ${
+              mobileTab === "canvas"
+                ? "border-b-2 border-primary text-foreground font-medium"
+                : "text-muted-foreground"
+            }`}
+          >
+            <GitFork className="w-3.5 h-3.5" /> Canvas
+          </button>
+          <button
+            onClick={() => setMobileTab("chat")}
+            className={`flex-1 py-2 text-sm flex items-center justify-center gap-1.5 ${
+              mobileTab === "chat"
+                ? "border-b-2 border-primary text-foreground font-medium"
+                : "text-muted-foreground"
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5" /> Agent
+          </button>
+        </div>
+      )}
 
       {/* Body */}
-      <div className="flex-1 min-h-0 hidden md:block">
-        <SplitPane
-          left={
-            <SkeletonViewer
-              nodes={parsedNodes}
-              emails={emails}
-              onGenerateNode={generateSingleEmail}
-              onEditNode={openEditNode}
-              onPreviewNode={setPreviewIndex}
-              generatingIndex={generatingIndex}
-            />
-          }
-          right={
-            <FlowAgentChat
-              flowId={flow.id}
-              brandId={flow.brand_id}
-              flowType={flow.flow_type}
-              initialMessages={Array.isArray(flow.messages) ? (flow.messages as any) : []}
-              currentSkeleton={flow.skeleton_markdown}
-              onSkeletonUpdated={handleSkeletonUpdated}
-            />
-          }
-          minLeftWidth={420}
-          minRightWidth={340}
-        />
-      </div>
-      <div className="flex-1 min-h-0 md:hidden">
-        {mobileTab === "canvas" ? (
-          <SkeletonViewer
-            nodes={parsedNodes}
-            emails={emails}
-            onGenerateNode={generateSingleEmail}
-            onEditNode={openEditNode}
-            onPreviewNode={setPreviewIndex}
-            generatingIndex={generatingIndex}
-          />
-        ) : (
+      {!flow.skeleton_markdown ? (
+        // Pre-skeleton: centered chat, no canvas yet
+        <div className="flex-1 min-h-0 transition-all duration-300">
           <FlowAgentChat
             flowId={flow.id}
             brandId={flow.brand_id}
@@ -451,9 +419,60 @@ Notes: ${node.notes || "none"}`;
             initialMessages={Array.isArray(flow.messages) ? (flow.messages as any) : []}
             currentSkeleton={flow.skeleton_markdown}
             onSkeletonUpdated={handleSkeletonUpdated}
+            centered
           />
-        )}
-      </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex-1 min-h-0 hidden md:block animate-fade-in">
+            <SplitPane
+              left={
+                <SkeletonViewer
+                  nodes={parsedNodes}
+                  emails={emails}
+                  onGenerateNode={generateSingleEmail}
+                  onEditNode={openEditNode}
+                  onPreviewNode={setPreviewIndex}
+                  generatingIndex={generatingIndex}
+                />
+              }
+              right={
+                <FlowAgentChat
+                  flowId={flow.id}
+                  brandId={flow.brand_id}
+                  flowType={flow.flow_type}
+                  initialMessages={Array.isArray(flow.messages) ? (flow.messages as any) : []}
+                  currentSkeleton={flow.skeleton_markdown}
+                  onSkeletonUpdated={handleSkeletonUpdated}
+                />
+              }
+              minLeftWidth={420}
+              minRightWidth={340}
+            />
+          </div>
+          <div className="flex-1 min-h-0 md:hidden">
+            {mobileTab === "canvas" ? (
+              <SkeletonViewer
+                nodes={parsedNodes}
+                emails={emails}
+                onGenerateNode={generateSingleEmail}
+                onEditNode={openEditNode}
+                onPreviewNode={setPreviewIndex}
+                generatingIndex={generatingIndex}
+              />
+            ) : (
+              <FlowAgentChat
+                flowId={flow.id}
+                brandId={flow.brand_id}
+                flowType={flow.flow_type}
+                initialMessages={Array.isArray(flow.messages) ? (flow.messages as any) : []}
+                currentSkeleton={flow.skeleton_markdown}
+                onSkeletonUpdated={handleSkeletonUpdated}
+              />
+            )}
+          </div>
+        </>
+      )}
 
       {/* Edit Brief dialog */}
       <Dialog
