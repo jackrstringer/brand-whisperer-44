@@ -172,7 +172,8 @@ export function FlowAgentChat({
             const evt = JSON.parse(line.slice(6));
             if (evt.type === "progress") {
               setStages((prev) => {
-                const next = prev.map((s) => ({ ...s, status: "done" as const }));
+                const next: { key: string; status: "active" | "done" }[] =
+                  prev.map((s) => ({ key: s.key, status: "done" }));
                 next.push({ key: evt.stage, status: "active" });
                 return next;
               });
@@ -180,7 +181,8 @@ export function FlowAgentChat({
               if (!firstTextReceived) {
                 firstTextReceived = true;
                 setStages((prev) => {
-                  const next = prev.map((s) => ({ ...s, status: "done" as const }));
+                  const next: { key: string; status: "active" | "done" }[] =
+                    prev.map((s) => ({ key: s.key, status: "done" }));
                   next.push({ key: "drafting", status: "active" });
                   return next;
                 });
