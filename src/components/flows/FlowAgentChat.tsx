@@ -179,6 +179,19 @@ export function FlowAgentChat({
                 next.push({ key: evt.stage, status: "active" });
                 return next;
               });
+            } else if (evt.type === "skeleton_start") {
+              setSkeletonStreaming(true);
+              setStages((prev) => {
+                const next: { key: string; status: "active" | "done" }[] =
+                  prev.map((s) => ({ key: s.key, status: "done" }));
+                next.push({ key: "drafting", status: "active" });
+                return next;
+              });
+            } else if (evt.type === "skeleton_chunk") {
+              // Skeleton text is routed to the canvas via realtime DB updates
+              // when the function persists. We only show a UI hint here.
+            } else if (evt.type === "skeleton_end") {
+              setSkeletonStreaming(false);
             } else if (evt.type === "text") {
               if (!firstTextReceived) {
                 firstTextReceived = true;
