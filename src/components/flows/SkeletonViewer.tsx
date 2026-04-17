@@ -1,4 +1,4 @@
-import { ParsedFlowNode } from "@/lib/flows/skeletonParser";
+import { ParsedFlowNode, ParsedFlowMeta } from "@/lib/flows/skeletonParser";
 import {
   Mail,
   Clock,
@@ -11,11 +11,22 @@ import {
   ChevronDown,
   ChevronUp,
   Sparkles,
+  Zap,
+  Filter,
+  LogOut,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
+import {
+  TransformWrapper,
+  TransformComponent,
+  useControls,
+} from "react-zoom-pan-pinch";
 
 export interface FlowEmailRow {
   id: string;
@@ -33,8 +44,9 @@ export interface FlowEmailMeta {
 
 interface Props {
   nodes: ParsedFlowNode[];
+  meta: ParsedFlowMeta;
+  flowType: string;
   emails: FlowEmailRow[];
-  /** Map of campaign_id → meta (subject_line, preview_text). */
   campaignMeta?: Record<string, FlowEmailMeta>;
   expandedIndex: number | null;
   onToggleExpand: (emailIndex: number | null) => void;
@@ -44,12 +56,105 @@ interface Props {
     patch: Partial<ParsedFlowNode>
   ) => void | Promise<void>;
   generatingIndex: number | null;
-  /** When true, show a shimmer placeholder for incoming skeleton. */
   drafting?: boolean;
 }
 
-export function SkeletonViewer({
+export function SkeletonViewer(props: Props) {
+  const { nodes, drafting } = props;
+
+  if (nodes.length === 0) {
+    return (
+      <div className="h-full w-full bg-[hsl(var(--muted))/0.3] dot-grid relative">
+        {drafting ? (
+          <DraftingShimmer />
+        ) : (
+          <div className="h-full flex items-center justify-center text-center px-6">
+            <div className="max-w-sm">
+              <GitFork className="w-12 h-12 mx-auto text-muted-foreground/40 mb-4" />
+              <p className="text-sm text-muted-foreground">
+                Chat with the agent to build your flow skeleton →
+              </p>
+            </div>
+          </div>
+        )}
+        <DotGridStyle />
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full w-full bg-[hsl(var(--muted))/0.3] relative overflow-hidden">
+      <DotGridStyle />
+      <TransformWrapper
+        initialScale={1}
+        minScale={0.35}
+        maxScale={2.2}
+        limitToBounds={false}
+        wheel={{ step: 0.08 }}
+        doubleClick={{ disabled: true }}
+        panning={{ velocityDisabled: true, excluded: ["input", "textarea", "button"] }}
+        pinch={{ step: 5 }}
+      >
+        {() => (
+          <>
+            <ZoomToolbar />
+            <TransformComponent
+              wrapperStyle={{ width: "100%", height: "100%" }}
+              contentStyle={{ width: "100%", height: "100%" }}
+            >
+              <CanvasContent {...props} />
+            </TransformComponent>
+          </>
+        )}
+      </TransformWrapper>
+    </div>
+  );
+}
+
+function DotGridStyle() {
+  return (
+    <style>{`
+      .dot-grid {
+        background-image: radial-gradient(circle, hsl(var(--muted-foreground) / 0.18) 1px, transparent 1px);
+        background-size: 22px 22px;
+      }
+    `}</style>
+  );
+}
+
+function ZoomToolbar() {
+  const { zoomIn, zoomOut, resetTransform } = useControls();
+  return (
+    <div className="absolute bottom-4 right-4 z-20 flex items-center gap-1 bg-card border border-border rounded-full shadow-lg px-1.5 py-1 backdrop-blur">
+      <button
+        onClick={() => zoomOut()}
+        className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+        aria-label="Zoom out"
+      >
+        <ZoomOut className="w-4 h-4" />
+      </button>
+      <button
+        onClick={() => resetTransform()}
+        className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+        aria-label="Reset view"
+      >
+        <Maximize2 className="w-3.5 h-3.5" />
+      </button>
+      <button
+        onClick={() => zoomIn()}
+        className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+        aria-label="Zoom in"
+      >
+        <ZoomIn className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+function CanvasContent({
   nodes,
+  meta,
+  flowType,
   emails,
   campaignMeta = {},
   expandedIndex,
@@ -57,108 +162,198 @@ export function SkeletonViewer({
   onGenerateNode,
   onSaveNodeEdit,
   generatingIndex,
-  drafting,
 }: Props) {
-  if (nodes.length === 0) {
-    if (drafting) {
-      return (
-        <div className="h-full overflow-y-auto py-8 px-6">
-          <div className="max-w-xl mx-auto flex flex-col items-center gap-3">
-            <div className="flex items-center gap-2 mb-2">
-              <Sparkles className="w-4 h-4 text-primary animate-pulse" />
-              <span className="text-sm font-medium text-foreground">
-                Drafting your flow skeleton…
-              </span>
-            </div>
-            {[0, 1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="w-full rounded-xl border border-border bg-muted/40 p-4 animate-pulse"
-                style={{ animationDelay: `${i * 120}ms` }}
-              >
-                <div className="h-3 w-32 bg-muted rounded mb-2" />
-                <div className="h-2 w-full bg-muted rounded mb-1.5" />
-                <div className="h-2 w-3/4 bg-muted rounded" />
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-    return (
-      <div className="h-full flex items-center justify-center text-center px-6">
-        <div className="max-w-sm">
-          <GitFork className="w-12 h-12 mx-auto text-muted-foreground/40 mb-4" />
-          <p className="text-sm text-muted-foreground">
-            Chat with the agent to build your flow skeleton →
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   let emailCount = 0;
-
   return (
-    <div className="h-full overflow-y-auto py-8 px-6">
-      <div className="max-w-3xl mx-auto flex flex-col items-center">
-        {nodes.map((node, i) => {
-          const isLast = i === nodes.length - 1;
-          let card;
-          if (node.node_type === "email") {
-            const myIndex = emailCount++;
-            const email = emails.find((e) => e.sequence_index === myIndex);
-            const meta = email?.campaign_id ? campaignMeta[email.campaign_id] : undefined;
-            card = (
-              <EmailNode
-                node={node}
-                index={myIndex}
-                email={email}
-                meta={meta}
-                expanded={expandedIndex === myIndex}
-                onToggle={() =>
-                  onToggleExpand(expandedIndex === myIndex ? null : myIndex)
-                }
-                isGenerating={generatingIndex === myIndex}
-                onGenerate={() => onGenerateNode(myIndex)}
-                onSaveEdit={(patch) => onSaveNodeEdit(myIndex, patch)}
-              />
-            );
-          } else if (node.node_type === "delay") {
-            card = <DelayCard label={node.label || "Delay"} />;
-          } else if (node.node_type === "split") {
-            card = <SplitCard node={node} />;
-          } else {
-            card = <SmsCard node={node} />;
-          }
-          return (
-            <div key={i} className="w-full flex flex-col items-center">
-              {card}
-              {!isLast && <Connector />}
-            </div>
+    <div className="dot-grid min-h-full w-full py-12 px-8 flex flex-col items-center">
+      <TriggerCard trigger={meta.trigger} flowType={flowType} />
+      <Connector label="When triggered" />
+      {(meta.filters && meta.filters.length > 0) || true ? (
+        <>
+          <FiltersCard filters={meta.filters} flowType={flowType} />
+          <Connector label="If matched" />
+        </>
+      ) : null}
+
+      {nodes.map((node, i) => {
+        const isLast = i === nodes.length - 1;
+        let card;
+        if (node.node_type === "email") {
+          const myIndex = emailCount++;
+          const email = emails.find((e) => e.sequence_index === myIndex);
+          const metaRow = email?.campaign_id ? campaignMeta[email.campaign_id] : undefined;
+          card = (
+            <EmailNode
+              node={node}
+              index={myIndex}
+              email={email}
+              meta={metaRow}
+              expanded={expandedIndex === myIndex}
+              onToggle={() => onToggleExpand(expandedIndex === myIndex ? null : myIndex)}
+              isGenerating={generatingIndex === myIndex}
+              onGenerate={() => onGenerateNode(myIndex)}
+              onSaveEdit={(patch) => onSaveNodeEdit(myIndex, patch)}
+            />
           );
-        })}
+        } else if (node.node_type === "delay") {
+          card = <DelayCard label={node.label || "Delay"} />;
+        } else if (node.node_type === "split") {
+          card = <SplitCard node={node} />;
+        } else {
+          card = <SmsCard node={node} />;
+        }
+        return (
+          <div key={i} className="flex flex-col items-center w-full max-w-[460px]">
+            {card}
+            {!isLast && <Connector />}
+          </div>
+        );
+      })}
+
+      {meta.exit && meta.exit.length > 0 && (
+        <>
+          <Connector />
+          <ExitCard exit={meta.exit} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function DraftingShimmer() {
+  return (
+    <div className="h-full overflow-y-auto py-10 px-6">
+      <div className="max-w-md mx-auto flex flex-col items-center gap-3">
+        <div className="flex items-center gap-2 mb-2">
+          <Sparkles className="w-4 h-4 text-primary animate-pulse" />
+          <span className="text-sm font-medium text-foreground">Drafting your flow…</span>
+        </div>
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="w-full rounded-xl border border-border bg-card/60 p-4 animate-pulse"
+            style={{ animationDelay: `${i * 120}ms` }}
+          >
+            <div className="h-3 w-32 bg-muted rounded mb-2" />
+            <div className="h-2 w-full bg-muted rounded mb-1.5" />
+            <div className="h-2 w-3/4 bg-muted rounded" />
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-function Connector() {
+function Connector({ label }: { label?: string }) {
   return (
-    <div className="flex flex-col items-center py-1.5">
-      <div className="w-px h-5 bg-border" />
-      <div className="text-muted-foreground/50 text-[10px] leading-none">▼</div>
+    <div className="flex flex-col items-center py-2">
+      <div className="w-px h-6 bg-border" />
+      {label && (
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground/70 px-2 py-0.5 my-0.5">
+          {label}
+        </div>
+      )}
+      <div className="w-px h-6 bg-border" />
+      <div className="text-muted-foreground/60 text-[11px] leading-none -mt-0.5">▼</div>
     </div>
   );
 }
 
-function StatusBadge({
-  isGenerating,
-  status,
-}: {
-  isGenerating: boolean;
-  status: string;
-}) {
+function TriggerCard({ trigger, flowType }: { trigger?: string; flowType: string }) {
+  const display =
+    trigger ||
+    ({
+      welcome: "Added to List (newsletter signup)",
+      abandoned_checkout: "Started Checkout",
+      post_purchase: "Placed Order",
+      browse_abandonment: "Viewed Product",
+      winback: "Time-based — 60+ days inactive",
+    } as Record<string, string>)[flowType] ||
+    "Trigger";
+
+  return (
+    <div className="w-full max-w-[460px] rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/30 px-4 py-3 shadow-sm hover:shadow-md hover:border-primary/50 hover:-translate-y-0.5 transition-all duration-200 cursor-default">
+      <div className="flex items-center gap-2.5">
+        <div className="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center flex-shrink-0">
+          <Zap className="w-4 h-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] uppercase tracking-wider text-primary/80 font-semibold">
+            Trigger
+          </div>
+          <div className="text-sm font-medium text-foreground truncate">{display}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FiltersCard({ filters, flowType }: { filters?: string[]; flowType: string }) {
+  // Always render — fall back to defaults so the user always sees the filter logic.
+  const fallback: Record<string, string[]> = {
+    welcome: [
+      "Has not been in this flow in the last 60 days",
+      "Has email consent",
+      "Has not Placed Order since starting this flow",
+    ],
+    abandoned_checkout: [
+      "Has not Placed Order since Started Checkout",
+      "Has not been in this flow in the last 7 days",
+    ],
+    post_purchase: ["Has Placed Order"],
+    browse_abandonment: [
+      "Has not Started Checkout since Viewed Product",
+      "Has not been in this flow in the last 14 days",
+    ],
+    winback: ["Has Placed Order at least once", "Has not Placed Order in 60+ days"],
+  };
+  const list = filters && filters.length > 0 ? filters : fallback[flowType] || [];
+  if (list.length === 0) return null;
+
+  return (
+    <div className="w-full max-w-[460px] rounded-2xl bg-card border border-border px-4 py-3 shadow-sm hover:shadow-md hover:border-foreground/20 hover:-translate-y-0.5 transition-all duration-200">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-7 h-7 rounded-full bg-muted text-muted-foreground flex items-center justify-center flex-shrink-0">
+          <Filter className="w-3.5 h-3.5" />
+        </div>
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+          Entry filters
+        </div>
+      </div>
+      <ul className="space-y-1 pl-1">
+        {list.map((f, i) => (
+          <li key={i} className="text-xs text-foreground/80 flex gap-1.5">
+            <span className="text-muted-foreground/60">•</span>
+            <span>{f}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ExitCard({ exit }: { exit: string[] }) {
+  return (
+    <div className="w-full max-w-[460px] rounded-2xl bg-card border border-dashed border-border px-4 py-3">
+      <div className="flex items-center gap-2 mb-1.5">
+        <LogOut className="w-3.5 h-3.5 text-muted-foreground" />
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+          Exit conditions
+        </div>
+      </div>
+      <ul className="space-y-1 pl-1">
+        {exit.map((e, i) => (
+          <li key={i} className="text-xs text-muted-foreground flex gap-1.5">
+            <span className="text-muted-foreground/60">•</span>
+            <span>{e}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function StatusBadge({ isGenerating, status }: { isGenerating: boolean; status: string }) {
   if (isGenerating || status === "generating")
     return (
       <span className="text-[11px] flex items-center gap-1 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full bg-amber-500/10">
@@ -209,14 +404,19 @@ function EmailNode({
   const status = email?.generation_status || "pending";
 
   return (
-    <div className="w-full bg-card border border-border rounded-xl shadow-sm overflow-hidden hover:border-primary/40 transition-colors">
-      {/* Compact header — always visible, click to expand */}
+    <div
+      className={`w-full bg-card border rounded-2xl shadow-sm overflow-hidden transition-all duration-200 ${
+        expanded
+          ? "border-primary/50 shadow-lg ring-2 ring-primary/10"
+          : "border-border hover:border-primary/40 hover:shadow-md hover:-translate-y-0.5"
+      }`}
+    >
       <button
         onClick={onToggle}
-        className="w-full text-left p-3.5 flex items-start justify-between gap-3 hover:bg-muted/40 transition-colors"
+        className="w-full text-left p-3.5 flex items-start justify-between gap-3 hover:bg-muted/30 transition-colors"
       >
         <div className="flex items-start gap-3 min-w-0 flex-1">
-          <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold">
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold">
             {index + 1}
           </div>
           <div className="min-w-0 flex-1">
@@ -246,7 +446,6 @@ function EmailNode({
         </div>
       </button>
 
-      {/* Expanded content */}
       {expanded && (
         <div className="border-t border-border p-4 space-y-4 animate-fade-in">
           <BriefEditor node={node} onSave={onSaveEdit} />
@@ -261,13 +460,11 @@ function EmailNode({
               <Button size="sm" onClick={onGenerate} disabled={isGenerating}>
                 {isGenerating ? (
                   <>
-                    <Loader2 className="w-3 h-3 animate-spin mr-1.5" />
-                    Generating…
+                    <Loader2 className="w-3 h-3 animate-spin mr-1.5" /> Generating…
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3 h-3 mr-1.5" />
-                    Generate this email
+                    <Sparkles className="w-3 h-3 mr-1.5" /> Generate this email
                   </>
                 )}
               </Button>
@@ -283,9 +480,7 @@ function EmailNode({
                 disabled={isGenerating}
                 className="text-xs h-7"
               >
-                {isGenerating ? (
-                  <Loader2 className="w-3 h-3 animate-spin mr-1.5" />
-                ) : null}
+                {isGenerating ? <Loader2 className="w-3 h-3 animate-spin mr-1.5" /> : null}
                 Regenerate
               </Button>
             </div>
@@ -486,24 +681,24 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function DelayCard({ label }: { label: string }) {
   return (
-    <div className="bg-muted/40 border border-border rounded-lg px-4 py-2 flex items-center gap-2 text-xs text-muted-foreground">
+    <div className="bg-card border border-border rounded-full px-4 py-1.5 flex items-center gap-2 text-xs text-muted-foreground shadow-sm hover:shadow-md hover:border-foreground/30 hover:-translate-y-0.5 transition-all duration-200">
       <Clock className="w-3 h-3" />
-      <span className="font-medium">{label}</span>
+      <span className="font-medium">Wait {label}</span>
     </div>
   );
 }
 
 function SplitCard({ node }: { node: ParsedFlowNode }) {
   return (
-    <div className="w-full bg-card border border-dashed border-border rounded-xl p-3.5">
+    <div className="w-full bg-card border border-dashed border-border rounded-2xl p-3.5 hover:border-primary/40 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
       <div className="flex items-center gap-2 mb-1.5">
         <GitFork className="w-3.5 h-3.5 text-primary" />
-        <h4 className="font-semibold text-foreground text-sm">{node.label}</h4>
+        <span className="text-sm font-semibold text-foreground">
+          {node.label || "Conditional Split"}
+        </span>
       </div>
       {node.notes && (
-        <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-sans">
-          {node.notes}
-        </pre>
+        <div className="text-xs text-muted-foreground whitespace-pre-line">{node.notes}</div>
       )}
     </div>
   );
@@ -511,12 +706,16 @@ function SplitCard({ node }: { node: ParsedFlowNode }) {
 
 function SmsCard({ node }: { node: ParsedFlowNode }) {
   return (
-    <div className="w-full bg-card border border-border rounded-xl p-3.5">
+    <div className="w-full bg-card border border-border rounded-2xl p-3.5 hover:border-primary/40 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
       <div className="flex items-center gap-2 mb-1.5">
         <MessageSquare className="w-3.5 h-3.5 text-primary" />
-        <h4 className="font-semibold text-foreground text-sm">SMS — {node.label}</h4>
+        <span className="text-sm font-semibold text-foreground">
+          {node.label || "SMS"}
+        </span>
       </div>
-      {node.notes && <p className="text-xs text-muted-foreground italic">{node.notes}</p>}
+      {node.notes && (
+        <div className="text-xs text-muted-foreground line-clamp-3">{node.notes}</div>
+      )}
     </div>
   );
 }
