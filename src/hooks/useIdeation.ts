@@ -279,7 +279,7 @@ export function useIdeation(brandId: string) {
       newNodes.push({
         id: crypto.randomUUID(),
         type: 'brief',
-        content: message,
+        content: mode === 'evergreen' ? 'Evergreen brand mix — variety of campaign types & angles' : message,
         timestamp: Date.now(),
       });
     }
