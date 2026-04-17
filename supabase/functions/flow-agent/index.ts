@@ -309,6 +309,14 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
 
         let fullText = "";
         try {
+          if (bootingFreshFlow) {
+            send({ type: "progress", stage: "reading", label: "Reading brand research" });
+            await new Promise((r) => setTimeout(r, 150));
+            send({ type: "progress", stage: "analyzing", label: "Analyzing performance data" });
+            await new Promise((r) => setTimeout(r, 150));
+            send({ type: "progress", stage: "strategizing", label: "Designing flow strategy" });
+          }
+
           const res = await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
             headers: {
