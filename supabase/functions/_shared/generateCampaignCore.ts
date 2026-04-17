@@ -542,6 +542,8 @@ export interface GenerateCampaignParams {
   campaignMode?: "campaign" | "flow";
   flowConfig?: any;
   flowNotes?: string;
+  /** 1–3 slugs from emailCopywriterSkill — names the visual blocks the email should lead with. */
+  featuredDesignElements?: string[];
 }
 
 /**
@@ -556,7 +558,7 @@ export async function generateCampaignCore(
     brandId, campaignId, brief, goal, copy, productIds,
     pinnedAssetUrls: pinnedUrls, matchProductColors, designNotes,
     shopifyProducts, reference, refreshCopy, _isSubGeneration, _runId,
-    campaignMode, flowConfig, flowNotes,
+    campaignMode, flowConfig, flowNotes, featuredDesignElements,
   } = params;
   const variantIdx = params._variantIndex ?? 0;
   const runId = _runId;
@@ -904,6 +906,9 @@ CRITICAL GRID RULES:
 
     let briefText = `Generate a ${goal} email. Brief: ${brief}`;
     if (copy) briefText += `\nThe following copy must be used verbatim: ${copy}`;
+    if (featuredDesignElements?.length) {
+      briefText += `\n\nFEATURED DESIGN BLOCKS (lead with these named blocks from the email design element library — use the EXACT slugs in data-block-type and an HTML comment <!-- block: <slug> -->): ${featuredDesignElements.join(", ")}`;
+    }
     briefText += `\nReturn only complete HTML.`;
     userContent.push({ type: "text", text: briefText });
 
@@ -959,6 +964,9 @@ CRITICAL GRID RULES:
 
     let part3 = `Generate a ${goal} email campaign.\nBrief: ${brief}`;
     if (copy) part3 += `\nThe following copy must be used verbatim: ${copy}`;
+    if (featuredDesignElements?.length) {
+      part3 += `\n\n=== FEATURED DESIGN BLOCKS ===\nThis campaign MUST lead with the following named visual blocks from the email design element library: ${featuredDesignElements.join(", ")}.\nUse the EXACT slugs in data-block-type and prepend each block with an HTML comment <!-- block: <slug> -->. Treat them as the skim-stoppers; surrounding copy is connective tissue.`;
+    }
 
     part3 += `\n\n=== ${creativeDir}`;
 

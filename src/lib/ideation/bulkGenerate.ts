@@ -60,6 +60,7 @@ export async function bulkGenerate(
       };
       if (prefs.product_ids?.length) genBody.productIds = prefs.product_ids;
       if (prefs.reference_campaign_id) genBody.referenceCampaignId = prefs.reference_campaign_id;
+      if (prefs.featured_design_elements?.length) genBody.featuredDesignElements = prefs.featured_design_elements;
 
       const resp = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-campaign`,
