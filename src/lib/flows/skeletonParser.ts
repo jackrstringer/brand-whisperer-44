@@ -69,12 +69,36 @@ function extractLabel(firstLine: string): string {
   return stripped.trim() || firstLine.trim();
 }
 
-export function parseSkeleton(markdown: string | null | undefined): ParsedFlowNode[] {
-  if (!markdown?.trim()) return [];
-  const blocks = markdown
+function splitIntoBlocks(markdown: string): string[] {
+  // Primary: split on `---` separators
+  const dashSplit = markdown
     .split(/\n\s*---+\s*\n/)
     .map((b) => b.trim())
     .filter(Boolean);
+  if (dashSplit.length > 1) return dashSplit;
+
+  // Fallback: split on bracket headers OR markdown headers (## EMAIL, etc.)
+  const lines = markdown.split("\n");
+  const blocks: string[] = [];
+  let current: string[] = [];
+  const isHeader = (l: string) =>
+    /^\s*\[(EMAIL|DELAY|CONDITIONAL\s+SPLIT|SPLIT|SMS)/i.test(l) ||
+    /^\s*#+\s*(EMAIL|DELAY|SPLIT|CONDITIONAL\s+SPLIT|SMS)\b/i.test(l);
+  for (const line of lines) {
+    if (isHeader(line) && current.length > 0) {
+      blocks.push(current.join("\n").trim());
+      current = [line];
+    } else {
+      current.push(line);
+    }
+  }
+  if (current.length > 0) blocks.push(current.join("\n").trim());
+  return blocks.filter(Boolean);
+}
+
+export function parseSkeleton(markdown: string | null | undefined): ParsedFlowNode[] {
+  if (!markdown?.trim()) return [];
+  const blocks = splitIntoBlocks(markdown);
 
   const nodes: ParsedFlowNode[] = [];
   for (const block of blocks) {
