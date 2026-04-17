@@ -283,6 +283,15 @@ export function FlowAgentChat({
               )}
             </>
           )}
+          {streaming && skeletonStreaming && (
+            <div className="rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3 flex items-center gap-2.5 animate-fade-in max-w-md">
+              <Sparkles className="w-3.5 h-3.5 text-primary animate-pulse" />
+              <span className="text-xs font-medium text-foreground">
+                Drafting skeleton on the canvas →
+              </span>
+              <PulseDots />
+            </div>
+          )}
           {streaming && !streamBuf && stages.length === 0 && (
             <ProgressStages stages={[{ key: "reading", status: "active" }]} />
           )}
