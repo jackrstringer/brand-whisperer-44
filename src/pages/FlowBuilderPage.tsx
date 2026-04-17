@@ -291,33 +291,18 @@ Notes: ${node.notes || "none"}`;
     URL.revokeObjectURL(url);
   };
 
-  const openEditNode = (idx: number) => {
+  const saveNodeEdit = async (idx: number, patch: Partial<ParsedFlowNode>) => {
+    if (!flow) return;
     const node = emailNodes[idx];
     if (!node) return;
-    setEditingNodeIndex(idx);
-    setEditDraft({
-      label: node.label,
-      timing: node.timing,
-      job: node.job,
-      subject_direction: node.subject_direction,
-      notes: node.notes,
-      sections: node.sections,
-    });
-  };
-
-  const saveNodeEdit = async () => {
-    if (editingNodeIndex === null || !flow) return;
-    const idx = editingNodeIndex;
-    const node = emailNodes[idx];
-    if (!node) return;
-    let emailRow = emails.find((e) => e.sequence_index === idx);
+    const emailRow = emails.find((e) => e.sequence_index === idx);
     const payload = {
-      label: editDraft.label || node.label,
-      timing: editDraft.timing,
-      job: editDraft.job,
-      subject_direction: editDraft.subject_direction,
-      notes: editDraft.notes,
-      sections: editDraft.sections,
+      label: patch.label || node.label,
+      timing: patch.timing,
+      job: patch.job,
+      subject_direction: patch.subject_direction,
+      notes: patch.notes,
+      sections: patch.sections,
     };
     if (emailRow) {
       await supabase.from("flow_emails").update(payload).eq("id", emailRow.id);
@@ -330,8 +315,6 @@ Notes: ${node.notes || "none"}`;
         ...payload,
       });
     }
-    setEditingNodeIndex(null);
-    setEditDraft({});
     await loadAll();
   };
 
