@@ -433,10 +433,13 @@ Notes: ${node.notes || "none"}`;
                 <SkeletonViewer
                   nodes={parsedNodes}
                   emails={emails}
+                  campaignMeta={campaignMeta}
+                  expandedIndex={expandedIndex}
+                  onToggleExpand={setExpandedIndex}
                   onGenerateNode={generateSingleEmail}
-                  onEditNode={openEditNode}
-                  onPreviewNode={setPreviewIndex}
+                  onSaveNodeEdit={saveNodeEdit}
                   generatingIndex={generatingIndex}
+                  drafting={flow.status === "draft" || flow.status === "generating"}
                 />
               }
               right={
@@ -458,10 +461,13 @@ Notes: ${node.notes || "none"}`;
               <SkeletonViewer
                 nodes={parsedNodes}
                 emails={emails}
+                campaignMeta={campaignMeta}
+                expandedIndex={expandedIndex}
+                onToggleExpand={setExpandedIndex}
                 onGenerateNode={generateSingleEmail}
-                onEditNode={openEditNode}
-                onPreviewNode={setPreviewIndex}
+                onSaveNodeEdit={saveNodeEdit}
                 generatingIndex={generatingIndex}
+                drafting={flow.status === "draft" || flow.status === "generating"}
               />
             ) : (
               <FlowAgentChat
@@ -476,101 +482,6 @@ Notes: ${node.notes || "none"}`;
           </div>
         </>
       )}
-
-      {/* Edit Brief dialog */}
-      <Dialog
-        open={editingNodeIndex !== null}
-        onOpenChange={(o) => !o && setEditingNodeIndex(null)}
-      >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              Edit Email {editingNodeIndex !== null ? editingNodeIndex + 1 : ""}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Field label="Label">
-              <Input
-                value={editDraft.label || ""}
-                onChange={(e) => setEditDraft((d) => ({ ...d, label: e.target.value }))}
-              />
-            </Field>
-            <Field label="Timing">
-              <Input
-                value={editDraft.timing || ""}
-                onChange={(e) => setEditDraft((d) => ({ ...d, timing: e.target.value }))}
-              />
-            </Field>
-            <Field label="Job">
-              <Textarea
-                value={editDraft.job || ""}
-                onChange={(e) => setEditDraft((d) => ({ ...d, job: e.target.value }))}
-                rows={2}
-              />
-            </Field>
-            <Field label="Subject direction">
-              <Input
-                value={editDraft.subject_direction || ""}
-                onChange={(e) =>
-                  setEditDraft((d) => ({ ...d, subject_direction: e.target.value }))
-                }
-              />
-            </Field>
-            <Field label="Sections (one per line)">
-              <Textarea
-                value={(editDraft.sections || []).join("\n")}
-                onChange={(e) =>
-                  setEditDraft((d) => ({
-                    ...d,
-                    sections: e.target.value.split("\n").map((s) => s.trim()).filter(Boolean),
-                  }))
-                }
-                rows={4}
-              />
-            </Field>
-            <Field label="Notes">
-              <Textarea
-                value={editDraft.notes || ""}
-                onChange={(e) => setEditDraft((d) => ({ ...d, notes: e.target.value }))}
-                rows={2}
-              />
-            </Field>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="ghost" onClick={() => setEditingNodeIndex(null)}>
-                Cancel
-              </Button>
-              <Button onClick={saveNodeEdit}>Save</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Preview dialog */}
-      <Dialog open={previewIndex !== null} onOpenChange={(o) => !o && setPreviewIndex(null)}>
-        <DialogContent className="max-w-[440px] p-0 overflow-hidden">
-          <DialogHeader className="px-4 py-3 border-b border-border">
-            <DialogTitle className="text-sm">
-              Email {previewIndex !== null ? previewIndex + 1 : ""} preview
-            </DialogTitle>
-          </DialogHeader>
-          {previewIndex !== null && (
-            <iframe
-              srcDoc={emails.find((e) => e.sequence_index === previewIndex)?.html || ""}
-              sandbox="allow-same-origin"
-              style={{ width: 390, height: "70vh", border: 0, background: "white" }}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="text-xs font-medium text-foreground/80 mb-1 block">{label}</label>
-      {children}
     </div>
   );
 }
