@@ -72,7 +72,7 @@ export function ChatBar({
       onGenerateCalendarIdeas?.();
       return;
     }
-    if (!msg && selectedCount === 0 && !activeType) return;
+    // Allow blank Enter with no context → triggers evergreen brand-mix ideation in useIdeation.sendChat
     onSend(msg);
     setInput('');
   };
