@@ -906,6 +906,9 @@ CRITICAL GRID RULES:
 
     let briefText = `Generate a ${goal} email. Brief: ${brief}`;
     if (copy) briefText += `\nThe following copy must be used verbatim: ${copy}`;
+    if (featuredDesignElements?.length) {
+      briefText += `\n\nFEATURED DESIGN BLOCKS (lead with these named blocks from the email design element library — use the EXACT slugs in data-block-type and an HTML comment <!-- block: <slug> -->): ${featuredDesignElements.join(", ")}`;
+    }
     briefText += `\nReturn only complete HTML.`;
     userContent.push({ type: "text", text: briefText });
 
