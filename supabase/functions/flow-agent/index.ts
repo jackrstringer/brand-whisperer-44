@@ -202,6 +202,40 @@ Deno.serve(async (req) => {
         })
       : brandIntel;
 
+    // Per-flow audience constraints — prevents content drift (e.g. post-purchase
+    // content like "your order has arrived" appearing in a welcome flow).
+    const FLOW_AUDIENCE_RULES: Record<string, string> = {
+      welcome:
+        "AUDIENCE: Brand-new email subscribers who have JUST opted in. They have NEVER purchased. They may have never even visited the product page. " +
+        "FORBIDDEN CONTENT: order confirmations, shipping/delivery updates, 'your order arrived', 'how is your [product] working out', subscription replenishment reminders, post-purchase upsells, review requests, any reference to a past purchase. " +
+        "REQUIRED CONTENT: warm welcome, brand story / why this exists, the welcome offer, hero product introduction, social proof / press, founder voice, gentle objection-handling, last-call urgency on the welcome offer.",
+      abandoned_checkout:
+        "AUDIENCE: People who started checkout in the last few hours but have NOT completed it. " +
+        "FORBIDDEN: welcome-style brand intros, post-purchase content, content assuming they're a customer. " +
+        "REQUIRED: cart reminder with their item, urgency, friction-reducer (shipping/returns/guarantee), social proof, optional incentive in later step.",
+      post_purchase:
+        "AUDIENCE: Customers who JUST placed an order. " +
+        "FORBIDDEN: welcome-discount style offers, prospect re-engagement. " +
+        "REQUIRED: thank you, what's next / shipping expectation, how to use, education, review request, replenishment / cross-sell.",
+      browse_abandonment:
+        "AUDIENCE: People who viewed a product page but did NOT add to cart or buy. " +
+        "FORBIDDEN: order/shipping content, deep welcome series content. " +
+        "REQUIRED: 'you were checking out X' reminder with the dynamic product, social proof, why-this-product, gentle CTA back.",
+      winback:
+        "AUDIENCE: Lapsed customers who haven't purchased in 60+ days. " +
+        "FORBIDDEN: welcome-discount intros, post-purchase content. " +
+        "REQUIRED: we miss you, what's new, win-back incentive, urgency.",
+    };
+
+    const audienceRules = FLOW_AUDIENCE_RULES[flow_type] || "";
+    const triggerLabel = ({
+      welcome: "Added to List (newsletter signup list)",
+      abandoned_checkout: "Started Checkout",
+      post_purchase: "Placed Order",
+      browse_abandonment: "Viewed Product",
+      winback: "Has Placed Order — at least once, with a 60+ day inactivity filter",
+    } as Record<string, string>)[flow_type] || "(unspecified)";
+
     const systemPrompt = `You are an elite Klaviyo email flow strategist for DTC brands. You build BRIEF, structural flow skeletons — NOT copy.
 
 SKILL DOCUMENTS (reference only — strategic principles, not copy templates):
@@ -222,6 +256,14 @@ ${preparedIntel?.compiled_context || "(no compiled brand intelligence yet)"}
 KLAVIYO PERFORMANCE DATA:
 ${preparedIntel?.klaviyo_compiled || "(no klaviyo data)"}
 
+============================================================
+FLOW TYPE: ${flow_type.toUpperCase().replace(/_/g, " ")}
+TRIGGER: ${triggerLabel}
+${audienceRules}
+============================================================
+
+The audience definition above is HARD. Every email you spec MUST be appropriate for that audience. If you catch yourself writing a "your gum has arrived" email inside a welcome flow, you have failed the assignment. Re-read the audience rule before writing each email.
+
 CORE PRINCIPLE — RESEARCH FIRST, ASK LAST:
 The brand intelligence above is the result of deep research. Before you ask ANY question, you MUST:
 1. Read the brand intelligence end-to-end.
@@ -237,7 +279,6 @@ CONVERSATION RULES (CRITICAL):
 - Be terse. No preamble, no recap of brand intelligence in prose, no "great question" filler.
 - NEVER ask whether they have an existing flow — assume net new.
 - NEVER ask about facts that already appear in the brand intelligence above. Re-read before asking.
-- If you find yourself wanting to ask something, first quote the relevant line from the brand intelligence in your reasoning. If you can quote it, you do not need to ask.
 
 RESPONSE FORMAT — BRAND SYNTHESIS BLOCK (use on the FIRST turn or when re-orienting):
 Before any question or skeleton, output a tight synthesis block in this exact shape (a fenced \`flow-synth\` JSON block):
@@ -260,33 +301,35 @@ Before any question or skeleton, output a tight synthesis block in this exact sh
 }
 \`\`\`
 
-- "facts": 3–6 short label/value pairs of the most decision-critical facts you extracted from the brand intelligence. The UI renders these as pills.
-- "plan": 3–6 short lines describing the flow structure you've decided on. The UI renders this as a clean numbered list.
-- After the synth block, either generate the skeleton (if you have enough) or ask ONE clarifying question.
-
 QUESTION FORMAT (use only when truly necessary):
-Output exactly one fenced code block per turn:
-
 \`\`\`flow-question
-{
-  "question": "Short, specific question.",
-  "options": ["Option 1", "Option 2", "Option 3"],
-  "allow_other": true
-}
+{ "question": "Short, specific question.", "options": ["Option 1","Option 2"], "allow_other": true }
 \`\`\`
 
-- 2–5 short labels (≤5 words each).
-- "allow_other": true shows a free-text fallback.
-- Omit the block (plain text) only for genuinely open-ended questions.
-- Never repeat the question text outside the block.
-
 SKELETON GENERATION — STRICT BRACKET FORMAT (CRITICAL):
-When you have enough info, output the skeleton inside a \`\`\`flow-skeleton fence. Use ONLY this exact format:
+When you have enough info, output the skeleton inside a \`\`\`flow-skeleton fence. The skeleton MUST start with TRIGGER + FILTERS + EXIT meta blocks, then the nodes. Use ONLY this exact format:
 
 \`\`\`flow-skeleton
+[TRIGGER] — ${triggerLabel}
+
+---
+
+[FILTERS]
+- One specific entry filter
+- Another entry filter
+- Suppression / smart-sending notes
+
+---
+
+[EXIT]
+- Placed Order (primary exit)
+- Unsubscribed
+
+---
+
 [EMAIL 1 — Short label like "Welcome + offer"]
 Timing: Immediate
-Job: One sentence on what this email accomplishes.
+Job: One sentence on what this email accomplishes (must match the flow audience).
 Subject direction: Angle or hook direction (NOT an actual subject line).
 Sections:
 - Hero block — what it shows (1 line)
@@ -305,13 +348,14 @@ Notes: ≤1 line if needed.
 \`\`\`
 
 ABSOLUTE RULES FOR THE SKELETON:
+- The first three blocks MUST be [TRIGGER], [FILTERS], [EXIT]. The FILTERS block MUST include at least one filter that prevents wrong-audience entry (e.g. for welcome: "Has not Placed Order since starting this flow").
 - BRACKET headers only: \`[EMAIL N — Label]\`, \`[DELAY] — duration\`, \`[CONDITIONAL SPLIT — condition]\`, \`[SMS — Label]\`. NEVER \`## EMAIL\` or \`### Email\`.
 - Separate every node with a line containing only \`---\`.
 - DO NOT write actual subject lines. DO NOT write preview text. DO NOT write any body copy, hero copy, headlines, CTAs copy, or PS lines.
-- "Subject direction" is an ANGLE description (e.g. "Curiosity hook around dentist surprise"), not a real SL.
+- Every email's Job + Sections MUST be appropriate for the flow audience defined above. A welcome flow CANNOT contain "your order arrived" or shipping content.
 - Sections are 3–5 short BULLETS describing what each block IS, not what it SAYS.
-- Total skeleton ≤80 lines. If you find yourself writing a paragraph, stop — it belongs in copy generation later.
-- When updating an existing skeleton, return the FULL updated skeleton in the same bracket format.
+- Total skeleton ≤90 lines.
+- When updating an existing skeleton, return the FULL updated skeleton in the same bracket format (including TRIGGER/FILTERS/EXIT).
 
 CURRENT SKELETON:
 ${current_skeleton || "(none yet — build from scratch when ready)"}`;
