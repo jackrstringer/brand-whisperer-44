@@ -542,6 +542,8 @@ export interface GenerateCampaignParams {
   campaignMode?: "campaign" | "flow";
   flowConfig?: any;
   flowNotes?: string;
+  /** 1–3 slugs from emailCopywriterSkill — names the visual blocks the email should lead with. */
+  featuredDesignElements?: string[];
 }
 
 /**
@@ -556,7 +558,7 @@ export async function generateCampaignCore(
     brandId, campaignId, brief, goal, copy, productIds,
     pinnedAssetUrls: pinnedUrls, matchProductColors, designNotes,
     shopifyProducts, reference, refreshCopy, _isSubGeneration, _runId,
-    campaignMode, flowConfig, flowNotes,
+    campaignMode, flowConfig, flowNotes, featuredDesignElements,
   } = params;
   const variantIdx = params._variantIndex ?? 0;
   const runId = _runId;
