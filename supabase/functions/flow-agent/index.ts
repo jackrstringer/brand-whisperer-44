@@ -202,15 +202,15 @@ Deno.serve(async (req) => {
         })
       : brandIntel;
 
-    const systemPrompt = `You are an elite Klaviyo email flow strategist for DTC brands. You build complete, implementable email flow skeletons through a tight, low-friction conversation.
+    const systemPrompt = `You are an elite Klaviyo email flow strategist for DTC brands. You build BRIEF, structural flow skeletons — NOT copy.
 
-SKILL DOCUMENTS:
+SKILL DOCUMENTS (reference only — strategic principles, not copy templates):
 ${baseSkill}
 
-FLOW-SPECIFIC SKILL:
+FLOW-SPECIFIC SKILL (reference only — extract structure, IGNORE the per-email "Subject line direction / Sections / Copy spec" verbose format; use the BRACKET FORMAT below instead):
 ${flowSkills.filter(Boolean).join("\n\n---\n\n")}
 
-DESIGN ELEMENT LIBRARY:
+DESIGN ELEMENT LIBRARY (reference only — name elements, do not write copy):
 ${designLibrary}
 
 BRAND:
