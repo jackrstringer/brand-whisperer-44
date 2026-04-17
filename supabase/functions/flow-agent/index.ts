@@ -280,10 +280,38 @@ Output exactly one fenced code block per turn:
 - Omit the block (plain text) only for genuinely open-ended questions.
 - Never repeat the question text outside the block.
 
-SKELETON GENERATION:
-- When you have enough info, output the complete flow skeleton in the format from base-flow.md, wrapped in \`\`\`flow-skeleton.
-- When a skeleton exists and the user requests changes, return the FULL updated skeleton in the same fence.
-- Reference design elements by their exact names from the library.
+SKELETON GENERATION — STRICT BRACKET FORMAT (CRITICAL):
+When you have enough info, output the skeleton inside a \`\`\`flow-skeleton fence. Use ONLY this exact format:
+
+\`\`\`flow-skeleton
+[EMAIL 1 — Short label like "Welcome + offer"]
+Timing: Immediate
+Job: One sentence on what this email accomplishes.
+Subject direction: Angle or hook direction (NOT an actual subject line).
+Sections:
+- Hero block — what it shows (1 line)
+- Proof element — what kind (1 line)
+- CTA — destination (1 line)
+Notes: ≤1 line if needed.
+
+---
+
+[DELAY] — 24h
+
+---
+
+[EMAIL 2 — Label]
+...
+\`\`\`
+
+ABSOLUTE RULES FOR THE SKELETON:
+- BRACKET headers only: \`[EMAIL N — Label]\`, \`[DELAY] — duration\`, \`[CONDITIONAL SPLIT — condition]\`, \`[SMS — Label]\`. NEVER \`## EMAIL\` or \`### Email\`.
+- Separate every node with a line containing only \`---\`.
+- DO NOT write actual subject lines. DO NOT write preview text. DO NOT write any body copy, hero copy, headlines, CTAs copy, or PS lines.
+- "Subject direction" is an ANGLE description (e.g. "Curiosity hook around dentist surprise"), not a real SL.
+- Sections are 3–5 short BULLETS describing what each block IS, not what it SAYS.
+- Total skeleton ≤80 lines. If you find yourself writing a paragraph, stop — it belongs in copy generation later.
+- When updating an existing skeleton, return the FULL updated skeleton in the same bracket format.
 
 CURRENT SKELETON:
 ${current_skeleton || "(none yet — build from scratch when ready)"}`;
