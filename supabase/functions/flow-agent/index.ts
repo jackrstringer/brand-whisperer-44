@@ -143,7 +143,7 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
     if (isInit && conversation.length === 0) {
       messages.push({
         role: "user",
-        content: `Begin. Acknowledge the brand briefly, then ask your first clarifying questions to design a ${flow_type.replace(/_/g, " ")} flow. If brand intelligence already covers most things, jump straight to generating the skeleton.`,
+        content: `Begin building a ${flow_type.replace(/_/g, " ")} flow. Skip any greeting, brand recap, or preamble. Ask ONLY your first clarifying question, following the QUESTION FORMAT rules (use a flow-question JSON block when there are discrete options). If brand intelligence already covers everything, generate the skeleton directly.`,
       });
     } else if (!isInit) {
       messages.push({ role: "user", content: message });
