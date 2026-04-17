@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.klaviyo-validate-template]
 verify_jwt = false
+
+[functions.flow-agent]
+verify_jwt = false
