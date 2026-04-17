@@ -372,6 +372,52 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
           const reader = res.body.getReader();
           const dec = new TextDecoder();
           let buf = "";
+          // Track whether we're currently inside a ```flow-skeleton fence so we
+          // can route those tokens to a separate SSE event (canvas-only, not chat).
+          let inSkeletonFence = false;
+          let pendingTail = ""; // small lookahead buffer for fence-marker detection
+          const SKELETON_OPEN = "```flow-skeleton";
+          const FENCE_CLOSE = "```";
+
+          const flushChunk = (chunk: string) => {
+            if (!chunk) return;
+            // Combine with any pending tail from the previous chunk so we never
+            // miss a fence marker that straddles two deltas.
+            let working = pendingTail + chunk;
+            pendingTail = "";
+
+            while (working.length > 0) {
+              if (!inSkeletonFence) {
+                const openIdx = working.indexOf(SKELETON_OPEN);
+                if (openIdx === -1) {
+                  // Hold back the last few chars in case a fence marker is starting
+                  const safeLen = Math.max(0, working.length - (SKELETON_OPEN.length - 1));
+                  if (safeLen > 0) send({ type: "text", content: working.slice(0, safeLen) });
+                  pendingTail = working.slice(safeLen);
+                  return;
+                }
+                if (openIdx > 0) send({ type: "text", content: working.slice(0, openIdx) });
+                inSkeletonFence = true;
+                send({ type: "skeleton_start" });
+                working = working.slice(openIdx + SKELETON_OPEN.length);
+              } else {
+                const closeIdx = working.indexOf(FENCE_CLOSE);
+                if (closeIdx === -1) {
+                  const safeLen = Math.max(0, working.length - (FENCE_CLOSE.length - 1));
+                  if (safeLen > 0)
+                    send({ type: "skeleton_chunk", content: working.slice(0, safeLen) });
+                  pendingTail = working.slice(safeLen);
+                  return;
+                }
+                if (closeIdx > 0)
+                  send({ type: "skeleton_chunk", content: working.slice(0, closeIdx) });
+                inSkeletonFence = false;
+                send({ type: "skeleton_end" });
+                working = working.slice(closeIdx + FENCE_CLOSE.length);
+              }
+            }
+          };
+
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -387,10 +433,16 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
                 if (evt.type === "content_block_delta" && evt.delta?.type === "text_delta") {
                   const chunk = evt.delta.text || "";
                   fullText += chunk;
-                  send({ type: "text", content: chunk });
+                  flushChunk(chunk);
                 }
               } catch {}
             }
+          }
+          // Flush any remaining tail text (only matters for non-fence content)
+          if (pendingTail) {
+            if (inSkeletonFence) send({ type: "skeleton_chunk", content: pendingTail });
+            else send({ type: "text", content: pendingTail });
+            pendingTail = "";
           }
 
           // Persist conversation + extract skeleton
