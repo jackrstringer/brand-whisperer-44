@@ -146,7 +146,7 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
     if (isInit && conversation.length === 0) {
       messages.push({
         role: "user",
-        content: `Begin building a ${flow_type.replace(/_/g, " ")} flow. Skip any greeting, brand recap, or preamble. Ask ONLY your first clarifying question, following the QUESTION FORMAT rules (use a flow-question JSON block when there are discrete options). If brand intelligence already covers everything, generate the skeleton directly.`,
+        content: `Begin building a ${flow_type.replace(/_/g, " ")} flow for this brand. You are the expert — do NOT ask the user to choose email count, timing, cadence, splits, or any strategic decision. Decide those yourself from brand intelligence + best practices. In your first turn: state the strategy you're building in 2–4 tight bullets (e.g. "Building: 5 emails over 10 days. E1 immediate w/ offer, E2 social proof at 24h, E3 education at 72h, E4 urgency at day 7, E5 last-chance at day 10."), then EITHER ask ONE necessary clarifying question that only the user can know (e.g. confirm the specific offer if not already in brand intel) OR skip straight to generating the full skeleton. No greetings, no brand recap.`,
       });
     } else if (!isInit) {
       messages.push({ role: "user", content: message });
