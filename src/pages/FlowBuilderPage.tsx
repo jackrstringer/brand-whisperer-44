@@ -432,36 +432,32 @@ Notes: ${node.notes || "none"}`;
         </div>
       ) : (
         <>
-          <div className="flex-1 min-h-0 hidden md:block animate-fade-in">
-            <SplitPane
-              left={
-                <SkeletonViewer
-                  nodes={parsedNodes}
-                  meta={parsedMeta}
-                  flowType={flow.flow_type}
-                  emails={emails}
-                  campaignMeta={campaignMeta}
-                  expandedIndex={expandedIndex}
-                  onToggleExpand={setExpandedIndex}
-                  onGenerateNode={generateSingleEmail}
-                  onSaveNodeEdit={saveNodeEdit}
-                  generatingIndex={generatingIndex}
-                  drafting={flow.status === "draft" || flow.status === "generating"}
-                />
-              }
-              right={
-                <FlowAgentChat
-                  flowId={flow.id}
-                  brandId={flow.brand_id}
-                  flowType={flow.flow_type}
-                  initialMessages={Array.isArray(flow.messages) ? (flow.messages as any) : []}
-                  currentSkeleton={flow.skeleton_markdown}
-                  onSkeletonUpdated={handleSkeletonUpdated}
-                />
-              }
-              minLeftWidth={420}
-              minRightWidth={340}
-            />
+          <div className="flex-1 min-h-0 hidden md:block animate-fade-in relative">
+            <div className="absolute inset-0 pr-[400px]">
+              <SkeletonViewer
+                nodes={parsedNodes}
+                meta={parsedMeta}
+                flowType={flow.flow_type}
+                emails={emails}
+                campaignMeta={campaignMeta}
+                expandedIndex={expandedIndex}
+                onToggleExpand={setExpandedIndex}
+                onGenerateNode={generateSingleEmail}
+                onSaveNodeEdit={saveNodeEdit}
+                generatingIndex={generatingIndex}
+                drafting={flow.status === "draft" || flow.status === "generating"}
+              />
+            </div>
+            <div className="absolute top-0 right-0 bottom-0 w-[400px] border-l border-border bg-background shadow-xl">
+              <FlowAgentChat
+                flowId={flow.id}
+                brandId={flow.brand_id}
+                flowType={flow.flow_type}
+                initialMessages={Array.isArray(flow.messages) ? (flow.messages as any) : []}
+                currentSkeleton={flow.skeleton_markdown}
+                onSkeletonUpdated={handleSkeletonUpdated}
+              />
+            </div>
           </div>
           <div className="flex-1 min-h-0 md:hidden">
             {mobileTab === "canvas" ? (
