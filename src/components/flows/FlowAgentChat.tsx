@@ -98,6 +98,7 @@ export function FlowAgentChat({
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [streamBuf, setStreamBuf] = useState("");
+  const [skeletonStreaming, setSkeletonStreaming] = useState(false);
   const [stages, setStages] = useState<{ key: string; status: "active" | "done" }[]>([]);
   const initFired = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
