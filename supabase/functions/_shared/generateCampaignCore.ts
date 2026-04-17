@@ -964,6 +964,9 @@ CRITICAL GRID RULES:
 
     let part3 = `Generate a ${goal} email campaign.\nBrief: ${brief}`;
     if (copy) part3 += `\nThe following copy must be used verbatim: ${copy}`;
+    if (featuredDesignElements?.length) {
+      part3 += `\n\n=== FEATURED DESIGN BLOCKS ===\nThis campaign MUST lead with the following named visual blocks from the email design element library: ${featuredDesignElements.join(", ")}.\nUse the EXACT slugs in data-block-type and prepend each block with an HTML comment <!-- block: <slug> -->. Treat them as the skim-stoppers; surrounding copy is connective tissue.`;
+    }
 
     part3 += `\n\n=== ${creativeDir}`;
 
