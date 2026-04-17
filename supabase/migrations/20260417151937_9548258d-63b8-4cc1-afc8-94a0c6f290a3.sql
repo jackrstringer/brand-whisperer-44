@@ -1,0 +1,1 @@
+UPDATE brand_intelligence SET campaign_report_status = 'failed', campaign_report_error = 'Previous run was terminated by the edge runtime before completion. Please retry — the background task lifecycle has been fixed.' WHERE brand_id = '31ffc2fc-34b0-4594-b45a-2cf0c5d1f09b' AND campaign_report_status = 'generating';
