@@ -133,6 +133,7 @@ export function FlowAgentChat({
     }
     setStreaming(true);
     setStreamBuf("");
+    setSkeletonStreaming(false);
     setStages([]);
 
     try {
