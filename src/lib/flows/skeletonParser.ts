@@ -58,10 +58,15 @@ function extractSections(block: string): string[] | undefined {
 }
 
 function extractLabel(firstLine: string): string {
-  // [EMAIL 1 — Welcome + Offer]  →  "Welcome + Offer"  (or whole bracket content if no dash)
-  const inner = firstLine.match(/\[([^\]]+)\]/)?.[1] ?? firstLine;
-  const dashSplit = inner.split(/[—–-]/);
-  return (dashSplit.length > 1 ? dashSplit.slice(1).join("-") : inner).trim();
+  // Bracket: [EMAIL 1 — Welcome + Offer] → "Welcome + Offer"
+  const bracket = firstLine.match(/\[([^\]]+)\]/)?.[1];
+  if (bracket) {
+    const dashSplit = bracket.split(/[—–-]/);
+    return (dashSplit.length > 1 ? dashSplit.slice(1).join("-") : bracket).trim();
+  }
+  // Markdown header: "## EMAIL 1: Welcome + Offer" or "## Email 1 - Welcome"
+  const stripped = firstLine.replace(/^#+\s*/, "").replace(/^(EMAIL|DELAY|SPLIT|CONDITIONAL SPLIT|SMS)\s*\d*\s*[:\-—–]?\s*/i, "");
+  return stripped.trim() || firstLine.trim();
 }
 
 export function parseSkeleton(markdown: string | null | undefined): ParsedFlowNode[] {
