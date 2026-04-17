@@ -218,6 +218,7 @@ export function FlowAgentChat({
       setMessages((m) => [...m, { role: "assistant", content: full }]);
       setStreamBuf("");
       setStages([]);
+      setSkeletonStreaming(false);
       if (skeletonUpdated) onSkeletonUpdated();
     } catch (err: any) {
       console.error("[FlowAgentChat]", err);
@@ -227,6 +228,7 @@ export function FlowAgentChat({
       ]);
       setStreamBuf("");
       setStages([]);
+      setSkeletonStreaming(false);
     } finally {
       setStreaming(false);
     }
