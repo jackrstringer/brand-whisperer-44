@@ -675,6 +675,126 @@ export type Database = {
           },
         ]
       }
+      flow_emails: {
+        Row: {
+          brand_id: string
+          campaign_id: string | null
+          created_at: string
+          flow_id: string
+          generation_status: string
+          html: string | null
+          id: string
+          job: string | null
+          label: string | null
+          node_type: string
+          notes: string | null
+          sections: Json | null
+          sequence_index: number
+          subject_direction: string | null
+          timing: string | null
+        }
+        Insert: {
+          brand_id: string
+          campaign_id?: string | null
+          created_at?: string
+          flow_id: string
+          generation_status?: string
+          html?: string | null
+          id?: string
+          job?: string | null
+          label?: string | null
+          node_type: string
+          notes?: string | null
+          sections?: Json | null
+          sequence_index: number
+          subject_direction?: string | null
+          timing?: string | null
+        }
+        Update: {
+          brand_id?: string
+          campaign_id?: string | null
+          created_at?: string
+          flow_id?: string
+          generation_status?: string
+          html?: string | null
+          id?: string
+          job?: string | null
+          label?: string | null
+          node_type?: string
+          notes?: string | null
+          sections?: Json | null
+          sequence_index?: number
+          subject_direction?: string | null
+          timing?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flow_emails_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "flow_emails_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "flow_emails_flow_id_fkey"
+            columns: ["flow_id"]
+            isOneToOne: false
+            referencedRelation: "flows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      flows: {
+        Row: {
+          brand_id: string
+          created_at: string
+          flow_type: string
+          id: string
+          messages: Json
+          name: string
+          skeleton_markdown: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          brand_id: string
+          created_at?: string
+          flow_type: string
+          id?: string
+          messages?: Json
+          name: string
+          skeleton_markdown?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          brand_id?: string
+          created_at?: string
+          flow_type?: string
+          id?: string
+          messages?: Json
+          name?: string
+          skeleton_markdown?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "flows_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       generation_events: {
         Row: {
           campaign_id: string
