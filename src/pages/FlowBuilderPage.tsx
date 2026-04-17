@@ -437,6 +437,8 @@ Notes: ${node.notes || "none"}`;
               left={
                 <SkeletonViewer
                   nodes={parsedNodes}
+                  meta={parsedMeta}
+                  flowType={flow.flow_type}
                   emails={emails}
                   campaignMeta={campaignMeta}
                   expandedIndex={expandedIndex}
@@ -465,6 +467,8 @@ Notes: ${node.notes || "none"}`;
             {mobileTab === "canvas" ? (
               <SkeletonViewer
                 nodes={parsedNodes}
+                meta={parsedMeta}
+                flowType={flow.flow_type}
                 emails={emails}
                 campaignMeta={campaignMeta}
                 expandedIndex={expandedIndex}
