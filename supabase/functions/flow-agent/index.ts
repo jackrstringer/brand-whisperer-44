@@ -25,6 +25,113 @@ async function readSkill(filename: string): Promise<string> {
   }
 }
 
+const INTEL_SELECT = "compiled_context, klaviyo_compiled, ai_research, research_status";
+
+async function invokeInternalFunction(name: string, payload: Record<string, unknown>) {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceRoleKey) throw new Error("Backend environment not configured");
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/${name}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${serviceRoleKey}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`${name} failed: ${errorText.slice(0, 300)}`);
+  }
+
+  return res;
+}
+
+async function pollBrandIntelligence(
+  sb: ReturnType<typeof createClient>,
+  brandId: string,
+  predicate: (intel: any) => boolean,
+  timeoutMs = 120000
+) {
+  const startedAt = Date.now();
+  let lastStatus = "unknown";
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const { data, error } = await sb
+      .from("brand_intelligence")
+      .select(INTEL_SELECT)
+      .eq("brand_id", brandId)
+      .maybeSingle();
+
+    if (error) throw error;
+    lastStatus = data?.research_status || "unknown";
+
+    if (lastStatus === "failed") {
+      throw new Error("Brand research failed. Re-run brand intelligence, then try Flow Mode again.");
+    }
+
+    if (data && predicate(data)) return data;
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+
+  throw new Error(`Timed out while preparing brand context (last status: ${lastStatus}).`);
+}
+
+async function ensureCompiledContext({
+  sb,
+  brandId,
+  brandName,
+  domain,
+  existingIntel,
+}: {
+  sb: ReturnType<typeof createClient>;
+  brandId: string;
+  brandName: string;
+  domain: string | null | undefined;
+  existingIntel: any;
+}) {
+  if (existingIntel?.compiled_context?.trim()) return existingIntel;
+
+  if (existingIntel?.research_status === "compiling") {
+    return await pollBrandIntelligence(sb, brandId, (intel) => !!intel?.compiled_context?.trim());
+  }
+
+  if (existingIntel?.research_status === "researching") {
+    await pollBrandIntelligence(
+      sb,
+      brandId,
+      (intel) => !!intel?.ai_research || intel?.research_status === "ai_complete",
+      180000
+    );
+    await invokeInternalFunction("compile-brand-context", { brand_id: brandId });
+    return await pollBrandIntelligence(sb, brandId, (intel) => !!intel?.compiled_context?.trim());
+  }
+
+  if (!existingIntel?.ai_research) {
+    if (!domain?.trim()) {
+      throw new Error("A website URL is required before Flow Mode can research and build a custom skeleton.");
+    }
+
+    await invokeInternalFunction("research-brand", {
+      brand_id: brandId,
+      brand_name: brandName,
+      domain,
+    });
+
+    await pollBrandIntelligence(
+      sb,
+      brandId,
+      (intel) => !!intel?.ai_research || intel?.research_status === "ai_complete",
+      180000
+    );
+  }
+
+  await invokeInternalFunction("compile-brand-context", { brand_id: brandId });
+  return await pollBrandIntelligence(sb, brandId, (intel) => !!intel?.compiled_context?.trim());
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -64,7 +171,7 @@ Deno.serve(async (req) => {
       await Promise.all([
         sb
           .from("brand_intelligence")
-          .select("compiled_context, klaviyo_compiled")
+          .select(`${INTEL_SELECT}`)
           .eq("brand_id", brand_id)
           .maybeSingle(),
         sb
@@ -72,15 +179,28 @@ Deno.serve(async (req) => {
           .select("cached_stats")
           .eq("brand_id", brand_id)
           .maybeSingle(),
-        sb.from("brands").select("name, industry").eq("id", brand_id).maybeSingle(),
+        sb.from("brands").select("name, industry, website_url").eq("id", brand_id).maybeSingle(),
         sb.from("flows").select("messages, skeleton_markdown").eq("id", flow_id).maybeSingle(),
       ]);
 
-    const conversation: Array<{ role: string; content: string }> = Array.isArray(
-      flowRow?.messages
-    )
-      ? (flowRow!.messages as any)
-      : [];
+    const isInit = message === "__FLOW_INIT__";
+    const isRestart = message === "__FLOW_RESTART__";
+    const bootingFreshFlow = isInit || isRestart;
+    const conversation: Array<{ role: string; content: string }> = isRestart
+      ? []
+      : Array.isArray(flowRow?.messages)
+        ? (flowRow!.messages as any)
+        : [];
+
+    const preparedIntel = bootingFreshFlow && !current_skeleton
+      ? await ensureCompiledContext({
+          sb,
+          brandId: brand_id,
+          brandName: brand?.name || "Unknown brand",
+          domain: brand?.website_url,
+          existingIntel: brandIntel,
+        })
+      : brandIntel;
 
     const systemPrompt = `You are an expert Klaviyo email flow strategist for DTC brands. You build complete, implementable email flow skeletons through a tight, low-friction conversation.
 
@@ -97,19 +217,20 @@ BRAND:
 ${brand?.name || "Unknown"} — Industry: ${brand?.industry || "Unknown"}
 
 BRAND INTELLIGENCE:
-${brandIntel?.compiled_context || "(no compiled brand intelligence yet)"}
+${preparedIntel?.compiled_context || "(no compiled brand intelligence yet)"}
 
 KLAVIYO PERFORMANCE DATA:
-${brandIntel?.klaviyo_compiled || "(no klaviyo data)"}
+${preparedIntel?.klaviyo_compiled || "(no klaviyo data)"}
 
 CONVERSATION RULES (CRITICAL):
 - YOU are the email marketing expert. The user is NOT. Never ask them to make expert/strategic decisions (email count, timing, cadence, split logic, channel mix, sequencing, etc.). Decide those yourself based on best practices and brand intelligence, then TELL them what you're building.
 - Only ask the user for things ONLY they can know: the specific offer/incentive (if not in brand intel), the hero product to feature (if ambiguous), brand-specific proof points you can't infer, or explicit preferences they've stated.
-- Default behavior: propose the complete strategy confidently in 2–4 short bullets ("Here's what I'm building: 5 emails over 10 days, E1 immediate with offer, E2 social proof at 24h…"), then ask AT MOST ONE genuinely necessary clarifying question — or skip straight to generating the skeleton.
+- Default behavior: if the brand context is sufficient, skip questions and generate the full custom skeleton immediately. Only ask one clarifying question if a truly blocking brand fact is missing after reviewing the research.
 - ONE question at a time. Never bundle multiple questions in a single turn.
 - Be terse. No preamble, no recap of brand intelligence, no "great question" filler.
 - NEVER ask whether they have an existing flow to replace — assume this is always net new.
 - Infer aggressively from brand intelligence. When in doubt, decide and move on rather than asking.
+- Never ask generic placeholder questions on the first turn (for example "What's the welcome offer?") before you've synthesized the actual brand context.
 - Whenever a question has a finite set of likely answers, you MUST present them as clickable options using a fenced code block (see below). Do NOT list options inline as bullets/prose — emit the JSON block instead.
 - After the user answers, confirm in one short line and move to the next step (or generate the skeleton).
 
@@ -139,16 +260,15 @@ CURRENT SKELETON:
 ${current_skeleton || "(none yet — build from scratch when ready)"}`;
 
     // Build messages array
-    const isInit = message === "__FLOW_INIT__";
     const messages = [
       ...conversation.map((m) => ({ role: m.role, content: m.content })),
     ];
-    if (isInit && conversation.length === 0) {
+    if (bootingFreshFlow && conversation.length === 0) {
       messages.push({
         role: "user",
-        content: `Begin building a ${flow_type.replace(/_/g, " ")} flow for this brand. You are the expert — do NOT ask the user to choose email count, timing, cadence, splits, or any strategic decision. Decide those yourself from brand intelligence + best practices. In your first turn: state the strategy you're building in 2–4 tight bullets (e.g. "Building: 5 emails over 10 days. E1 immediate w/ offer, E2 social proof at 24h, E3 education at 72h, E4 urgency at day 7, E5 last-chance at day 10."), then EITHER ask ONE necessary clarifying question that only the user can know (e.g. confirm the specific offer if not already in brand intel) OR skip straight to generating the full skeleton. No greetings, no brand recap.`,
+        content: `Begin building a ${flow_type.replace(/_/g, " ")} flow for this brand. First, synthesize the actual researched brand context you were given. If there is enough information, generate the full custom skeleton immediately in a single response. Only ask one clarifying question if a missing brand-specific fact truly blocks you. Do not ask a generic template question before doing the research-based synthesis. No greetings. No recap. No placeholder defaults.`,
       });
-    } else if (!isInit) {
+    } else if (!isInit && !isRestart) {
       messages.push({ role: "user", content: message });
     }
 
@@ -211,7 +331,7 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
           // Persist conversation + extract skeleton
           const newConversation = [
             ...conversation,
-            ...(isInit && conversation.length === 0
+            ...(bootingFreshFlow && conversation.length === 0
               ? []
               : [{ role: "user", content: message, ts: new Date().toISOString() }]),
             { role: "assistant", content: fullText, ts: new Date().toISOString() },
