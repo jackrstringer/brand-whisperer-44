@@ -5,8 +5,18 @@ import { useAuth } from "@/hooks/useAuth";
 import { FLOW_TYPE_META } from "@/lib/flows/skeletonParser";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { GitBranch, Plus, Loader2 } from "lucide-react";
+import { GitBranch, Plus, Loader2, Trash2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface FlowRow {
   id: string;
@@ -25,6 +35,22 @@ export default function FlowsListPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<FlowRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const { error } = await supabase.from("flows").delete().eq("id", deleteTarget.id);
+    setDeleting(false);
+    if (error) {
+      toast({ title: "Failed to delete flow", description: error.message, variant: "destructive" });
+      return;
+    }
+    setFlows((prev) => prev.filter((f) => f.id !== deleteTarget.id));
+    setDeleteTarget(null);
+    toast({ title: "Flow deleted" });
+  };
 
   useEffect(() => {
     if (!brandId) return;
@@ -123,26 +149,67 @@ export default function FlowsListPage() {
           {flows.map((f) => {
             const meta = FLOW_TYPE_META[f.flow_type];
             return (
-              <button
+              <div
                 key={f.id}
-                onClick={() => navigate(`/brands/${brandId}/flows/${f.id}`)}
-                className="text-left p-5 rounded-xl border border-border bg-card hover:border-primary/50 hover:bg-muted/30 transition-all"
+                className="group relative text-left p-5 rounded-xl border border-border bg-card hover:border-primary/50 hover:bg-muted/30 transition-all"
               >
-                <div className="flex items-start justify-between gap-3 mb-3">
-                  <h3 className="font-semibold text-foreground line-clamp-2">{f.name}</h3>
-                  <StatusBadge status={f.status} />
+                <button
+                  onClick={() => navigate(`/brands/${brandId}/flows/${f.id}`)}
+                  className="absolute inset-0 rounded-xl"
+                  aria-label={`Open ${f.name}`}
+                />
+                <div className="relative pointer-events-none">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <h3 className="font-semibold text-foreground line-clamp-2">{f.name}</h3>
+                    <StatusBadge status={f.status} />
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Badge variant="outline" className="text-xs">
+                      {meta?.label || f.flow_type}
+                    </Badge>
+                    <span>· Updated {new Date(f.updated_at).toLocaleDateString()}</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Badge variant="outline" className="text-xs">
-                    {meta?.label || f.flow_type}
-                  </Badge>
-                  <span>· Updated {new Date(f.updated_at).toLocaleDateString()}</span>
-                </div>
-              </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteTarget(f);
+                  }}
+                  className="absolute top-3 right-3 z-10 p-1.5 rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-opacity"
+                  aria-label="Delete flow"
+                  title="Delete flow"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             );
           })}
         </div>
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this flow?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{deleteTarget?.name}" and all of its emails will be permanently deleted. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                confirmDelete();
+              }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
