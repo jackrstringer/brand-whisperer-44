@@ -34,12 +34,11 @@ export default function FlowBuilderPage() {
   const navigate = useNavigate();
   const [flow, setFlow] = useState<FlowRow | null>(null);
   const [emails, setEmails] = useState<FlowEmailRow[]>([]);
+  const [campaignMeta, setCampaignMeta] = useState<Record<string, FlowEmailMeta>>({});
   const [loading, setLoading] = useState(true);
   const [generatingIndex, setGeneratingIndex] = useState<number | null>(null);
   const [bulkGenerating, setBulkGenerating] = useState(false);
-  const [editingNodeIndex, setEditingNodeIndex] = useState<number | null>(null);
-  const [editDraft, setEditDraft] = useState<Partial<ParsedFlowNode>>({});
-  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [mobileTab, setMobileTab] = useState<"canvas" | "chat">("canvas");
   const [nameDraft, setNameDraft] = useState("");
   const [editingName, setEditingName] = useState(false);
