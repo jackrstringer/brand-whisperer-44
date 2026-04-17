@@ -31,6 +31,12 @@ interface FlowQuestion {
 const QUESTION_FENCE = /```flow-question\s*([\s\S]*?)```/;
 const SKELETON_FENCE = /```flow-skeleton[\s\S]*?```/;
 
+function shouldAutoRestart(messages: Msg[], currentSkeleton: string | null): boolean {
+  if (currentSkeleton || messages.length !== 1) return false;
+  const [first] = messages;
+  return first.role === "assistant" && QUESTION_FENCE.test(first.content);
+}
+
 function extractQuestion(content: string): FlowQuestion | null {
   const m = content.match(QUESTION_FENCE);
   if (!m) return null;
@@ -68,7 +74,11 @@ export function FlowAgentChat({
 
   useEffect(() => {
     if (initFired.current) return;
-    if (initialMessages.length === 0 && !streaming) {
+    if (shouldAutoRestart(initialMessages, currentSkeleton) && !streaming) {
+      initFired.current = true;
+      setMessages([]);
+      sendMessage("__FLOW_RESTART__", true);
+    } else if (initialMessages.length === 0 && !streaming) {
       initFired.current = true;
       sendMessage("__FLOW_INIT__", true);
     } else {
