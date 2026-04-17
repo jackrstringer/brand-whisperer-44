@@ -57,7 +57,26 @@ export default function FlowBuilderPage() {
       setFlow(f as FlowRow);
       setNameDraft(f.name);
     }
-    setEmails((e as FlowEmailRow[]) || []);
+    const emailRows = (e as FlowEmailRow[]) || [];
+    setEmails(emailRows);
+
+    // Pull campaign meta (subject_line, preview_text) for any linked campaigns
+    const campaignIds = emailRows
+      .map((row) => row.campaign_id)
+      .filter((id): id is string => !!id);
+    if (campaignIds.length > 0) {
+      const { data: camps } = await supabase
+        .from("campaigns")
+        .select("id, subject_line, preview_text")
+        .in("id", campaignIds);
+      if (camps) {
+        const map: Record<string, FlowEmailMeta> = {};
+        for (const c of camps as { id: string; subject_line: string | null; preview_text: string | null }[]) {
+          map[c.id] = { subject_line: c.subject_line, preview_text: c.preview_text };
+        }
+        setCampaignMeta(map);
+      }
+    }
     setLoading(false);
   };
 
