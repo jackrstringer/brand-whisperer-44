@@ -5,8 +5,18 @@ import { useAuth } from "@/hooks/useAuth";
 import { FLOW_TYPE_META } from "@/lib/flows/skeletonParser";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { GitBranch, Plus, Loader2 } from "lucide-react";
+import { GitBranch, Plus, Loader2, Trash2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface FlowRow {
   id: string;
