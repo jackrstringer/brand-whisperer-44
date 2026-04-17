@@ -159,7 +159,7 @@ export default function FlowsListPage() {
                   aria-label={`Open ${f.name}`}
                 />
                 <div className="relative pointer-events-none">
-                  <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-start justify-between gap-3 mb-3 pr-8">
                     <h3 className="font-semibold text-foreground line-clamp-2">{f.name}</h3>
                     <StatusBadge status={f.status} />
                   </div>
@@ -175,7 +175,7 @@ export default function FlowsListPage() {
                     e.stopPropagation();
                     setDeleteTarget(f);
                   }}
-                  className="absolute top-3 right-3 z-10 p-1.5 rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-opacity"
+                  className="absolute bottom-3 right-3 z-10 p-1.5 rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive transition-opacity"
                   aria-label="Delete flow"
                   title="Delete flow"
                 >
