@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { finalizeCampaignHtml } from "../_shared/finalizeCampaignHtml.ts";
+import { EMAIL_DESIGN_ELEMENT_LIBRARY, DESIGN_ELEMENT_USAGE_RULES } from "../_shared/emailCopywriterSkill.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -441,6 +442,25 @@ RENDERING CONTEXT (CRITICAL — read before every edit):
 - Image dimensions are calculated for 470px: full-width = w-470, 2-col grid slots ≈ w-220, 3-col grid slots ≈ w-145.
 - Mobile stacking rules are stripped post-generation. DO NOT add any CSS that sets display:block on table cells or width:100% on columns.
 - The layout you see in the HTML IS the final layout. Do not "fix" or "improve" it by restructuring columns or changing stacking behavior.
+
+DESIGN BLOCK LIBRARY — TARGETED EDITS:
+When the user asks to "add a comparison table", "make this more skimmable", "add a stat strip",
+"swap the intro for a feature checklist", "add a press logo bar", "drop in a founder quote",
+"add a numbered callout list", etc. — resolve the request to a NAMED block from the library
+below and insert/swap accordingly.
+
+When inserting a new block via patches:
+- Wrap it with an HTML comment <!-- block: <slug> --> immediately above and
+  data-block-type="<slug>" on the outer wrapping <table> or <td>.
+- Use the EXACT slug from the library. No paraphrasing.
+- Respect the per-block copy length limits in the library spec.
+
+When swapping an existing block, target the existing data-block-type="..." element so the
+patch is unambiguous.
+
+${EMAIL_DESIGN_ELEMENT_LIBRARY}
+
+${DESIGN_ELEMENT_USAGE_RULES}
 
 Never mix the two formats in one response. Use VARIANT MODE only when the user asks for ideas/options/alternatives. Use EDIT MODE for everything else.`;
 

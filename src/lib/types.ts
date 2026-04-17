@@ -130,6 +130,8 @@ export interface CampaignIdea {
   campaign_type: string;
   campaign_info?: string;
   copy_direction?: string;
+  /** 1–3 slugs from the email design element library — names the visual blocks the email leads with. */
+  featured_design_elements?: string[];
 }
 
 export interface BrandExtraction {

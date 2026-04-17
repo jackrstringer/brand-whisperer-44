@@ -5,6 +5,7 @@
 import { rehostHtmlImagesWithImageKit } from "./imagekit.ts";
 import { finalizeCampaignHtml } from "./finalizeCampaignHtml.ts";
 import { KLAVIYO_BEST_PRACTICES, KLAVIYO_FLOW_LIQUID_REFERENCE } from "./klaviyoBestPractices.ts";
+import { emailCopywriterPromptBlock } from "./emailCopywriterSkill.ts";
 
 /** Lightweight structured event logger for generation pipeline steps.
  *  Uses upsert on (campaign_id, run_id, event_key) so a "started" row
@@ -406,6 +407,8 @@ FOOTER (required on every email):
 - The footer is a SEPARATE section from the main content — never merge it with the last content block
 - Social media icons in footer: use small hosted PNG images, never emoji or SVG
 
+${emailCopywriterPromptBlock()}
+
 Return only complete HTML. No commentary. No markdown fences.`;
 
 const REFERENCE_MODE_SYSTEM = `You are an expert HTML email developer.
@@ -443,6 +446,14 @@ GRID GEOMETRY REPLICATION (CRITICAL):
 - A 2×2 grid = 2 <tr> rows, each with 2 <td> cells of equal width+height. A 3-column row = 1 <tr> with 3 <td> cells.
 - Count the images in each grid section of the reference. Your output must have the SAME count in the SAME arrangement.
 - All images in a grid row MUST share identical width AND height attributes.
+
+NAMING THE BLOCKS YOU FILL IN:
+- Reference layout still controls structure. Within each section, when the section
+  matches one of the named blocks in the EMAIL DESIGN ELEMENT LIBRARY below, mark
+  it the same way: HTML comment <!-- block: <slug> --> immediately above, and
+  data-block-type="<slug>" on the outer wrapping element. This makes the block
+  editable later. Do not invent new slugs.
+${emailCopywriterPromptBlock()}
 
 - Return only complete HTML, no commentary, no markdown fences.`;
 
@@ -487,6 +498,23 @@ Rules:
   12. GRID STACKING CLASSES: Check for class="grid-cell" or class="category-cell" on any <td> element. These are mobile stacking classes that cause grid width imbalance bugs. Flag as [critical] if found. Also check for media query rules containing .grid-cell or .category-cell with display:block or width:100%. Flag as [critical] if found.
   12. GRID GEOMETRY: If a structural skeleton was provided specifying a grid (e.g., "columns: 2, rows: 2, equal_sizing: true"), verify the HTML implements that exact geometry. A 2×2 equal grid must have exactly 2 <tr> rows each containing exactly 2 equal-width <td> cells. Flag any mosaic, asymmetric, or "1 large + 2 small" layout as critical when the skeleton specifies equal sizing.
   13. PRICING SANITY: Flag any compare-at/original price that is $0, $0.00, or less than the sale price as a CRITICAL error. A product cannot be "on sale" from $0. Also flag any pricing that wasn't present in the reference layout.
+  14. SKIMMABILITY: Verify the email contains AT LEAST ONE named visual block from the
+      design element library, marked with both an HTML comment (<!-- block: <slug> -->)
+      AND a data-block-type="<slug>" attribute on its outer wrapper. Walls of text
+      with only a hero image and a button FAIL skimmability. If no named block exists,
+      add an issue describing which block to insert (pick one that fits the message:
+      e.g. stat-strip, feature-checklist-matrix, review-card-single, numbered-callout-list,
+      how-it-works-steps, press-logo-bar, founder-expert-quote-card) and provide a find/replace
+      that injects it into a sensible location. Treat missing-block as a [skimmability] issue.
+  15. BLOCK SLUG VALIDITY: If any data-block-type attribute exists, its value must be
+      one of the documented slugs. Flag unknown slugs.
+
+Additionally include a top-level "skimmability" object in the JSON output:
+{
+  "passes_qa": ...,
+  "skimmability": { "pass": true|false, "reason": "...", "named_blocks_found": ["slug-1", ...] },
+  "issues": [...]
+}
 
 Return ONLY the JSON object. No markdown fences, no explanation, no preamble.`;
 
@@ -1080,6 +1108,9 @@ ${UNIVERSAL_EMAIL_RULES}`;
       "refund", "cancelled",
       "subscription", "recharge",
     ].some(kw => triggerNameLower.includes(kw));
+
+    // Re-inject the design element library with transactional restrictions for flow mode.
+    systemPrompt += `\n\n${emailCopywriterPromptBlock({ isTransactional })}`;
 
     // Fetch product data from persistent product store — only for non-transactional flows
     let productFeedsBlock = "";

@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import { DESIGN_ELEMENT_LIBRARY_COMPACT } from "../_shared/emailCopywriterSkill.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -106,7 +107,9 @@ Deno.serve(async (req) => {
 Today is ${today}. Factor in seasonality, upcoming holidays, and cultural timing.
 ${voiceContext}${pastCampaignContext}${compiledExcerpt}
 
-Your role is to give sharp, strategic guidance — not generic advice. When the user gives a direction, acknowledge it and add ONE specific strategic insight they might not have considered. Be conversational but substantive.
+${DESIGN_ELEMENT_LIBRARY_COMPACT}
+
+Your role is to give sharp, strategic guidance — not generic advice. When the user gives a direction, acknowledge it and add ONE specific strategic insight they might not have considered. When useful, name specific design block(s) from the library above (by slug) that would carry the message — e.g. "lead with a feature-checklist-matrix and close with a founder-expert-quote-card." Be conversational but substantive.
 
 Keep responses to 2-3 sentences max. Be direct, skip pleasantries. Reference the brand's actual products, voice, and past work when relevant. New campaign ideas based on their direction will be generated alongside your response, so don't list out ideas yourself — focus on strategic framing.`;
 
