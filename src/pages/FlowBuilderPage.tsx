@@ -382,29 +382,31 @@ Notes: ${node.notes || "none"}`;
         </div>
       </div>
 
-      {/* Mobile tabs */}
-      <div className="md:hidden flex border-b border-border">
-        <button
-          onClick={() => setMobileTab("canvas")}
-          className={`flex-1 py-2 text-sm flex items-center justify-center gap-1.5 ${
-            mobileTab === "canvas"
-              ? "border-b-2 border-primary text-foreground font-medium"
-              : "text-muted-foreground"
-          }`}
-        >
-          <GitFork className="w-3.5 h-3.5" /> Canvas
-        </button>
-        <button
-          onClick={() => setMobileTab("chat")}
-          className={`flex-1 py-2 text-sm flex items-center justify-center gap-1.5 ${
-            mobileTab === "chat"
-              ? "border-b-2 border-primary text-foreground font-medium"
-              : "text-muted-foreground"
-          }`}
-        >
-          <MessageSquare className="w-3.5 h-3.5" /> Agent
-        </button>
-      </div>
+      {/* Mobile tabs (only when skeleton exists) */}
+      {flow.skeleton_markdown && (
+        <div className="md:hidden flex border-b border-border">
+          <button
+            onClick={() => setMobileTab("canvas")}
+            className={`flex-1 py-2 text-sm flex items-center justify-center gap-1.5 ${
+              mobileTab === "canvas"
+                ? "border-b-2 border-primary text-foreground font-medium"
+                : "text-muted-foreground"
+            }`}
+          >
+            <GitFork className="w-3.5 h-3.5" /> Canvas
+          </button>
+          <button
+            onClick={() => setMobileTab("chat")}
+            className={`flex-1 py-2 text-sm flex items-center justify-center gap-1.5 ${
+              mobileTab === "chat"
+                ? "border-b-2 border-primary text-foreground font-medium"
+                : "text-muted-foreground"
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5" /> Agent
+          </button>
+        </div>
+      )}
 
       {/* Body */}
       {!flow.skeleton_markdown ? (
