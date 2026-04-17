@@ -354,7 +354,7 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
             },
             body: JSON.stringify({
               model: "claude-sonnet-4-5-20250929",
-              max_tokens: 8000,
+              max_tokens: 2500,
               system: systemPrompt,
               messages,
               stream: true,
