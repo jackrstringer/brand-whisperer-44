@@ -32,9 +32,12 @@ export function GenerationNode({
   roundIndex = 0,
   groupLabel,
 }: Props) {
-  const displayIdeas = isStreaming
-    ? [...ideas, ...streamingIdeas.filter(si => (si.title || si.description) && !ideas.find(i => i.id === si.id))]
-    : ideas;
+  // Streaming entries are appended in order; once an idea is finalized it joins `ideas`.
+  // Only show streaming partials beyond the finalized count to avoid duplicates.
+  const pendingStreaming = isStreaming
+    ? streamingIdeas.slice(ideas.length).filter(si => si.title || si.description)
+    : [];
+  const displayIdeas = isStreaming ? [...ideas, ...pendingStreaming] : ideas;
 
   const showResearch = isStreaming && researchStatus;
   const showLoading = isStreaming && displayIdeas.length === 0 && !showResearch;

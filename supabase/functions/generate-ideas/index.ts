@@ -347,7 +347,7 @@ Deno.serve(async (req) => {
     }
 
     // Build user prompt based on mode
-    const ideaCount = turbo_mode ? 20 : 4;
+    const ideaCount = turbo_mode ? 20 : 5;
     let userPrompt = "";
 
     // Parse subtype from campaign_type_filter if colon-delimited
