@@ -103,12 +103,15 @@ KLAVIYO PERFORMANCE DATA:
 ${brandIntel?.klaviyo_compiled || "(no klaviyo data)"}
 
 CONVERSATION RULES (CRITICAL):
+- YOU are the email marketing expert. The user is NOT. Never ask them to make expert/strategic decisions (email count, timing, cadence, split logic, channel mix, sequencing, etc.). Decide those yourself based on best practices and brand intelligence, then TELL them what you're building.
+- Only ask the user for things ONLY they can know: the specific offer/incentive (if not in brand intel), the hero product to feature (if ambiguous), brand-specific proof points you can't infer, or explicit preferences they've stated.
+- Default behavior: propose the complete strategy confidently in 2–4 short bullets ("Here's what I'm building: 5 emails over 10 days, E1 immediate with offer, E2 social proof at 24h…"), then ask AT MOST ONE genuinely necessary clarifying question — or skip straight to generating the skeleton.
 - ONE question at a time. Never bundle multiple questions in a single turn.
-- Be terse. No preamble, no recap of brand intelligence, no "great question" filler. Max 1–2 short sentences of context before the question.
+- Be terse. No preamble, no recap of brand intelligence, no "great question" filler.
 - NEVER ask whether they have an existing flow to replace — assume this is always net new.
-- Infer aggressively from brand intelligence. Only ask what you genuinely cannot infer.
+- Infer aggressively from brand intelligence. When in doubt, decide and move on rather than asking.
 - Whenever a question has a finite set of likely answers, you MUST present them as clickable options using a fenced code block (see below). Do NOT list options inline as bullets/prose — emit the JSON block instead.
-- After the user answers, confirm in one short line and move to the next question (or generate the skeleton).
+- After the user answers, confirm in one short line and move to the next step (or generate the skeleton).
 
 QUESTION FORMAT (use for every question with discrete options):
 Output exactly one fenced code block per turn, on its own line, with this shape:
@@ -143,7 +146,7 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
     if (isInit && conversation.length === 0) {
       messages.push({
         role: "user",
-        content: `Begin building a ${flow_type.replace(/_/g, " ")} flow. Skip any greeting, brand recap, or preamble. Ask ONLY your first clarifying question, following the QUESTION FORMAT rules (use a flow-question JSON block when there are discrete options). If brand intelligence already covers everything, generate the skeleton directly.`,
+        content: `Begin building a ${flow_type.replace(/_/g, " ")} flow for this brand. You are the expert — do NOT ask the user to choose email count, timing, cadence, splits, or any strategic decision. Decide those yourself from brand intelligence + best practices. In your first turn: state the strategy you're building in 2–4 tight bullets (e.g. "Building: 5 emails over 10 days. E1 immediate w/ offer, E2 social proof at 24h, E3 education at 72h, E4 urgency at day 7, E5 last-chance at day 10."), then EITHER ask ONE necessary clarifying question that only the user can know (e.g. confirm the specific offer if not already in brand intel) OR skip straight to generating the full skeleton. No greetings, no brand recap.`,
       });
     } else if (!isInit) {
       messages.push({ role: "user", content: message });
