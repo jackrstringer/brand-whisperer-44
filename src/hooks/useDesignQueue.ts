@@ -65,6 +65,9 @@ export function useDesignQueue(brandId: string) {
         send_date: params.sendDate || null,
         position: nextPos,
         status: 'draft',
+        preferences: params.idea.featured_design_elements?.length
+          ? { featured_design_elements: params.idea.featured_design_elements }
+          : {},
       } as any);
       if (error) throw error;
     },
