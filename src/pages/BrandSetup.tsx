@@ -896,7 +896,49 @@ export default function BrandSetup() {
     );
   }
 
-  if (step === "audit_review" && auditFindings) {
+  if (step === "audit_failed") {
+    return (
+      <div className="min-h-screen bg-background p-6 md:p-12 flex flex-col items-center justify-center">
+        <div className="max-w-2xl w-full space-y-6">
+          <div className="text-center space-y-2">
+            <AlertTriangle className="w-10 h-10 text-destructive mx-auto" />
+            <h2 className="text-xl font-semibold">Brand audit failed</h2>
+            <p className="text-sm text-muted-foreground">
+              The pipeline was halted. No further API calls were made (no spec, no guide, no brand row created).
+            </p>
+          </div>
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <span className="text-xs font-medium text-destructive uppercase tracking-wide">Error</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={() => {
+                  navigator.clipboard.writeText(auditError || "");
+                  toast.success("Error copied");
+                }}
+              >
+                Copy
+              </Button>
+            </div>
+            <pre className="text-xs whitespace-pre-wrap font-mono text-destructive break-words">
+              {auditError || "Unknown error"}
+            </pre>
+          </div>
+          <div className="flex gap-2 justify-center">
+            <Button variant="outline" onClick={() => { setAuditError(null); setStep("uploads"); }}>
+              <ArrowLeft className="w-4 h-4 mr-2" /> Back to uploads
+            </Button>
+            <Button onClick={() => { setAuditError(null); startAudit(); }}>
+              <RotateCcw className="w-4 h-4 mr-2" /> Retry audit
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
     return (
       <div className="min-h-screen bg-background p-6 md:p-12">
         <button onClick={() => setStep("uploads")} className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8 transition-colors">
