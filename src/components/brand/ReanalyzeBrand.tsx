@@ -34,14 +34,18 @@ interface PreflightSummary {
 export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUrl, figmaUrl }: ReanalyzeBrandProps) {
   const { user } = useAuth();
   const [phase, setPhase] = useState<Phase>("idle");
-  const [progressValue, setProgressValue] = useState(0);
-  const [progressMessage, setProgressMessage] = useState("");
   const [auditFindings, setAuditFindings] = useState<any>(null);
   const [brandGuideHtml, setBrandGuideHtml] = useState("");
   const [summary, setSummary] = useState<PreflightSummary | null>(null);
   const [figmaToken, setFigmaToken] = useState("");
+  const [pipelineEvents, setPipelineEvents] = useState<DebugLogEntry[]>([]);
   const guideIframeRef = useRef<HTMLIFrameElement>(null);
   const [guideIframeHeight, setGuideIframeHeight] = useState(800);
+
+  const pushEvent = (event: string, detail: string) => {
+    setPipelineEvents((prev) => [...prev, { timestamp: Date.now(), event, detail }]);
+  };
+
 
   const sliceImageFromUrl = (
     url: string,
