@@ -129,41 +129,21 @@ export default function ProcessingStatusPanel({
           return "stop";
         }
 
-        // Phase transition: spec_complete → trigger guide phase
+        // Phase transition: spec_complete → guide is now chained automatically
+        // by the extract-brand edge function (EdgeRuntime.waitUntil). We just
+        // observe the status transition and watch for stuck state.
         if (status === "spec_complete" && !guideFiredRef.current) {
           guideFiredRef.current = true;
           specCompleteTimeRef.current = Date.now();
-          console.log("[ProcessingStatusPanel] spec_complete detected, firing guide phase");
-          
-          // Always fetch fresh audit findings from DB rather than relying on prop
-          const { data: freshProfile } = await supabase
-            .from("brand_profiles")
-            .select("audit_findings")
-            .eq("brand_id", brandId)
-            .single();
-
-          const freshAudit = (freshProfile as any)?.audit_findings || brandContext?.auditFindings || {};
-
-          supabase.functions.invoke("extract-brand", {
-            body: {
-              auditFindings: freshAudit,
-              brandName: brandContext?.brandName || "",
-              industry: brandContext?.industry || "",
-              brandId,
-              step: "guide"
-            },
-          }).then(({ error: guideErr }) => {
-            if (guideErr) console.log("[ProcessingStatusPanel] guide invoke error:", guideErr.message);
-          }).catch((err) => {
-            console.log("[ProcessingStatusPanel] guide invoke timed out (expected):", err?.message);
-          });
+          console.log("[ProcessingStatusPanel] spec_complete detected, guide should chain automatically in background");
         }
 
-        // Stuck on spec_complete: guide never started after 30s
+        // Stuck on spec_complete: backend should have transitioned to running_guide within 10s.
+        // If not, the background task failed to start.
         if (status === "spec_complete" && guideFiredRef.current && specCompleteTimeRef.current) {
           const stuckMs = Date.now() - specCompleteTimeRef.current;
           if (stuckMs > 60000) {
-            onFailed("Guide generation failed to start after spec completed. Please try again.");
+            onFailed("Guide generation failed to start after spec completed. The background task may have been killed. Please try again.");
             return "stop";
           }
         }

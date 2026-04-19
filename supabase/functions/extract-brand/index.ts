@@ -555,51 +555,76 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Spec and full modes remain synchronous
-      try {
-        if (mode === "spec" || mode === "full") {
-          await sb.from("brand_profiles").update({
-            processing_status: "running_spec",
-            processing_error: null,
-          }).eq("brand_id", brandId);
-
-          await processSpecStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId, confirmed_properties);
-
-          await sb.from("brand_profiles").update({
-            processing_status: "spec_complete",
-          }).eq("brand_id", brandId);
-
-          if (mode === "spec") {
-            return new Response(JSON.stringify({ status: "spec_complete", brandId }), {
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          }
-        }
-
-        // Full mode: also run guide synchronously (will hit gateway timeout, but kept for completeness)
+      // SPEC mode: run spec, then automatically chain into guide in the background.
+      // Returns 200 as soon as spec is done so the client doesn't hit gateway timeouts.
+      if (mode === "spec" || mode === "full") {
+        // Mark running_spec FIRST so client polling sees the transition immediately.
         await sb.from("brand_profiles").update({
-          processing_status: "running_guide",
+          processing_status: "running_spec",
           processing_error: null,
         }).eq("brand_id", brandId);
 
-        await processGuideStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId);
+        // Run spec synchronously (typically 30-60s)
+        try {
+          await processSpecStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId, confirmed_properties);
+        } catch (err: any) {
+          console.error("[extract-brand] Spec step failed:", err);
+          await sb.from("brand_profiles").update({
+            processing_status: "failed",
+            processing_error: `Spec generation failed: ${err.message || "Unknown error"}`,
+          }).eq("brand_id", brandId).catch(console.error);
+          return new Response(JSON.stringify({
+            status: "failed",
+            stage: "spec",
+            error: err.message || "Spec generation failed",
+            brandId,
+          }), {
+            status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
 
+        // Mark spec_complete so client knows it can transition to guide phase
         await sb.from("brand_profiles").update({
-          processing_status: "complete",
+          processing_status: "spec_complete",
         }).eq("brand_id", brandId);
 
-        return new Response(JSON.stringify({ status: "complete", brandId }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      } catch (err: any) {
-        console.error(`[extract-brand] ${mode} error:`, err);
-        await sb.from("brand_profiles").update({
-          processing_status: "failed",
-          processing_error: err.message || "Unknown error",
-        }).eq("brand_id", brandId).catch(console.error);
+        // Background: chain into guide phase using EdgeRuntime.waitUntil so the client
+        // doesn't need to make a second invoke. This avoids race conditions and
+        // gateway-timeout ambiguity.
+        const runGuideInBackground = async () => {
+          try {
+            await sb.from("brand_profiles").update({
+              processing_status: "running_guide",
+              processing_error: null,
+            }).eq("brand_id", brandId);
 
-        return new Response(JSON.stringify({ status: "failed", error: err.message, brandId }), {
-          status: 500,
+            const guideHtml = await processGuideStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId);
+            // processGuideStep saves the html itself; just flip status.
+            if (guideHtml) {
+              await sb.from("brand_profiles").update({
+                processing_status: "complete",
+              }).eq("brand_id", brandId);
+              console.log(`[extract-brand] Background guide complete for ${brandId}`);
+            }
+          } catch (err: any) {
+            console.error("[extract-brand] Background guide failed:", err);
+            await sb.from("brand_profiles").update({
+              processing_status: "failed",
+              processing_error: `Guide generation failed: ${err.message || "Unknown error"}`,
+            }).eq("brand_id", brandId).catch(console.error);
+          }
+        };
+
+        // @ts-ignore - EdgeRuntime is provided by Supabase edge runtime
+        if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+          // @ts-ignore
+          EdgeRuntime.waitUntil(runGuideInBackground());
+        } else {
+          // Fallback: fire-and-forget (will still run because Deno keeps the isolate alive briefly)
+          runGuideInBackground();
+        }
+
+        return new Response(JSON.stringify({ status: "spec_complete", brandId, message: "Guide phase started in background" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }

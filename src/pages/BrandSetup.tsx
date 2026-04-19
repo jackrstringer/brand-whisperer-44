@@ -9,11 +9,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, ArrowRight, Check, AlertTriangle, Download, Edit2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, AlertTriangle, Download, Edit2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import SourceQuiz, { type SourceType } from "@/components/brand/SourceQuiz";
 import ResourceUploader from "@/components/brand/ResourceUploader";
 import AssetCategoryUploader, { type AssetCategory } from "@/components/brand/AssetCategoryUploader";
+import ProcessingStatusPanel from "@/components/brand/ProcessingStatusPanel";
 import type { BrandExtraction } from "@/lib/types";
 import { sliceAndUploadReferenceImages, saveSliceUrls } from "@/lib/imageSlicing";
 
@@ -330,32 +331,28 @@ export default function BrandSetup() {
   // Brand ID created early for async guide generation
   const [earlyBrandId, setEarlyBrandId] = useState<string | null>(null);
 
-  // === PASS 2+3: Spec + Guide (async with polling) ===
+  // === PASS 2+3: Spec + Guide (DB-driven, polled by ProcessingStatusPanel) ===
+  // After this completes, step transitions to "generating_guide" which mounts
+  // the ProcessingStatusPanel — that polls brand_profiles.processing_status
+  // and surfaces failures or completion. No manual fetch streams here.
   const generateGuideFromAudit = async (findings?: any, mergedProps?: any, sources?: string[]) => {
     const auditData = findings || auditFindings;
     const props = mergedProps || confirmedProperties;
     const extractionSrcs = sources || ["screenshots"];
-    if (!auditData || !user) { toast.error("No audit data available"); return; }
+    if (!auditData || !user) {
+      toast.error("No audit data available");
+      setStep("uploads");
+      return;
+    }
 
     setStep("generating_guide");
     guideStartTimeRef.current = Date.now();
-    setProgressValue(0);
-    setProgressMessage(GUIDE_MESSAGES[0]);
-
-    const guideStartTime = Date.now();
-    const interval = setInterval(() => {
-      const elapsed = (Date.now() - guideStartTime) / 1000;
-      const progress = Math.min(90, 25 * Math.log10(1 + elapsed / 8));
-      const msgIndex = Math.min(Math.floor(progress / 25), GUIDE_MESSAGES.length - 1);
-      setProgressMessage(GUIDE_MESSAGES[msgIndex]);
-      setProgressValue(progress);
-    }, 1000);
+    setProgressMessage("Uploading images & creating brand...");
 
     try {
-      // Step 1: Upload images and create brand + profile early
+      // Step 1: Upload images and create brand + profile
       let brandId = earlyBrandId;
       if (!brandId) {
-        setProgressMessage("Uploading images...");
         const imageUrls: string[] = [];
         const allImageFiles = getAllImageFiles();
         for (const file of allImageFiles) {
@@ -386,13 +383,15 @@ export default function BrandSetup() {
           }).catch((err: any) => console.warn("[BrandSetup] Background research failed:", err));
         }
 
-        // Create profile with audit findings
+        // Create profile with audit findings AND set processing_status to running_spec
+        // up-front so the ProcessingStatusPanel sees a non-idle status immediately.
         const { error: profileError } = await supabase.from("brand_profiles").insert({
           brand_id: brandId,
           reference_image_urls: imageUrls,
           audit_findings: auditData,
           confirmed_properties: props || null,
           extraction_sources: extractionSrcs,
+          processing_status: "running_spec",
         } as any);
         if (profileError) throw profileError;
 
@@ -404,7 +403,6 @@ export default function BrandSetup() {
           .catch((e) => console.warn("Slice upload failed (non-blocking):", e));
 
         // Fire-and-forget: upload asset files and analyze with AI in background
-        // This does NOT block guide generation — results are needed later for campaign building
         const assetBrandId = brandId!;
         (async () => {
           try {
@@ -446,113 +444,49 @@ export default function BrandSetup() {
             console.warn("Background asset upload failed (non-blocking):", err);
           }
         })();
+      } else {
+        // Brand already exists — make sure processing_status is set so the panel doesn't get stuck on "idle"
+        await supabase.from("brand_profiles").update({
+          processing_status: "running_spec",
+          processing_error: null,
+        }).eq("brand_id", brandId);
       }
 
-      setProgressMessage("Building brand spec...");
+      // Step 2: Fire spec step. Backend will:
+      //  - mark running_spec
+      //  - run spec, mark spec_complete
+      //  - automatically chain into guide via EdgeRuntime.waitUntil
+      //  - mark complete (or failed) when guide finishes
+      // We do NOT await this fully — the panel polls the DB for status.
+      // We do still await the response so we surface immediate spec failures fast.
       const { error: specError } = await supabase.functions.invoke("extract-brand", {
         body: { auditFindings: auditData, brandName, industry, brandId, step: "spec", confirmed_properties: props },
       });
-      if (specError) throw new Error(specError.message || "Failed to build brand spec");
 
-      setProgressMessage("Generating brand guide...");
-      // Use fetch() directly — guide mode returns a stream, not JSON
-      try {
-        const session = await supabase.auth.getSession();
-        const accessToken = session.data.session?.access_token || "";
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-        
-        const guideResponse = await fetch(`${supabaseUrl}/functions/v1/extract-brand`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${accessToken}`,
-            "apikey": supabaseKey,
-          },
-          body: JSON.stringify({
-            auditFindings: auditData,
-            brandName,
-            industry,
-            brandId,
-            step: "guide",
-          }),
-        });
-
-        // Consume the stream to keep the connection alive
-        if (guideResponse.body) {
-          const reader = guideResponse.body.getReader();
-          while (true) {
-            const { done } = await reader.read();
-            if (done) break;
-          }
-        }
-      } catch (err: any) {
-        // Stream timeout or disconnect is OK — the edge function saves to DB
-        console.log("[BrandSetup] guide stream ended:", err?.message);
+      if (specError) {
+        // Spec invoke failed — persist the failure so the panel can show it.
+        await supabase.from("brand_profiles").update({
+          processing_status: "failed",
+          processing_error: specError.message || "Failed to start brand spec generation",
+        }).eq("brand_id", brandId);
+        // Don't throw — let the panel surface the failure with retry UI.
       }
-
-      // Step 3: Poll brand_profiles for brand_guide_html
-      const POLL_INTERVAL = 5000;
-      const MAX_POLL_TIME = 15 * 60 * 1000; // 15 minutes
-      const startTime = Date.now();
-
-      const pollForGuide = () => {
-        const pollTimer = setInterval(async () => {
-          try {
-            const { data: profile } = await supabase
-              .from("brand_profiles")
-              .select("brand_guide_html, system_prompt, raw_extraction, audit_findings, processing_status, processing_error")
-              .eq("brand_id", brandId!)
-              .single();
-
-            // Fail loud on any failure status from the edge function
-            if ((profile as any)?.processing_status === "failed") {
-              clearInterval(pollTimer);
-              clearInterval(interval);
-              toast.error((profile as any).processing_error || "Brand processing failed", { duration: 10000 });
-              setStep("uploads");
-              return;
-            }
-
-            // Legacy error channel
-            const findings = profile?.audit_findings as any;
-            if (findings?._error) {
-              clearInterval(pollTimer);
-              clearInterval(interval);
-              toast.error(findings._error || "Guide generation failed", { duration: 10000 });
-              setStep("uploads");
-              return;
-            }
-
-            if (profile?.brand_guide_html) {
-              clearInterval(pollTimer);
-              clearInterval(interval);
-              setExtraction(profile.raw_extraction as any);
-              setSystemPrompt(profile.system_prompt || "");
-              setBrandGuideHtml(profile.brand_guide_html);
-              setProgressValue(100);
-              setProgressMessage("Guide ready!");
-              setTimeout(() => setStep("guide_review"), 500);
-              return;
-            }
-
-            if (Date.now() - startTime > MAX_POLL_TIME) {
-              clearInterval(pollTimer);
-              clearInterval(interval);
-              toast.error("Guide generation timed out. Please try again.", { duration: 10000 });
-              setStep("uploads");
-            }
-          } catch {
-            // Keep polling on transient errors
-          }
-        }, POLL_INTERVAL);
-      };
-
-      pollForGuide();
     } catch (err: any) {
-      clearInterval(interval);
-      toast.error(err.message || "Guide generation failed");
-      setStep("uploads");
+      // Setup phase failed BEFORE the panel could mount its polling loop.
+      // Persist if we have a brand id; otherwise show a toast and reset.
+      const msg = err?.message || "Failed to start brand processing";
+      console.error("[BrandSetup] generateGuideFromAudit setup failed:", err);
+      if (earlyBrandId) {
+        try {
+          await supabase.from("brand_profiles").update({
+            processing_status: "failed",
+            processing_error: msg,
+          }).eq("brand_id", earlyBrandId);
+        } catch {}
+      } else {
+        toast.error(msg);
+        setStep("uploads");
+      }
     }
   };
 
@@ -920,37 +854,69 @@ export default function BrandSetup() {
   }
 
   if (step === "generating_guide") {
-    const elapsed = Math.round((Date.now() - (guideStartTimeRef.current || Date.now())) / 1000);
-    const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-    const phases = [
-      { label: "Analyzing campaigns", status: progressValue < 30 ? "running" : "complete" },
-      { label: "Building brand spec", status: progressValue < 30 ? "pending" : progressValue < 60 ? "running" : "complete" },
-      { label: "Generating brand guide (3-5 min)", status: progressValue < 60 ? "pending" : progressValue < 95 ? "running" : "complete" },
-    ];
+    // The brand row + profile may not exist yet (very first instant before insert).
+    // While waiting, show a minimal "starting..." placeholder.
+    if (!earlyBrandId) {
+      return (
+        <div className="min-h-screen bg-background p-6 md:p-12 flex flex-col items-center justify-center">
+          <div className="max-w-md w-full text-center space-y-4">
+            <h2 className="text-xl font-semibold">Starting brand analysis…</h2>
+            <p className="text-sm text-muted-foreground">{progressMessage || "Uploading images & creating brand…"}</p>
+            <div className="w-6 h-6 mx-auto rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-background p-6 md:p-12 flex flex-col items-center justify-center">
-        <div className="max-w-lg w-full space-y-6 text-center">
-          <h2 className="text-xl font-semibold">Deep Brand Analysis</h2>
-          <p className="text-sm text-muted-foreground">
-            Deep brand analysis in progress. This typically takes 5-10 minutes for a complete brand guide. You can leave this page — we'll notify you here when it's ready.
-          </p>
-          <Progress value={progressValue} className="h-1.5" />
-          <div className="space-y-2 text-left">
-            {phases.map((p, i) => (
-              <div key={i} className="flex items-center gap-2 text-sm">
-                {p.status === "complete" && <Check className="w-4 h-4 text-green-500 shrink-0" />}
-                {p.status === "running" && <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin shrink-0" />}
-                {p.status === "pending" && <div className="w-4 h-4 rounded-full border border-muted-foreground/30 shrink-0" />}
-                <span className={p.status === "pending" ? "text-muted-foreground" : ""}>{p.label}</span>
-              </div>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground">Elapsed: {formatTime(elapsed)}</p>
-          {earlyBrandId && (
-            <Button variant="outline" onClick={() => navigate(`/brands/${earlyBrandId}`)} className="mt-2">
-              Go to dashboard
-            </Button>
-          )}
+        <ProcessingStatusPanel
+          brandId={earlyBrandId}
+          title="Deep Brand Analysis"
+          subtitle="Building your brand spec and design guide. This typically takes 5–10 minutes. You can leave this page — your brand will pick up where it left off."
+          brandContext={auditFindings ? { auditFindings, brandName, industry } : undefined}
+          showDashboardLink
+          onGoToDashboard={() => navigate(`/brands/${earlyBrandId}`)}
+          onComplete={(html, raw, sysPrompt) => {
+            setExtraction(raw as any);
+            setSystemPrompt(sysPrompt || "");
+            setBrandGuideHtml(html);
+            setStep("guide_review");
+          }}
+          onFailed={(error) => {
+            // Show the actual backend error inline + offer retry instead of bouncing back silently.
+            toast.error(error, { duration: 12000 });
+          }}
+          onTimeout={() => {
+            toast.error("Brand processing timed out after 15 minutes. Open your brand from the dashboard to retry.", { duration: 12000 });
+          }}
+        />
+        {/* Persistent retry / dashboard fallbacks — visible even when the panel is in-flight */}
+        <div className="mt-6 flex gap-3">
+          <Button variant="outline" onClick={() => navigate(`/brands/${earlyBrandId}`)}>
+            Go to dashboard
+          </Button>
+          <Button
+            variant="outline"
+            onClick={async () => {
+              // Retry from spec — re-fire the spec step using the persisted audit findings.
+              if (!earlyBrandId || !auditFindings) {
+                toast.error("Cannot retry — audit findings missing. Please re-upload from Step 3.");
+                setStep("uploads");
+                return;
+              }
+              await supabase.from("brand_profiles").update({
+                processing_status: "running_spec",
+                processing_error: null,
+              }).eq("brand_id", earlyBrandId);
+              supabase.functions.invoke("extract-brand", {
+                body: { auditFindings, brandName, industry, brandId: earlyBrandId, step: "spec", confirmed_properties: confirmedProperties },
+              }).catch((err) => console.warn("[BrandSetup] retry invoke failed:", err));
+              toast.success("Restarting brand analysis…");
+            }}
+            className="gap-1.5"
+          >
+            <RotateCcw className="w-4 h-4" /> Retry analysis
+          </Button>
         </div>
       </div>
     );
