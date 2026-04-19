@@ -250,7 +250,7 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
       setProgressMessage(AUDIT_MESSAGES[4]);
 
       const { data, error } = await supabase.functions.invoke("audit-brand", {
-        body: { images: slicedImages, brandName, industry, confirmed_properties: merged },
+        body: { images: slicedImages, brandName, industry, confirmed_properties: merged, brandId },
       });
 
       if (error) throw new Error(error.message || "Audit failed");
@@ -267,6 +267,7 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
           audit_findings: data.audit,
           confirmed_properties: merged,
           extraction_sources: extractionSources,
+          reference_image_urls: orderedUrls,
           brand_guide_html: null,
           processing_status: "running_spec",
           processing_error: null,
@@ -275,7 +276,7 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
 
       // Fire-and-forget: re-slice for generation use
       if (user?.id) {
-        sliceAndUploadReferenceImages(user.id, brandId, orderedUrls)
+        sliceAndUploadReferenceImages(user.id, brandId, imageOnlyUrls)
           .then((sliceUrls) => saveSliceUrls(brandId, sliceUrls))
           .catch((e) => console.warn("[Reanalyze] slice re-upload failed:", e));
       }
