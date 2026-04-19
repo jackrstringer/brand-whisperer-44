@@ -18,7 +18,14 @@ import ProcessingStatusPanel from "@/components/brand/ProcessingStatusPanel";
 import type { BrandExtraction } from "@/lib/types";
 import { sliceAndUploadReferenceImages, saveSliceUrls } from "@/lib/imageSlicing";
 
-type Step = "info" | "sources" | "uploads" | "auditing" | "audit_review" | "generating_guide" | "guide_review";
+type Step = "info" | "sources" | "uploads" | "auditing" | "audit_review" | "generating_guide" | "guide_review" | "audit_failed";
+
+// Dev-only spend confirmation gate. In production returns true (no prompt).
+function confirmDevSpend(fnName: string): boolean {
+  if (!import.meta.env.DEV) return true;
+  // eslint-disable-next-line no-alert
+  return window.confirm(`About to call ${fnName}. This will cost real money. Continue?`);
+}
 
 const AUDIT_MESSAGES = [
   "Scanning layouts...",
@@ -100,6 +107,7 @@ export default function BrandSetup() {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [brandGuideHtml, setBrandGuideHtml] = useState("");
   const [saving, setSaving] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
   const guideIframeRef = useRef<HTMLIFrameElement>(null);
   const guideStartTimeRef = useRef<number>(Date.now());
   const [guideIframeHeight, setGuideIframeHeight] = useState(800);
@@ -192,7 +200,46 @@ export default function BrandSetup() {
       toast.error("Please upload at least 3 images."); return;
     }
 
+    // ── Kill-switch 1: rate limit guard (>=2 failed setups in last hour for this user) ──
+    if (user) {
+      try {
+        const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        const { data: recentBrands } = await supabase
+          .from("brands")
+          .select("id")
+          .eq("user_id", user.id)
+          .gte("created_at", since);
+        const brandIds = (recentBrands || []).map((b: any) => b.id);
+        if (brandIds.length > 0) {
+          const { data: recentProfiles } = await supabase
+            .from("brand_profiles")
+            .select("processing_status, audit_findings")
+            .in("brand_id", brandIds)
+            .gte("created_at", since);
+          const failedCount = (recentProfiles || []).filter((p: any) => {
+            if (p.processing_status === "failed") return true;
+            const af = p.audit_findings;
+            if (af && typeof af === "object" && "_error" in af) return true;
+            return false;
+          }).length;
+          if (failedCount >= 2) {
+            window.alert(
+              `Rate limit: ${failedCount} failed brand setups in the last hour. ` +
+              `Wait before retrying to avoid burning API credits.`
+            );
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("[BrandSetup] Rate limit check failed (continuing):", e);
+      }
+    }
+
+    // ── Kill-switch 2: dev-mode spend confirm before audit ──
+    if (!confirmDevSpend("audit-brand")) return;
+
     setStep("auditing");
+    setAuditError(null);
     setProgressValue(0);
     setProgressMessage(AUDIT_MESSAGES[0]);
 
@@ -307,7 +354,7 @@ export default function BrandSetup() {
       console.log(`Sending ${slicedImages.length} slices from ${refFiles.length} refs to audit`);
 
       const { data, error } = await supabase.functions.invoke("audit-brand", {
-        body: { images: slicedImages, brandName, industry, confirmed_properties: merged },
+        body: { images: slicedImages, brandName, industry, confirmed_properties: merged, brandId: earlyBrandId || null },
       });
 
       clearInterval(interval);
@@ -323,8 +370,12 @@ export default function BrandSetup() {
       setTimeout(() => generateGuideFromAudit(data.audit, merged, extractionSources), 500);
     } catch (err: any) {
       clearInterval(interval);
-      toast.error(err.message || "Audit failed");
-      setStep("uploads");
+      const msg = err?.message || "Audit failed";
+      console.error("[BrandSetup] Audit failed, halting pipeline:", err);
+      // ── Kill-switch 4: hard stop. Do NOT call extract-brand, do NOT create brand row, do NOT navigate. ──
+      setAuditError(msg);
+      setStep("audit_failed");
+      toast.error(msg);
     }
   };
 
@@ -474,6 +525,13 @@ export default function BrandSetup() {
       //  - mark complete (or failed) when guide finishes
       // We do NOT await this fully — the panel polls the DB for status.
       // We do still await the response so we surface immediate spec failures fast.
+      if (!confirmDevSpend("extract-brand (spec)")) {
+        await supabase.from("brand_profiles").update({
+          processing_status: "failed",
+          processing_error: "Cancelled by developer before spec call",
+        }).eq("brand_id", brandId);
+        return;
+      }
       const { error: specError } = await supabase.functions.invoke("extract-brand", {
         body: { auditFindings: auditData, brandName, industry, brandId, step: "spec", confirmed_properties: props },
       });
@@ -490,6 +548,14 @@ export default function BrandSetup() {
       // This keeps the gateway connection alive through streaming (Opus ~3-5min).
       // The edge function writes brand_guide_html + status="complete" to DB independently.
       try {
+        if (!confirmDevSpend("extract-brand (guide)")) {
+          setGuideStreamStatus("error");
+          await supabase.from("brand_profiles").update({
+            processing_status: "failed",
+            processing_error: "Cancelled by developer before guide call",
+          }).eq("brand_id", brandId);
+          return;
+        }
         setGuideStreamStatus("opening");
         const session = await supabase.auth.getSession();
         const accessToken = session.data.session?.access_token || "";
@@ -825,6 +891,49 @@ export default function BrandSetup() {
           </p>
           <Progress value={unifiedProgress} className="h-1.5" />
           <p className="text-sm text-muted-foreground">{progressMessage || "Reading your emails..."}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "audit_failed") {
+    return (
+      <div className="min-h-screen bg-background p-6 md:p-12 flex flex-col items-center justify-center">
+        <div className="max-w-2xl w-full space-y-6">
+          <div className="text-center space-y-2">
+            <AlertTriangle className="w-10 h-10 text-destructive mx-auto" />
+            <h2 className="text-xl font-semibold">Brand audit failed</h2>
+            <p className="text-sm text-muted-foreground">
+              The pipeline was halted. No further API calls were made (no spec, no guide, no brand row created).
+            </p>
+          </div>
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <span className="text-xs font-medium text-destructive uppercase tracking-wide">Error</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={() => {
+                  navigator.clipboard.writeText(auditError || "");
+                  toast.success("Error copied");
+                }}
+              >
+                Copy
+              </Button>
+            </div>
+            <pre className="text-xs whitespace-pre-wrap font-mono text-destructive break-words">
+              {auditError || "Unknown error"}
+            </pre>
+          </div>
+          <div className="flex gap-2 justify-center">
+            <Button variant="outline" onClick={() => { setAuditError(null); setStep("uploads"); }}>
+              <ArrowLeft className="w-4 h-4 mr-2" /> Back to uploads
+            </Button>
+            <Button onClick={() => { setAuditError(null); startAudit(); }}>
+              <RotateCcw className="w-4 h-4 mr-2" /> Retry audit
+            </Button>
+          </div>
         </div>
       </div>
     );

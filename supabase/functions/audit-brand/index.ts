@@ -219,12 +219,20 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // brandId is captured outside try so error handler can persist failures.
+  let brandId: string | null = null;
+
   try {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
     const GOOGLE_VISION_KEY = Deno.env.get("GOOGLE_CLOUD_VISION_API_KEY") ?? "";
 
-    const { images, imageUrls, brandName, industry, confirmed_properties } = await req.json();
+    const body = await req.json();
+    const { images, imageUrls, brandName, industry, confirmed_properties } = body;
+    brandId = body.brandId || null;
+    if (!brandId) {
+      console.warn("[audit-brand] No brandId in request body — parse failures will not be persisted to DB");
+    }
 
     // Support two modes:
     // 1. imageUrls: array of URLs → server-side intelligent slicing via Vision API + Claude
@@ -500,7 +508,27 @@ Deno.serve(async (req) => {
       parsed = extractJsonObject(text);
     } catch (e: any) {
       console.error(`[audit-brand] JSON extraction failed: ${e.message}. Text length: ${text.length}`);
-      throw new Error(`Malformed JSON in audit output: ${e.message}`);
+      const failMsg = `Malformed JSON in audit output: ${e.message}`;
+      // Persist the failure on brand_profiles so the UI sees it (best-effort).
+      if (brandId) {
+        try {
+          const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+          const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+          if (SUPABASE_URL && SERVICE_KEY) {
+            const { createClient } = await import("jsr:@supabase/supabase-js@2");
+            const sb = createClient(SUPABASE_URL, SERVICE_KEY);
+            await sb.from("brand_profiles").update({
+              processing_status: "failed",
+              processing_error: failMsg,
+              audit_findings: { _error: failMsg, _raw_snippet: text.slice(0, 2000) },
+            }).eq("brand_id", brandId);
+            console.log(`[audit-brand] Persisted parse failure to brand_profiles for ${brandId}`);
+          }
+        } catch (dbErr: any) {
+          console.error(`[audit-brand] Failed to persist parse failure (non-fatal): ${dbErr?.message}`);
+        }
+      }
+      throw new Error(failMsg);
     }
 
     // Ensure expected structure
