@@ -1,58 +1,40 @@
 
-Goal: make brand analysis reliable on `/brands/new`, fail loudly when backend processing breaks, and stop the endless spinner.
 
-What I found
-- `/brands/new` is still using the old `src/pages/BrandSetup.tsx` pipeline instead of the newer DB-polled processing components.
-- The current new-brand flow still uses fake/proxy progress timers and a manual `fetch()` stream for `extract-brand` guide mode.
-- In `BrandSetup.tsx`, the guide request does not check `guideResponse.ok`; 400/500 responses can be treated like an expected stream end, so the UI keeps polling/spinning instead of surfacing the real error.
-- The latest backend logs only show `[extract-brand] Call 1: Generating spec...` and never show the later “spec saved”/guide-success path, so the spec phase is failing or never completing cleanly.
-- Session replay confirms the UX bug: the app shows “Failed to send a request to the Edge Function” but remains in the long-running analysis screen.
+## Two real backend failures observed in latest run
 
-Implementation plan
+### 1. `audit-brand` — JSON parse fails despite balanced braces
+- Sonnet returned 28805 chars, **79 open vs 79 close braces** (balanced).
+- Current "repair" only handles missing closing braces → throws "Malformed JSON" and gives up.
+- The actual cause is one of: (a) a trailing comma, (b) an unterminated/unescaped string inside the JSON, or (c) the `/\{[\s\S]*\}/` regex grabbed too much (greedy match across stray text). With balanced braces, (c) is most likely — the regex is matching from the FIRST `{` in surrounding prose to the LAST `}`, producing a non-JSON envelope.
+- Also `max_tokens: 16000` is tight for 8 campaigns; one more campaign and we'd hit the truncation path too.
 
-1. Replace the legacy `/brands/new` processing flow with the real state-machine flow
-- Refactor `src/pages/BrandSetup.tsx` to stop doing the full spec+guide orchestration inline.
-- After audit completes, create the brand/profile row, set `processing_status`, fire `extract-brand` with `step: "spec"` in fire-and-forget mode, and hand off to `BrandProcessingScreen` / `ProcessingStatusPanel`.
-- Remove the old fake-timer “Deep Brand Analysis” screen logic from `BrandSetup.tsx` so progress is driven by backend state only.
+### 2. `research-brand` — runs in parallel during brand setup, also crashing
+- Line 257: `.upsert(...).catch(...)` — Supabase query builders return a thenable, not a real Promise. `.catch` is undefined → uncaught exception kills the worker.
+- Also separately fails `JSON.parse` at position 3723 (separate root cause: model emitted invalid JSON; needs a real extractor).
 
-2. Fix the backend contract in `extract-brand`
-- Harden `supabase/functions/extract-brand/index.ts` so spec failures always persist `processing_status: "failed"` and a clear `processing_error`.
-- Add stricter validation around the spec call:
-  - fail on bad API responses
-  - fail on parse failures
-  - fail if `raw_extraction` write does not succeed
-- Improve the guide-mode missing-extraction error so it records the exact stage/last known status instead of just returning bare `No extraction found`.
+## Fix plan
 
-3. Remove the bad guide invocation path from the new-brand flow
-- Stop using direct `fetch()` streaming inside `BrandSetup.tsx` for guide generation.
-- Use the same pattern as the newer processing components: DB polling drives the phase transition, and the guide step is invoked only after `processing_status === "spec_complete"`.
-- This avoids the current race/transport ambiguity and makes the page resumable.
+### A. `supabase/functions/audit-brand/index.ts`
+- Bump `max_tokens` from 16000 → 24000 (Sonnet 4.6 supports it; gives headroom for 8+ campaign audits).
+- Replace the brittle regex + brace-only repair with a robust extractor:
+  1. Strip ```json fences if present.
+  2. Find the JSON by walking from the first `{` and tracking brace depth + string state (skipping escaped quotes), stopping at the matching close. This avoids the greedy-regex envelope problem.
+  3. If parse still fails, run a small repair pass: trim trailing commas before `}`/`]`, then retry.
+  4. If still fails, log a meaningful slice of the candidate around the failure offset (`SyntaxError.message` includes position) and throw — no silent fallback, per project rules.
+- Keep the existing `stop_reason === "max_tokens"` loud-fail path.
 
-4. Make failures visible instead of bouncing the user back into confusion
-- In `BrandSetup.tsx`, replace the current “toast + back to uploads” failure behavior with a persistent failed state:
-  - show the backend error inline
-  - offer retry
-  - preserve uploaded files and audit data
-- Reuse the log/phase UI already present in `BrandProcessingScreen.tsx` so users can see whether it failed in audit, spec, or guide.
+### B. `supabase/functions/research-brand/index.ts`
+- Line 257: remove the bogus `.catch(...)` chain. Use a real `try/catch` around the failure-marker upsert so the background worker can't crash on its own error path.
+- Replace the JSON parsing block (lines 208–233) with the same robust extractor from (A) — extracted into a shared helper inline in each file (no new shared module needed; both functions already duplicate other utilities).
 
-5. Tighten `ProcessingStatusPanel` and brand resume behavior
-- Make sure the new-brand route uses the same polling behavior already used on the Brand page.
-- Keep the existing resumable behavior on `src/pages/BrandProfile.tsx`, but ensure the failure copy is explicit and actionable.
-- If the spec phase never leaves `running_spec` or returns to idle unexpectedly, fail loudly with a diagnostic message rather than waiting indefinitely.
+### C. No frontend changes
+- `BrandSetup.tsx` already surfaces audit errors via the unified progress screen + debug panel. Once the backend stops throwing on parse-able output, the existing UI handles it.
 
-Files to update
-- `src/pages/BrandSetup.tsx`
-- `src/components/brand/BrandProcessingScreen.tsx`
-- `src/components/brand/ProcessingStatusPanel.tsx`
-- `supabase/functions/extract-brand/index.ts`
+### D. Deploy
+- Deploy `audit-brand` and `research-brand`. Report timestamps.
 
-Expected result
-- Brand analysis on `/brands/new` uses one consistent backend-driven pipeline.
-- If spec fails, the user sees that it failed in spec, with the real error.
-- If guide cannot start because extraction is missing, that becomes an explicit failed state, not an endless spinner.
-- Users can leave and return to the Brand page and still see live processing status.
+### Out of scope (intentionally)
+- No model swap. Sonnet 4.6 is fine here once parsing is robust.
+- No prompt rewrite. The prompt is already explicit about "no markdown fences, no commentary."
+- No silent fallbacks or fake-success paths — failures still throw loudly with diagnostics.
 
-Technical notes
-- No database migration is required for this fix; `brand_profiles.processing_status` and `processing_error` already exist.
-- The main architectural issue is not the table schema; it is that `/brands/new` is still on the old orchestration path while the rest of the app already has a better state-machine pattern.
-- I would keep the zero-fallback rule: no fake success, no silent stream-timeout masking, no auto-recovery that hides backend failures.
