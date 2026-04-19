@@ -16,8 +16,11 @@ const FLOW_SKILL_FILES: Record<string, string[]> = {
 };
 
 async function readSkill(filename: string): Promise<string> {
+  // Skills are co-located with this function (./skills/) so they bundle with deploy.
+  // Previously we read from ../_shared/flow-skills/ which doesn't exist in the
+  // bundled edge runtime path (/var/tmp/sb-compile-edge-runtime/...).
   try {
-    const url = new URL(`../_shared/flow-skills/${filename}`, import.meta.url);
+    const url = new URL(`./skills/${filename}`, import.meta.url);
     return await Deno.readTextFile(url);
   } catch (err) {
     console.error(`[flow-agent] Failed to read skill ${filename}:`, err);
