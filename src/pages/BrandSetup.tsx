@@ -720,7 +720,7 @@ export default function BrandSetup() {
       // Fire research in background if URL provided
       if (websiteUrl.trim()) {
         supabase.functions.invoke("research-brand", {
-          body: { brand_id: brand.id, website_url: websiteUrl.trim(), brand_name: brandName, industry: industry || null },
+          body: { brand_id: brand.id, domain: websiteUrl.trim(), brand_name: brandName, industry: industry || null },
         }).catch((err: any) => console.warn("[BrandSetup] Background research failed:", err));
       }
 
