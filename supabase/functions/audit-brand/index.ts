@@ -443,7 +443,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 16000,
+        max_tokens: 24000,
         system: SINGLE_PASS_AUDIT_PROMPT,
         messages: [{ role: "user", content: imageContent }],
       }),
@@ -462,30 +462,12 @@ Deno.serve(async (req) => {
     }
 
     const text = result.content?.[0]?.text || "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("Failed to parse audit result - no JSON found in response");
-
     let parsed: any;
     try {
-      parsed = JSON.parse(jsonMatch[0]);
-    } catch {
-      // Attempt JSON repair: add missing closing braces
-      let candidate = jsonMatch[0];
-      const openBraces = (candidate.match(/\{/g) || []).length;
-      const closeBraces = (candidate.match(/\}/g) || []).length;
-      if (openBraces > closeBraces && openBraces - closeBraces <= 5) {
-        candidate += "}".repeat(openBraces - closeBraces);
-        try {
-          parsed = JSON.parse(candidate);
-          console.log(`[audit-brand] JSON repaired: added ${openBraces - closeBraces} closing braces`);
-        } catch {
-          console.error(`[audit-brand] JSON repair failed. Braces: ${openBraces} open, ${closeBraces} close. Length: ${candidate.length}`);
-          throw new Error(`Malformed JSON in audit output (${openBraces} open vs ${closeBraces} close braces). Model output may have been truncated.`);
-        }
-      } else {
-        console.error(`[audit-brand] JSON parse failed. Braces: ${openBraces} open, ${closeBraces} close. Length: ${jsonMatch[0].length}`);
-        throw new Error(`Malformed JSON in audit output (${openBraces} open vs ${closeBraces} close braces). Model output may have been truncated.`);
-      }
+      parsed = extractJsonObject(text);
+    } catch (e: any) {
+      console.error(`[audit-brand] JSON extraction failed: ${e.message}. Text length: ${text.length}`);
+      throw new Error(`Malformed JSON in audit output: ${e.message}`);
     }
 
     // Ensure expected structure
