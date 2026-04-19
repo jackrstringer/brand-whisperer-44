@@ -200,7 +200,46 @@ export default function BrandSetup() {
       toast.error("Please upload at least 3 images."); return;
     }
 
+    // ── Kill-switch 1: rate limit guard (>=2 failed setups in last hour for this user) ──
+    if (user) {
+      try {
+        const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+        const { data: recentBrands } = await supabase
+          .from("brands")
+          .select("id")
+          .eq("user_id", user.id)
+          .gte("created_at", since);
+        const brandIds = (recentBrands || []).map((b: any) => b.id);
+        if (brandIds.length > 0) {
+          const { data: recentProfiles } = await supabase
+            .from("brand_profiles")
+            .select("processing_status, audit_findings")
+            .in("brand_id", brandIds)
+            .gte("created_at", since);
+          const failedCount = (recentProfiles || []).filter((p: any) => {
+            if (p.processing_status === "failed") return true;
+            const af = p.audit_findings;
+            if (af && typeof af === "object" && "_error" in af) return true;
+            return false;
+          }).length;
+          if (failedCount >= 2) {
+            window.alert(
+              `Rate limit: ${failedCount} failed brand setups in the last hour. ` +
+              `Wait before retrying to avoid burning API credits.`
+            );
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("[BrandSetup] Rate limit check failed (continuing):", e);
+      }
+    }
+
+    // ── Kill-switch 2: dev-mode spend confirm before audit ──
+    if (!confirmDevSpend("audit-brand")) return;
+
     setStep("auditing");
+    setAuditError(null);
     setProgressValue(0);
     setProgressMessage(AUDIT_MESSAGES[0]);
 
