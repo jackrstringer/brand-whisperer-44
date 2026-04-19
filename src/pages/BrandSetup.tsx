@@ -464,12 +464,51 @@ export default function BrandSetup() {
       });
 
       if (specError) {
-        // Spec invoke failed — persist the failure so the panel can show it.
         await supabase.from("brand_profiles").update({
           processing_status: "failed",
           processing_error: specError.message || "Failed to start brand spec generation",
         }).eq("brand_id", brandId);
-        // Don't throw — let the panel surface the failure with retry UI.
+        return;
+      }
+
+      // Fire the guide call using fetch so we can consume the stream.
+      // This keeps the gateway connection alive through streaming (Opus ~3-5min).
+      // The edge function writes brand_guide_html + status="complete" to DB independently.
+      try {
+        setGuideStreamStatus("opening");
+        const session = await supabase.auth.getSession();
+        const accessToken = session.data.session?.access_token || "";
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+        const guideResponse = await fetch(`${supabaseUrl}/functions/v1/extract-brand`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken}`,
+            "apikey": supabaseKey,
+          },
+          body: JSON.stringify({
+            auditFindings: auditData,
+            brandName,
+            industry,
+            brandId,
+            step: "guide",
+          }),
+        });
+
+        setGuideStreamStatus("streaming");
+        if (guideResponse.body) {
+          const reader = guideResponse.body.getReader();
+          while (true) {
+            const { done } = await reader.read();
+            if (done) break;
+          }
+        }
+        setGuideStreamStatus("ended");
+      } catch (err: any) {
+        console.log("[BrandSetup] guide stream ended:", err?.message);
+        setGuideStreamStatus("error");
       }
     } catch (err: any) {
       // Setup phase failed BEFORE the panel could mount its polling loop.
