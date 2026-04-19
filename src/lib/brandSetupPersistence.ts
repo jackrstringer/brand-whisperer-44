@@ -11,6 +11,8 @@ export type BrandSetupSource =
 
 export type BrandAssetCategory = "logo" | "product_imagery" | "hero_shots" | "lifestyle";
 
+export type PersistEvent = (event: string, detail: string) => void;
+
 interface PersistBrandSetupInputsParams {
   brandId: string;
   userId: string;
@@ -21,6 +23,7 @@ interface PersistBrandSetupInputsParams {
   selectedSources: BrandSetupSource[];
   referenceFilesByCategory: Record<string, File[]>;
   assetFilesByCategory: Record<BrandAssetCategory, File[]>;
+  onEvent?: PersistEvent;
 }
 
 interface PersistBrandSetupInputsResult {
@@ -42,14 +45,19 @@ async function uploadCategorizedFiles(
   brandId: string,
   rootFolder: string,
   filesByCategory: Record<string, File[]>,
+  onEvent?: PersistEvent,
 ) {
   const entries = await Promise.all(
     Object.entries(filesByCategory).map(async ([category, files]) => {
       const urls = await Promise.all(
         files.map(async (file, index) => {
           const path = `${userId}/${brandId}/${rootFolder}/${category}/${String(index).padStart(2, "0")}-${sanitizeFilename(file.name)}`;
+          onEvent?.("storage_write", `bucket=${bucket} path=${path}`);
           const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true });
-          if (error) throw error;
+          if (error) {
+            onEvent?.("storage_error", `bucket=${bucket} path=${path} msg=${error.message}`);
+            throw new Error(`Storage upload failed (${bucket}/${path}): ${error.message}`);
+          }
           return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
         }),
       );
@@ -91,17 +99,19 @@ export async function persistBrandSetupInputs({
   selectedSources,
   referenceFilesByCategory,
   assetFilesByCategory,
+  onEvent,
 }: PersistBrandSetupInputsParams): Promise<PersistBrandSetupInputsResult> {
   const extractionSources = getExtractionSources(selectedSources);
 
   const [referenceFileCategories, assetFileCategories] = await Promise.all([
-    uploadCategorizedFiles("brand-references", userId, brandId, "references", referenceFilesByCategory),
-    uploadCategorizedFiles("brand-assets", userId, brandId, "assets", assetFilesByCategory),
+    uploadCategorizedFiles("brand-references", userId, brandId, "references", referenceFilesByCategory, onEvent),
+    uploadCategorizedFiles("brand-assets", userId, brandId, "assets", assetFilesByCategory, onEvent),
   ]);
 
   const referenceFileUrls = Object.values(referenceFileCategories).flat();
   const referenceImageUrls = referenceFileUrls.filter(isImageUrl);
 
+  onEvent?.("db_write", `table=brands op=update id=${brandId}`);
   const { error: brandUpdateError } = await supabase
     .from("brands")
     .update({
@@ -113,7 +123,10 @@ export async function persistBrandSetupInputs({
     } as any)
     .eq("id", brandId);
 
-  if (brandUpdateError) throw brandUpdateError;
+  if (brandUpdateError) {
+    onEvent?.("db_error", `table=brands msg=${brandUpdateError.message}`);
+    throw brandUpdateError;
+  }
 
   const { data: existingProfile, error: profileLookupError } = await supabase
     .from("brand_profiles")
@@ -132,15 +145,23 @@ export async function persistBrandSetupInputs({
   } as any;
 
   if (existingProfile?.id) {
+    onEvent?.("db_write", `table=brand_profiles op=update brand_id=${brandId}`);
     const { error: profileUpdateError } = await supabase
       .from("brand_profiles")
       .update(profilePayload)
       .eq("brand_id", brandId);
 
-    if (profileUpdateError) throw profileUpdateError;
+    if (profileUpdateError) {
+      onEvent?.("db_error", `table=brand_profiles msg=${profileUpdateError.message}`);
+      throw profileUpdateError;
+    }
   } else {
+    onEvent?.("db_write", `table=brand_profiles op=insert brand_id=${brandId}`);
     const { error: profileInsertError } = await supabase.from("brand_profiles").insert(profilePayload);
-    if (profileInsertError) throw profileInsertError;
+    if (profileInsertError) {
+      onEvent?.("db_error", `table=brand_profiles msg=${profileInsertError.message}`);
+      throw profileInsertError;
+    }
   }
 
   const assetRows = Object.entries(assetFileCategories).flatMap(([category, urls]) =>
@@ -152,12 +173,20 @@ export async function persistBrandSetupInputs({
     })),
   );
 
+  onEvent?.("db_write", `table=brand_assets op=delete brand_id=${brandId}`);
   const { error: deleteAssetsError } = await supabase.from("brand_assets").delete().eq("brand_id", brandId);
-  if (deleteAssetsError) throw deleteAssetsError;
+  if (deleteAssetsError) {
+    onEvent?.("db_error", `table=brand_assets op=delete msg=${deleteAssetsError.message}`);
+    throw deleteAssetsError;
+  }
 
   if (assetRows.length > 0) {
+    onEvent?.("db_write", `table=brand_assets op=insert rows=${assetRows.length}`);
     const { error: insertAssetsError } = await supabase.from("brand_assets").insert(assetRows as any);
-    if (insertAssetsError) throw insertAssetsError;
+    if (insertAssetsError) {
+      onEvent?.("db_error", `table=brand_assets op=insert msg=${insertAssetsError.message}`);
+      throw insertAssetsError;
+    }
   }
 
   return {
