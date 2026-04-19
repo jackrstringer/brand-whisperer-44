@@ -6,8 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
  */
 export function sliceImageFromUrl(
   url: string,
-  maxSliceHeight = 1300,
-  maxWidth = 600,
+  maxSliceHeight = 2400,
+  maxWidth = 800,
 ): Promise<Array<{ blob: Blob; sliceIndex: number; totalSlices: number }>> {
   return new Promise((resolve, reject) => {
     const img = new Image();

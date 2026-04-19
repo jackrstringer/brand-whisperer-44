@@ -449,8 +449,7 @@ Deno.serve(async (req) => {
           },
           body: JSON.stringify({
             model: "claude-opus-4-7",
-            max_tokens: 96000,
-            thinking: { type: "adaptive" },
+            max_tokens: 32000,
             stream: true,
             system: GUIDE_PROMPT,
             messages: [{
@@ -691,8 +690,7 @@ async function runGuideCall(
     },
     body: JSON.stringify({
       model: "claude-opus-4-7",
-      max_tokens: 96000,
-      thinking: { type: "adaptive" },
+      max_tokens: 32000,
       stream: true,
       system: GUIDE_PROMPT,
       messages: [{
