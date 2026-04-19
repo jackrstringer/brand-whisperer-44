@@ -462,12 +462,16 @@ Notes: ${node.notes || "none"}`;
 }
 
 function StatusPill({ status }: { status: string }) {
-  const map: Record<string, { label: string; cls: string }> = {
-    draft: { label: "Draft", cls: "bg-muted text-muted-foreground" },
-    skeleton_ready: { label: "Skeleton Ready", cls: "bg-primary/15 text-primary" },
-    generating: { label: "Generating", cls: "bg-amber-500/15 text-amber-700 dark:text-amber-300" },
-    complete: { label: "Complete", cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" },
+  const map: Record<string, string> = {
+    draft: "Draft",
+    skeleton_ready: "Skeleton ready",
+    generating: "Generating",
+    complete: "Complete",
   };
-  const m = map[status] || map.draft;
-  return <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${m.cls}`}>{m.label}</span>;
+  const label = map[status] || "Draft";
+  return (
+    <span className="text-[10px] uppercase tracking-[0.1em] text-foreground/45 font-semibold">
+      {label}
+    </span>
+  );
 }
