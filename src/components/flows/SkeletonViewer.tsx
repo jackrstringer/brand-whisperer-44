@@ -167,7 +167,10 @@ function CanvasContent({
 }: Props) {
   let emailCount = 0;
   return (
-    <div className="dot-grid min-h-full w-full py-12 px-8 flex flex-col items-center">
+    <div
+      className="py-16 px-12 flex flex-col items-center"
+      style={{ width: 640, minHeight: 800 }}
+    >
       <TriggerCard trigger={meta.trigger} flowType={flowType} />
       <Connector label="When triggered" />
       {(meta.filters && meta.filters.length > 0) || true ? (
