@@ -508,7 +508,27 @@ Deno.serve(async (req) => {
       parsed = extractJsonObject(text);
     } catch (e: any) {
       console.error(`[audit-brand] JSON extraction failed: ${e.message}. Text length: ${text.length}`);
-      throw new Error(`Malformed JSON in audit output: ${e.message}`);
+      const failMsg = `Malformed JSON in audit output: ${e.message}`;
+      // Persist the failure on brand_profiles so the UI sees it (best-effort).
+      if (brandId) {
+        try {
+          const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+          const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+          if (SUPABASE_URL && SERVICE_KEY) {
+            const { createClient } = await import("jsr:@supabase/supabase-js@2");
+            const sb = createClient(SUPABASE_URL, SERVICE_KEY);
+            await sb.from("brand_profiles").update({
+              processing_status: "failed",
+              processing_error: failMsg,
+              audit_findings: { _error: failMsg, _raw_snippet: text.slice(0, 2000) },
+            }).eq("brand_id", brandId);
+            console.log(`[audit-brand] Persisted parse failure to brand_profiles for ${brandId}`);
+          }
+        } catch (dbErr: any) {
+          console.error(`[audit-brand] Failed to persist parse failure (non-fatal): ${dbErr?.message}`);
+        }
+      }
+      throw new Error(failMsg);
     }
 
     // Ensure expected structure
