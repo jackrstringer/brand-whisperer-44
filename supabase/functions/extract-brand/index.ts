@@ -396,22 +396,43 @@ Deno.serve(async (req) => {
           processing_error: null,
         }).eq("brand_id", brandId);
 
-        // Get extraction from DB
-        const { data: profile } = await sb
-          .from("brand_profiles")
-          .select("raw_extraction, audit_findings")
-          .eq("brand_id", brandId)
-          .maybeSingle();
+        // Get extraction from DB — poll briefly in case the spec step is still completing
+        // (the client may have fired the guide call after a gateway timeout while spec was still running)
+        let extraction: any = null;
+        let lastStatus: string | null = null;
+        const POLL_MAX_MS = 90_000; // 90s — spec call typically takes 30-60s
+        const POLL_INTERVAL_MS = 2_000;
+        const pollStart = Date.now();
+        while (Date.now() - pollStart < POLL_MAX_MS) {
+          const { data: profile } = await sb
+            .from("brand_profiles")
+            .select("raw_extraction, processing_status, processing_error")
+            .eq("brand_id", brandId)
+            .maybeSingle();
+          extraction = profile?.raw_extraction;
+          lastStatus = profile?.processing_status ?? null;
+          if (extraction) break;
+          if (lastStatus === "failed") {
+            return new Response(JSON.stringify({
+              error: `Spec step failed: ${profile?.processing_error || "unknown error"}`,
+            }), {
+              status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+          console.log(`[extract-brand] Guide step waiting for extraction (status=${lastStatus})...`);
+          await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        }
 
-        const extraction = profile?.raw_extraction;
         const cleanedAudit = stripRuntimeKeys(auditFindings);
 
         if (!extraction) {
           await sb.from("brand_profiles").update({
             processing_status: "failed",
-            processing_error: "No extraction found. Run spec first.",
+            processing_error: `No extraction found after ${POLL_MAX_MS / 1000}s wait (last status: ${lastStatus}). Spec step may have failed silently — please retry.`,
           }).eq("brand_id", brandId);
-          return new Response(JSON.stringify({ error: "No extraction found" }), {
+          return new Response(JSON.stringify({
+            error: `No extraction found after waiting ${POLL_MAX_MS / 1000}s (last status: ${lastStatus}). The spec step did not complete — please retry.`,
+          }), {
             status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
