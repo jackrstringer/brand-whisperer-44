@@ -939,6 +939,7 @@ export default function BrandSetup() {
     );
   }
 
+  if (step === "audit_review" && auditFindings) {
     return (
       <div className="min-h-screen bg-background p-6 md:p-12">
         <button onClick={() => setStep("uploads")} className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8 transition-colors">
