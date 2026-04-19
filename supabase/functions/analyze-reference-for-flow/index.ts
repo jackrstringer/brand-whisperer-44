@@ -136,7 +136,7 @@ This analysis will be used directly by the email generator — be precise.`,
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 16384,
+        max_tokens: 24000,
         system: `You are an expert Klaviyo email developer and email marketing strategist.
 You analyze reference emails to identify their data architecture — what each section is
 and what Klaviyo data source populates it. You understand the difference between:

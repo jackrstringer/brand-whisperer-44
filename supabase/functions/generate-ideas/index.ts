@@ -436,7 +436,6 @@ Return ONLY a JSON array. No other text, no markdown:
       body: JSON.stringify({
         model: "claude-haiku-4-5",
         max_tokens: 16384,
-        temperature: 1.0,
         stream: true,
         system: systemPrompt,
         messages: [{ role: "user", content: userPrompt }],

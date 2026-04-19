@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 16384,
+        max_tokens: 24000,
         system: `You are an expert email design system maintainer. You will receive a current brand design system prompt and user feedback about generated campaigns. Your job is to update the design system prompt to incorporate the feedback while maintaining all existing rules that weren't criticized. Return ONLY the updated system prompt text — no commentary, no markdown fences.`,
         messages: [{
           role: "user",

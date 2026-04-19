@@ -149,7 +149,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-function capImageDimensions(url: string, maxDim = 1800): string {
+function capImageDimensions(url: string, maxDim = 2576): string {
   if (!/^https:\/\/ik\.imagekit\.io\//i.test(url)) return url;
 
   const pathStyleMatch = url.match(/\/tr:([^/]+)\//i);
@@ -566,8 +566,8 @@ export async function generateCampaignCore(
   const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
   if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
 
-  const GENERATION_MODEL = "claude-opus-4-6";
-  const QA_MODEL = "claude-sonnet-4-6";
+  const GENERATION_MODEL = "claude-opus-4-7";
+  const QA_MODEL = "claude-opus-4-7";
 
   // Parallelize independent DB reads
   const [profileResult, brandResult, brandIntelResult] = await Promise.all([
@@ -1394,7 +1394,8 @@ UNIVERSAL RULES FOR EVENT DATA:
 
   const response = await callAnthropic({
     model: GENERATION_MODEL,
-    max_tokens: 16384,
+    max_tokens: 32000,
+    thinking: { type: "adaptive" },
     system: systemPrompt,
     messages: [{ role: "user", content: userContent }],
   }, ANTHROPIC_API_KEY);
@@ -1428,7 +1429,7 @@ UNIVERSAL RULES FOR EVENT DATA:
     }];
     const retryResp = await callAnthropic({
       model: GENERATION_MODEL,
-      max_tokens: 16384,
+      max_tokens: 32000,
       system: UNIVERSAL_EMAIL_RULES,
       messages: [{ role: "user", content: retryContent }],
     }, ANTHROPIC_API_KEY);
@@ -1464,7 +1465,8 @@ UNIVERSAL RULES FOR EVENT DATA:
 
       const qaResponse = await callAnthropic({
         model: QA_MODEL,
-        max_tokens: 16384,
+        max_tokens: 32000,
+        thinking: { type: "adaptive" },
         system: QA_SYSTEM_PROMPT,
         messages: [{ role: "user", content: qaContent }],
       }, ANTHROPIC_API_KEY);
@@ -1575,7 +1577,7 @@ UNIVERSAL RULES FOR EVENT DATA:
           const fixResp = await callAnthropic(
             {
               model: "claude-sonnet-4-6",
-              max_tokens: 16384,
+              max_tokens: 32000,
               system: `You are an expert Klaviyo email developer. Fix the Liquid template error below.
 Return ONLY the corrected complete HTML — no explanation, no markdown fences.
 CRITICAL: Klaviyo uses Django templates, not Shopify Liquid.

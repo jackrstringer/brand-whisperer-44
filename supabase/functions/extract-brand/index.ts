@@ -427,8 +427,9 @@ Deno.serve(async (req) => {
             "anthropic-version": "2023-06-01",
           },
           body: JSON.stringify({
-            model: "claude-opus-4-6",
-            max_tokens: 64000,
+            model: "claude-opus-4-7",
+            max_tokens: 96000,
+            thinking: { type: "adaptive" },
             stream: true,
             system: GUIDE_PROMPT,
             messages: [{
@@ -633,8 +634,8 @@ async function runSpecCall(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 8000,
+      model: "claude-sonnet-4-6",
+      max_tokens: 12000,
       system: SPEC_PROMPT,
       messages: [{
         role: "user",
@@ -677,8 +678,9 @@ async function runGuideCall(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-opus-4-6",
-      max_tokens: 64000,
+      model: "claude-opus-4-7",
+      max_tokens: 96000,
+      thinking: { type: "adaptive" },
       stream: true,
       system: GUIDE_PROMPT,
       messages: [{

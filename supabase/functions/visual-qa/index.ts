@@ -153,7 +153,7 @@ Deno.serve(async (req) => {
       throw new Error("html and outputSlices are required");
     }
 
-    const MAX_SLICE_DIM = 1800;
+    const MAX_SLICE_DIM = 2576;
     const hasReferences = Array.isArray(referenceSlices) && referenceSlices.length > 0;
     console.log(
       `[visual-qa] Starting QA for campaign ${campaignId}, ${outputSlices.length} output slices, ${hasReferences ? referenceSlices.length + " reference slices" : "no references"}, previewDataUsed=${!!previewDataUsed}`
@@ -265,8 +265,8 @@ Deno.serve(async (req) => {
       text: `HTML SOURCE:\n${htmlForQa}`,
     });
 
-    // Call Claude Sonnet 4
-    console.log("[visual-qa] Calling Claude claude-sonnet-4-6...");
+    // Call Claude Opus 4.7 for vision QA (high-res image support, better localization)
+    console.log("[visual-qa] Calling Claude claude-opus-4-7...");
 
     const anthropicResp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -276,8 +276,9 @@ Deno.serve(async (req) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 16384,
+        model: "claude-opus-4-7",
+        max_tokens: 32000,
+        thinking: { type: "adaptive" },
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content }],
       }),
