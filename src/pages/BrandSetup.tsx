@@ -479,14 +479,16 @@ export default function BrandSetup() {
       return;
     }
 
-    setStep("generating_guide");
+    // Single processing screen — already on "processing".
     guideStartTimeRef.current = Date.now();
-    setProgressMessage("Uploading images & creating brand...");
+    setProgressMessage("Generating brand guide...");
 
     try {
-      const persisted = await ensureBrandAndInputsPersisted();
-      const brandId = persisted.brandId;
+      const cached = persistedInputsRef.current;
+      if (!cached) throw new Error("Pipeline state lost — no persisted inputs cached");
+      const { brandId } = cached;
 
+      pushEvent("db_write", `table=brand_profiles op=update brand_id=${brandId} fields=audit_findings,processing_status=running_spec`);
       await supabase.from("brand_profiles").update({
         audit_findings: auditData,
         confirmed_properties: props || null,
@@ -496,37 +498,29 @@ export default function BrandSetup() {
       }).eq("brand_id", brandId);
 
       if (websiteUrl.trim()) {
+        pushEvent("fn_invoke", "name=research-brand (background)");
         supabase.functions.invoke("research-brand", {
           body: { brand_id: brandId, domain: websiteUrl.trim(), brand_name: brandName, industry: industry || null },
-        }).catch((err: any) => console.warn("[BrandSetup] Background research failed:", err));
+        }).catch((err: any) => pushEvent("fn_error", `name=research-brand msg=${err?.message || err}`));
       }
 
-      const sliceImageUrls = persisted.referenceImageUrls.length > 0 ? persisted.referenceImageUrls : storedReferenceImageUrls;
+      const sliceImageUrls = cached.referenceImageUrls.length > 0 ? cached.referenceImageUrls : storedReferenceImageUrls;
       if (sliceImageUrls.length > 0) {
+        pushEvent("slice_start", `count=${sliceImageUrls.length}`);
         sliceAndUploadReferenceImages(user.id, brandId, sliceImageUrls)
-          .then((sliceUrls) => saveSliceUrls(brandId, sliceUrls))
-          .catch((e) => console.warn("Slice upload failed (non-blocking):", e));
+          .then((sliceUrls) => { pushEvent("slice_done", `produced=${sliceUrls.length}`); return saveSliceUrls(brandId, sliceUrls); })
+          .catch((e) => pushEvent("slice_error", e?.message || String(e)));
       }
 
-      // Step 2: Fire spec step. Backend will:
-      //  - mark running_spec
-      //  - run spec, mark spec_complete
-      //  - automatically chain into guide via EdgeRuntime.waitUntil
-      //  - mark complete (or failed) when guide finishes
-      // We do NOT await this fully — the panel polls the DB for status.
-      // We do still await the response so we surface immediate spec failures fast.
-      if (!confirmDevSpend("extract-brand (spec)")) {
-        await supabase.from("brand_profiles").update({
-          processing_status: "failed",
-          processing_error: "Cancelled by developer before spec call",
-        }).eq("brand_id", brandId);
-        return;
-      }
+      pushEvent("fn_invoke", "name=extract-brand mode=spec");
+      const specStart = Date.now();
       const { error: specError } = await supabase.functions.invoke("extract-brand", {
         body: { auditFindings: auditData, brandName, industry, brandId, step: "spec", confirmed_properties: props },
       });
+      pushEvent("fn_response", `name=extract-brand mode=spec ms=${Date.now() - specStart} ok=${!specError}`);
 
       if (specError) {
+        pushEvent("error", `scope=spec msg=${specError.message}`);
         await supabase.from("brand_profiles").update({
           processing_status: "failed",
           processing_error: specError.message || "Failed to start brand spec generation",
@@ -534,19 +528,9 @@ export default function BrandSetup() {
         return;
       }
 
-      // Fire the guide call using fetch so we can consume the stream.
-      // This keeps the gateway connection alive through streaming (Opus ~3-5min).
-      // The edge function writes brand_guide_html + status="complete" to DB independently.
       try {
-        if (!confirmDevSpend("extract-brand (guide)")) {
-          setGuideStreamStatus("error");
-          await supabase.from("brand_profiles").update({
-            processing_status: "failed",
-            processing_error: "Cancelled by developer before guide call",
-          }).eq("brand_id", brandId);
-          return;
-        }
         setGuideStreamStatus("opening");
+        pushEvent("fn_stream", "name=extract-brand mode=guide event=open");
         const session = await supabase.auth.getSession();
         const accessToken = session.data.session?.access_token || "";
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -559,39 +543,39 @@ export default function BrandSetup() {
             "Authorization": `Bearer ${accessToken}`,
             "apikey": supabaseKey,
           },
-          body: JSON.stringify({
-            auditFindings: auditData,
-            brandName,
-            industry,
-            brandId,
-            step: "guide",
-          }),
+          body: JSON.stringify({ auditFindings: auditData, brandName, industry, brandId, step: "guide" }),
         });
 
         setGuideStreamStatus("streaming");
+        let bytes = 0;
+        let firstByteLogged = false;
         if (guideResponse.body) {
           const reader = guideResponse.body.getReader();
           while (true) {
-            const { done } = await reader.read();
+            const { done, value } = await reader.read();
+            if (value) {
+              bytes += value.length;
+              if (!firstByteLogged) { pushEvent("fn_stream", "name=extract-brand mode=guide event=first_byte"); firstByteLogged = true; }
+            }
             if (done) break;
           }
         }
+        pushEvent("fn_stream", `name=extract-brand mode=guide event=end bytes=${bytes}`);
         setGuideStreamStatus("ended");
       } catch (err: any) {
-        console.log("[BrandSetup] guide stream ended:", err?.message);
+        pushEvent("error", `scope=guide_stream msg=${err?.message || err}`);
         setGuideStreamStatus("error");
       }
     } catch (err: any) {
-      // Setup phase failed BEFORE the panel could mount its polling loop.
-      // Persist if we have a brand id; otherwise show a toast and reset.
       const msg = err?.message || "Failed to start brand processing";
-      console.error("[BrandSetup] generateGuideFromAudit setup failed:", err);
-      if (earlyBrandId) {
+      pushEvent("error", `scope=generateGuideFromAudit msg=${msg}`);
+      const brandId = persistedInputsRef.current?.brandId || earlyBrandId;
+      if (brandId) {
         try {
           await supabase.from("brand_profiles").update({
             processing_status: "failed",
             processing_error: msg,
-          }).eq("brand_id", earlyBrandId);
+          }).eq("brand_id", brandId);
         } catch {}
       } else {
         toast.error(msg);
@@ -600,7 +584,6 @@ export default function BrandSetup() {
     }
   };
 
-  // Keep old name for any other references
   const generateGuide = () => generateGuideFromAudit();
 
   // Render guide HTML in iframe
