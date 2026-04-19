@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, Check, Download, Edit2, RefreshCw, Info } from "lucide-react";
 import { toast } from "sonner";
 import ProcessingStatusPanel from "@/components/brand/ProcessingStatusPanel";
+import { getExtractionSources, isImageUrl } from "@/lib/brandSetupPersistence";
 
 const AUDIT_MESSAGES = [
   "Loading reference images...",
@@ -155,15 +156,18 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
         if (Array.isArray(cats[key])) orderedUrls.push(...cats[key]);
       }
       if (orderedUrls.length === 0) orderedUrls.push(...flat);
+      const imageOnlyUrls = orderedUrls.filter(isImageUrl);
 
       const storedProps = (profile as any)?.confirmed_properties || null;
 
       // Phase A — fresh website + Figma re-extraction in parallel (mirrors /brands/new)
-      const extractionSources: string[] = ["screenshots"];
+      const extractionSources = getExtractionSources([
+        ...(websiteUrl?.trim() ? ["website"] : []),
+        ...(figmaUrl?.trim() ? ["figma"] : []),
+      ] as any);
       const extractionPromises: Promise<any>[] = [];
 
       if (websiteUrl?.trim()) {
-        extractionSources.push("website");
         setProgressMessage(AUDIT_MESSAGES[1]);
         extractionPromises.push(
           supabase.functions
@@ -183,7 +187,6 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
       }
 
       if (figmaUrl?.trim() && figmaToken.trim()) {
-        extractionSources.push("figma");
         setProgressMessage(AUDIT_MESSAGES[2]);
         extractionPromises.push(
           supabase.functions
@@ -207,7 +210,7 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
 
       // Phase B — slice reference images while extractions run
       const slicedImages: any[] = [];
-      const refUrls = orderedUrls.slice(0, 10);
+      const refUrls = imageOnlyUrls.slice(0, 10);
       for (let ci = 0; ci < refUrls.length; ci++) {
         try {
           const slices = await sliceImageFromUrl(refUrls[ci]);
