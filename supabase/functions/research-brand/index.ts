@@ -6,6 +6,39 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function extractJsonObject(raw: string): any {
+  const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let start = -1, end = -1, depth = 0, inString = false;
+  for (let i = 0; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (inString) {
+      if (ch === "\\") { i++; continue; }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === "{") { if (depth === 0) start = i; depth++; }
+    else if (ch === "}") { depth--; if (depth === 0) { end = i; break; } }
+  }
+  if (start === -1 || end === -1) {
+    throw new Error(`No balanced JSON object found (length=${cleaned.length})`);
+  }
+  const candidate = cleaned.substring(start, end + 1);
+  try { return JSON.parse(candidate); } catch (_) {
+    const repaired = candidate
+      .replace(/,\s*}/g, "}")
+      .replace(/,\s*]/g, "]")
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+    try { return JSON.parse(repaired); } catch (e2: any) {
+      const m = /position (\d+)/.exec(e2.message || "");
+      const pos = m ? parseInt(m[1], 10) : 0;
+      const snippet = repaired.substring(Math.max(0, pos - 120), Math.min(repaired.length, pos + 120));
+      console.error(`[extractJsonObject] Parse failed at pos ${pos}. Snippet: ...${snippet}...`);
+      throw new Error(`${e2.message} (snippet around offset ${pos})`);
+    }
+  }
+}
+
 const SYSTEM_PROMPT = `You are a senior DTC e-commerce strategist conducting deep brand intelligence research. You have access to web search — USE IT EXTENSIVELY.
 
 CRITICAL RULE: You are researching ONE SPECIFIC brand at ONE SPECIFIC domain. The domain provided is the AUTHORITATIVE source of truth. 
@@ -207,29 +240,10 @@ async function runResearch(brandId: string, brandName: string, domain: string) {
 
     let parsed: any;
     try {
-      parsed = JSON.parse(rawText);
-    } catch {
-      const jsonMatch = rawText.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[1]);
-      } else {
-        const start = rawText.indexOf("{");
-        const end = rawText.lastIndexOf("}");
-        if (start >= 0 && end > start) {
-          const candidate = rawText.substring(start, end + 1);
-          try {
-            parsed = JSON.parse(candidate);
-          } catch {
-            const openBraces = (candidate.match(/\{/g) || []).length;
-            const closeBraces = (candidate.match(/\}/g) || []).length;
-            console.error(`[research-brand] JSON parse failed. Braces: ${openBraces} open, ${closeBraces} close`);
-            throw new Error(`Malformed JSON in research output (${openBraces} open vs ${closeBraces} close braces)`);
-          }
-        } else {
-          console.error("[research-brand] Could not find JSON in response:", rawText.substring(0, 500));
-          throw new Error("Could not find JSON in AI response");
-        }
-      }
+      parsed = extractJsonObject(rawText);
+    } catch (e: any) {
+      console.error("[research-brand] JSON extraction failed:", e.message, "Text head:", rawText.substring(0, 300));
+      throw new Error(`Malformed JSON in research output: ${e.message}`);
     }
 
     const { error: upsertError } = await supabase
@@ -250,11 +264,15 @@ async function runResearch(brandId: string, brandName: string, domain: string) {
     console.log("[research-brand] Research completed successfully for", brandId);
   } catch (err: any) {
     console.error("[research-brand] Background research failed:", err);
-    // Mark as failed — now allowed by the updated trigger
-    await supabase.from("brand_intelligence").upsert({
-      brand_id: brandId,
-      research_status: "failed",
-    }, { onConflict: "brand_id" }).catch((e) => console.error("[research-brand] Failed to set failed status:", e));
+    try {
+      const { error: failErr } = await supabase.from("brand_intelligence").upsert({
+        brand_id: brandId,
+        research_status: "failed",
+      }, { onConflict: "brand_id" });
+      if (failErr) console.error("[research-brand] Failed to set failed status:", failErr);
+    } catch (markErr) {
+      console.error("[research-brand] Exception while marking failed:", markErr);
+    }
   }
 }
 

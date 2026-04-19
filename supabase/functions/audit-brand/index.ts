@@ -10,6 +10,39 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function extractJsonObject(raw: string): any {
+  const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let start = -1, end = -1, depth = 0, inString = false;
+  for (let i = 0; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (inString) {
+      if (ch === "\\") { i++; continue; }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === "{") { if (depth === 0) start = i; depth++; }
+    else if (ch === "}") { depth--; if (depth === 0) { end = i; break; } }
+  }
+  if (start === -1 || end === -1) {
+    throw new Error(`No balanced JSON object found (length=${cleaned.length})`);
+  }
+  const candidate = cleaned.substring(start, end + 1);
+  try { return JSON.parse(candidate); } catch (_) {
+    const repaired = candidate
+      .replace(/,\s*}/g, "}")
+      .replace(/,\s*]/g, "]")
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+    try { return JSON.parse(repaired); } catch (e2: any) {
+      const m = /position (\d+)/.exec(e2.message || "");
+      const pos = m ? parseInt(m[1], 10) : 0;
+      const snippet = repaired.substring(Math.max(0, pos - 120), Math.min(repaired.length, pos + 120));
+      console.error(`[extractJsonObject] Parse failed at pos ${pos}. Snippet: ...${snippet}...`);
+      throw new Error(`${e2.message} (snippet around offset ${pos})`);
+    }
+  }
+}
+
 const SINGLE_PASS_AUDIT_PROMPT = `You are performing a detailed visual audit of multiple email campaigns from a single brand. Each campaign has been split into sequential vertical slices (top to bottom). Analyze ALL campaigns together to produce ONE unified audit.
 
 Organize your audit around the FIVE RULE CATEGORIES that matter for email design. Be EXACT with values. If you cannot clearly determine a property, mark it as "[NEEDS CONFIRMATION]" rather than guessing.
@@ -443,7 +476,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 16000,
+        max_tokens: 24000,
         system: SINGLE_PASS_AUDIT_PROMPT,
         messages: [{ role: "user", content: imageContent }],
       }),
@@ -462,30 +495,12 @@ Deno.serve(async (req) => {
     }
 
     const text = result.content?.[0]?.text || "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("Failed to parse audit result - no JSON found in response");
-
     let parsed: any;
     try {
-      parsed = JSON.parse(jsonMatch[0]);
-    } catch {
-      // Attempt JSON repair: add missing closing braces
-      let candidate = jsonMatch[0];
-      const openBraces = (candidate.match(/\{/g) || []).length;
-      const closeBraces = (candidate.match(/\}/g) || []).length;
-      if (openBraces > closeBraces && openBraces - closeBraces <= 5) {
-        candidate += "}".repeat(openBraces - closeBraces);
-        try {
-          parsed = JSON.parse(candidate);
-          console.log(`[audit-brand] JSON repaired: added ${openBraces - closeBraces} closing braces`);
-        } catch {
-          console.error(`[audit-brand] JSON repair failed. Braces: ${openBraces} open, ${closeBraces} close. Length: ${candidate.length}`);
-          throw new Error(`Malformed JSON in audit output (${openBraces} open vs ${closeBraces} close braces). Model output may have been truncated.`);
-        }
-      } else {
-        console.error(`[audit-brand] JSON parse failed. Braces: ${openBraces} open, ${closeBraces} close. Length: ${jsonMatch[0].length}`);
-        throw new Error(`Malformed JSON in audit output (${openBraces} open vs ${closeBraces} close braces). Model output may have been truncated.`);
-      }
+      parsed = extractJsonObject(text);
+    } catch (e: any) {
+      console.error(`[audit-brand] JSON extraction failed: ${e.message}. Text length: ${text.length}`);
+      throw new Error(`Malformed JSON in audit output: ${e.message}`);
     }
 
     // Ensure expected structure
