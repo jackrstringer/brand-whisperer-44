@@ -27,6 +27,7 @@ export default function BrandProfile() {
   const [brandName, setBrandName] = useState("");
   const [industry, setIndustry] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
+  const [figmaUrl, setFigmaUrl] = useState("");
   const [assets, setAssets] = useState<BrandAsset[]>([]);
   const [guideHtml, setGuideHtml] = useState<string | null>(null);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
@@ -43,6 +44,7 @@ export default function BrandProfile() {
       setBrandName(brand.name);
       setIndustry(brand.industry || "");
       setWebsiteUrl(brand.website_url || "");
+      setFigmaUrl((brand as any).figma_url || "");
     }
     setAssets((brandAssets || []) as BrandAsset[]);
     const status = (profile as any)?.processing_status as string | null;
@@ -149,7 +151,7 @@ export default function BrandProfile() {
         )}
 
         <TabsContent value="analysis">
-          <ReanalyzeBrand brandId={brandId} brandName={brandName} industry={industry} websiteUrl={websiteUrl} />
+          <ReanalyzeBrand brandId={brandId} brandName={brandName} industry={industry} websiteUrl={websiteUrl} figmaUrl={figmaUrl} />
         </TabsContent>
       </Tabs>
     </div>

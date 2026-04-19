@@ -354,17 +354,27 @@ export default function BrandSetup() {
     setProgressMessage("Uploading images & creating brand...");
 
     try {
-      // Step 1: Upload images and create brand + profile
+      // Step 1: Upload images (per category) and create brand + profile
       let brandId = earlyBrandId;
       if (!brandId) {
+        // Categorized uploads — preserve which bucket each ref image came from
+        const categoryBuckets: Record<string, File[]> = {
+          campaign: campaignFiles,
+          brand_deck: brandDeckFiles,
+          misc: miscRefFiles,
+          mockup: mockupFiles,
+        };
+        const categorizedUrls: Record<string, string[]> = { campaign: [], brand_deck: [], misc: [], mockup: [] };
         const imageUrls: string[] = [];
-        const allImageFiles = getAllImageFiles();
-        for (const file of allImageFiles) {
-          const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`;
-          const { error: uploadError } = await supabase.storage.from("brand-references").upload(path, file);
-          if (!uploadError) {
-            const { data: urlData } = supabase.storage.from("brand-references").getPublicUrl(path);
-            imageUrls.push(urlData.publicUrl);
+        for (const [category, files] of Object.entries(categoryBuckets)) {
+          for (const file of files) {
+            const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`;
+            const { error: uploadError } = await supabase.storage.from("brand-references").upload(path, file);
+            if (!uploadError) {
+              const { data: urlData } = supabase.storage.from("brand-references").getPublicUrl(path);
+              categorizedUrls[category].push(urlData.publicUrl);
+              imageUrls.push(urlData.publicUrl);
+            }
           }
         }
 
@@ -392,6 +402,7 @@ export default function BrandSetup() {
         const { error: profileError } = await supabase.from("brand_profiles").insert({
           brand_id: brandId,
           reference_image_urls: imageUrls,
+          reference_image_categories: categorizedUrls,
           audit_findings: auditData,
           confirmed_properties: props || null,
           extraction_sources: extractionSrcs,
