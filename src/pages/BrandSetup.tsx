@@ -525,6 +525,13 @@ export default function BrandSetup() {
       //  - mark complete (or failed) when guide finishes
       // We do NOT await this fully — the panel polls the DB for status.
       // We do still await the response so we surface immediate spec failures fast.
+      if (!confirmDevSpend("extract-brand (spec)")) {
+        await supabase.from("brand_profiles").update({
+          processing_status: "failed",
+          processing_error: "Cancelled by developer before spec call",
+        }).eq("brand_id", brandId);
+        return;
+      }
       const { error: specError } = await supabase.functions.invoke("extract-brand", {
         body: { auditFindings: auditData, brandName, industry, brandId, step: "spec", confirmed_properties: props },
       });
