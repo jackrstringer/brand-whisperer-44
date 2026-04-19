@@ -244,8 +244,24 @@ export function FlowAgentChat({
     }
   };
 
-  const visibleMessages = messages.filter((message) => {
-    if (!currentSkeleton || message.role !== "assistant") return true;
+  const lastSetupMessageIndex = currentSkeleton
+    ? messages.reduce((lastIndex, message, index) => {
+        if (
+          message.role === "assistant" &&
+          (QUESTION_FENCE.test(message.content) ||
+            SYNTH_FENCE.test(message.content) ||
+            SKELETON_FENCE.test(message.content))
+        ) {
+          return index;
+        }
+        return lastIndex;
+      }, -1)
+    : -1;
+
+  const visibleMessages = messages.filter((message, index) => {
+    if (!currentSkeleton) return true;
+    if (index <= lastSetupMessageIndex) return false;
+    if (message.role !== "assistant") return true;
     const hasControlFence =
       QUESTION_FENCE.test(message.content) ||
       SYNTH_FENCE.test(message.content) ||
