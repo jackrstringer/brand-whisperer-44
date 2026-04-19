@@ -179,13 +179,11 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Load skills
+    // Load skills (synchronous - bundled at deploy time)
     const flowSkillFiles = FLOW_SKILL_FILES[flow_type] || [];
-    const [baseSkill, designLibrary, ...flowSkills] = await Promise.all([
-      readSkill("base-flow.md"),
-      readSkill("email-design-element-library.md"),
-      ...flowSkillFiles.map(readSkill),
-    ]);
+    const baseSkill = readSkill("base-flow.md");
+    const designLibrary = readSkill("email-design-element-library.md");
+    const flowSkills = flowSkillFiles.map(readSkill);
 
     // Load brand context
     const [{ data: brandIntel }, { data: klaviyoConn }, { data: brand }, { data: flowRow }] =
