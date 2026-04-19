@@ -503,7 +503,7 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 16384,
+        max_tokens: 32000,
         system: systemMsg,
         messages: anthropicMessages,
         stream: true,
@@ -686,7 +686,7 @@ Never mix the two formats in one response. Use VARIANT MODE only when the user a
                       },
                       body: JSON.stringify({
                         model: "claude-sonnet-4-6",
-                        max_tokens: 16384,
+                        max_tokens: 32000,
                         system: `You are a surgical HTML email editor. Apply ONLY the user's specific requested edit and return the COMPLETE modified HTML wrapped in <email_html> tags. Also include a brief <reply> tag describing what you changed.
 
 CRITICAL STRUCTURE RULES:

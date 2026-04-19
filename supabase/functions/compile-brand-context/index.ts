@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 16384,
+        max_tokens: 24000,
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content: buildUserPrompt(mergedProfile) }],
       }),

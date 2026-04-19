@@ -442,8 +442,9 @@ Deno.serve(async (req) => {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-opus-4-6",
-        max_tokens: 64000,
+        model: "claude-opus-4-7",
+        max_tokens: 96000,
+        thinking: { type: "adaptive" },
         system: SINGLE_PASS_AUDIT_PROMPT,
         messages: [{ role: "user", content: imageContent }],
       }),

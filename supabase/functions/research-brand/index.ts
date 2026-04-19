@@ -171,8 +171,9 @@ async function runResearch(brandId: string, brandName: string, domain: string) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-opus-4-6",
-        max_tokens: 16000,
+        model: "claude-opus-4-7",
+        max_tokens: 24000,
+        thinking: { type: "adaptive" },
         system: SYSTEM_PROMPT,
         tools: [
           {
