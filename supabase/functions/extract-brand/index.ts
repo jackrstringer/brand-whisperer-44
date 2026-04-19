@@ -588,43 +588,9 @@ Deno.serve(async (req) => {
           processing_status: "spec_complete",
         }).eq("brand_id", brandId);
 
-        // Background: chain into guide phase using EdgeRuntime.waitUntil so the client
-        // doesn't need to make a second invoke. This avoids race conditions and
-        // gateway-timeout ambiguity.
-        const runGuideInBackground = async () => {
-          try {
-            await sb.from("brand_profiles").update({
-              processing_status: "running_guide",
-              processing_error: null,
-            }).eq("brand_id", brandId);
-
-            const guideHtml = await processGuideStep(ANTHROPIC_API_KEY, auditFindings, brandName, industry, brandId);
-            // processGuideStep saves the html itself; just flip status.
-            if (guideHtml) {
-              await sb.from("brand_profiles").update({
-                processing_status: "complete",
-              }).eq("brand_id", brandId);
-              console.log(`[extract-brand] Background guide complete for ${brandId}`);
-            }
-          } catch (err: any) {
-            console.error("[extract-brand] Background guide failed:", err);
-            await sb.from("brand_profiles").update({
-              processing_status: "failed",
-              processing_error: `Guide generation failed: ${err.message || "Unknown error"}`,
-            }).eq("brand_id", brandId).catch(console.error);
-          }
-        };
-
-        // @ts-ignore - EdgeRuntime is provided by Supabase edge runtime
-        if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
-          // @ts-ignore
-          EdgeRuntime.waitUntil(runGuideInBackground());
-        } else {
-          // Fallback: fire-and-forget (will still run because Deno keeps the isolate alive briefly)
-          runGuideInBackground();
-        }
-
-        return new Response(JSON.stringify({ status: "spec_complete", brandId, message: "Guide phase started in background" }), {
+        // Spec function ONLY does spec. Client fires a separate guide call to keep
+        // the gateway connection alive through the long-running streaming response.
+        return new Response(JSON.stringify({ status: "spec_complete", brandId }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
