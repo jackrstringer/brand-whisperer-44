@@ -107,6 +107,7 @@ export default function BrandSetup() {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [brandGuideHtml, setBrandGuideHtml] = useState("");
   const [saving, setSaving] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
   const guideIframeRef = useRef<HTMLIFrameElement>(null);
   const guideStartTimeRef = useRef<number>(Date.now());
   const [guideIframeHeight, setGuideIframeHeight] = useState(800);
