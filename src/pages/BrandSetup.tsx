@@ -133,8 +133,8 @@ export default function BrandSetup() {
 
   const sliceImage = (
     file: File,
-    maxSliceHeight = 1300,
-    maxWidth = 600,
+    maxSliceHeight = 2400,
+    maxWidth = 800,
   ): Promise<Array<{ data: string; mediaType: string; sliceIndex: number; totalSlices: number }>> =>
     new Promise((resolve, reject) => {
       const img = new Image();
@@ -157,8 +157,8 @@ export default function BrandSetup() {
           const ctx = canvas.getContext("2d")!;
           const origRatio = img.naturalWidth / width;
           ctx.drawImage(img, 0, sy * origRatio, img.naturalWidth, sh * origRatio, 0, 0, width, sh);
-           const dataUrl = canvas.toDataURL("image/png");
-           results.push({ data: dataUrl.split(",")[1], mediaType: "image/png", sliceIndex: i, totalSlices });
+           const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+           results.push({ data: dataUrl.split(",")[1], mediaType: "image/jpeg", sliceIndex: i, totalSlices });
         }
         URL.revokeObjectURL(img.src);
         resolve(results);
@@ -803,13 +803,17 @@ export default function BrandSetup() {
   }
 
   if (step === "auditing") {
+    // Audit owns the first ~30% of the unified pipeline progress bar.
+    const unifiedProgress = Math.min(30, Math.round(progressValue * 0.3));
     return (
       <div className="min-h-screen bg-background p-6 md:p-12 flex flex-col items-center justify-center">
-        <div className="max-w-md w-full space-y-6 text-center">
-          <h2 className="text-xl font-semibold">Deep Visual Audit</h2>
-          <p className="text-sm text-muted-foreground">Analyzing each campaign individually, then synthesizing patterns...</p>
-          <Progress value={progressValue} className="h-1.5" />
-          <p className="text-sm text-muted-foreground">{progressMessage}</p>
+        <div className="max-w-lg w-full space-y-6 text-center">
+          <h2 className="text-xl font-semibold">Analyzing your brand</h2>
+          <p className="text-sm text-muted-foreground">
+            Reading your emails, extracting your design system, and writing your full brand guide. This typically takes 5–10 minutes.
+          </p>
+          <Progress value={unifiedProgress} className="h-1.5" />
+          <p className="text-sm text-muted-foreground">{progressMessage || "Reading your emails..."}</p>
         </div>
       </div>
     );
@@ -898,12 +902,16 @@ export default function BrandSetup() {
 
   if (step === "generating_guide") {
     // The brand row + profile may not exist yet (very first instant before insert).
-    // While waiting, show a minimal "starting..." placeholder.
+    // While waiting, show a unified placeholder that matches the auditing screen chrome.
     if (!earlyBrandId) {
       return (
         <div className="min-h-screen bg-background p-6 md:p-12 flex flex-col items-center justify-center">
-          <div className="max-w-md w-full text-center space-y-4">
-            <h2 className="text-xl font-semibold">Starting brand analysis…</h2>
+          <div className="max-w-lg w-full text-center space-y-6">
+            <h2 className="text-xl font-semibold">Analyzing your brand</h2>
+            <p className="text-sm text-muted-foreground">
+              Reading your emails, extracting your design system, and writing your full brand guide. This typically takes 5–10 minutes.
+            </p>
+            <Progress value={32} className="h-1.5" />
             <p className="text-sm text-muted-foreground">{progressMessage || "Uploading images & creating brand…"}</p>
             <div className="w-6 h-6 mx-auto rounded-full border-2 border-primary border-t-transparent animate-spin" />
           </div>
@@ -914,8 +922,8 @@ export default function BrandSetup() {
       <div className="min-h-screen bg-background p-6 md:p-12 flex flex-col items-center justify-center">
         <ProcessingStatusPanel
           brandId={earlyBrandId}
-          title="Deep Brand Analysis"
-          subtitle="Building your brand spec and design guide. This typically takes 5–10 minutes. You can leave this page — your brand will pick up where it left off."
+          title="Analyzing your brand"
+          subtitle="Reading your emails, extracting your design system, and writing your full brand guide. This typically takes 5–10 minutes. You can leave this page — your brand will pick up where it left off."
           brandContext={auditFindings ? { auditFindings, brandName, industry } : undefined}
           guideStreamStatus={guideStreamStatus}
           showDashboardLink
