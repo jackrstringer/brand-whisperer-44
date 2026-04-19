@@ -207,29 +207,10 @@ async function runResearch(brandId: string, brandName: string, domain: string) {
 
     let parsed: any;
     try {
-      parsed = JSON.parse(rawText);
-    } catch {
-      const jsonMatch = rawText.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[1]);
-      } else {
-        const start = rawText.indexOf("{");
-        const end = rawText.lastIndexOf("}");
-        if (start >= 0 && end > start) {
-          const candidate = rawText.substring(start, end + 1);
-          try {
-            parsed = JSON.parse(candidate);
-          } catch {
-            const openBraces = (candidate.match(/\{/g) || []).length;
-            const closeBraces = (candidate.match(/\}/g) || []).length;
-            console.error(`[research-brand] JSON parse failed. Braces: ${openBraces} open, ${closeBraces} close`);
-            throw new Error(`Malformed JSON in research output (${openBraces} open vs ${closeBraces} close braces)`);
-          }
-        } else {
-          console.error("[research-brand] Could not find JSON in response:", rawText.substring(0, 500));
-          throw new Error("Could not find JSON in AI response");
-        }
-      }
+      parsed = extractJsonObject(rawText);
+    } catch (e: any) {
+      console.error("[research-brand] JSON extraction failed:", e.message, "Text head:", rawText.substring(0, 300));
+      throw new Error(`Malformed JSON in research output: ${e.message}`);
     }
 
     const { error: upsertError } = await supabase
@@ -250,11 +231,15 @@ async function runResearch(brandId: string, brandName: string, domain: string) {
     console.log("[research-brand] Research completed successfully for", brandId);
   } catch (err: any) {
     console.error("[research-brand] Background research failed:", err);
-    // Mark as failed — now allowed by the updated trigger
-    await supabase.from("brand_intelligence").upsert({
-      brand_id: brandId,
-      research_status: "failed",
-    }, { onConflict: "brand_id" }).catch((e) => console.error("[research-brand] Failed to set failed status:", e));
+    try {
+      const { error: failErr } = await supabase.from("brand_intelligence").upsert({
+        brand_id: brandId,
+        research_status: "failed",
+      }, { onConflict: "brand_id" });
+      if (failErr) console.error("[research-brand] Failed to set failed status:", failErr);
+    } catch (markErr) {
+      console.error("[research-brand] Exception while marking failed:", markErr);
+    }
   }
 }
 
