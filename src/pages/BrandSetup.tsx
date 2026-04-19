@@ -331,6 +331,10 @@ export default function BrandSetup() {
   // Brand ID created early for async guide generation
   const [earlyBrandId, setEarlyBrandId] = useState<string | null>(null);
 
+  // Stream status for the guide fetch — surfaced in the debug panel.
+  // "idle" | "opening" | "streaming" | "ended" | "error"
+  const [guideStreamStatus, setGuideStreamStatus] = useState<string>("idle");
+
   // === PASS 2+3: Spec + Guide (DB-driven, polled by ProcessingStatusPanel) ===
   // After this completes, step transitions to "generating_guide" which mounts
   // the ProcessingStatusPanel — that polls brand_profiles.processing_status
@@ -464,12 +468,51 @@ export default function BrandSetup() {
       });
 
       if (specError) {
-        // Spec invoke failed — persist the failure so the panel can show it.
         await supabase.from("brand_profiles").update({
           processing_status: "failed",
           processing_error: specError.message || "Failed to start brand spec generation",
         }).eq("brand_id", brandId);
-        // Don't throw — let the panel surface the failure with retry UI.
+        return;
+      }
+
+      // Fire the guide call using fetch so we can consume the stream.
+      // This keeps the gateway connection alive through streaming (Opus ~3-5min).
+      // The edge function writes brand_guide_html + status="complete" to DB independently.
+      try {
+        setGuideStreamStatus("opening");
+        const session = await supabase.auth.getSession();
+        const accessToken = session.data.session?.access_token || "";
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+        const guideResponse = await fetch(`${supabaseUrl}/functions/v1/extract-brand`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${accessToken}`,
+            "apikey": supabaseKey,
+          },
+          body: JSON.stringify({
+            auditFindings: auditData,
+            brandName,
+            industry,
+            brandId,
+            step: "guide",
+          }),
+        });
+
+        setGuideStreamStatus("streaming");
+        if (guideResponse.body) {
+          const reader = guideResponse.body.getReader();
+          while (true) {
+            const { done } = await reader.read();
+            if (done) break;
+          }
+        }
+        setGuideStreamStatus("ended");
+      } catch (err: any) {
+        console.log("[BrandSetup] guide stream ended:", err?.message);
+        setGuideStreamStatus("error");
       }
     } catch (err: any) {
       // Setup phase failed BEFORE the panel could mount its polling loop.
@@ -874,8 +917,22 @@ export default function BrandSetup() {
           title="Deep Brand Analysis"
           subtitle="Building your brand spec and design guide. This typically takes 5–10 minutes. You can leave this page — your brand will pick up where it left off."
           brandContext={auditFindings ? { auditFindings, brandName, industry } : undefined}
+          guideStreamStatus={guideStreamStatus}
           showDashboardLink
           onGoToDashboard={() => navigate(`/brands/${earlyBrandId}`)}
+          onRetry={async () => {
+            if (!earlyBrandId || !auditFindings) {
+              toast.error("Cannot retry — audit findings missing.");
+              setStep("uploads");
+              return;
+            }
+            await supabase.from("brand_profiles").update({
+              processing_status: "running_spec",
+              processing_error: null,
+            }).eq("brand_id", earlyBrandId);
+            setGuideStreamStatus("idle");
+            generateGuideFromAudit(auditFindings, confirmedProperties);
+          }}
           onComplete={(html, raw, sysPrompt) => {
             setExtraction(raw as any);
             setSystemPrompt(sysPrompt || "");
@@ -883,7 +940,6 @@ export default function BrandSetup() {
             setStep("guide_review");
           }}
           onFailed={(error) => {
-            // Show the actual backend error inline + offer retry instead of bouncing back silently.
             toast.error(error, { duration: 12000 });
           }}
           onTimeout={() => {

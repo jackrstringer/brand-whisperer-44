@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { Check, AlertTriangle, Loader2, Clock, RefreshCw } from "lucide-react";
+import { Check, AlertTriangle, Loader2, Clock, RefreshCw, Copy, ChevronDown, ChevronUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 type PipelineStatus = "idle" | "running_spec" | "spec_complete" | "running_guide" | "complete" | "failed";
 
@@ -25,7 +26,6 @@ function getPhaseStatus(phase: Phase, currentStatus: PipelineStatus): "pending" 
   const phaseEndIdx = Math.max(...phase.key.map((k) => statusOrder.indexOf(k)));
 
   if (currentStatus === "failed") {
-    // Mark the phase that was running when it failed
     if (phaseStartIdx <= currentIdx && currentIdx <= phaseEndIdx) return "failed";
     if (currentIdx > phaseEndIdx) return "complete";
     return "pending";
@@ -42,19 +42,31 @@ function formatElapsed(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+function fmtTs(d: Date | null): string {
+  if (!d) return "—";
+  return d.toLocaleTimeString([], { hour12: false });
+}
+
+interface DebugLogEntry {
+  timestamp: number;
+  event: string;
+  detail: string;
+}
+
 interface ProcessingStatusPanelProps {
   brandId: string;
   onComplete: (guideHtml: string, rawExtraction?: any, systemPrompt?: string) => void;
   onFailed: (error: string) => void;
   onTimeout?: () => void;
+  onRetry?: () => void;
   title?: string;
   subtitle?: string;
   showDashboardLink?: boolean;
   onGoToDashboard?: () => void;
   maxPollMinutes?: number;
-  /** Seconds to wait before declaring stuck on idle (default 30) */
   idleTimeoutSeconds?: number;
-  /** Audit findings + brand info needed to trigger guide phase */
+  /** Status of the parent's guide fetch stream: idle | opening | streaming | ended | error */
+  guideStreamStatus?: string;
   brandContext?: {
     auditFindings: any;
     brandName: string;
@@ -67,13 +79,14 @@ export default function ProcessingStatusPanel({
   onComplete,
   onFailed,
   onTimeout,
+  onRetry,
   title = "Deep Brand Analysis",
   subtitle,
   showDashboardLink = false,
   onGoToDashboard,
   maxPollMinutes = 15,
   idleTimeoutSeconds = 90,
-  brandContext,
+  guideStreamStatus = "idle",
 }: ProcessingStatusPanelProps) {
   const [dbStatus, setDbStatus] = useState<PipelineStatus>("idle");
   const [dbError, setDbError] = useState<string | null>(null);
@@ -82,8 +95,38 @@ export default function ProcessingStatusPanel({
   const startTimeRef = useRef(Date.now());
   const [elapsed, setElapsed] = useState(0);
   const hasLeftIdleRef = useRef(false);
-  const guideFiredRef = useRef(false);
-  const specCompleteTimeRef = useRef<number | null>(null);
+
+  // Per-phase timestamps
+  const [specStartedAt, setSpecStartedAt] = useState<Date | null>(null);
+  const [specCompletedAt, setSpecCompletedAt] = useState<Date | null>(null);
+  const [guideStartedAt, setGuideStartedAt] = useState<Date | null>(null);
+  const [guideCompletedAt, setGuideCompletedAt] = useState<Date | null>(null);
+
+  // Raw row diagnostics
+  const [rowDiag, setRowDiag] = useState<{
+    has_audit_findings: boolean;
+    audit_error: string | null;
+    has_raw_extraction: boolean;
+    system_prompt_len: number;
+    brand_guide_html_len: number;
+  }>({
+    has_audit_findings: false,
+    audit_error: null,
+    has_raw_extraction: false,
+    system_prompt_len: 0,
+    brand_guide_html_len: 0,
+  });
+
+  // Diagnostic log (rolling, keep last 20)
+  const [debugLog, setDebugLog] = useState<DebugLogEntry[]>([]);
+  const logRef = useRef<DebugLogEntry[]>([]);
+  const [debugOpen, setDebugOpen] = useState(false);
+
+  const pushLog = (event: string, detail: string) => {
+    const entry = { timestamp: Date.now(), event, detail };
+    logRef.current = [...logRef.current, entry].slice(-20);
+    setDebugLog([...logRef.current]);
+  };
 
   // Tick elapsed every second
   useEffect(() => {
@@ -93,7 +136,17 @@ export default function ProcessingStatusPanel({
     return () => clearInterval(timer);
   }, []);
 
+  // Track stream status changes
+  const lastStreamRef = useRef<string>("idle");
+  useEffect(() => {
+    if (guideStreamStatus !== lastStreamRef.current) {
+      pushLog("stream", `${lastStreamRef.current} → ${guideStreamStatus}`);
+      lastStreamRef.current = guideStreamStatus;
+    }
+  }, [guideStreamStatus]);
+
   // Poll DB status
+  const lastStatusRef = useRef<PipelineStatus | null>(null);
   useEffect(() => {
     const POLL_INTERVAL = 4000;
     const MAX_POLL_TIME = maxPollMinutes * 60 * 1000;
@@ -102,67 +155,73 @@ export default function ProcessingStatusPanel({
       try {
         const { data: profile } = await supabase
           .from("brand_profiles")
-          .select("processing_status, processing_error, brand_guide_html, raw_extraction, system_prompt")
+          .select("processing_status, processing_error, brand_guide_html, raw_extraction, system_prompt, audit_findings")
           .eq("brand_id", brandId)
           .single();
 
-        const status = (profile as any)?.processing_status as PipelineStatus;
-        const error = (profile as any)?.processing_error as string | null;
+        const status = ((profile as any)?.processing_status as PipelineStatus) || "idle";
+        const error = ((profile as any)?.processing_error as string | null) ?? null;
+        const auditFindings = (profile as any)?.audit_findings;
+        const rawExtraction = (profile as any)?.raw_extraction;
+        const sysPrompt = (profile as any)?.system_prompt || "";
+        const guideHtml = (profile as any)?.brand_guide_html || "";
 
-        setDbStatus(status || "idle");
+        // Track per-phase timestamps from status transitions
+        if (status !== lastStatusRef.current) {
+          const now = new Date();
+          pushLog("status", `${lastStatusRef.current ?? "(initial)"} → ${status}`);
+          if (status === "running_spec" && !specStartedAt) setSpecStartedAt(now);
+          if ((status === "spec_complete" || status === "running_guide") && !specCompletedAt) setSpecCompletedAt(now);
+          if (status === "running_guide" && !guideStartedAt) setGuideStartedAt(now);
+          if (status === "complete" && !guideCompletedAt) setGuideCompletedAt(now);
+          lastStatusRef.current = status;
+        }
+
+        setDbStatus(status);
         setDbError(error);
         setPollCount((c) => c + 1);
         setLastPollAt(new Date());
+        setRowDiag({
+          has_audit_findings: !!auditFindings,
+          audit_error: auditFindings && typeof auditFindings === "object" ? (auditFindings as any)._error || null : null,
+          has_raw_extraction: !!rawExtraction,
+          system_prompt_len: sysPrompt.length,
+          brand_guide_html_len: guideHtml.length,
+        });
 
-        // Track if we ever left idle
         if (status && status !== "idle") {
           hasLeftIdleRef.current = true;
         }
 
         if (status === "failed") {
+          pushLog("error", error || "(no error message)");
           onFailed(error || "Brand processing failed");
           return "stop";
         }
 
-        if (status === "complete" && profile?.brand_guide_html) {
-          onComplete(profile.brand_guide_html, (profile as any)?.raw_extraction, profile.system_prompt || undefined);
+        if (status === "complete" && guideHtml) {
+          pushLog("done", `guide_html=${guideHtml.length} chars`);
+          onComplete(guideHtml, rawExtraction, sysPrompt || undefined);
           return "stop";
         }
 
-        // Phase transition: spec_complete → guide is now chained automatically
-        // by the extract-brand edge function (EdgeRuntime.waitUntil). We just
-        // observe the status transition and watch for stuck state.
-        if (status === "spec_complete" && !guideFiredRef.current) {
-          guideFiredRef.current = true;
-          specCompleteTimeRef.current = Date.now();
-          console.log("[ProcessingStatusPanel] spec_complete detected, guide should chain automatically in background");
-        }
-
-        // Stuck on spec_complete: backend should have transitioned to running_guide within 10s.
-        // If not, the background task failed to start.
-        if (status === "spec_complete" && guideFiredRef.current && specCompleteTimeRef.current) {
-          const stuckMs = Date.now() - specCompleteTimeRef.current;
-          if (stuckMs > 60000) {
-            onFailed("Guide generation failed to start after spec completed. The background task may have been killed. Please try again.");
-            return "stop";
-          }
-        }
-
-        // Bug 3 fix: stuck-on-idle detection
+        // Stuck on idle
         if (status === "idle" && !hasLeftIdleRef.current) {
           const elapsedMs = Date.now() - startTimeRef.current;
           if (elapsedMs > idleTimeoutSeconds * 1000) {
+            pushLog("error", "stuck on idle past timeout");
             onFailed("Brand analysis failed to start. The processing function may not have been invoked. Please try again.");
             return "stop";
           }
         }
 
         if (Date.now() - startTimeRef.current > MAX_POLL_TIME) {
+          pushLog("error", "max poll time exceeded");
           onTimeout?.();
           return "stop";
         }
-      } catch {
-        // Keep polling on transient errors
+      } catch (err: any) {
+        pushLog("poll_error", err?.message || String(err));
       }
       return "continue";
     };
@@ -172,13 +231,13 @@ export default function ProcessingStatusPanel({
       if (result === "stop") clearInterval(timer);
     }, POLL_INTERVAL);
 
-    // Initial poll
     poll().then((result) => {
       if (result === "stop") clearInterval(timer);
     });
 
     return () => clearInterval(timer);
-  }, [brandId, maxPollMinutes, idleTimeoutSeconds, onComplete, onFailed, onTimeout, brandContext]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brandId, maxPollMinutes, idleTimeoutSeconds]);
 
   const progressValue =
     dbStatus === "idle" ? 5 :
@@ -189,6 +248,42 @@ export default function ProcessingStatusPanel({
     dbStatus === "failed" ? 0 : 5;
 
   const isFailed = dbStatus === "failed";
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const functionUrl = `${supabaseUrl}/functions/v1/extract-brand`;
+
+  const buildDebugBlob = () => {
+    return JSON.stringify({
+      brandId,
+      title,
+      capturedAt: new Date().toISOString(),
+      dbStatus,
+      dbError,
+      elapsedSeconds: elapsed,
+      pollCount,
+      lastPollAt: lastPollAt?.toISOString() ?? null,
+      guideStreamStatus,
+      phaseTimings: {
+        specStartedAt: specStartedAt?.toISOString() ?? null,
+        specCompletedAt: specCompletedAt?.toISOString() ?? null,
+        guideStartedAt: guideStartedAt?.toISOString() ?? null,
+        guideCompletedAt: guideCompletedAt?.toISOString() ?? null,
+        specDurationMs: specStartedAt && specCompletedAt ? specCompletedAt.getTime() - specStartedAt.getTime() : null,
+        guideDurationMs: guideStartedAt && guideCompletedAt ? guideCompletedAt.getTime() - guideStartedAt.getTime() : null,
+      },
+      rowDiagnostics: rowDiag,
+      functionUrl,
+      debugLog,
+    }, null, 2);
+  };
+
+  const handleCopyDebug = async () => {
+    try {
+      await navigator.clipboard.writeText(buildDebugBlob());
+      toast.success("Debug info copied to clipboard");
+    } catch {
+      toast.error("Copy failed");
+    }
+  };
 
   return (
     <div className="max-w-lg w-full space-y-6 text-center">
@@ -211,7 +306,7 @@ export default function ProcessingStatusPanel({
                 {status === "pending" && <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/20" />}
                 {status === "failed" && <AlertTriangle className="w-5 h-5 text-destructive" />}
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <span className={`text-sm font-medium ${status === "pending" ? "text-muted-foreground" : status === "failed" ? "text-destructive" : ""}`}>
                   {phase.label}
                 </span>
@@ -219,7 +314,7 @@ export default function ProcessingStatusPanel({
                   <p className="text-xs text-muted-foreground mt-0.5">{phase.detail}</p>
                 )}
                 {status === "failed" && dbError && (
-                  <p className="text-xs text-destructive mt-0.5">{dbError}</p>
+                  <p className="text-xs text-destructive mt-0.5 break-words">{dbError}</p>
                 )}
               </div>
             </div>
@@ -228,7 +323,7 @@ export default function ProcessingStatusPanel({
       </div>
 
       {/* Status footer */}
-      <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground pt-2">
+      <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground pt-2 flex-wrap">
         <div className="flex items-center gap-1.5">
           <Clock className="w-3.5 h-3.5" />
           <span>Elapsed: {formatElapsed(elapsed)}</span>
@@ -254,12 +349,92 @@ export default function ProcessingStatusPanel({
         </span>
       </div>
 
-      {/* Actions */}
+      {/* Failure retry */}
+      {isFailed && onRetry && (
+        <div className="flex justify-center">
+          <Button onClick={onRetry} variant="default" className="gap-1.5">
+            <RotateCcwIcon /> Retry analysis
+          </Button>
+        </div>
+      )}
+
+      {/* Dashboard link */}
       {showDashboardLink && onGoToDashboard && (
         <Button variant="outline" onClick={onGoToDashboard} className="mt-2">
           Go to dashboard
         </Button>
       )}
+
+      {/* Debug panel toggle */}
+      <div className="pt-4 border-t border-border">
+        <button
+          type="button"
+          onClick={() => setDebugOpen((v) => !v)}
+          className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+        >
+          {debugOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          {debugOpen ? "Hide debug info" : "Show debug info"}
+        </button>
+
+        {debugOpen && (
+          <div className="mt-3 text-left font-mono text-[11px] bg-muted/40 border border-border rounded-md p-3 max-h-[420px] overflow-auto space-y-3">
+            <div>
+              <div className="text-muted-foreground uppercase tracking-wide text-[10px] mb-1">Phase timings</div>
+              <div>spec: {fmtTs(specStartedAt)} → {fmtTs(specCompletedAt)}{specStartedAt && specCompletedAt ? ` (${Math.round((specCompletedAt.getTime() - specStartedAt.getTime())/1000)}s)` : ""}</div>
+              <div>guide: {fmtTs(guideStartedAt)} → {fmtTs(guideCompletedAt)}{guideStartedAt && guideCompletedAt ? ` (${Math.round((guideCompletedAt.getTime() - guideStartedAt.getTime())/1000)}s)` : ""}</div>
+            </div>
+
+            <div>
+              <div className="text-muted-foreground uppercase tracking-wide text-[10px] mb-1">Stream</div>
+              <div>guideStreamStatus: {guideStreamStatus}</div>
+            </div>
+
+            <div>
+              <div className="text-muted-foreground uppercase tracking-wide text-[10px] mb-1">DB row</div>
+              <div>has_audit_findings: {String(rowDiag.has_audit_findings)}</div>
+              {rowDiag.audit_error && <div className="text-destructive">audit_findings._error: {rowDiag.audit_error}</div>}
+              <div>has_raw_extraction: {String(rowDiag.has_raw_extraction)}</div>
+              <div>length(system_prompt): {rowDiag.system_prompt_len}</div>
+              <div>length(brand_guide_html): {rowDiag.brand_guide_html_len}</div>
+            </div>
+
+            {dbError && (
+              <div>
+                <div className="text-muted-foreground uppercase tracking-wide text-[10px] mb-1">processing_error</div>
+                <div className="text-destructive whitespace-pre-wrap break-words">{dbError}</div>
+              </div>
+            )}
+
+            <div>
+              <div className="text-muted-foreground uppercase tracking-wide text-[10px] mb-1">Function URL</div>
+              <div className="break-all">{functionUrl}</div>
+            </div>
+
+            <div>
+              <div className="text-muted-foreground uppercase tracking-wide text-[10px] mb-1">Log (last 20)</div>
+              {debugLog.length === 0 ? (
+                <div className="text-muted-foreground">(empty)</div>
+              ) : (
+                debugLog.map((e, i) => (
+                  <div key={i}>
+                    {new Date(e.timestamp).toLocaleTimeString([], { hour12: false })} [{e.event}] {e.detail}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-2">
+              <Button size="sm" variant="outline" onClick={handleCopyDebug} className="gap-1.5">
+                <Copy className="w-3 h-3" /> Copy all debug info
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
+}
+
+function RotateCcwIcon() {
+  return <RefreshCw className="w-4 h-4" />;
 }
