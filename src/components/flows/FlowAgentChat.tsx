@@ -2,7 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Sparkles, BookOpen, BarChart3, Wand2, Check } from "lucide-react";
+import {
+  Send,
+  Sparkles,
+  BookOpen,
+  BarChart3,
+  Wand2,
+  ChevronDown,
+  ChevronUp,
+  MessageSquare,
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 interface Msg {
@@ -18,7 +27,7 @@ interface Props {
   initialMessages: Msg[];
   currentSkeleton: string | null;
   onSkeletonUpdated: () => void;
-  /** When true, constrain chat to a centered, narrower column (used pre-skeleton). */
+  /** When true, render as a centered hero panel instead of a floating dock. */
   centered?: boolean;
 }
 
@@ -76,14 +85,12 @@ function stripFences(content: string): string {
     .trim();
 }
 
-const STAGE_META: Record<string, { label: string; icon: typeof BookOpen }> = {
-  reading: { label: "Reading brand research", icon: BookOpen },
-  analyzing: { label: "Analyzing performance data", icon: BarChart3 },
-  strategizing: { label: "Designing flow strategy", icon: Wand2 },
-  drafting: { label: "Drafting your skeleton", icon: Sparkles },
+const STAGE_META: Record<string, { label: string }> = {
+  reading: { label: "Reading brand research" },
+  analyzing: { label: "Analyzing performance data" },
+  strategizing: { label: "Designing flow strategy" },
+  drafting: { label: "Drafting your skeleton" },
 };
-
-const STAGE_ORDER = ["reading", "analyzing", "strategizing", "drafting"];
 
 export function FlowAgentChat({
   flowId,
@@ -100,6 +107,7 @@ export function FlowAgentChat({
   const [streamBuf, setStreamBuf] = useState("");
   const [skeletonStreaming, setSkeletonStreaming] = useState(false);
   const [stages, setStages] = useState<{ key: string; status: "active" | "done" }[]>([]);
+  const [docked, setDocked] = useState(false);
   const initFired = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -116,8 +124,6 @@ export function FlowAgentChat({
   useEffect(() => {
     if (initFired.current) return;
     initFired.current = true;
-    // Once a skeleton exists, the user is in "edit" mode — don't auto-kick
-    // the agent (which would show the "Building your flow" loader again).
     if (currentSkeleton) return;
     if (shouldAutoRestart(initialMessages, currentSkeleton) && !streaming) {
       setMessages([]);
@@ -198,8 +204,7 @@ export function FlowAgentChat({
                 return next;
               });
             } else if (evt.type === "skeleton_chunk") {
-              // Skeleton text is routed to the canvas via realtime DB updates
-              // when the function persists. We only show a UI hint here.
+              /* canvas listens via realtime */
             } else if (evt.type === "skeleton_end") {
               setSkeletonStreaming(false);
             } else if (evt.type === "text") {
@@ -244,6 +249,7 @@ export function FlowAgentChat({
     }
   };
 
+  // Hide all pre-skeleton scaffolding messages once a skeleton exists.
   const lastSetupMessageIndex = currentSkeleton
     ? messages.reduce((lastIndex, message, index) => {
         if (
@@ -277,64 +283,156 @@ export function FlowAgentChat({
     return -1;
   })();
 
-  return (
-    <div className="flex flex-col h-full bg-background">
-      <div
-        ref={scrollRef}
-        className={`flex-1 overflow-y-auto px-5 py-6 ${
-          centered ? "flex justify-center" : ""
-        }`}
-      >
-        <div className={`w-full ${centered ? "max-w-2xl" : ""} space-y-4`}>
-          {visibleMessages.map((m, i) => {
-            const isLastAssistant = i === lastAssistantIdx;
-            const question = m.role === "assistant" ? extractQuestion(m.content) : null;
-            const synth = m.role === "assistant" && !currentSkeleton ? extractSynth(m.content) : null;
-            return (
-              <MessageBubble
-                key={i}
-                role={m.role}
-                content={m.content}
-                question={currentSkeleton ? null : question}
-                synth={synth}
-                showQuestionChips={isLastAssistant && !streaming && !currentSkeleton}
-                onAnswer={(answer) => sendMessage(answer)}
-                disabled={streaming}
-              />
-            );
-          })}
-          {streaming && (
-            <>
-              {streamBuf && stripFences(streamBuf) ? (
+  const currentStageLabel = skeletonStreaming
+    ? "Drafting your skeleton"
+    : STAGE_META[stages[stages.length - 1]?.key ?? "reading"]?.label ?? "Thinking";
+
+  // ---------- Pre-skeleton: centered hero conversation ----------
+  if (centered) {
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
+        <div className="w-full max-w-xl flex flex-col gap-4">
+          <div ref={scrollRef} className="max-h-[55vh] overflow-y-auto space-y-3 pr-1">
+            {visibleMessages.map((m, i) => {
+              const isLastAssistant = i === lastAssistantIdx;
+              const question = m.role === "assistant" ? extractQuestion(m.content) : null;
+              const synth = m.role === "assistant" ? extractSynth(m.content) : null;
+              return (
                 <MessageBubble
-                  role="assistant"
-                  content={streamBuf}
-                  streaming
-                  question={currentSkeleton ? null : extractQuestion(streamBuf)}
-                  synth={currentSkeleton ? null : extractSynth(streamBuf)}
-                  showQuestionChips={false}
-                  disabled
+                  key={i}
+                  role={m.role}
+                  content={m.content}
+                  question={question}
+                  synth={synth}
+                  showQuestionChips={isLastAssistant && !streaming}
+                  onAnswer={(answer) => sendMessage(answer)}
+                  disabled={streaming}
                 />
-              ) : (
-                <InlineShimmer
-                  label={
-                    skeletonStreaming
-                      ? "Drafting your skeleton"
-                      : STAGE_META[stages[stages.length - 1]?.key ?? "reading"]?.label ??
-                        "Thinking"
-                  }
-                />
-              )}
-            </>
-          )}
+              );
+            })}
+            {streaming && (
+              <>
+                {streamBuf && stripFences(streamBuf) ? (
+                  <MessageBubble
+                    role="assistant"
+                    content={streamBuf}
+                    streaming
+                    question={extractQuestion(streamBuf)}
+                    synth={extractSynth(streamBuf)}
+                    showQuestionChips={false}
+                    disabled
+                  />
+                ) : (
+                  <InlineShimmer label={currentStageLabel} />
+                )}
+              </>
+            )}
+          </div>
+          <Composer
+            input={input}
+            setInput={setInput}
+            send={() => sendMessage(input)}
+            streaming={streaming}
+            placeholder="Describe the flow you want to build…"
+          />
         </div>
       </div>
-      <div className={`border-t border-border p-3 ${centered ? "flex justify-center" : ""}`}>
-        <div className={`flex gap-2 w-full ${centered ? "max-w-2xl" : ""}`}>
+    );
+  }
+
+  // ---------- Post-skeleton: floating dock at the bottom ----------
+  const hasConversation = visibleMessages.length > 0 || streaming;
+
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 flex justify-center px-6 pb-6">
+      <div className="pointer-events-auto w-full max-w-2xl">
+        {/* Conversation panel — collapsible */}
+        {hasConversation && docked && (
+          <div className="mb-3 rounded-2xl border border-foreground/15 bg-card/95 backdrop-blur-xl shadow-[0_8px_32px_-12px_rgba(0,0,0,0.18)] overflow-hidden animate-fade-in">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-foreground/10">
+              <div className="flex items-center gap-2 text-[12px] text-foreground/60">
+                <MessageSquare className="w-3.5 h-3.5" strokeWidth={2} />
+                <span className="font-medium">Conversation</span>
+              </div>
+              <button
+                onClick={() => setDocked(false)}
+                className="text-foreground/45 hover:text-foreground transition-colors"
+                aria-label="Collapse"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </div>
+            <div ref={scrollRef} className="max-h-[40vh] overflow-y-auto px-4 py-3 space-y-3">
+              {visibleMessages.map((m, i) => {
+                const isLastAssistant = i === lastAssistantIdx;
+                const question = m.role === "assistant" ? extractQuestion(m.content) : null;
+                return (
+                  <MessageBubble
+                    key={i}
+                    role={m.role}
+                    content={m.content}
+                    question={null}
+                    synth={null}
+                    showQuestionChips={isLastAssistant && !streaming && !!question}
+                    onAnswer={(answer) => sendMessage(answer)}
+                    disabled={streaming}
+                  />
+                );
+              })}
+              {streaming && (
+                <>
+                  {streamBuf && stripFences(streamBuf) ? (
+                    <MessageBubble
+                      role="assistant"
+                      content={streamBuf}
+                      streaming
+                      question={null}
+                      synth={null}
+                      showQuestionChips={false}
+                      disabled
+                    />
+                  ) : (
+                    <InlineShimmer label={currentStageLabel} />
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Status pill (when streaming and conversation is collapsed) */}
+        {streaming && !docked && (
+          <div className="mb-3 flex justify-center">
+            <button
+              onClick={() => setDocked(true)}
+              className="flex items-center gap-2.5 px-4 py-2 rounded-full bg-card/95 backdrop-blur-xl border border-foreground/15 shadow-sm hover:border-foreground/30 transition-colors"
+            >
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-foreground opacity-50 animate-ping" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-foreground" />
+              </span>
+              <span className="text-[12px] font-medium text-foreground/75">
+                {currentStageLabel}…
+              </span>
+            </button>
+          </div>
+        )}
+
+        {/* Composer */}
+        <div className="rounded-full border border-foreground/15 bg-card/95 backdrop-blur-xl shadow-[0_4px_24px_-8px_rgba(0,0,0,0.16)] flex items-center gap-2 px-2 py-2">
+          {hasConversation && !docked && (
+            <button
+              onClick={() => setDocked(true)}
+              className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-foreground/55 hover:bg-muted hover:text-foreground transition-colors"
+              aria-label="Show conversation"
+            >
+              <ChevronUp className="w-4 h-4" />
+            </button>
+          )}
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your answer…"
+            placeholder="Refine your flow — e.g. add a delay before email 3"
             disabled={streaming}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -342,15 +440,16 @@ export function FlowAgentChat({
                 sendMessage(input);
               }
             }}
-            className="min-h-[60px] max-h-[160px] resize-none"
+            rows={1}
+            className="min-h-[36px] max-h-[120px] resize-none border-0 bg-transparent px-2 py-2 text-[13px] focus-visible:outline-none focus-visible:border-0 focus-visible:ring-0 shadow-none"
           />
           <Button
             onClick={() => sendMessage(input)}
             disabled={streaming || !input.trim()}
             size="icon"
-            className="h-auto self-stretch"
+            className="h-9 w-9 rounded-full flex-shrink-0"
           >
-            <Send className="w-4 h-4" />
+            <Send className="w-3.5 h-3.5" />
           </Button>
         </div>
       </div>
@@ -358,74 +457,55 @@ export function FlowAgentChat({
   );
 }
 
-function ProgressStages({ stages }: { stages: { key: string; status: "active" | "done" }[] }) {
-  // Show all stages up through the latest one — completed get a check, active gets a spinner.
-  const latestIdx = STAGE_ORDER.indexOf(stages[stages.length - 1]?.key ?? "");
-  const visible = STAGE_ORDER.slice(0, Math.max(latestIdx + 1, 1)).map((key) => {
-    const found = stages.find((s) => s.key === key);
-    const status = found?.status ?? "done";
-    return { key, status };
-  });
-
+function Composer({
+  input,
+  setInput,
+  send,
+  streaming,
+  placeholder,
+}: {
+  input: string;
+  setInput: (s: string) => void;
+  send: () => void;
+  streaming: boolean;
+  placeholder: string;
+}) {
   return (
-    <div className="rounded-2xl border border-border bg-muted/40 p-4 max-w-md animate-fade-in">
-      <div className="flex items-center gap-2 mb-3">
-        <Sparkles className="w-3.5 h-3.5 text-primary animate-pulse" />
-        <span className="text-xs font-medium text-foreground">Building your flow</span>
-      </div>
-      <div className="space-y-2">
-        {visible.map((s) => {
-          const meta = STAGE_META[s.key] || STAGE_META.reading;
-          const Icon = meta.icon;
-          const isActive = s.status === "active";
-          return (
-            <div
-              key={s.key}
-              className={`flex items-center gap-2.5 text-xs transition-opacity ${
-                isActive ? "text-foreground" : "text-muted-foreground"
-              }`}
-            >
-              <span
-                className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  isActive
-                    ? "bg-primary/15 text-primary"
-                    : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                }`}
-              >
-                {isActive ? (
-                  <Icon className="w-3 h-3 animate-pulse" />
-                ) : (
-                  <Check className="w-3 h-3" />
-                )}
-              </span>
-              <span className={isActive ? "font-medium" : ""}>{meta.label}</span>
-              {isActive && <PulseDots />}
-            </div>
-          );
-        })}
-      </div>
+    <div className="rounded-2xl border border-foreground/15 bg-card shadow-[0_4px_24px_-12px_rgba(0,0,0,0.16)] flex items-end gap-2 px-2 py-2">
+      <Textarea
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        placeholder={placeholder}
+        disabled={streaming}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            send();
+          }
+        }}
+        rows={2}
+        className="min-h-[60px] max-h-[160px] resize-none border-0 bg-transparent px-3 py-2 text-[13.5px] focus-visible:outline-none focus-visible:ring-0 shadow-none"
+      />
+      <Button
+        onClick={send}
+        disabled={streaming || !input.trim()}
+        size="icon"
+        className="h-9 w-9 rounded-full flex-shrink-0 mb-1 mr-1"
+      >
+        <Send className="w-3.5 h-3.5" />
+      </Button>
     </div>
-  );
-}
-
-function PulseDots() {
-  return (
-    <span className="inline-flex gap-0.5 ml-1">
-      <span className="w-1 h-1 rounded-full bg-current opacity-60 animate-bounce" style={{ animationDelay: "0ms" }} />
-      <span className="w-1 h-1 rounded-full bg-current opacity-60 animate-bounce" style={{ animationDelay: "120ms" }} />
-      <span className="w-1 h-1 rounded-full bg-current opacity-60 animate-bounce" style={{ animationDelay: "240ms" }} />
-    </span>
   );
 }
 
 function InlineShimmer({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-2.5 py-1 animate-fade-in">
-      <span className="relative flex h-2 w-2">
-        <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-60 animate-ping" />
-        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+      <span className="relative flex h-1.5 w-1.5">
+        <span className="absolute inline-flex h-full w-full rounded-full bg-foreground opacity-50 animate-ping" />
+        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-foreground" />
       </span>
-      <span className="text-sm bg-gradient-to-r from-muted-foreground via-foreground to-muted-foreground bg-[length:200%_100%] bg-clip-text text-transparent animate-[flow-shimmer_2.2s_linear_infinite]">
+      <span className="text-[13px] bg-gradient-to-r from-foreground/40 via-foreground to-foreground/40 bg-[length:200%_100%] bg-clip-text text-transparent animate-[flow-shimmer_2.2s_linear_infinite]">
         {label}…
       </span>
       <style>{`@keyframes flow-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
@@ -435,11 +515,13 @@ function InlineShimmer({ label }: { label: string }) {
 
 function SynthCard({ synth }: { synth: FlowSynth }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 space-y-3 animate-fade-in">
+    <div className="rounded-2xl border border-foreground/15 bg-card p-4 space-y-3 animate-fade-in">
       {synth.headline && (
         <div className="flex items-start gap-2">
-          <Sparkles className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
-          <p className="text-sm font-medium text-foreground leading-snug">{synth.headline}</p>
+          <Sparkles className="w-3.5 h-3.5 text-foreground/60 mt-0.5 flex-shrink-0" />
+          <p className="text-[13.5px] font-medium text-foreground leading-snug">
+            {synth.headline}
+          </p>
         </div>
       )}
       {synth.facts && synth.facts.length > 0 && (
@@ -447,9 +529,9 @@ function SynthCard({ synth }: { synth: FlowSynth }) {
           {synth.facts.map((f, i) => (
             <div
               key={i}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted text-xs"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted text-[12px]"
             >
-              <span className="text-muted-foreground">{f.label}:</span>
+              <span className="text-foreground/55">{f.label}:</span>
               <span className="font-medium text-foreground">{f.value}</span>
             </div>
           ))}
@@ -457,13 +539,13 @@ function SynthCard({ synth }: { synth: FlowSynth }) {
       )}
       {synth.plan && synth.plan.length > 0 && (
         <div className="pt-1">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-foreground/45 mb-1.5">
             Plan
           </div>
           <ol className="space-y-1">
             {synth.plan.map((step, i) => (
-              <li key={i} className="flex gap-2 text-xs text-foreground">
-                <span className="text-muted-foreground flex-shrink-0">{i + 1}.</span>
+              <li key={i} className="flex gap-2 text-[12.5px] text-foreground">
+                <span className="text-foreground/45 flex-shrink-0">{i + 1}.</span>
                 <span className="leading-relaxed">{step}</span>
               </li>
             ))}
@@ -497,7 +579,7 @@ function MessageBubble({
   const isSystem = role === "system";
   if (isSystem) {
     return (
-      <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 rounded-lg px-3 py-2">
+      <div className="text-[12px] text-foreground/70 bg-muted rounded-lg px-3 py-2">
         {content}
       </div>
     );
@@ -505,14 +587,13 @@ function MessageBubble({
 
   const cleanContent = stripFences(content);
 
-  // Assistant: render synth card outside the bubble for a richer layout
   if (!isUser && synth) {
     return (
       <div className="space-y-3">
         <SynthCard synth={synth} />
         {(question || cleanContent) && (
           <div className="flex justify-start">
-            <div className="max-w-[88%] rounded-2xl px-4 py-2.5 text-sm bg-muted text-foreground">
+            <div className="max-w-[88%] rounded-2xl px-4 py-2.5 text-[13.5px] bg-muted text-foreground">
               {question ? (
                 <div className="font-medium text-foreground mb-2">{question.question}</div>
               ) : null}
@@ -529,7 +610,9 @@ function MessageBubble({
                   disabled={disabled}
                 />
               )}
-              {streaming && <span className="inline-block w-1.5 h-3 bg-current ml-0.5 animate-pulse" />}
+              {streaming && (
+                <span className="inline-block w-1.5 h-3 bg-current ml-0.5 animate-pulse" />
+              )}
             </div>
           </div>
         )}
@@ -540,9 +623,9 @@ function MessageBubble({
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className={`max-w-[88%] rounded-2xl px-4 py-2.5 text-sm ${
+        className={`max-w-[88%] rounded-2xl px-4 py-2.5 text-[13.5px] ${
           isUser
-            ? "bg-primary text-primary-foreground"
+            ? "bg-foreground text-background"
             : "bg-muted text-foreground"
         }`}
       >
@@ -555,7 +638,7 @@ function MessageBubble({
         ) : null}
 
         {question && cleanContent && (
-          <div className="prose prose-sm dark:prose-invert max-w-none [&>*]:my-1.5 mt-2 text-muted-foreground">
+          <div className="prose prose-sm dark:prose-invert max-w-none [&>*]:my-1.5 mt-2 text-foreground/70">
             <ReactMarkdown>{cleanContent}</ReactMarkdown>
           </div>
         )}
@@ -569,7 +652,9 @@ function MessageBubble({
           />
         )}
 
-        {streaming && <span className="inline-block w-1.5 h-3 bg-current ml-0.5 animate-pulse" />}
+        {streaming && (
+          <span className="inline-block w-1.5 h-3 bg-current ml-0.5 animate-pulse" />
+        )}
       </div>
     </div>
   );
@@ -597,7 +682,7 @@ function QuestionChips({
             key={opt}
             disabled={disabled}
             onClick={() => onAnswer(opt)}
-            className="px-3 py-1.5 text-xs font-medium rounded-full bg-background border border-border hover:bg-accent hover:border-primary/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-foreground"
+            className="px-3 py-1.5 text-[12px] font-medium rounded-full bg-card border border-foreground/15 hover:bg-muted hover:border-foreground/35 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-foreground"
           >
             {opt}
           </button>
@@ -606,7 +691,7 @@ function QuestionChips({
           <button
             disabled={disabled}
             onClick={() => setShowOther(true)}
-            className="px-3 py-1.5 text-xs font-medium rounded-full bg-background border border-dashed border-border hover:border-primary/40 transition-colors disabled:opacity-50 text-muted-foreground"
+            className="px-3 py-1.5 text-[12px] font-medium rounded-full bg-card border border-dashed border-foreground/20 hover:border-foreground/40 transition-colors disabled:opacity-50 text-foreground/60"
           >
             Something else?
           </button>
@@ -627,7 +712,7 @@ function QuestionChips({
             }}
             disabled={disabled}
             placeholder="Type your answer…"
-            className="flex-1 px-3 py-1.5 text-xs rounded-full bg-background border border-border focus:outline-none focus:border-primary/60 text-foreground"
+            className="flex-1 px-3 py-1.5 text-[12px] rounded-full bg-card border border-foreground/15 focus:outline-none focus:border-foreground/45 text-foreground"
           />
           <Button
             size="sm"
@@ -637,7 +722,7 @@ function QuestionChips({
               setOtherText("");
               setShowOther(false);
             }}
-            className="h-7 px-3 text-xs rounded-full"
+            className="h-7 px-3 text-[12px] rounded-full"
           >
             Send
           </Button>
