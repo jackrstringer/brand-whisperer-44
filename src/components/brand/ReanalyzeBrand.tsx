@@ -3,26 +3,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { sliceAndUploadReferenceImages, saveSliceUrls } from "@/lib/imageSlicing";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Check, Download, Edit2, RefreshCw, Info } from "lucide-react";
+import { AlertTriangle, Check, Download, RefreshCw, Info } from "lucide-react";
 import { toast } from "sonner";
-import ProcessingStatusPanel from "@/components/brand/ProcessingStatusPanel";
+import ProcessingStatusPanel, { type DebugLogEntry } from "@/components/brand/ProcessingStatusPanel";
 import { getExtractionSources, isImageUrl } from "@/lib/brandSetupPersistence";
 
-const AUDIT_MESSAGES = [
-  "Loading reference images...",
-  "Re-extracting website fonts & colors...",
-  "Re-extracting Figma tokens...",
-  "Slicing campaigns...",
-  "Running deep visual audit...",
-  "Synthesizing findings...",
-];
-
-type Phase = "idle" | "preflight" | "fetching" | "auditing" | "generating_guide" | "guide_review";
+type Phase = "idle" | "preflight" | "processing" | "guide_review";
 
 interface ReanalyzeBrandProps {
   brandId: string;
@@ -44,14 +34,18 @@ interface PreflightSummary {
 export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUrl, figmaUrl }: ReanalyzeBrandProps) {
   const { user } = useAuth();
   const [phase, setPhase] = useState<Phase>("idle");
-  const [progressValue, setProgressValue] = useState(0);
-  const [progressMessage, setProgressMessage] = useState("");
   const [auditFindings, setAuditFindings] = useState<any>(null);
   const [brandGuideHtml, setBrandGuideHtml] = useState("");
   const [summary, setSummary] = useState<PreflightSummary | null>(null);
   const [figmaToken, setFigmaToken] = useState("");
+  const [pipelineEvents, setPipelineEvents] = useState<DebugLogEntry[]>([]);
   const guideIframeRef = useRef<HTMLIFrameElement>(null);
   const [guideIframeHeight, setGuideIframeHeight] = useState(800);
+
+  const pushEvent = (event: string, detail: string) => {
+    setPipelineEvents((prev) => [...prev, { timestamp: Date.now(), event, detail }]);
+  };
+
 
   const sliceImageFromUrl = (
     url: string,
@@ -137,30 +131,36 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
       return;
     }
 
-    setPhase("fetching");
-    setProgressValue(0);
-    setProgressMessage(AUDIT_MESSAGES[0]);
+    // Switch to unified processing screen IMMEDIATELY so user sees progress + debug log
+    setPipelineEvents([]);
+    setPhase("processing");
+    pushEvent("phase", "loading reference inputs");
 
     try {
-      const { data: profile } = await supabase
+      pushEvent("db_read", `table=brand_profiles brand_id=${brandId}`);
+      const { data: profile, error: profileError } = await supabase
         .from("brand_profiles")
         .select("reference_image_urls, reference_image_categories, confirmed_properties")
         .eq("brand_id", brandId)
         .single();
 
+      if (profileError) {
+        pushEvent("db_error", `table=brand_profiles msg=${profileError.message}`);
+        throw new Error(profileError.message);
+      }
+
       const cats = ((profile as any)?.reference_image_categories || {}) as Record<string, string[]>;
       const flat = ((profile as any)?.reference_image_urls || []) as string[];
-      // Flatten in category order (matches /brands/new ordering)
       const orderedUrls: string[] = [];
       for (const key of ["campaign", "brand_deck", "misc", "mockup"]) {
         if (Array.isArray(cats[key])) orderedUrls.push(...cats[key]);
       }
       if (orderedUrls.length === 0) orderedUrls.push(...flat);
       const imageOnlyUrls = orderedUrls.filter(isImageUrl);
+      pushEvent("inputs", `references=${imageOnlyUrls.length} (${Object.keys(cats).join(",") || "flat"})`);
 
       const storedProps = (profile as any)?.confirmed_properties || null;
 
-      // Phase A — fresh website + Figma re-extraction in parallel (mirrors /brands/new)
       const extractionSources = getExtractionSources([
         ...(websiteUrl?.trim() ? ["website"] : []),
         ...(figmaUrl?.trim() ? ["figma"] : []),
@@ -168,68 +168,68 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
       const extractionPromises: Promise<any>[] = [];
 
       if (websiteUrl?.trim()) {
-        setProgressMessage(AUDIT_MESSAGES[1]);
+        pushEvent("fn_invoke", `name=extract-website-fonts url=${websiteUrl.trim()}`);
+        const startedAt = Date.now();
         extractionPromises.push(
           supabase.functions
             .invoke("extract-website-fonts", { body: { url: websiteUrl.trim() } })
             .then(({ data, error }) => {
+              const ms = Date.now() - startedAt;
               if (error || data?.error) {
-                console.warn("[Reanalyze] website extraction failed, will fall back to stored props:", error || data?.error);
+                pushEvent("fn_response", `name=extract-website-fonts ms=${ms} error=${error?.message || data?.error}`);
                 return null;
               }
+              if (data?.warning) pushEvent("fn_warning", `name=extract-website-fonts ${data.warning}`);
+              else pushEvent("fn_response", `name=extract-website-fonts ms=${ms} ok`);
               return { source: "website", ...data };
             })
             .catch((err) => {
-              console.warn("[Reanalyze] website extraction threw:", err);
+              pushEvent("fn_error", `name=extract-website-fonts msg=${err?.message}`);
               return null;
             }),
         );
       }
 
       if (figmaUrl?.trim() && figmaToken.trim()) {
-        setProgressMessage(AUDIT_MESSAGES[2]);
+        pushEvent("fn_invoke", `name=extract-figma url=${figmaUrl.trim()}`);
+        const startedAt = Date.now();
         extractionPromises.push(
           supabase.functions
             .invoke("extract-figma", { body: { figma_url: figmaUrl.trim(), figma_token: figmaToken.trim() } })
             .then(({ data, error }) => {
+              const ms = Date.now() - startedAt;
               if (error || data?.error) {
-                console.warn("[Reanalyze] Figma extraction failed, will fall back to stored props:", error || data?.error);
+                pushEvent("fn_response", `name=extract-figma ms=${ms} error=${error?.message || data?.error}`);
                 return null;
               }
+              pushEvent("fn_response", `name=extract-figma ms=${ms} ok`);
               return { source: "figma", ...data };
             })
             .catch((err) => {
-              console.warn("[Reanalyze] Figma extraction threw:", err);
+              pushEvent("fn_error", `name=extract-figma msg=${err?.message}`);
               return null;
             }),
         );
       }
 
-      setProgressValue(15);
-      setProgressMessage(AUDIT_MESSAGES[3]);
-
-      // Phase B — slice reference images while extractions run
+      pushEvent("phase", "slicing reference images");
       const slicedImages: any[] = [];
       const refUrls = imageOnlyUrls.slice(0, 10);
       for (let ci = 0; ci < refUrls.length; ci++) {
         try {
           const slices = await sliceImageFromUrl(refUrls[ci]);
           for (const slice of slices) slicedImages.push({ ...slice, campaignIndex: ci });
-        } catch (e) {
-          console.warn(`[Reanalyze] skipping image ${ci}:`, e);
+        } catch (e: any) {
+          pushEvent("slice_warn", `idx=${ci} msg=${e?.message}`);
         }
       }
       if (slicedImages.length === 0) {
-        toast.error("Could not load any reference images from storage.");
-        setPhase("idle");
-        return;
+        throw new Error("Could not load any reference images from storage.");
       }
-      setProgressValue(35);
+      pushEvent("slice_done", `total_slices=${slicedImages.length}`);
 
-      // Wait for parallel extractions
       const extractionResults = await Promise.all(extractionPromises);
 
-      // Merge confirmed properties: stored < website < figma (matches /brands/new)
       let merged: any = storedProps ? { ...storedProps } : null;
       const websiteResult = extractionResults.find((r) => r?.source === "website");
       const figmaResult = extractionResults.find((r) => r?.source === "figma");
@@ -244,24 +244,20 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
         }
       }
 
-      // Phase C — run audit
-      setPhase("auditing");
-      setProgressValue(50);
-      setProgressMessage(AUDIT_MESSAGES[4]);
-
+      pushEvent("fn_invoke", `name=audit-brand slices=${slicedImages.length}`);
+      const auditStart = Date.now();
       const { data, error } = await supabase.functions.invoke("audit-brand", {
         body: { images: slicedImages, brandName, industry, confirmed_properties: merged, brandId },
       });
+      pushEvent("fn_response", `name=audit-brand ms=${Date.now() - auditStart} ${error || data?.error ? "ERROR" : "ok"}`);
 
       if (error) throw new Error(error.message || "Audit failed");
       if (data?.error) throw new Error(data.error);
 
       setAuditFindings(data.audit);
-      setProgressValue(80);
-      setProgressMessage(AUDIT_MESSAGES[5]);
 
-      // Persist refreshed inputs to brand_profiles
-      await supabase
+      pushEvent("db_write", `table=brand_profiles op=update brand_id=${brandId} (audit + status=running_spec)`);
+      const { error: updErr } = await supabase
         .from("brand_profiles")
         .update({
           audit_findings: data.audit,
@@ -273,31 +269,31 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
           processing_error: null,
         } as any)
         .eq("brand_id", brandId);
+      if (updErr) {
+        pushEvent("db_error", `table=brand_profiles msg=${updErr.message}`);
+        throw new Error(updErr.message);
+      }
 
-      // Fire-and-forget: re-slice for generation use
       if (user?.id) {
         sliceAndUploadReferenceImages(user.id, brandId, imageOnlyUrls)
           .then((sliceUrls) => saveSliceUrls(brandId, sliceUrls))
-          .catch((e) => console.warn("[Reanalyze] slice re-upload failed:", e));
+          .catch((e) => pushEvent("bg_warn", `slice re-upload failed: ${e?.message}`));
       }
 
-      // Fire-and-forget: re-run brand intelligence research
       if (websiteUrl?.trim()) {
         supabase.functions
           .invoke("research-brand", {
             body: { brand_id: brandId, brand_name: brandName, domain: websiteUrl.trim(), industry: industry || null },
           })
-          .catch((e) => console.warn("[Reanalyze] research-brand failed:", e));
+          .catch((e) => pushEvent("bg_warn", `research-brand failed: ${e?.message}`));
       }
 
-      // Phase D — kick spec then stream guide
-      setPhase("generating_guide");
-      setProgressValue(95);
-      setProgressMessage("Starting brand processing...");
-
+      pushEvent("fn_invoke", `name=extract-brand step=spec`);
+      const specStart = Date.now();
       const { error: specError } = await supabase.functions.invoke("extract-brand", {
         body: { auditFindings: data.audit, brandName, industry, brandId, step: "spec", confirmed_properties: merged },
       });
+      pushEvent("fn_response", `name=extract-brand step=spec ms=${Date.now() - specStart} ${specError ? "ERROR" : "ok"}`);
       if (specError) {
         await supabase
           .from("brand_profiles")
@@ -306,7 +302,7 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
         throw new Error(specError.message);
       }
 
-      // Fire guide stream (keeps gateway alive during 3-5min Opus call)
+      pushEvent("fn_stream", `name=extract-brand step=guide event=open`);
       try {
         const session = await supabase.auth.getSession();
         const accessToken = session.data.session?.access_token || "";
@@ -319,25 +315,23 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
             Authorization: `Bearer ${accessToken}`,
             apikey: supabaseKey,
           },
-          body: JSON.stringify({
-            auditFindings: data.audit,
-            brandName,
-            industry,
-            brandId,
-            step: "guide",
-          }),
+          body: JSON.stringify({ auditFindings: data.audit, brandName, industry, brandId, step: "guide" }),
         });
+        let bytes = 0;
         if (guideResponse.body) {
           const reader = guideResponse.body.getReader();
           while (true) {
-            const { done } = await reader.read();
+            const { done, value } = await reader.read();
+            if (value) bytes += value.length;
             if (done) break;
           }
         }
+        pushEvent("fn_stream", `name=extract-brand step=guide event=end bytes=${bytes}`);
       } catch (err: any) {
-        console.log("[Reanalyze] guide stream ended:", err?.message);
+        pushEvent("fn_stream", `name=extract-brand step=guide event=error msg=${err?.message}`);
       }
     } catch (err: any) {
+      pushEvent("error", `scope=reanalyze msg=${err?.message}`);
       toast.error(err.message || "Re-analysis failed");
       setPhase("idle");
     }
@@ -465,27 +459,17 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
     );
   }
 
-  if (phase === "fetching" || phase === "auditing") {
+  if (phase === "processing") {
     return (
-      <div className="space-y-6 py-8 text-center">
-        <h3 className="text-lg font-semibold">Re-running Brand Pipeline</h3>
-        <p className="text-sm text-muted-foreground">{progressMessage}</p>
-        <Progress value={progressValue} className="h-1.5 max-w-md mx-auto" />
-      </div>
-    );
-  }
-
-  if (phase === "generating_guide") {
-    return (
-      <div className="space-y-6 py-8 flex flex-col items-center">
+      <div className="space-y-6 py-4">
         <ProcessingStatusPanel
           brandId={brandId}
           title="Re-processing Brand"
-          subtitle="Running full brand pipeline — spec extraction then guide generation. This takes 5–10 minutes."
+          subtitle="Replaying the full brand pipeline using your stored references. Takes 5–10 minutes."
+          externalEvents={pipelineEvents}
           brandContext={{ auditFindings, brandName, industry }}
           onComplete={(guideHtml) => {
             setBrandGuideHtml(guideHtml);
-            setProgressValue(100);
             toast.success("Brand profile updated!");
             setTimeout(() => setPhase("guide_review"), 500);
           }}
