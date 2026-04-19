@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Loader2, Download, Sparkles, MessageSquare, GitFork } from "lucide-react";
+import { ArrowLeft, Loader2, Download, Sparkles } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   parseSkeleton,
@@ -12,7 +12,6 @@ import {
   FLOW_TRIGGERS,
   FLOW_TYPE_META,
 } from "@/lib/flows/skeletonParser";
-import { SplitPane } from "@/components/ideation/SplitPane";
 import { FlowAgentChat } from "@/components/flows/FlowAgentChat";
 import {
   SkeletonViewer,
@@ -40,7 +39,6 @@ export default function FlowBuilderPage() {
   const [generatingIndex, setGeneratingIndex] = useState<number | null>(null);
   const [bulkGenerating, setBulkGenerating] = useState(false);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
-  const [mobileTab, setMobileTab] = useState<"canvas" | "chat">("canvas");
   const [nameDraft, setNameDraft] = useState("");
   const [editingName, setEditingName] = useState(false);
 
