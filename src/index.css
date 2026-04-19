@@ -108,7 +108,11 @@
     --sidebar-border: var(--gray-4);
     --sidebar-ring: var(--gray-3);
 
-    --canvas: var(--gray-5);
+    --canvas: 0 0% 12%; /* darker board for dark mode */
+    --canvas-grid: 0 0% 100%;
+    --postit-yellow: 48 70% 60%;
+    --postit-blue: 210 60% 65%;
+    --postit-pink: 350 70% 70%;
 
     --success: #22c55e;
   }
