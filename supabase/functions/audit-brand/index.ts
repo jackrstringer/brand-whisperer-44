@@ -10,6 +10,39 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+function extractJsonObject(raw: string): any {
+  const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+  let start = -1, end = -1, depth = 0, inString = false;
+  for (let i = 0; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (inString) {
+      if (ch === "\\") { i++; continue; }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === "{") { if (depth === 0) start = i; depth++; }
+    else if (ch === "}") { depth--; if (depth === 0) { end = i; break; } }
+  }
+  if (start === -1 || end === -1) {
+    throw new Error(`No balanced JSON object found (length=${cleaned.length})`);
+  }
+  const candidate = cleaned.substring(start, end + 1);
+  try { return JSON.parse(candidate); } catch (_) {
+    const repaired = candidate
+      .replace(/,\s*}/g, "}")
+      .replace(/,\s*]/g, "]")
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+    try { return JSON.parse(repaired); } catch (e2: any) {
+      const m = /position (\d+)/.exec(e2.message || "");
+      const pos = m ? parseInt(m[1], 10) : 0;
+      const snippet = repaired.substring(Math.max(0, pos - 120), Math.min(repaired.length, pos + 120));
+      console.error(`[extractJsonObject] Parse failed at pos ${pos}. Snippet: ...${snippet}...`);
+      throw new Error(`${e2.message} (snippet around offset ${pos})`);
+    }
+  }
+}
+
 const SINGLE_PASS_AUDIT_PROMPT = `You are performing a detailed visual audit of multiple email campaigns from a single brand. Each campaign has been split into sequential vertical slices (top to bottom). Analyze ALL campaigns together to produce ONE unified audit.
 
 Organize your audit around the FIVE RULE CATEGORIES that matter for email design. Be EXACT with values. If you cannot clearly determine a property, mark it as "[NEEDS CONFIRMATION]" rather than guessing.
