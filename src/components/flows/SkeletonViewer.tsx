@@ -83,14 +83,15 @@ export function SkeletonViewer(props: Props) {
   }
 
   return (
-    <div className="h-full w-full bg-[hsl(var(--muted))/0.3] relative overflow-hidden">
+    <div className="h-full w-full bg-[hsl(var(--muted))/0.3] dot-grid relative overflow-hidden">
       <DotGridStyle />
       <TransformWrapper
-        initialScale={1}
-        minScale={0.35}
-        maxScale={2.2}
+        initialScale={0.85}
+        minScale={0.3}
+        maxScale={2}
+        centerOnInit
         limitToBounds={false}
-        wheel={{ step: 0.03 }}
+        wheel={{ step: 0.05 }}
         doubleClick={{ disabled: true }}
         panning={{ velocityDisabled: false, excluded: ["input", "textarea", "button"] }}
         pinch={{ step: 2 }}
@@ -101,7 +102,7 @@ export function SkeletonViewer(props: Props) {
             <ZoomToolbar />
             <TransformComponent
               wrapperStyle={{ width: "100%", height: "100%" }}
-              contentStyle={{ width: "100%", height: "100%" }}
+              contentStyle={{ width: "auto", height: "auto" }}
             >
               <CanvasContent {...props} />
             </TransformComponent>
@@ -166,7 +167,10 @@ function CanvasContent({
 }: Props) {
   let emailCount = 0;
   return (
-    <div className="dot-grid min-h-full w-full py-12 px-8 flex flex-col items-center">
+    <div
+      className="py-16 px-12 flex flex-col items-center"
+      style={{ width: 640, minHeight: 800 }}
+    >
       <TriggerCard trigger={meta.trigger} flowType={flowType} />
       <Connector label="When triggered" />
       {(meta.filters && meta.filters.length > 0) || true ? (

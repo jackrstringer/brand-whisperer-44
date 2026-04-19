@@ -287,10 +287,9 @@ export function FlowAgentChat({
               />
             );
           })}
-          {streaming && (streamBuf || stages.length > 0) && (
+          {streaming && (
             <>
-              {stages.length > 0 && !streamBuf && <ProgressStages stages={stages} />}
-              {streamBuf && stripFences(streamBuf) && (
+              {streamBuf && stripFences(streamBuf) ? (
                 <MessageBubble
                   role="assistant"
                   content={streamBuf}
@@ -300,20 +299,17 @@ export function FlowAgentChat({
                   showQuestionChips={false}
                   disabled
                 />
+              ) : (
+                <InlineShimmer
+                  label={
+                    skeletonStreaming
+                      ? "Drafting your skeleton"
+                      : STAGE_META[stages[stages.length - 1]?.key ?? "reading"]?.label ??
+                        "Thinking"
+                  }
+                />
               )}
             </>
-          )}
-          {streaming && skeletonStreaming && (
-            <div className="rounded-2xl border border-primary/30 bg-primary/5 px-4 py-3 flex items-center gap-2.5 animate-fade-in max-w-md">
-              <Sparkles className="w-3.5 h-3.5 text-primary animate-pulse" />
-              <span className="text-xs font-medium text-foreground">
-                Drafting skeleton on the canvas →
-              </span>
-              <PulseDots />
-            </div>
-          )}
-          {streaming && !streamBuf && stages.length === 0 && (
-            <ProgressStages stages={[{ key: "reading", status: "active" }]} />
           )}
         </div>
       </div>
@@ -403,6 +399,21 @@ function PulseDots() {
       <span className="w-1 h-1 rounded-full bg-current opacity-60 animate-bounce" style={{ animationDelay: "120ms" }} />
       <span className="w-1 h-1 rounded-full bg-current opacity-60 animate-bounce" style={{ animationDelay: "240ms" }} />
     </span>
+  );
+}
+
+function InlineShimmer({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2.5 py-1 animate-fade-in">
+      <span className="relative flex h-2 w-2">
+        <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-60 animate-ping" />
+        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+      </span>
+      <span className="text-sm bg-gradient-to-r from-muted-foreground via-foreground to-muted-foreground bg-[length:200%_100%] bg-clip-text text-transparent animate-[flow-shimmer_2.2s_linear_infinite]">
+        {label}…
+      </span>
+      <style>{`@keyframes flow-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
+    </div>
   );
 }
 
