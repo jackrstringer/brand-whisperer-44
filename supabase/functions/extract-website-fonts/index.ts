@@ -111,18 +111,40 @@ Deno.serve(async (req) => {
 
     console.log(`[extract-website-fonts] Fetching: ${url}`);
 
-    const resp = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml",
-      },
-      signal: AbortSignal.timeout(10000),
-    });
+    const browserHeaders = {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Sec-Fetch-Dest": "document",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Site": "none",
+      "Sec-Fetch-User": "?1",
+      "Upgrade-Insecure-Requests": "1",
+      "Cache-Control": "max-age=0",
+    };
 
-    if (!resp.ok) {
-      return new Response(JSON.stringify({ error: `Failed to fetch website: ${resp.status}` }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let resp: Response | null = null;
+    let fetchError: string | null = null;
+    try {
+      resp = await fetch(url, { headers: browserHeaders, signal: AbortSignal.timeout(12000), redirect: "follow" });
+    } catch (e) {
+      fetchError = (e as Error).message;
+    }
+
+    if (!resp || !resp.ok) {
+      const status = resp?.status ?? 0;
+      console.warn(`[extract-website-fonts] Fetch blocked (status=${status} err=${fetchError}). Returning empty extraction so pipeline continues.`);
+      return new Response(JSON.stringify({
+        confirmed_properties: {
+          fonts_from_css: [],
+          google_fonts_detected: [],
+          colors_from_css: [],
+          css_variables: {},
+        },
+        source: "website",
+        warning: `Website fetch failed (status=${status}${fetchError ? `, error=${fetchError}` : ""}). Site likely blocks automated requests; proceeding without CSS extraction.`,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const html = await resp.text();
