@@ -438,6 +438,7 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
           const reader = res.body.getReader();
           const dec = new TextDecoder();
           let buf = "";
+          let fullText = "";
           // Track whether we're currently inside a ```flow-skeleton fence so we
           // can route those tokens to a separate SSE event (canvas-only, not chat).
           let inSkeletonFence = false;
