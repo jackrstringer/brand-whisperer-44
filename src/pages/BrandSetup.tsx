@@ -354,7 +354,7 @@ export default function BrandSetup() {
       console.log(`Sending ${slicedImages.length} slices from ${refFiles.length} refs to audit`);
 
       const { data, error } = await supabase.functions.invoke("audit-brand", {
-        body: { images: slicedImages, brandName, industry, confirmed_properties: merged },
+        body: { images: slicedImages, brandName, industry, confirmed_properties: merged, brandId: earlyBrandId || null },
       });
 
       clearInterval(interval);
@@ -370,8 +370,12 @@ export default function BrandSetup() {
       setTimeout(() => generateGuideFromAudit(data.audit, merged, extractionSources), 500);
     } catch (err: any) {
       clearInterval(interval);
-      toast.error(err.message || "Audit failed");
-      setStep("uploads");
+      const msg = err?.message || "Audit failed";
+      console.error("[BrandSetup] Audit failed, halting pipeline:", err);
+      // ── Kill-switch 4: hard stop. Do NOT call extract-brand, do NOT create brand row, do NOT navigate. ──
+      setAuditError(msg);
+      setStep("audit_failed");
+      toast.error(msg);
     }
   };
 
