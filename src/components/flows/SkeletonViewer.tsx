@@ -104,7 +104,9 @@ export function SkeletonViewer(props: Props) {
               wrapperStyle={{ width: "100%", height: "100%" }}
               contentStyle={{ width: "auto", height: "auto" }}
             >
-              <CanvasContent {...props} />
+              <div>
+                <CanvasContent {...props} />
+              </div>
             </TransformComponent>
           </>
         )}
