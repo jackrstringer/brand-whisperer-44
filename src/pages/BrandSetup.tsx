@@ -17,6 +17,7 @@ import AssetCategoryUploader, { type AssetCategory } from "@/components/brand/As
 import ProcessingStatusPanel from "@/components/brand/ProcessingStatusPanel";
 import type { BrandExtraction } from "@/lib/types";
 import { sliceAndUploadReferenceImages, saveSliceUrls } from "@/lib/imageSlicing";
+import { getExtractionSources, isImageFile, persistBrandSetupInputs, type BrandAssetCategory } from "@/lib/brandSetupPersistence";
 
 type Step = "info" | "sources" | "uploads" | "auditing" | "audit_review" | "generating_guide" | "guide_review" | "audit_failed";
 
@@ -111,6 +112,7 @@ export default function BrandSetup() {
   const guideIframeRef = useRef<HTMLIFrameElement>(null);
   const guideStartTimeRef = useRef<number>(Date.now());
   const [guideIframeHeight, setGuideIframeHeight] = useState(800);
+  const [storedReferenceImageUrls, setStoredReferenceImageUrls] = useState<string[]>([]);
 
   // Sliced images cache for reuse across passes
   const [slicedImagesCache, setSlicedImagesCache] = useState<any[]>([]);
@@ -385,6 +387,62 @@ export default function BrandSetup() {
   // Stream status for the guide fetch — surfaced in the debug panel.
   // "idle" | "opening" | "streaming" | "ended" | "error"
   const [guideStreamStatus, setGuideStreamStatus] = useState<string>("idle");
+
+  const getReferenceFileBuckets = useCallback(() => ({
+    campaign: campaignFiles,
+    brand_deck: brandDeckFiles,
+    misc: miscRefFiles,
+    mockup: mockupFiles,
+  }), [campaignFiles, brandDeckFiles, miscRefFiles, mockupFiles]);
+
+  const getAssetFileBuckets = useCallback(() => ({
+    logo: assetCategories.logo.files,
+    product_imagery: assetCategories.product_imagery.files,
+    hero_shots: assetCategories.hero_shots.files,
+    lifestyle: assetCategories.lifestyle.files,
+  }), [assetCategories]);
+
+  const ensureBrandAndInputsPersisted = useCallback(async () => {
+    if (!user) throw new Error("You must be signed in");
+
+    let brandId = earlyBrandId;
+    if (!brandId) {
+      const { data: brand, error: brandError } = await supabase
+        .from("brands")
+        .insert({
+          name: brandName,
+          industry: industry || null,
+          user_id: user.id,
+          website_url: websiteUrl || null,
+          source_types: selectedSources,
+          figma_url: figmaUrl || null,
+        } as any)
+        .select()
+        .single();
+      if (brandError) throw brandError;
+      brandId = brand.id;
+      setEarlyBrandId(brandId);
+
+      try {
+        await supabase.from("brand_intelligence").insert({ brand_id: brandId, research_status: "pending" } as any);
+      } catch {}
+    }
+
+    const persisted = await persistBrandSetupInputs({
+      brandId,
+      userId: user.id,
+      brandName,
+      industry,
+      websiteUrl,
+      figmaUrl,
+      selectedSources: selectedSources as any,
+      referenceFilesByCategory: getReferenceFileBuckets(),
+      assetFilesByCategory: getAssetFileBuckets() as Record<BrandAssetCategory, File[]>,
+    });
+
+    setStoredReferenceImageUrls(persisted.referenceImageUrls);
+    return { brandId, ...persisted };
+  }, [user, earlyBrandId, brandName, industry, websiteUrl, selectedSources, figmaUrl, getReferenceFileBuckets, getAssetFileBuckets]);
 
   // === PASS 2+3: Spec + Guide (DB-driven, polled by ProcessingStatusPanel) ===
   // After this completes, step transitions to "generating_guide" which mounts
