@@ -1,40 +1,48 @@
 
+## Kill-switch plan — stop credit burn before any more fixes
 
-## Two real backend failures observed in latest run
+Four targeted changes. No architecture work. No model changes. No silent fallbacks.
 
-### 1. `audit-brand` — JSON parse fails despite balanced braces
-- Sonnet returned 28805 chars, **79 open vs 79 close braces** (balanced).
-- Current "repair" only handles missing closing braces → throws "Malformed JSON" and gives up.
-- The actual cause is one of: (a) a trailing comma, (b) an unterminated/unescaped string inside the JSON, or (c) the `/\{[\s\S]*\}/` regex grabbed too much (greedy match across stray text). With balanced braces, (c) is most likely — the regex is matching from the FIRST `{` in surrounding prose to the LAST `}`, producing a non-JSON envelope.
-- Also `max_tokens: 16000` is tight for 8 campaigns; one more campaign and we'd hit the truncation path too.
+### 1. Rate limit guard in `src/pages/BrandSetup.tsx`
+Before `supabase.functions.invoke("audit-brand", ...)`:
+- Query: select `brand_profiles.processing_status, audit_findings, created_at` joined to `brands` filtered by `brands.user_id = auth.uid()` and `brand_profiles.created_at > now() - 1 hour`.
+- Count rows where `processing_status = 'failed'` OR `audit_findings->>'_error' IS NOT NULL`.
+- If count >= 2: show blocking alert ("Rate limit: 2+ failed brand setups in the last hour. Wait before retrying to avoid burning API credits.") and `return`. No invoke fires.
 
-### 2. `research-brand` — runs in parallel during brand setup, also crashing
-- Line 257: `.upsert(...).catch(...)` — Supabase query builders return a thenable, not a real Promise. `.catch` is undefined → uncaught exception kills the worker.
-- Also separately fails `JSON.parse` at position 3723 (separate root cause: model emitted invalid JSON; needs a real extractor).
+### 2. Dev-mode confirm gate in `src/pages/BrandSetup.tsx`
+Add a small helper:
+```ts
+function confirmDevSpend(fnName: string): boolean {
+  if (!import.meta.env.DEV) return true;
+  return window.confirm(`About to call ${fnName}. This will cost real money. Continue?`);
+}
+```
+Gate the three invoke sites:
+- Before `audit-brand` invoke → `if (!confirmDevSpend("audit-brand")) return;`
+- Before `extract-brand` (spec mode) invoke → same guard.
+- Before `extract-brand` (guide mode) fetch → same guard.
 
-## Fix plan
+### 3. Persist parse failures in `supabase/functions/audit-brand/index.ts`
+- Ensure request body accepts `brandId` (frontend already has it during initial setup; pass it through — if missing, log a warning and continue without DB write).
+- Wrap the `extractJsonObject(...)` call in try/catch.
+- On parse failure, BEFORE re-throwing:
+  - If `brandId` present: `supabase.from("brand_profiles").update({ processing_status: "failed", processing_error: <msg>, audit_findings: { _error: <msg>, _raw_snippet: rawText.slice(0, 2000) } }).eq("brand_id", brandId)` inside its own try/catch (do not let the DB write error mask the original parse error).
+  - Then throw the original parse error so the function returns 500 with the real message.
+- Frontend `BrandSetup.tsx` already calls `audit-brand` before the profile row is created, so also handle the case where `brandId` is undefined: skip the DB write, just log and throw.
 
-### A. `supabase/functions/audit-brand/index.ts`
-- Bump `max_tokens` from 16000 → 24000 (Sonnet 4.6 supports it; gives headroom for 8+ campaign audits).
-- Replace the brittle regex + brace-only repair with a robust extractor:
-  1. Strip ```json fences if present.
-  2. Find the JSON by walking from the first `{` and tracking brace depth + string state (skipping escaped quotes), stopping at the matching close. This avoids the greedy-regex envelope problem.
-  3. If parse still fails, run a small repair pass: trim trailing commas before `}`/`]`, then retry.
-  4. If still fails, log a meaningful slice of the candidate around the failure offset (`SyntaxError.message` includes position) and throw — no silent fallback, per project rules.
-- Keep the existing `stop_reason === "max_tokens"` loud-fail path.
+### 4. Hard stop on audit failure in `src/pages/BrandSetup.tsx`
+- Locate the `startAudit` flow and the catch block that currently proceeds to `generateGuideFromAudit` (or equivalent next step).
+- Replace any silent continuation with:
+  - Set step to a `failed` state.
+  - Surface the raw audit error message in the UI (red alert with full message + copy button).
+  - Explicitly do NOT call `extract-brand` (spec or guide), do NOT create the brand row, do NOT navigate.
+- Add a single console.error with `[BrandSetup] Audit failed, halting pipeline:` for log clarity.
 
-### B. `supabase/functions/research-brand/index.ts`
-- Line 257: remove the bogus `.catch(...)` chain. Use a real `try/catch` around the failure-marker upsert so the background worker can't crash on its own error path.
-- Replace the JSON parsing block (lines 208–233) with the same robust extractor from (A) — extracted into a shared helper inline in each file (no new shared module needed; both functions already duplicate other utilities).
+### Deploy
+- Deploy `audit-brand`. Report timestamp.
+- Frontend changes ship via the build (no separate deploy).
 
-### C. No frontend changes
-- `BrandSetup.tsx` already surfaces audit errors via the unified progress screen + debug panel. Once the backend stops throwing on parse-able output, the existing UI handles it.
-
-### D. Deploy
-- Deploy `audit-brand` and `research-brand`. Report timestamps.
-
-### Out of scope (intentionally)
-- No model swap. Sonnet 4.6 is fine here once parsing is robust.
-- No prompt rewrite. The prompt is already explicit about "no markdown fences, no commentary."
-- No silent fallbacks or fake-success paths — failures still throw loudly with diagnostics.
-
+### Out of scope (per your instruction)
+- No architecture rewrite of the two-screen flow.
+- No changes to extract-brand transactional logic.
+- No model swaps. No prompt changes. No retries.
