@@ -3,26 +3,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { sliceAndUploadReferenceImages, saveSliceUrls } from "@/lib/imageSlicing";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, Check, Download, Edit2, RefreshCw, Info } from "lucide-react";
+import { AlertTriangle, Check, Download, RefreshCw, Info } from "lucide-react";
 import { toast } from "sonner";
-import ProcessingStatusPanel from "@/components/brand/ProcessingStatusPanel";
+import ProcessingStatusPanel, { type DebugLogEntry } from "@/components/brand/ProcessingStatusPanel";
 import { getExtractionSources, isImageUrl } from "@/lib/brandSetupPersistence";
 
-const AUDIT_MESSAGES = [
-  "Loading reference images...",
-  "Re-extracting website fonts & colors...",
-  "Re-extracting Figma tokens...",
-  "Slicing campaigns...",
-  "Running deep visual audit...",
-  "Synthesizing findings...",
-];
-
-type Phase = "idle" | "preflight" | "fetching" | "auditing" | "generating_guide" | "guide_review";
+type Phase = "idle" | "preflight" | "processing" | "guide_review";
 
 interface ReanalyzeBrandProps {
   brandId: string;
