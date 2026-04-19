@@ -386,7 +386,6 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
           try { controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`)); } catch {}
         };
 
-        let fullText = "";
         try {
           if (bootingFreshFlow) {
             send({ type: "progress", stage: "reading", label: "Reading brand research" });
