@@ -219,12 +219,20 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // brandId is captured outside try so error handler can persist failures.
+  let brandId: string | null = null;
+
   try {
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY not configured");
     const GOOGLE_VISION_KEY = Deno.env.get("GOOGLE_CLOUD_VISION_API_KEY") ?? "";
 
-    const { images, imageUrls, brandName, industry, confirmed_properties } = await req.json();
+    const body = await req.json();
+    const { images, imageUrls, brandName, industry, confirmed_properties } = body;
+    brandId = body.brandId || null;
+    if (!brandId) {
+      console.warn("[audit-brand] No brandId in request body — parse failures will not be persisted to DB");
+    }
 
     // Support two modes:
     // 1. imageUrls: array of URLs → server-side intelligent slicing via Vision API + Claude
