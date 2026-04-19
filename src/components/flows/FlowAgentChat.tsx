@@ -402,6 +402,21 @@ function PulseDots() {
   );
 }
 
+function InlineShimmer({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2.5 py-1 animate-fade-in">
+      <span className="relative flex h-2 w-2">
+        <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-60 animate-ping" />
+        <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+      </span>
+      <span className="text-sm bg-gradient-to-r from-muted-foreground via-foreground to-muted-foreground bg-[length:200%_100%] bg-clip-text text-transparent animate-[flow-shimmer_2.2s_linear_infinite]">
+        {label}…
+      </span>
+      <style>{`@keyframes flow-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
+    </div>
+  );
+}
+
 function SynthCard({ synth }: { synth: FlowSynth }) {
   return (
     <div className="rounded-2xl border border-border bg-card p-4 space-y-3 animate-fade-in">
