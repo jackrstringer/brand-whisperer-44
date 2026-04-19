@@ -415,7 +415,7 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
             const errText = await res.text();
             console.error("[flow-agent] Anthropic error:", res.status, errText);
             send({ type: "error", error: `Anthropic ${res.status}: ${errText.slice(0, 300)}` });
-            controller.close();
+            safeClose();
             return;
           }
 
