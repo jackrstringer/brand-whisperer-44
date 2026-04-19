@@ -47,7 +47,7 @@ function fmtTs(d: Date | null): string {
   return d.toLocaleTimeString([], { hour12: false });
 }
 
-interface DebugLogEntry {
+export interface DebugLogEntry {
   timestamp: number;
   event: string;
   detail: string;
@@ -67,6 +67,8 @@ interface ProcessingStatusPanelProps {
   idleTimeoutSeconds?: number;
   /** Status of the parent's guide fetch stream: idle | opening | streaming | ended | error */
   guideStreamStatus?: string;
+  /** External pipeline events from parent (uploads, fn invokes, etc) — merged into log + copy blob. */
+  externalEvents?: DebugLogEntry[];
   brandContext?: {
     auditFindings: any;
     brandName: string;
@@ -87,6 +89,7 @@ export default function ProcessingStatusPanel({
   maxPollMinutes = 15,
   idleTimeoutSeconds = 180,
   guideStreamStatus = "idle",
+  externalEvents = [],
 }: ProcessingStatusPanelProps) {
   const [dbStatus, setDbStatus] = useState<PipelineStatus>("idle");
   const [dbError, setDbError] = useState<string | null>(null);
@@ -117,16 +120,21 @@ export default function ProcessingStatusPanel({
     brand_guide_html_len: 0,
   });
 
-  // Diagnostic log (rolling, keep last 20)
-  const [debugLog, setDebugLog] = useState<DebugLogEntry[]>([]);
-  const logRef = useRef<DebugLogEntry[]>([]);
+  // Internal poll/stream events (status transitions, errors, etc)
+  const [internalLog, setInternalLog] = useState<DebugLogEntry[]>([]);
+  const internalLogRef = useRef<DebugLogEntry[]>([]);
   const [debugOpen, setDebugOpen] = useState(false);
 
   const pushLog = (event: string, detail: string) => {
     const entry = { timestamp: Date.now(), event, detail };
-    logRef.current = [...logRef.current, entry].slice(-20);
-    setDebugLog([...logRef.current]);
+    internalLogRef.current = [...internalLogRef.current, entry];
+    setInternalLog([...internalLogRef.current]);
   };
+
+  // Combined log: internal + external, sorted, last 50
+  const combinedLog: DebugLogEntry[] = [...externalEvents, ...internalLog]
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .slice(-50);
 
   // Tick elapsed every second
   useEffect(() => {
@@ -205,11 +213,6 @@ export default function ProcessingStatusPanel({
           return "stop";
         }
 
-        // Stuck on idle — only fire if NOTHING has happened:
-        // - status is still "idle" in DB
-        // - we have never seen a non-idle status
-        // - the guide stream has never opened (still "idle")
-        // - no status transition has been recorded
         const streamHasOpened = lastStreamRef.current !== "idle";
         const statusHasTransitioned = lastStatusRef.current !== null && lastStatusRef.current !== "idle";
         if (
@@ -283,7 +286,7 @@ export default function ProcessingStatusPanel({
       },
       rowDiagnostics: rowDiag,
       functionUrl,
-      debugLog,
+      eventLog: combinedLog,
     }, null, 2);
   };
 
@@ -364,7 +367,7 @@ export default function ProcessingStatusPanel({
       {isFailed && onRetry && (
         <div className="flex justify-center">
           <Button onClick={onRetry} variant="default" className="gap-1.5">
-            <RotateCcwIcon /> Retry analysis
+            <RefreshCw className="w-4 h-4" /> Retry analysis
           </Button>
         </div>
       )}
@@ -388,7 +391,7 @@ export default function ProcessingStatusPanel({
         </button>
 
         {debugOpen && (
-          <div className="mt-3 text-left font-mono text-[11px] bg-muted/40 border border-border rounded-md p-3 max-h-[420px] overflow-auto space-y-3">
+          <div className="mt-3 text-left font-mono text-[11px] bg-muted/40 border border-border rounded-md p-3 max-h-[480px] overflow-auto space-y-3">
             <div>
               <div className="text-muted-foreground uppercase tracking-wide text-[10px] mb-1">Phase timings</div>
               <div>spec: {fmtTs(specStartedAt)} → {fmtTs(specCompletedAt)}{specStartedAt && specCompletedAt ? ` (${Math.round((specCompletedAt.getTime() - specStartedAt.getTime())/1000)}s)` : ""}</div>
@@ -422,12 +425,12 @@ export default function ProcessingStatusPanel({
             </div>
 
             <div>
-              <div className="text-muted-foreground uppercase tracking-wide text-[10px] mb-1">Log (last 20)</div>
-              {debugLog.length === 0 ? (
+              <div className="text-muted-foreground uppercase tracking-wide text-[10px] mb-1">Event log (last 50)</div>
+              {combinedLog.length === 0 ? (
                 <div className="text-muted-foreground">(empty)</div>
               ) : (
-                debugLog.map((e, i) => (
-                  <div key={i}>
+                combinedLog.map((e, i) => (
+                  <div key={i} className={e.event.endsWith("_error") || e.event === "error" ? "text-destructive" : ""}>
                     {new Date(e.timestamp).toLocaleTimeString([], { hour12: false })} [{e.event}] {e.detail}
                   </div>
                 ))
@@ -444,8 +447,4 @@ export default function ProcessingStatusPanel({
       </div>
     </div>
   );
-}
-
-function RotateCcwIcon() {
-  return <RefreshCw className="w-4 h-4" />;
 }
