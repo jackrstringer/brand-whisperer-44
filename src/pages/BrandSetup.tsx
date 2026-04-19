@@ -331,32 +331,28 @@ export default function BrandSetup() {
   // Brand ID created early for async guide generation
   const [earlyBrandId, setEarlyBrandId] = useState<string | null>(null);
 
-  // === PASS 2+3: Spec + Guide (async with polling) ===
+  // === PASS 2+3: Spec + Guide (DB-driven, polled by ProcessingStatusPanel) ===
+  // After this completes, step transitions to "generating_guide" which mounts
+  // the ProcessingStatusPanel — that polls brand_profiles.processing_status
+  // and surfaces failures or completion. No manual fetch streams here.
   const generateGuideFromAudit = async (findings?: any, mergedProps?: any, sources?: string[]) => {
     const auditData = findings || auditFindings;
     const props = mergedProps || confirmedProperties;
     const extractionSrcs = sources || ["screenshots"];
-    if (!auditData || !user) { toast.error("No audit data available"); return; }
+    if (!auditData || !user) {
+      toast.error("No audit data available");
+      setStep("uploads");
+      return;
+    }
 
     setStep("generating_guide");
     guideStartTimeRef.current = Date.now();
-    setProgressValue(0);
-    setProgressMessage(GUIDE_MESSAGES[0]);
-
-    const guideStartTime = Date.now();
-    const interval = setInterval(() => {
-      const elapsed = (Date.now() - guideStartTime) / 1000;
-      const progress = Math.min(90, 25 * Math.log10(1 + elapsed / 8));
-      const msgIndex = Math.min(Math.floor(progress / 25), GUIDE_MESSAGES.length - 1);
-      setProgressMessage(GUIDE_MESSAGES[msgIndex]);
-      setProgressValue(progress);
-    }, 1000);
+    setProgressMessage("Uploading images & creating brand...");
 
     try {
-      // Step 1: Upload images and create brand + profile early
+      // Step 1: Upload images and create brand + profile
       let brandId = earlyBrandId;
       if (!brandId) {
-        setProgressMessage("Uploading images...");
         const imageUrls: string[] = [];
         const allImageFiles = getAllImageFiles();
         for (const file of allImageFiles) {
@@ -387,13 +383,15 @@ export default function BrandSetup() {
           }).catch((err: any) => console.warn("[BrandSetup] Background research failed:", err));
         }
 
-        // Create profile with audit findings
+        // Create profile with audit findings AND set processing_status to running_spec
+        // up-front so the ProcessingStatusPanel sees a non-idle status immediately.
         const { error: profileError } = await supabase.from("brand_profiles").insert({
           brand_id: brandId,
           reference_image_urls: imageUrls,
           audit_findings: auditData,
           confirmed_properties: props || null,
           extraction_sources: extractionSrcs,
+          processing_status: "running_spec",
         } as any);
         if (profileError) throw profileError;
 
@@ -405,7 +403,6 @@ export default function BrandSetup() {
           .catch((e) => console.warn("Slice upload failed (non-blocking):", e));
 
         // Fire-and-forget: upload asset files and analyze with AI in background
-        // This does NOT block guide generation — results are needed later for campaign building
         const assetBrandId = brandId!;
         (async () => {
           try {
@@ -447,113 +444,47 @@ export default function BrandSetup() {
             console.warn("Background asset upload failed (non-blocking):", err);
           }
         })();
+      } else {
+        // Brand already exists — make sure processing_status is set so the panel doesn't get stuck on "idle"
+        await supabase.from("brand_profiles").update({
+          processing_status: "running_spec",
+          processing_error: null,
+        }).eq("brand_id", brandId);
       }
 
-      setProgressMessage("Building brand spec...");
+      // Step 2: Fire spec step. Backend will:
+      //  - mark running_spec
+      //  - run spec, mark spec_complete
+      //  - automatically chain into guide via EdgeRuntime.waitUntil
+      //  - mark complete (or failed) when guide finishes
+      // We do NOT await this fully — the panel polls the DB for status.
+      // We do still await the response so we surface immediate spec failures fast.
       const { error: specError } = await supabase.functions.invoke("extract-brand", {
         body: { auditFindings: auditData, brandName, industry, brandId, step: "spec", confirmed_properties: props },
       });
-      if (specError) throw new Error(specError.message || "Failed to build brand spec");
 
-      setProgressMessage("Generating brand guide...");
-      // Use fetch() directly — guide mode returns a stream, not JSON
-      try {
-        const session = await supabase.auth.getSession();
-        const accessToken = session.data.session?.access_token || "";
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-        
-        const guideResponse = await fetch(`${supabaseUrl}/functions/v1/extract-brand`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${accessToken}`,
-            "apikey": supabaseKey,
-          },
-          body: JSON.stringify({
-            auditFindings: auditData,
-            brandName,
-            industry,
-            brandId,
-            step: "guide",
-          }),
-        });
-
-        // Consume the stream to keep the connection alive
-        if (guideResponse.body) {
-          const reader = guideResponse.body.getReader();
-          while (true) {
-            const { done } = await reader.read();
-            if (done) break;
-          }
-        }
-      } catch (err: any) {
-        // Stream timeout or disconnect is OK — the edge function saves to DB
-        console.log("[BrandSetup] guide stream ended:", err?.message);
+      if (specError) {
+        // Spec invoke failed — persist the failure so the panel can show it.
+        await supabase.from("brand_profiles").update({
+          processing_status: "failed",
+          processing_error: specError.message || "Failed to start brand spec generation",
+        }).eq("brand_id", brandId);
+        // Don't throw — let the panel surface the failure with retry UI.
       }
-
-      // Step 3: Poll brand_profiles for brand_guide_html
-      const POLL_INTERVAL = 5000;
-      const MAX_POLL_TIME = 15 * 60 * 1000; // 15 minutes
-      const startTime = Date.now();
-
-      const pollForGuide = () => {
-        const pollTimer = setInterval(async () => {
-          try {
-            const { data: profile } = await supabase
-              .from("brand_profiles")
-              .select("brand_guide_html, system_prompt, raw_extraction, audit_findings, processing_status, processing_error")
-              .eq("brand_id", brandId!)
-              .single();
-
-            // Fail loud on any failure status from the edge function
-            if ((profile as any)?.processing_status === "failed") {
-              clearInterval(pollTimer);
-              clearInterval(interval);
-              toast.error((profile as any).processing_error || "Brand processing failed", { duration: 10000 });
-              setStep("uploads");
-              return;
-            }
-
-            // Legacy error channel
-            const findings = profile?.audit_findings as any;
-            if (findings?._error) {
-              clearInterval(pollTimer);
-              clearInterval(interval);
-              toast.error(findings._error || "Guide generation failed", { duration: 10000 });
-              setStep("uploads");
-              return;
-            }
-
-            if (profile?.brand_guide_html) {
-              clearInterval(pollTimer);
-              clearInterval(interval);
-              setExtraction(profile.raw_extraction as any);
-              setSystemPrompt(profile.system_prompt || "");
-              setBrandGuideHtml(profile.brand_guide_html);
-              setProgressValue(100);
-              setProgressMessage("Guide ready!");
-              setTimeout(() => setStep("guide_review"), 500);
-              return;
-            }
-
-            if (Date.now() - startTime > MAX_POLL_TIME) {
-              clearInterval(pollTimer);
-              clearInterval(interval);
-              toast.error("Guide generation timed out. Please try again.", { duration: 10000 });
-              setStep("uploads");
-            }
-          } catch {
-            // Keep polling on transient errors
-          }
-        }, POLL_INTERVAL);
-      };
-
-      pollForGuide();
     } catch (err: any) {
-      clearInterval(interval);
-      toast.error(err.message || "Guide generation failed");
-      setStep("uploads");
+      // Setup phase failed BEFORE the panel could mount its polling loop.
+      // Persist if we have a brand id; otherwise show a toast and reset.
+      const msg = err?.message || "Failed to start brand processing";
+      console.error("[BrandSetup] generateGuideFromAudit setup failed:", err);
+      if (earlyBrandId) {
+        await supabase.from("brand_profiles").update({
+          processing_status: "failed",
+          processing_error: msg,
+        }).eq("brand_id", earlyBrandId).catch(() => {});
+      } else {
+        toast.error(msg);
+        setStep("uploads");
+      }
     }
   };
 
