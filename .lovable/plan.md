@@ -1,77 +1,58 @@
 
+Goal: make brand analysis reliable on `/brands/new`, fail loudly when backend processing breaks, and stop the endless spinner.
 
-## Investigation summary
+What I found
+- `/brands/new` is still using the old `src/pages/BrandSetup.tsx` pipeline instead of the newer DB-polled processing components.
+- The current new-brand flow still uses fake/proxy progress timers and a manual `fetch()` stream for `extract-brand` guide mode.
+- In `BrandSetup.tsx`, the guide request does not check `guideResponse.ok`; 400/500 responses can be treated like an expected stream end, so the UI keeps polling/spinning instead of surfacing the real error.
+- The latest backend logs only show `[extract-brand] Call 1: Generating spec...` and never show the later “spec saved”/guide-success path, so the spec phase is failing or never completing cleanly.
+- Session replay confirms the UX bug: the app shows “Failed to send a request to the Edge Function” but remains in the long-running analysis screen.
 
-**Root causes of the bad UX:**
+Implementation plan
 
-1. **Agent over-produces.** The current prompt + welcome-flow.md tell Claude to output full Subject Lines, Preview Text, Hero Sections, Body Structure, etc. inside the `flow-skeleton` block. That's why you're seeing 100+ lines of pseudo-copy. The skeleton is supposed to be a *brief structural map*, not the email itself.
-2. **Parser mismatch = empty canvas.** `skeletonParser.ts` only recognizes `[EMAIL ...]`, `[DELAY ...]`, `[CONDITIONAL SPLIT ...]` bracket syntax. The agent is currently outputting `## EMAIL 1: ...` markdown headers, so `parsedNodes` returns `[]` → SkeletonViewer shows the empty-state placeholder → "I don't see anything."
-3. **Skeleton streams into the chat as a giant bubble.** While Claude streams the `flow-skeleton` fence content, every token is rendered as an assistant message. We strip the fence *after* completion, but the user sees the wall of markdown for 30+ seconds.
-4. **Model is already `claude-sonnet-4-5-20250929`** — it's not Opus. So the slowness isn't model choice; it's the 8000-token verbose output. Cutting output 5× makes it feel 5× faster.
-5. **Canvas is a vertical list, not a Miro board.** And there's no inline-expansion of generated emails — there's just a tiny preview dialog.
+1. Replace the legacy `/brands/new` processing flow with the real state-machine flow
+- Refactor `src/pages/BrandSetup.tsx` to stop doing the full spec+guide orchestration inline.
+- After audit completes, create the brand/profile row, set `processing_status`, fire `extract-brand` with `step: "spec"` in fire-and-forget mode, and hand off to `BrandProcessingScreen` / `ProcessingStatusPanel`.
+- Remove the old fake-timer “Deep Brand Analysis” screen logic from `BrandSetup.tsx` so progress is driven by backend state only.
 
-## What I'll change
+2. Fix the backend contract in `extract-brand`
+- Harden `supabase/functions/extract-brand/index.ts` so spec failures always persist `processing_status: "failed"` and a clear `processing_error`.
+- Add stricter validation around the spec call:
+  - fail on bad API responses
+  - fail on parse failures
+  - fail if `raw_extraction` write does not succeed
+- Improve the guide-mode missing-extraction error so it records the exact stage/last known status instead of just returning bare `No extraction found`.
 
-### A. Fix the agent (brief skeletons, not copy)
+3. Remove the bad guide invocation path from the new-brand flow
+- Stop using direct `fetch()` streaming inside `BrandSetup.tsx` for guide generation.
+- Use the same pattern as the newer processing components: DB polling drives the phase transition, and the guide step is invoked only after `processing_status === "spec_complete"`.
+- This avoids the current race/transport ambiguity and makes the page resumable.
 
-**`supabase/functions/flow-agent/index.ts`**
-- Tighten system prompt: skeleton must be a *structural brief only* — per email: `label`, `timing`, `job` (one sentence), `subject_direction` (angle, not actual SL), `sections` (3-5 bullets), `notes` (≤1 line). **Forbid** writing actual subject lines, preview text, body copy, hero copy, CTA copy.
-- Force the bracket syntax the parser expects (`[EMAIL 1 — Label]`, `[DELAY] — 24h`) so the canvas actually populates.
-- Drop `max_tokens` from 8000 → 2500. Skeleton should fit in ~600 tokens.
-- Keep Sonnet-4.5 (already correct).
-- Suppress streaming the `flow-skeleton` fence into the chat: emit a separate `skeleton_chunk` SSE event for content inside the fence so the UI can route it to the canvas, not the chat bubble. Chat only shows the synth card + a short "Skeleton drafted ✓" line.
+4. Make failures visible instead of bouncing the user back into confusion
+- In `BrandSetup.tsx`, replace the current “toast + back to uploads” failure behavior with a persistent failed state:
+  - show the backend error inline
+  - offer retry
+  - preserve uploaded files and audit data
+- Reuse the log/phase UI already present in `BrandProcessingScreen.tsx` so users can see whether it failed in audit, spec, or guide.
 
-### B. Make the canvas the source of truth
+5. Tighten `ProcessingStatusPanel` and brand resume behavior
+- Make sure the new-brand route uses the same polling behavior already used on the Brand page.
+- Keep the existing resumable behavior on `src/pages/BrandProfile.tsx`, but ensure the failure copy is explicit and actionable.
+- If the spec phase never leaves `running_spec` or returns to idle unexpectedly, fail loudly with a diagnostic message rather than waiting indefinitely.
 
-**`src/components/flows/SkeletonViewer.tsx` → rebuild as "Flow Board"**
-- Horizontal/vertical Miro-style canvas (vertical column for v1, since flows are linear) with cleaner node cards.
-- Each email node = compact brief card: number, label, timing pill, one-line job, subject angle, sections as small chips.
-- **Inline expand**: clicking a node expands it *in place* in the canvas (not a dialog) to reveal:
-  - Brief (editable inline)
-  - When generated: rendered 390px email iframe + Subject Line + Preview Text + creation insights, side-by-side with the brief
-  - Collapses back with a chevron
-- Connectors stay as thin vertical lines with the timing label between nodes.
-- Empty state replaced by a "Skeleton drafting…" shimmer when `flow.status === 'generating'` and chat is producing the skeleton.
+Files to update
+- `src/pages/BrandSetup.tsx`
+- `src/components/brand/BrandProcessingScreen.tsx`
+- `src/components/brand/ProcessingStatusPanel.tsx`
+- `supabase/functions/extract-brand/index.ts`
 
-**`src/pages/FlowBuilderPage.tsx`**
-- Remove the small `previewIndex` Dialog (replaced by inline expansion).
-- Remove the `editingNodeIndex` Dialog (inline edit in the expanded node).
-- Pass `expandedIndex` state down so only one node is open at a time.
-- Pull SL/PT/insights from the linked `campaigns` row (subject_line, preview_text, creation_insights / generation_meta) when expanded.
+Expected result
+- Brand analysis on `/brands/new` uses one consistent backend-driven pipeline.
+- If spec fails, the user sees that it failed in spec, with the real error.
+- If guide cannot start because extraction is missing, that becomes an explicit failed state, not an endless spinner.
+- Users can leave and return to the Brand page and still see live processing status.
 
-### C. Chat stays the conductor
-
-**`src/components/flows/FlowAgentChat.tsx`**
-- When a `skeleton_chunk` event arrives, do NOT append to the chat bubble — just show a compact "Drafting skeleton in the canvas →" indicator.
-- After skeleton completes, the chat shows: synth card + "Skeleton ready. Edit nodes directly or tell me what to change."
-- Existing question chips / synth card stay as-is.
-
-### D. Tighten the skill file (welcome-flow.md)
-
-The welcome-flow.md skill currently instructs full per-email "Subject line direction / Sections / Copy spec". I'll add a stronger directive in the system prompt (not edit the .md, per your earlier instruction to not overwrite skill files): *"Output skeleton in BRACKET syntax only. No subject lines, no preview text, no body copy. ≤80 lines total."*
-
-## Flow after changes
-
-```text
-1. User picks flow type
-   → Centered chat, agent does research + asks ≤1 question via chips
-2. Agent drafts a SHORT bracket-format skeleton
-   → Canvas slides in with brief node cards (labels, timing, job, sections)
-   → Chat shows synth card + "Skeleton ready" message
-3. User edits inline in the canvas OR chats "make E2 about social proof"
-   → Agent returns updated skeleton, canvas re-renders
-4. User hits "Approve & Generate All"
-   → generate-campaign runs per node (already wired)
-   → Each node card flips to expanded state showing live email + SL/PT/insights
-```
-
-## Files to edit
-
-- `supabase/functions/flow-agent/index.ts` — prompt rewrite, max_tokens=2500, separate `skeleton_chunk` SSE event
-- `src/components/flows/FlowAgentChat.tsx` — handle `skeleton_chunk`, suppress fence in chat, "Drafting in canvas" indicator
-- `src/components/flows/SkeletonViewer.tsx` — Miro-board node cards with inline expand
-- `src/pages/FlowBuilderPage.tsx` — remove preview/edit dialogs, wire inline expansion, pull campaign meta (SL/PT/insights) for expanded nodes
-- `src/lib/flows/skeletonParser.ts` — add tolerant fallback so `## EMAIL N:` markdown still parses (defense in depth)
-
-No DB migrations needed.
-
+Technical notes
+- No database migration is required for this fix; `brand_profiles.processing_status` and `processing_error` already exist.
+- The main architectural issue is not the table schema; it is that `/brands/new` is still on the old orchestration path while the rest of the app already has a better state-machine pattern.
+- I would keep the zero-fallback rule: no fake success, no silent stream-timeout masking, no auto-recovery that hides backend failures.
