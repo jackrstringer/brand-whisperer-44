@@ -331,6 +331,10 @@ export default function BrandSetup() {
   // Brand ID created early for async guide generation
   const [earlyBrandId, setEarlyBrandId] = useState<string | null>(null);
 
+  // Stream status for the guide fetch — surfaced in the debug panel.
+  // "idle" | "opening" | "streaming" | "ended" | "error"
+  const [guideStreamStatus, setGuideStreamStatus] = useState<string>("idle");
+
   // === PASS 2+3: Spec + Guide (DB-driven, polled by ProcessingStatusPanel) ===
   // After this completes, step transitions to "generating_guide" which mounts
   // the ProcessingStatusPanel — that polls brand_profiles.processing_status
