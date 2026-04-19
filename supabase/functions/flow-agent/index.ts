@@ -7,6 +7,28 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Skills are imported as TypeScript modules so they bundle with the deploy.
+// (.md files are NOT included in the edge-runtime bundle, .ts files are.)
+import baseFlow from "./skills/base-flow.ts";
+import emailDesignLibrary from "./skills/email-design-element-library.ts";
+import welcomeFlow from "./skills/welcome-flow.ts";
+import welcomeTemplates from "./skills/welcome-templates.ts";
+import abandonedCheckoutFlow from "./skills/abandoned-checkout-flow.ts";
+import postPurchaseFlow from "./skills/post-purchase-flow.ts";
+import browseAbandonmentFlow from "./skills/browse-abandonment-flow.ts";
+import winbackFlow from "./skills/winback-flow.ts";
+
+const SKILL_REGISTRY: Record<string, string> = {
+  "base-flow.md": baseFlow,
+  "email-design-element-library.md": emailDesignLibrary,
+  "welcome-flow.md": welcomeFlow,
+  "welcome-templates.md": welcomeTemplates,
+  "abandoned-checkout-flow.md": abandonedCheckoutFlow,
+  "post-purchase-flow.md": postPurchaseFlow,
+  "browse-abandonment-flow.md": browseAbandonmentFlow,
+  "winback-flow.md": winbackFlow,
+};
+
 const FLOW_SKILL_FILES: Record<string, string[]> = {
   welcome: ["welcome-flow.md", "welcome-templates.md"],
   abandoned_checkout: ["abandoned-checkout-flow.md"],
@@ -15,17 +37,13 @@ const FLOW_SKILL_FILES: Record<string, string[]> = {
   winback: ["winback-flow.md"],
 };
 
-async function readSkill(filename: string): Promise<string> {
-  // Skills are co-located with this function (./skills/) so they bundle with deploy.
-  // Previously we read from ../_shared/flow-skills/ which doesn't exist in the
-  // bundled edge runtime path (/var/tmp/sb-compile-edge-runtime/...).
-  try {
-    const url = new URL(`./skills/${filename}`, import.meta.url);
-    return await Deno.readTextFile(url);
-  } catch (err) {
-    console.error(`[flow-agent] Failed to read skill ${filename}:`, err);
+function readSkill(filename: string): string {
+  const content = SKILL_REGISTRY[filename];
+  if (!content) {
+    console.error(`[flow-agent] Skill not found in registry: ${filename}`);
     return "";
   }
+  return content;
 }
 
 const INTEL_SELECT = "compiled_context, klaviyo_compiled, ai_research, research_status";
@@ -161,13 +179,11 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    // Load skills
+    // Load skills (synchronous - bundled at deploy time)
     const flowSkillFiles = FLOW_SKILL_FILES[flow_type] || [];
-    const [baseSkill, designLibrary, ...flowSkills] = await Promise.all([
-      readSkill("base-flow.md"),
-      readSkill("email-design-element-library.md"),
-      ...flowSkillFiles.map(readSkill),
-    ]);
+    const baseSkill = readSkill("base-flow.md");
+    const designLibrary = readSkill("email-design-element-library.md");
+    const flowSkills = flowSkillFiles.map(readSkill);
 
     // Load brand context
     const [{ data: brandIntel }, { data: klaviyoConn }, { data: brand }, { data: flowRow }] =
@@ -422,6 +438,7 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
           const reader = res.body.getReader();
           const dec = new TextDecoder();
           let buf = "";
+          let fullText = "";
           // Track whether we're currently inside a ```flow-skeleton fence so we
           // can route those tokens to a separate SSE event (canvas-only, not chat).
           let inSkeletonFence = false;

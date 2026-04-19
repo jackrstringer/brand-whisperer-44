@@ -105,15 +105,15 @@ export function FlowAgentChat({
 
   useEffect(() => {
     if (initFired.current) return;
+    initFired.current = true;
+    // Once a skeleton exists, the user is in "edit" mode — don't auto-kick
+    // the agent (which would show the "Building your flow" loader again).
+    if (currentSkeleton) return;
     if (shouldAutoRestart(initialMessages, currentSkeleton) && !streaming) {
-      initFired.current = true;
       setMessages([]);
       sendMessage("__FLOW_RESTART__", true);
     } else if (initialMessages.length === 0 && !streaming) {
-      initFired.current = true;
       sendMessage("__FLOW_INIT__", true);
-    } else {
-      initFired.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
