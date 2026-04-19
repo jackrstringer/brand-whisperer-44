@@ -14,19 +14,12 @@ import { toast } from "sonner";
 import SourceQuiz, { type SourceType } from "@/components/brand/SourceQuiz";
 import ResourceUploader from "@/components/brand/ResourceUploader";
 import AssetCategoryUploader, { type AssetCategory } from "@/components/brand/AssetCategoryUploader";
-import ProcessingStatusPanel from "@/components/brand/ProcessingStatusPanel";
+import ProcessingStatusPanel, { type DebugLogEntry } from "@/components/brand/ProcessingStatusPanel";
 import type { BrandExtraction } from "@/lib/types";
 import { sliceAndUploadReferenceImages, saveSliceUrls } from "@/lib/imageSlicing";
 import { getExtractionSources, isImageFile, persistBrandSetupInputs, type BrandAssetCategory } from "@/lib/brandSetupPersistence";
 
-type Step = "info" | "sources" | "uploads" | "auditing" | "audit_review" | "generating_guide" | "guide_review" | "audit_failed";
-
-// Dev-only spend confirmation gate. In production returns true (no prompt).
-function confirmDevSpend(fnName: string): boolean {
-  if (!import.meta.env.DEV) return true;
-  // eslint-disable-next-line no-alert
-  return window.confirm(`About to call ${fnName}. This will cost real money. Continue?`);
-}
+type Step = "info" | "sources" | "uploads" | "processing" | "guide_review" | "audit_failed";
 
 const AUDIT_MESSAGES = [
   "Scanning layouts...",
