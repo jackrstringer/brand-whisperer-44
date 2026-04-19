@@ -584,8 +584,6 @@ export default function BrandSetup() {
     }
   };
 
-  const generateGuide = () => generateGuideFromAudit();
-
   // Render guide HTML in iframe
   useEffect(() => {
     const iframe = guideIframeRef.current;
@@ -852,150 +850,7 @@ export default function BrandSetup() {
     );
   }
 
-  if (step === "auditing") {
-    // Audit owns the first ~30% of the unified pipeline progress bar.
-    const unifiedProgress = Math.min(30, Math.round(progressValue * 0.3));
-    return (
-      <div className="min-h-screen bg-background p-6 md:p-12 flex flex-col items-center justify-center">
-        <div className="max-w-lg w-full space-y-6 text-center">
-          <h2 className="text-xl font-semibold">Analyzing your brand</h2>
-          <p className="text-sm text-muted-foreground">
-            Reading your emails, extracting your design system, and writing your full brand guide. This typically takes 5–10 minutes.
-          </p>
-          <Progress value={unifiedProgress} className="h-1.5" />
-          <p className="text-sm text-muted-foreground">{progressMessage || "Reading your emails..."}</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (step === "audit_failed") {
-    return (
-      <div className="min-h-screen bg-background p-6 md:p-12 flex flex-col items-center justify-center">
-        <div className="max-w-2xl w-full space-y-6">
-          <div className="text-center space-y-2">
-            <AlertTriangle className="w-10 h-10 text-destructive mx-auto" />
-            <h2 className="text-xl font-semibold">Brand audit failed</h2>
-              <p className="text-sm text-muted-foreground">
-                The pipeline was halted. Your uploaded inputs were preserved, and no further generation calls were made.
-              </p>
-          </div>
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <span className="text-xs font-medium text-destructive uppercase tracking-wide">Error</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-2 text-xs"
-                onClick={() => {
-                  navigator.clipboard.writeText(auditError || "");
-                  toast.success("Error copied");
-                }}
-              >
-                Copy
-              </Button>
-            </div>
-            <pre className="text-xs whitespace-pre-wrap font-mono text-destructive break-words">
-              {auditError || "Unknown error"}
-            </pre>
-          </div>
-          <div className="flex gap-2 justify-center">
-            <Button variant="outline" onClick={() => { setAuditError(null); setStep("uploads"); }}>
-              <ArrowLeft className="w-4 h-4 mr-2" /> Back to uploads
-            </Button>
-            <Button onClick={() => { setAuditError(null); startAudit(); }}>
-              <RotateCcw className="w-4 h-4 mr-2" /> Retry audit
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (step === "audit_review" && auditFindings) {
-    return (
-      <div className="min-h-screen bg-background p-6 md:p-12">
-        <button onClick={() => setStep("uploads")} className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-8 transition-colors">
-          <ArrowLeft className="w-4 h-4" /> Back to uploads
-        </button>
-        <h1 className="text-2xl font-semibold mb-2">Review Brand Audit</h1>
-        <p className="text-muted-foreground mb-2">Review the extracted design attributes below. Click any value to edit it.</p>
-
-        {needsConfirmation.length > 0 && (
-          <div className="mb-6 p-4 rounded-lg border border-yellow-500/30 bg-yellow-500/5">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-4 h-4 text-yellow-500" />
-              <span className="text-sm font-medium text-yellow-500">Items needing confirmation</span>
-            </div>
-            <ul className="space-y-1">
-              {needsConfirmation.map((nc, i) => (
-                <li key={i} className="text-sm text-muted-foreground">
-                  <span className="font-mono text-xs">{nc.element}</span> — {nc.reason}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {inconsistencies.length > 0 && (
-          <div className="mb-6 p-4 rounded-lg border border-blue-500/30 bg-blue-500/5">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-4 h-4 text-blue-500" />
-              <span className="text-sm font-medium text-blue-500">Inconsistencies between campaigns</span>
-            </div>
-            <ul className="space-y-1">
-              {inconsistencies.map((inc, i) => (
-                <li key={i} className="text-sm text-muted-foreground">
-                  <span className="font-mono text-xs">{inc.element}</span> — {inc.description}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <div className="grid gap-4 md:grid-cols-2 max-w-5xl">
-          {AUDIT_SECTIONS.map(({ key, title }) => {
-            const sectionData = auditFindings[key];
-            if (!sectionData) return null;
-            return (
-              <Card key={key} className="bg-card border-border group">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">{title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {renderAuditSection(key, sectionData)}
-                </CardContent>
-              </Card>
-            );
-          })}
-
-          {auditFindings.special_patterns && auditFindings.special_patterns.length > 0 && (
-            <Card className="bg-card border-border md:col-span-2">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Special Patterns</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {renderAuditSection("special_patterns", auditFindings.special_patterns)}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        <div className="mt-8 flex gap-3 max-w-5xl">
-          <Button onClick={generateGuide} className="bg-primary text-primary-foreground hover:bg-primary/90">
-            <Check className="w-4 h-4 mr-1.5" /> Confirm & Generate Brand Guide
-          </Button>
-          <Button variant="outline" onClick={() => { setAuditFindings(null); setStep("uploads"); }}>
-            Re-analyze
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  if (step === "generating_guide") {
-    // The brand row + profile may not exist yet (very first instant before insert).
-    // While waiting, show a unified placeholder that matches the auditing screen chrome.
+  if (step === "processing") {
     if (!earlyBrandId) {
       return (
         <div className="min-h-screen bg-background p-6 md:p-12 flex flex-col items-center justify-center">
@@ -1004,7 +859,7 @@ export default function BrandSetup() {
             <p className="text-sm text-muted-foreground">
               Reading your emails, extracting your design system, and writing your full brand guide. This typically takes 5–10 minutes.
             </p>
-            <Progress value={32} className="h-1.5" />
+            <Progress value={Math.max(5, Math.min(30, Math.round(progressValue * 0.3)))} className="h-1.5" />
             <p className="text-sm text-muted-foreground">{progressMessage || "Uploading images & creating brand…"}</p>
             <div className="w-6 h-6 mx-auto rounded-full border-2 border-primary border-t-transparent animate-spin" />
           </div>
@@ -1019,6 +874,7 @@ export default function BrandSetup() {
           subtitle="Reading your emails, extracting your design system, and writing your full brand guide. This typically takes 5–10 minutes. You can leave this page — your brand will pick up where it left off."
           brandContext={auditFindings ? { auditFindings, brandName, industry } : undefined}
           guideStreamStatus={guideStreamStatus}
+          externalEvents={pipelineEvents}
           showDashboardLink
           onGoToDashboard={() => navigate(`/brands/${earlyBrandId}`)}
           onRetry={async () => {
@@ -1041,40 +897,14 @@ export default function BrandSetup() {
             setStep("guide_review");
           }}
           onFailed={(error) => {
+            setAuditError(error);
+            setStep("audit_failed");
             toast.error(error, { duration: 12000 });
           }}
           onTimeout={() => {
             toast.error("Brand processing timed out after 15 minutes. Open your brand from the dashboard to retry.", { duration: 12000 });
           }}
         />
-        {/* Persistent retry / dashboard fallbacks — visible even when the panel is in-flight */}
-        <div className="mt-6 flex gap-3">
-          <Button variant="outline" onClick={() => navigate(`/brands/${earlyBrandId}`)}>
-            Go to dashboard
-          </Button>
-          <Button
-            variant="outline"
-            onClick={async () => {
-              // Retry from spec — re-fire the spec step using the persisted audit findings.
-              if (!earlyBrandId || !auditFindings) {
-                toast.error("Cannot retry — audit findings missing. Please re-upload from Step 3.");
-                setStep("uploads");
-                return;
-              }
-              await supabase.from("brand_profiles").update({
-                processing_status: "running_spec",
-                processing_error: null,
-              }).eq("brand_id", earlyBrandId);
-              supabase.functions.invoke("extract-brand", {
-                body: { auditFindings, brandName, industry, brandId: earlyBrandId, step: "spec", confirmed_properties: confirmedProperties },
-              }).catch((err) => console.warn("[BrandSetup] retry invoke failed:", err));
-              toast.success("Restarting brand analysis…");
-            }}
-            className="gap-1.5"
-          >
-            <RotateCcw className="w-4 h-4" /> Retry analysis
-          </Button>
-        </div>
       </div>
     );
   }
