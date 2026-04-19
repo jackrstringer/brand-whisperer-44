@@ -2,7 +2,7 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { useLocation } from "react-router-dom";
 
 // Routes that need full-width (no max-width container)
-const FULL_WIDTH_ROUTES = ["/ideate"];
+const FULL_WIDTH_ROUTES = ["/ideate", "/flows/"];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation();

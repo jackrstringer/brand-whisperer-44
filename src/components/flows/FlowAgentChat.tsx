@@ -72,7 +72,7 @@ function stripFences(content: string): string {
   return content
     .replace(QUESTION_FENCE, "")
     .replace(SYNTH_FENCE, "")
-    .replace(SKELETON_FENCE, "_(skeleton updated — see the canvas)_")
+    .replace(SKELETON_FENCE, "")
     .trim();
 }
 
@@ -104,6 +104,16 @@ export function FlowAgentChat({
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    setMessages(initialMessages);
+    setInput("");
+    setStreamBuf("");
+    setSkeletonStreaming(false);
+    setStages([]);
+    setStreaming(false);
+    initFired.current = false;
+  }, [flowId, initialMessages]);
+
+  useEffect(() => {
     if (initFired.current) return;
     initFired.current = true;
     // Once a skeleton exists, the user is in "edit" mode — don't auto-kick
@@ -116,7 +126,7 @@ export function FlowAgentChat({
       sendMessage("__FLOW_INIT__", true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [flowId, currentSkeleton, initialMessages]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -234,9 +244,19 @@ export function FlowAgentChat({
     }
   };
 
+  const visibleMessages = messages.filter((message) => {
+    if (!currentSkeleton || message.role !== "assistant") return true;
+    const hasControlFence =
+      QUESTION_FENCE.test(message.content) ||
+      SYNTH_FENCE.test(message.content) ||
+      SKELETON_FENCE.test(message.content);
+    if (!hasControlFence) return true;
+    return stripFences(message.content).length > 0;
+  });
+
   const lastAssistantIdx = (() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "assistant") return i;
+    for (let i = visibleMessages.length - 1; i >= 0; i--) {
+      if (visibleMessages[i].role === "assistant") return i;
     }
     return -1;
   })();
@@ -250,18 +270,18 @@ export function FlowAgentChat({
         }`}
       >
         <div className={`w-full ${centered ? "max-w-2xl" : ""} space-y-4`}>
-          {messages.map((m, i) => {
+          {visibleMessages.map((m, i) => {
             const isLastAssistant = i === lastAssistantIdx;
             const question = m.role === "assistant" ? extractQuestion(m.content) : null;
-            const synth = m.role === "assistant" ? extractSynth(m.content) : null;
+            const synth = m.role === "assistant" && !currentSkeleton ? extractSynth(m.content) : null;
             return (
               <MessageBubble
                 key={i}
                 role={m.role}
                 content={m.content}
-                question={question}
+                question={currentSkeleton ? null : question}
                 synth={synth}
-                showQuestionChips={isLastAssistant && !streaming}
+                showQuestionChips={isLastAssistant && !streaming && !currentSkeleton}
                 onAnswer={(answer) => sendMessage(answer)}
                 disabled={streaming}
               />
@@ -270,13 +290,13 @@ export function FlowAgentChat({
           {streaming && (streamBuf || stages.length > 0) && (
             <>
               {stages.length > 0 && !streamBuf && <ProgressStages stages={stages} />}
-              {streamBuf && (
+              {streamBuf && stripFences(streamBuf) && (
                 <MessageBubble
                   role="assistant"
                   content={streamBuf}
                   streaming
-                  question={extractQuestion(streamBuf)}
-                  synth={extractSynth(streamBuf)}
+                  question={currentSkeleton ? null : extractQuestion(streamBuf)}
+                  synth={currentSkeleton ? null : extractSynth(streamBuf)}
                   showQuestionChips={false}
                   disabled
                 />
