@@ -459,27 +459,17 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
     );
   }
 
-  if (phase === "fetching" || phase === "auditing") {
+  if (phase === "processing") {
     return (
-      <div className="space-y-6 py-8 text-center">
-        <h3 className="text-lg font-semibold">Re-running Brand Pipeline</h3>
-        <p className="text-sm text-muted-foreground">{progressMessage}</p>
-        <Progress value={progressValue} className="h-1.5 max-w-md mx-auto" />
-      </div>
-    );
-  }
-
-  if (phase === "generating_guide") {
-    return (
-      <div className="space-y-6 py-8 flex flex-col items-center">
+      <div className="space-y-6 py-4">
         <ProcessingStatusPanel
           brandId={brandId}
           title="Re-processing Brand"
-          subtitle="Running full brand pipeline — spec extraction then guide generation. This takes 5–10 minutes."
+          subtitle="Replaying the full brand pipeline using your stored references. Takes 5–10 minutes."
+          externalEvents={pipelineEvents}
           brandContext={{ auditFindings, brandName, industry }}
           onComplete={(guideHtml) => {
             setBrandGuideHtml(guideHtml);
-            setProgressValue(100);
             toast.success("Brand profile updated!");
             setTimeout(() => setPhase("guide_review"), 500);
           }}
