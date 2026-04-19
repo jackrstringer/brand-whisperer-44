@@ -917,8 +917,22 @@ export default function BrandSetup() {
           title="Deep Brand Analysis"
           subtitle="Building your brand spec and design guide. This typically takes 5–10 minutes. You can leave this page — your brand will pick up where it left off."
           brandContext={auditFindings ? { auditFindings, brandName, industry } : undefined}
+          guideStreamStatus={guideStreamStatus}
           showDashboardLink
           onGoToDashboard={() => navigate(`/brands/${earlyBrandId}`)}
+          onRetry={async () => {
+            if (!earlyBrandId || !auditFindings) {
+              toast.error("Cannot retry — audit findings missing.");
+              setStep("uploads");
+              return;
+            }
+            await supabase.from("brand_profiles").update({
+              processing_status: "running_spec",
+              processing_error: null,
+            }).eq("brand_id", earlyBrandId);
+            setGuideStreamStatus("idle");
+            generateGuideFromAudit(auditFindings, confirmedProperties);
+          }}
           onComplete={(html, raw, sysPrompt) => {
             setExtraction(raw as any);
             setSystemPrompt(sysPrompt || "");
@@ -926,7 +940,6 @@ export default function BrandSetup() {
             setStep("guide_review");
           }}
           onFailed={(error) => {
-            // Show the actual backend error inline + offer retry instead of bouncing back silently.
             toast.error(error, { duration: 12000 });
           }}
           onTimeout={() => {
