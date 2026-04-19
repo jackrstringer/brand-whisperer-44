@@ -85,7 +85,7 @@ export default function ProcessingStatusPanel({
   showDashboardLink = false,
   onGoToDashboard,
   maxPollMinutes = 15,
-  idleTimeoutSeconds = 90,
+  idleTimeoutSeconds = 180,
   guideStreamStatus = "idle",
 }: ProcessingStatusPanelProps) {
   const [dbStatus, setDbStatus] = useState<PipelineStatus>("idle");
@@ -205,11 +205,22 @@ export default function ProcessingStatusPanel({
           return "stop";
         }
 
-        // Stuck on idle
-        if (status === "idle" && !hasLeftIdleRef.current) {
+        // Stuck on idle — only fire if NOTHING has happened:
+        // - status is still "idle" in DB
+        // - we have never seen a non-idle status
+        // - the guide stream has never opened (still "idle")
+        // - no status transition has been recorded
+        const streamHasOpened = lastStreamRef.current !== "idle";
+        const statusHasTransitioned = lastStatusRef.current !== null && lastStatusRef.current !== "idle";
+        if (
+          status === "idle" &&
+          !hasLeftIdleRef.current &&
+          !streamHasOpened &&
+          !statusHasTransitioned
+        ) {
           const elapsedMs = Date.now() - startTimeRef.current;
           if (elapsedMs > idleTimeoutSeconds * 1000) {
-            pushLog("error", "stuck on idle past timeout");
+            pushLog("error", `stuck on idle past ${idleTimeoutSeconds}s timeout (no stream, no status change)`);
             onFailed("Brand analysis failed to start. The processing function may not have been invoked. Please try again.");
             return "stop";
           }
