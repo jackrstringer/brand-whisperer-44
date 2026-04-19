@@ -226,6 +226,7 @@ export type Database = {
           processing_status: string
           qa_checklist: Json | null
           raw_extraction: Json | null
+          reference_image_categories: Json | null
           reference_image_urls: string[] | null
           reference_slice_urls: string[] | null
           system_prompt: string | null
@@ -244,6 +245,7 @@ export type Database = {
           processing_status?: string
           qa_checklist?: Json | null
           raw_extraction?: Json | null
+          reference_image_categories?: Json | null
           reference_image_urls?: string[] | null
           reference_slice_urls?: string[] | null
           system_prompt?: string | null
@@ -262,6 +264,7 @@ export type Database = {
           processing_status?: string
           qa_checklist?: Json | null
           raw_extraction?: Json | null
+          reference_image_categories?: Json | null
           reference_image_urls?: string[] | null
           reference_slice_urls?: string[] | null
           system_prompt?: string | null
