@@ -9,11 +9,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, ArrowRight, Check, AlertTriangle, Download, Edit2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, AlertTriangle, Download, Edit2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import SourceQuiz, { type SourceType } from "@/components/brand/SourceQuiz";
 import ResourceUploader from "@/components/brand/ResourceUploader";
 import AssetCategoryUploader, { type AssetCategory } from "@/components/brand/AssetCategoryUploader";
+import ProcessingStatusPanel from "@/components/brand/ProcessingStatusPanel";
 import type { BrandExtraction } from "@/lib/types";
 import { sliceAndUploadReferenceImages, saveSliceUrls } from "@/lib/imageSlicing";
 
