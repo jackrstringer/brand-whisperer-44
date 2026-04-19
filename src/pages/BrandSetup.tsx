@@ -477,10 +477,12 @@ export default function BrandSetup() {
       const msg = err?.message || "Failed to start brand processing";
       console.error("[BrandSetup] generateGuideFromAudit setup failed:", err);
       if (earlyBrandId) {
-        await supabase.from("brand_profiles").update({
-          processing_status: "failed",
-          processing_error: msg,
-        }).eq("brand_id", earlyBrandId).catch(() => {});
+        try {
+          await supabase.from("brand_profiles").update({
+            processing_status: "failed",
+            processing_error: msg,
+          }).eq("brand_id", earlyBrandId);
+        } catch {}
       } else {
         toast.error(msg);
         setStep("uploads");
