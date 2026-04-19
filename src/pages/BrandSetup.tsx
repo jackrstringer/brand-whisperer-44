@@ -584,8 +584,6 @@ export default function BrandSetup() {
     }
   };
 
-  const generateGuide = () => generateGuideFromAudit();
-
   // Render guide HTML in iframe
   useEffect(() => {
     const iframe = guideIframeRef.current;
