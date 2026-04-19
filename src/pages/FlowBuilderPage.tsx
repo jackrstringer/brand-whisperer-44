@@ -346,28 +346,70 @@ Notes: ${node.notes || "none"}`;
 
   if (loading || !flow) {
     return (
-      <div className="h-full flex items-center justify-center text-muted-foreground">
-        <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading flow…
+      <div className="absolute inset-0 flex items-center justify-center text-foreground/55 bg-[hsl(var(--canvas))]">
+        <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading flow…
       </div>
     );
   }
 
   const hasAnyHtml = emails.some((e) => e.html);
   const meta = FLOW_TYPE_META[flow.flow_type];
+  const hasSkeleton = !!flow.skeleton_markdown;
 
   return (
-    <div className="h-full flex flex-col bg-background">
-      {/* Top bar */}
-      <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border bg-card">
-        <div className="flex items-center gap-3 min-w-0">
-          <Button
-            variant="ghost"
-            size="icon"
+    <div className="absolute inset-0 bg-[hsl(var(--canvas))]">
+      {/* Canvas fills the entire stage */}
+      {!hasSkeleton ? (
+        <FlowAgentChat
+          key={`${flow.id}:draft`}
+          flowId={flow.id}
+          brandId={flow.brand_id}
+          flowType={flow.flow_type}
+          initialMessages={Array.isArray(flow.messages) ? (flow.messages as any) : []}
+          currentSkeleton={flow.skeleton_markdown}
+          onSkeletonUpdated={handleSkeletonUpdated}
+          centered
+        />
+      ) : (
+        <>
+          <SkeletonViewer
+            key={`${flow.id}:ready`}
+            nodes={parsedNodes}
+            meta={parsedMeta}
+            flowType={flow.flow_type}
+            emails={emails}
+            campaignMeta={campaignMeta}
+            expandedIndex={expandedIndex}
+            onToggleExpand={setExpandedIndex}
+            onGenerateNode={generateSingleEmail}
+            onSaveNodeEdit={saveNodeEdit}
+            generatingIndex={generatingIndex}
+            drafting={flow.status === "draft" || flow.status === "generating"}
+          />
+          <FlowAgentChat
+            key={`${flow.id}:chat`}
+            flowId={flow.id}
+            brandId={flow.brand_id}
+            flowType={flow.flow_type}
+            initialMessages={Array.isArray(flow.messages) ? (flow.messages as any) : []}
+            currentSkeleton={flow.skeleton_markdown}
+            onSkeletonUpdated={handleSkeletonUpdated}
+          />
+        </>
+      )}
+
+      {/* Floating top-left: back + title */}
+      <div className="absolute top-5 left-5 z-30 flex items-center gap-2 pointer-events-none">
+        <div className="pointer-events-auto flex items-center gap-2 px-2 py-1.5 rounded-full bg-card/90 backdrop-blur-xl border border-foreground/15 shadow-sm">
+          <button
             onClick={() => navigate(`/brands/${brandId}/flows`)}
+            className="w-7 h-7 rounded-full flex items-center justify-center text-foreground/55 hover:bg-muted hover:text-foreground transition-colors"
+            aria-label="Back to flows"
           >
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <div className="min-w-0">
+            <ArrowLeft className="w-3.5 h-3.5" />
+          </button>
+          <div className="w-px h-4 bg-foreground/15" />
+          <div className="flex items-center gap-2 px-1.5">
             {editingName ? (
               <Input
                 autoFocus
@@ -375,144 +417,48 @@ Notes: ${node.notes || "none"}`;
                 onChange={(e) => setNameDraft(e.target.value)}
                 onBlur={renameFlow}
                 onKeyDown={(e) => e.key === "Enter" && renameFlow()}
-                className="h-8 text-sm font-semibold"
+                className="h-6 text-[13px] font-medium border-0 px-1 py-0 focus-visible:ring-0 shadow-none bg-transparent w-48"
               />
             ) : (
               <button
                 onClick={() => setEditingName(true)}
-                className="text-sm font-semibold text-foreground truncate hover:underline"
+                className="text-[13px] font-medium text-foreground hover:opacity-70 transition-opacity"
               >
                 {flow.name}
               </button>
             )}
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-xs text-muted-foreground">{meta?.label}</span>
-              <span className="text-xs text-muted-foreground">·</span>
-              <StatusPill status={flow.status} />
-            </div>
+            <span className="text-foreground/25 text-[11px]">·</span>
+            <span className="text-[11px] text-foreground/55">{meta?.label}</span>
+            <StatusPill status={flow.status} />
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {flow.status === "skeleton_ready" && emailNodes.length > 0 && (
-            <Button onClick={generateAllEmails} disabled={bulkGenerating}>
-              {bulkGenerating ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <Sparkles className="w-4 h-4 mr-2" />
-              )}
-              Approve & Generate All
-            </Button>
-          )}
-          {hasAnyHtml && (
-            <Button variant="outline" onClick={exportAll}>
-              <Download className="w-4 h-4 mr-2" /> Export All
-            </Button>
-          )}
         </div>
       </div>
 
-      {/* Mobile tabs (only when skeleton exists) */}
-      {flow.skeleton_markdown && (
-        <div className="md:hidden flex border-b border-border">
+      {/* Floating top-right: actions */}
+      <div className="absolute top-5 right-5 z-30 flex items-center gap-2 pointer-events-none">
+        {hasAnyHtml && (
           <button
-            onClick={() => setMobileTab("canvas")}
-            className={`flex-1 py-2 text-sm flex items-center justify-center gap-1.5 ${
-              mobileTab === "canvas"
-                ? "border-b-2 border-primary text-foreground font-medium"
-                : "text-muted-foreground"
-            }`}
+            onClick={exportAll}
+            className="pointer-events-auto px-3.5 h-9 rounded-full bg-card/90 backdrop-blur-xl border border-foreground/15 shadow-sm flex items-center gap-1.5 text-[12.5px] font-medium text-foreground/75 hover:text-foreground hover:border-foreground/35 transition-colors"
           >
-            <GitFork className="w-3.5 h-3.5" /> Canvas
+            <Download className="w-3.5 h-3.5" /> Export all
           </button>
+        )}
+        {flow.status === "skeleton_ready" && emailNodes.length > 0 && (
           <button
-            onClick={() => setMobileTab("chat")}
-            className={`flex-1 py-2 text-sm flex items-center justify-center gap-1.5 ${
-              mobileTab === "chat"
-                ? "border-b-2 border-primary text-foreground font-medium"
-                : "text-muted-foreground"
-            }`}
+            onClick={generateAllEmails}
+            disabled={bulkGenerating}
+            className="pointer-events-auto px-4 h-9 rounded-full bg-foreground text-background shadow-[0_4px_16px_-4px_rgba(0,0,0,0.25)] flex items-center gap-1.5 text-[12.5px] font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
           >
-            <MessageSquare className="w-3.5 h-3.5" /> Agent
+            {bulkGenerating ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Sparkles className="w-3.5 h-3.5" />
+            )}
+            Approve & Generate All
           </button>
-        </div>
-      )}
-
-      {/* Body */}
-      {!flow.skeleton_markdown ? (
-        // Pre-skeleton: centered chat, no canvas yet
-          <div className="flex-1 min-h-0 transition-all duration-300">
-            <FlowAgentChat
-              key={`${flow.id}:draft`}
-              flowId={flow.id}
-              brandId={flow.brand_id}
-              flowType={flow.flow_type}
-              initialMessages={Array.isArray(flow.messages) ? (flow.messages as any) : []}
-              currentSkeleton={flow.skeleton_markdown}
-              onSkeletonUpdated={handleSkeletonUpdated}
-              centered
-            />
-          </div>
-        ) : (
-          <>
-            <div className="flex-1 min-h-0 hidden md:block animate-fade-in relative">
-              <div className="absolute inset-0 pr-[400px]">
-                <SkeletonViewer
-                  key={`${flow.id}:${flow.skeleton_markdown ? "ready" : "draft"}`}
-                  nodes={parsedNodes}
-                  meta={parsedMeta}
-                  flowType={flow.flow_type}
-                  emails={emails}
-                  campaignMeta={campaignMeta}
-                  expandedIndex={expandedIndex}
-                  onToggleExpand={setExpandedIndex}
-                  onGenerateNode={generateSingleEmail}
-                  onSaveNodeEdit={saveNodeEdit}
-                  generatingIndex={generatingIndex}
-                  drafting={flow.status === "draft" || flow.status === "generating"}
-                />
-              </div>
-              <div className="absolute top-0 right-0 bottom-0 w-[400px] border-l border-border bg-background shadow-xl">
-                <FlowAgentChat
-                  key={`${flow.id}:${flow.skeleton_markdown ? "ready" : "draft"}:desktop`}
-                  flowId={flow.id}
-                  brandId={flow.brand_id}
-                  flowType={flow.flow_type}
-                  initialMessages={Array.isArray(flow.messages) ? (flow.messages as any) : []}
-                  currentSkeleton={flow.skeleton_markdown}
-                  onSkeletonUpdated={handleSkeletonUpdated}
-                />
-              </div>
-            </div>
-            <div className="flex-1 min-h-0 md:hidden">
-              {mobileTab === "canvas" ? (
-                <SkeletonViewer
-                  key={`${flow.id}:${flow.skeleton_markdown ? "ready" : "draft"}:mobile`}
-                  nodes={parsedNodes}
-                  meta={parsedMeta}
-                  flowType={flow.flow_type}
-                  emails={emails}
-                  campaignMeta={campaignMeta}
-                  expandedIndex={expandedIndex}
-                  onToggleExpand={setExpandedIndex}
-                  onGenerateNode={generateSingleEmail}
-                  onSaveNodeEdit={saveNodeEdit}
-                  generatingIndex={generatingIndex}
-                  drafting={flow.status === "draft" || flow.status === "generating"}
-                />
-              ) : (
-                <FlowAgentChat
-                  key={`${flow.id}:${flow.skeleton_markdown ? "ready" : "draft"}:mobile`}
-                  flowId={flow.id}
-                  brandId={flow.brand_id}
-                  flowType={flow.flow_type}
-                  initialMessages={Array.isArray(flow.messages) ? (flow.messages as any) : []}
-                  currentSkeleton={flow.skeleton_markdown}
-                  onSkeletonUpdated={handleSkeletonUpdated}
-                />
-              )}
-            </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }
