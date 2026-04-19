@@ -379,8 +379,12 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
     const stream = new ReadableStream({
       async start(controller) {
         const enc = new TextEncoder();
-        const send = (obj: unknown) =>
-          controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        let closed = false;
+        const safeClose = () => { if (!closed) { closed = true; try { controller.close(); } catch {} } };
+        const send = (obj: unknown) => {
+          if (closed) return;
+          try { controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`)); } catch {}
+        };
 
         let fullText = "";
         try {
