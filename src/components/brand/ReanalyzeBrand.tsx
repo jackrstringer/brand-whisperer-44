@@ -4,65 +4,51 @@ import { useAuth } from "@/hooks/useAuth";
 import { sliceAndUploadReferenceImages, saveSliceUrls } from "@/lib/imageSlicing";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { AlertTriangle, Check, Download, Edit2, RefreshCw, ArrowLeft } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { AlertTriangle, Check, Download, Edit2, RefreshCw, Info } from "lucide-react";
 import { toast } from "sonner";
 import ProcessingStatusPanel from "@/components/brand/ProcessingStatusPanel";
 
 const AUDIT_MESSAGES = [
-  "Scanning layouts...",
-  "Analyzing typography...",
-  "Extracting color palettes...",
-  "Inspecting CTA buttons...",
-  "Mapping design patterns...",
+  "Loading reference images...",
+  "Re-extracting website fonts & colors...",
+  "Re-extracting Figma tokens...",
+  "Slicing campaigns...",
+  "Running deep visual audit...",
   "Synthesizing findings...",
 ];
 
-const GUIDE_MESSAGES = [
-  "Building brand spec...",
-  "Generating design system...",
-  "Creating brand guide...",
-  "Finalizing documentation...",
-];
-
-const AUDIT_SECTIONS = [
-  { key: "logo", title: "Logo Treatment" },
-  { key: "colors", title: "Color Palette" },
-  { key: "typography_headlines", title: "Typography — Headlines" },
-  { key: "typography_body", title: "Typography — Body" },
-  { key: "typography_subheads", title: "Typography — Subheads" },
-  { key: "cta_buttons", title: "CTA Buttons" },
-  { key: "image_treatment", title: "Image Treatment" },
-  { key: "card_container_design", title: "Card / Container Design" },
-  { key: "section_dividers", title: "Section Dividers" },
-  { key: "footer", title: "Footer" },
-  { key: "icons_decorative", title: "Icons & Decorative Elements" },
-  { key: "voice", title: "Voice & Tone" },
-] as const;
-
-type Phase = "idle" | "fetching" | "auditing" | "audit_review" | "generating_guide" | "guide_review";
+type Phase = "idle" | "preflight" | "fetching" | "auditing" | "generating_guide" | "guide_review";
 
 interface ReanalyzeBrandProps {
   brandId: string;
   brandName: string;
   industry: string;
   websiteUrl?: string;
+  figmaUrl?: string;
 }
 
-export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUrl }: ReanalyzeBrandProps) {
+interface PreflightSummary {
+  refCount: number;
+  categories: Record<string, number>;
+  hasWebsite: boolean;
+  hasFigma: boolean;
+  hasStoredConfirmedProps: boolean;
+  extractionSources: string[];
+}
+
+export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUrl, figmaUrl }: ReanalyzeBrandProps) {
   const { user } = useAuth();
   const [phase, setPhase] = useState<Phase>("idle");
   const [progressValue, setProgressValue] = useState(0);
   const [progressMessage, setProgressMessage] = useState("");
   const [auditFindings, setAuditFindings] = useState<any>(null);
-  const [inconsistencies, setInconsistencies] = useState<any[]>([]);
-  const [needsConfirmation, setNeedsConfirmation] = useState<any[]>([]);
-  const [editingField, setEditingField] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState("");
   const [brandGuideHtml, setBrandGuideHtml] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [summary, setSummary] = useState<PreflightSummary | null>(null);
+  const [figmaToken, setFigmaToken] = useState("");
   const guideIframeRef = useRef<HTMLIFrameElement>(null);
   const [guideIframeHeight, setGuideIframeHeight] = useState(800);
 
@@ -102,139 +88,254 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
       img.src = url;
     });
 
+  // Step 1: Load existing inputs and show what will be replayed
+  const loadPreflight = async () => {
+    setPhase("preflight");
+    const { data: profile, error } = await supabase
+      .from("brand_profiles")
+      .select("reference_image_urls, reference_image_categories, confirmed_properties, extraction_sources")
+      .eq("brand_id", brandId)
+      .single();
+
+    if (error || !profile) {
+      toast.error("Could not load brand profile.");
+      setPhase("idle");
+      return;
+    }
+
+    const cats = ((profile as any).reference_image_categories || {}) as Record<string, string[]>;
+    const flat = ((profile as any).reference_image_urls || []) as string[];
+    const categoryCounts: Record<string, number> = {};
+    let total = 0;
+    for (const [k, v] of Object.entries(cats)) {
+      const n = Array.isArray(v) ? v.length : 0;
+      if (n > 0) categoryCounts[k] = n;
+      total += n;
+    }
+    if (total === 0) {
+      // Fall back to flat list
+      total = flat.length;
+      if (total > 0) categoryCounts.campaign = total;
+    }
+
+    setSummary({
+      refCount: total,
+      categories: categoryCounts,
+      hasWebsite: !!websiteUrl?.trim(),
+      hasFigma: !!figmaUrl?.trim(),
+      hasStoredConfirmedProps: !!(profile as any).confirmed_properties,
+      extractionSources: ((profile as any).extraction_sources || []) as string[],
+    });
+  };
+
+  // Step 2: Run the full pipeline replay
   const startReanalysis = async () => {
+    if (!summary) return;
+    if (summary.refCount < 3) {
+      toast.error("This brand has fewer than 3 reference images stored. Cannot re-process.");
+      return;
+    }
+
     setPhase("fetching");
     setProgressValue(0);
-    setProgressMessage("Loading reference images...");
+    setProgressMessage(AUDIT_MESSAGES[0]);
 
     try {
       const { data: profile } = await supabase
         .from("brand_profiles")
-        .select("reference_image_urls, confirmed_properties")
+        .select("reference_image_urls, reference_image_categories, confirmed_properties")
         .eq("brand_id", brandId)
         .single();
 
-      const urls: string[] = (profile as any)?.reference_image_urls || [];
-      if (urls.length < 3) {
-        toast.error("This brand has fewer than 3 reference images stored. Please re-create the brand with more images.");
-        setPhase("idle");
-        return;
+      const cats = ((profile as any)?.reference_image_categories || {}) as Record<string, string[]>;
+      const flat = ((profile as any)?.reference_image_urls || []) as string[];
+      // Flatten in category order (matches /brands/new ordering)
+      const orderedUrls: string[] = [];
+      for (const key of ["campaign", "brand_deck", "misc", "mockup"]) {
+        if (Array.isArray(cats[key])) orderedUrls.push(...cats[key]);
+      }
+      if (orderedUrls.length === 0) orderedUrls.push(...flat);
+
+      const storedProps = (profile as any)?.confirmed_properties || null;
+
+      // Phase A — fresh website + Figma re-extraction in parallel (mirrors /brands/new)
+      const extractionSources: string[] = ["screenshots"];
+      const extractionPromises: Promise<any>[] = [];
+
+      if (websiteUrl?.trim()) {
+        extractionSources.push("website");
+        setProgressMessage(AUDIT_MESSAGES[1]);
+        extractionPromises.push(
+          supabase.functions
+            .invoke("extract-website-fonts", { body: { url: websiteUrl.trim() } })
+            .then(({ data, error }) => {
+              if (error || data?.error) {
+                console.warn("[Reanalyze] website extraction failed, will fall back to stored props:", error || data?.error);
+                return null;
+              }
+              return { source: "website", ...data };
+            })
+            .catch((err) => {
+              console.warn("[Reanalyze] website extraction threw:", err);
+              return null;
+            }),
+        );
       }
 
-      setPhase("auditing");
-      setProgressMessage(AUDIT_MESSAGES[0]);
+      if (figmaUrl?.trim() && figmaToken.trim()) {
+        extractionSources.push("figma");
+        setProgressMessage(AUDIT_MESSAGES[2]);
+        extractionPromises.push(
+          supabase.functions
+            .invoke("extract-figma", { body: { figma_url: figmaUrl.trim(), figma_token: figmaToken.trim() } })
+            .then(({ data, error }) => {
+              if (error || data?.error) {
+                console.warn("[Reanalyze] Figma extraction failed, will fall back to stored props:", error || data?.error);
+                return null;
+              }
+              return { source: "figma", ...data };
+            })
+            .catch((err) => {
+              console.warn("[Reanalyze] Figma extraction threw:", err);
+              return null;
+            }),
+        );
+      }
 
-      const interval = setInterval(() => {
-        setProgressValue((v) => {
-          const next = Math.min(v + 1.5, 95);
-          const msgIndex = Math.min(Math.floor(next / 16), AUDIT_MESSAGES.length - 1);
-          setProgressMessage(AUDIT_MESSAGES[msgIndex]);
-          return next;
-        });
-      }, 400);
+      setProgressValue(15);
+      setProgressMessage(AUDIT_MESSAGES[3]);
 
-      // Slice images from URLs
+      // Phase B — slice reference images while extractions run
       const slicedImages: any[] = [];
-      const refUrls = urls.slice(0, 10);
+      const refUrls = orderedUrls.slice(0, 10);
       for (let ci = 0; ci < refUrls.length; ci++) {
         try {
           const slices = await sliceImageFromUrl(refUrls[ci]);
-          for (const slice of slices) {
-            slicedImages.push({ ...slice, campaignIndex: ci });
-          }
+          for (const slice of slices) slicedImages.push({ ...slice, campaignIndex: ci });
         } catch (e) {
-          console.warn(`Skipping image ${ci}:`, e);
+          console.warn(`[Reanalyze] skipping image ${ci}:`, e);
         }
       }
-
       if (slicedImages.length === 0) {
-        clearInterval(interval);
-        toast.error("Could not load any reference images. They may have been deleted.");
+        toast.error("Could not load any reference images from storage.");
         setPhase("idle");
         return;
       }
+      setProgressValue(35);
 
-      const savedProps = (profile as any)?.confirmed_properties || null;
+      // Wait for parallel extractions
+      const extractionResults = await Promise.all(extractionPromises);
+
+      // Merge confirmed properties: stored < website < figma (matches /brands/new)
+      let merged: any = storedProps ? { ...storedProps } : null;
+      const websiteResult = extractionResults.find((r) => r?.source === "website");
+      const figmaResult = extractionResults.find((r) => r?.source === "figma");
+      if (websiteResult?.confirmed_properties) {
+        merged = { ...(merged || {}), ...websiteResult.confirmed_properties };
+      }
+      if (figmaResult?.confirmed_properties) {
+        merged = { ...(merged || {}), ...figmaResult.confirmed_properties };
+        if (figmaResult.confirmed_properties.fonts) merged.fonts = figmaResult.confirmed_properties.fonts;
+        if (figmaResult.confirmed_properties.colors) {
+          merged.colors = { ...(merged.colors || {}), ...figmaResult.confirmed_properties.colors };
+        }
+      }
+
+      // Phase C — run audit
+      setPhase("auditing");
+      setProgressValue(50);
+      setProgressMessage(AUDIT_MESSAGES[4]);
+
       const { data, error } = await supabase.functions.invoke("audit-brand", {
-        body: { images: slicedImages, brandName, industry, confirmed_properties: savedProps },
+        body: { images: slicedImages, brandName, industry, confirmed_properties: merged },
       });
 
-      clearInterval(interval);
       if (error) throw new Error(error.message || "Audit failed");
       if (data?.error) throw new Error(data.error);
 
       setAuditFindings(data.audit);
-      setInconsistencies(data.inconsistencies || []);
-      setNeedsConfirmation(data.needs_confirmation || []);
-      setProgressValue(50);
-      setProgressMessage("Audit complete! Building guide...");
+      setProgressValue(80);
+      setProgressMessage(AUDIT_MESSAGES[5]);
 
-      // Fire-and-forget: re-slice and upload reference images for generation use
+      // Persist refreshed inputs to brand_profiles
+      await supabase
+        .from("brand_profiles")
+        .update({
+          audit_findings: data.audit,
+          confirmed_properties: merged,
+          extraction_sources: extractionSources,
+          brand_guide_html: null,
+          processing_status: "running_spec",
+          processing_error: null,
+        } as any)
+        .eq("brand_id", brandId);
+
+      // Fire-and-forget: re-slice for generation use
       if (user?.id) {
-        sliceAndUploadReferenceImages(user.id, brandId, urls)
+        sliceAndUploadReferenceImages(user.id, brandId, orderedUrls)
           .then((sliceUrls) => saveSliceUrls(brandId, sliceUrls))
-          .catch((e) => console.warn("Slice re-upload failed (non-blocking):", e));
+          .catch((e) => console.warn("[Reanalyze] slice re-upload failed:", e));
       }
 
       // Fire-and-forget: re-run brand intelligence research
       if (websiteUrl?.trim()) {
-        supabase.functions.invoke("research-brand", {
-          body: { brand_id: brandId, brand_name: brandName, domain: websiteUrl },
-        }).catch((e) => console.warn("Brand intelligence research failed (non-blocking):", e));
+        supabase.functions
+          .invoke("research-brand", {
+            body: { brand_id: brandId, brand_name: brandName, domain: websiteUrl.trim(), industry: industry || null },
+          })
+          .catch((e) => console.warn("[Reanalyze] research-brand failed:", e));
       }
 
-      // Auto-proceed to guide generation (no confirmation step)
-      await autoGenerateGuide(data.audit);
+      // Phase D — kick spec then stream guide
+      setPhase("generating_guide");
+      setProgressValue(95);
+      setProgressMessage("Starting brand processing...");
+
+      const { error: specError } = await supabase.functions.invoke("extract-brand", {
+        body: { auditFindings: data.audit, brandName, industry, brandId, step: "spec", confirmed_properties: merged },
+      });
+      if (specError) {
+        await supabase
+          .from("brand_profiles")
+          .update({ processing_status: "failed", processing_error: specError.message } as any)
+          .eq("brand_id", brandId);
+        throw new Error(specError.message);
+      }
+
+      // Fire guide stream (keeps gateway alive during 3-5min Opus call)
+      try {
+        const session = await supabase.auth.getSession();
+        const accessToken = session.data.session?.access_token || "";
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+        const guideResponse = await fetch(`${supabaseUrl}/functions/v1/extract-brand`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+            apikey: supabaseKey,
+          },
+          body: JSON.stringify({
+            auditFindings: data.audit,
+            brandName,
+            industry,
+            brandId,
+            step: "guide",
+          }),
+        });
+        if (guideResponse.body) {
+          const reader = guideResponse.body.getReader();
+          while (true) {
+            const { done } = await reader.read();
+            if (done) break;
+          }
+        }
+      } catch (err: any) {
+        console.log("[Reanalyze] guide stream ended:", err?.message);
+      }
     } catch (err: any) {
       toast.error(err.message || "Re-analysis failed");
       setPhase("idle");
-    }
-  };
-
-  const autoGenerateGuide = async (findings: any) => {
-    const effectiveFindings = findings || auditFindings;
-    if (!effectiveFindings) {
-      toast.error("No audit findings available");
-      setPhase("idle");
-      return;
-    }
-    setAuditFindings(effectiveFindings);
-    setPhase("generating_guide");
-    setProgressValue(50);
-    setProgressMessage(GUIDE_MESSAGES[0]);
-
-    const interval = setInterval(() => {
-      setProgressValue((v) => {
-        const next = Math.min(v + 0.8, 95);
-        const msgIndex = Math.min(Math.floor(next / 25), GUIDE_MESSAGES.length - 1);
-        setProgressMessage(GUIDE_MESSAGES[msgIndex]);
-        return next;
-      });
-    }, 500);
-
-    try {
-      // Save current audit findings and clear old guide, kick off full processing
-      await supabase
-        .from("brand_profiles")
-        .update({ audit_findings: effectiveFindings, brand_guide_html: null, processing_status: "running_spec", processing_error: null } as any)
-        .eq("brand_id", brandId);
-
-      setProgressMessage("Starting brand processing...");
-      supabase.functions.invoke("extract-brand", {
-        body: { auditFindings: effectiveFindings, brandName, industry, brandId, step: "spec" },
-      }).then(({ error: processError }) => {
-        if (processError) {
-          console.log("[ReanalyzeBrand] extract-brand spec invoke returned error (may still be running):", processError.message);
-        }
-      }).catch((err) => {
-        console.log("[ReanalyzeBrand] extract-brand spec invoke timed out (expected):", err?.message);
-      });
-
-      // Polling is now handled by ProcessingStatusPanel
-    } catch (err: any) {
-      clearInterval(interval);
-      toast.error(err.message || "Brand processing failed");
-      setPhase("audit_review");
     }
   };
 
@@ -249,96 +350,13 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
     doc.close();
     const poll = setInterval(() => {
       const h = doc.documentElement?.scrollHeight;
-      if (h && h > 100) { setGuideIframeHeight(h); clearInterval(poll); }
+      if (h && h > 100) {
+        setGuideIframeHeight(h);
+        clearInterval(poll);
+      }
     }, 200);
     return () => clearInterval(poll);
   }, [brandGuideHtml, phase]);
-
-  const renderAuditValue = (sectionKey: string, data: any): JSX.Element => {
-    if (!data) return <p className="text-sm text-muted-foreground">No data</p>;
-
-    if (Array.isArray(data)) {
-      return (
-        <div className="space-y-2">
-          {data.map((item: any, i: number) => (
-            <div key={i} className="p-2 rounded bg-muted/30 text-sm">
-              {typeof item === "object" ? (
-                <div>
-                  {item.name && <p className="font-medium">{item.name}</p>}
-                  {item.description && <p className="text-muted-foreground">{item.description}</p>}
-                  {!item.name && !item.description && <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(item, null, 2)}</pre>}
-                </div>
-              ) : <span>{String(item)}</span>}
-            </div>
-          ))}
-        </div>
-      );
-    }
-
-    if (typeof data === "object") {
-      return (
-        <div className="space-y-1.5">
-          {Object.entries(data).map(([key, val]) => {
-            const isColor = typeof val === "string" && /^#[0-9a-fA-F]{3,8}$/.test(val);
-            const fieldPath = `${sectionKey}.${key}`;
-            const needsConf = needsConfirmation.some((nc) => nc.element === fieldPath);
-
-            return (
-              <div key={key} className="flex items-start gap-2 text-sm group">
-                <span className="text-muted-foreground min-w-[140px] shrink-0">{key.replace(/_/g, " ")}</span>
-                {isColor && <div className="w-5 h-5 rounded border border-border shrink-0" style={{ backgroundColor: val }} />}
-                {editingField === fieldPath ? (
-                  <div className="flex items-center gap-1 flex-1">
-                    <Input
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      className="h-7 text-sm"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          const keys = fieldPath.split(".");
-                          const updated = { ...auditFindings };
-                          let obj = updated;
-                          for (let i = 0; i < keys.length - 1; i++) {
-                            obj[keys[i]] = { ...obj[keys[i]] };
-                            obj = obj[keys[i]];
-                          }
-                          obj[keys[keys.length - 1]] = editValue;
-                          setAuditFindings(updated);
-                          setEditingField(null);
-                        }
-                        if (e.key === "Escape") setEditingField(null);
-                      }}
-                    />
-                    <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setEditingField(null)}>✓</Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 flex-1">
-                    {typeof val === "object" && val !== null ? (
-                      <div className="text-xs">{renderAuditValue(fieldPath, val)}</div>
-                    ) : (
-                      <span className="font-mono text-xs">{String(val)}</span>
-                    )}
-                    {needsConf && (
-                      <Badge variant="outline" className="text-yellow-500 border-yellow-500/50 text-[10px] shrink-0">Needs review</Badge>
-                    )}
-                    <button
-                      onClick={() => { setEditingField(fieldPath); setEditValue(String(val)); }}
-                      className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <Edit2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      );
-    }
-
-    return <span className="text-sm font-mono">{String(data)}</span>;
-  };
 
   if (phase === "idle") {
     return (
@@ -346,14 +364,99 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
         <div>
           <h3 className="text-sm font-medium mb-1">Re-process Brand</h3>
           <p className="text-xs text-muted-foreground mb-4">
-            Re-run the full brand pipeline using existing reference images and assets — visual audit, brand guide regeneration,
-            {websiteUrl ? " and AI intelligence research." : " (add a website URL in the Info tab to also run AI research)."}
-            {" "}No re-uploading needed.
+            Re-runs the full original pipeline using the inputs you provided when this brand was created — reference
+            images, website, Figma (if you re-supply the token), brand intelligence research, audit, spec extraction,
+            and brand guide generation.
           </p>
         </div>
-        <Button onClick={startReanalysis} variant="outline">
+        <Button onClick={loadPreflight} variant="outline">
           <RefreshCw className="w-4 h-4 mr-1.5" /> Re-process Brand
         </Button>
+      </div>
+    );
+  }
+
+  if (phase === "preflight" && summary) {
+    return (
+      <div className="space-y-4">
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Info className="w-4 h-4 text-muted-foreground" />
+              Inputs to be replayed
+            </div>
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Reference images</span>
+                <span className="font-mono">{summary.refCount}</span>
+              </div>
+              {Object.entries(summary.categories).map(([cat, n]) => (
+                <div key={cat} className="flex items-center justify-between pl-3">
+                  <span className="text-muted-foreground">↳ {cat.replace(/_/g, " ")}</span>
+                  <span className="font-mono">{n}</span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Website re-extraction</span>
+                {summary.hasWebsite ? (
+                  <Badge variant="outline" className="text-[10px]">
+                    <Check className="w-3 h-3 mr-1" /> {websiteUrl}
+                  </Badge>
+                ) : (
+                  <span className="text-muted-foreground">none</span>
+                )}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Figma re-extraction</span>
+                {summary.hasFigma ? (
+                  <Badge variant="outline" className="text-[10px]">
+                    {figmaToken ? <Check className="w-3 h-3 mr-1" /> : <AlertTriangle className="w-3 h-3 mr-1" />}
+                    {figmaToken ? "token provided" : "needs token"}
+                  </Badge>
+                ) : (
+                  <span className="text-muted-foreground">not configured</span>
+                )}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Stored confirmed properties</span>
+                <span className="font-mono">{summary.hasStoredConfirmedProps ? "yes (fallback)" : "no"}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Original extraction sources</span>
+                <span className="font-mono">{summary.extractionSources.join(", ") || "—"}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {summary.hasFigma && (
+          <div className="space-y-1.5">
+            <Label htmlFor="figma-token" className="text-xs">
+              Figma personal access token (optional — for live re-extraction)
+            </Label>
+            <Input
+              id="figma-token"
+              type="password"
+              placeholder="figd_..."
+              value={figmaToken}
+              onChange={(e) => setFigmaToken(e.target.value)}
+              className="text-xs"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              Tokens are never stored. If left blank we'll fall back to the confirmed properties saved during the original
+              run.
+            </p>
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <Button onClick={startReanalysis} disabled={summary.refCount < 3}>
+            <RefreshCw className="w-4 h-4 mr-1.5" /> Run full pipeline
+          </Button>
+          <Button variant="outline" onClick={() => setPhase("idle")}>
+            Cancel
+          </Button>
+        </div>
       </div>
     );
   }
@@ -361,9 +464,7 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
   if (phase === "fetching" || phase === "auditing") {
     return (
       <div className="space-y-6 py-8 text-center">
-        <h3 className="text-lg font-semibold">
-          {phase === "fetching" ? "Loading References" : "Deep Visual Audit"}
-        </h3>
+        <h3 className="text-lg font-semibold">Re-running Brand Pipeline</h3>
         <p className="text-sm text-muted-foreground">{progressMessage}</p>
         <Progress value={progressValue} className="h-1.5 max-w-md mx-auto" />
       </div>
@@ -377,11 +478,10 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
           brandId={brandId}
           title="Re-processing Brand"
           subtitle="Running full brand pipeline — spec extraction then guide generation. This takes 5–10 minutes."
-          brandContext={{ auditFindings: auditFindings, brandName, industry }}
+          brandContext={{ auditFindings, brandName, industry }}
           onComplete={(guideHtml) => {
             setBrandGuideHtml(guideHtml);
             setProgressValue(100);
-            setProgressMessage("Guide ready!");
             toast.success("Brand profile updated!");
             setTimeout(() => setPhase("guide_review"), 500);
           }}
@@ -407,23 +507,34 @@ export default function ReanalyzeBrand({ brandId, brandName, industry, websiteUr
             <p className="text-sm text-muted-foreground">Your brand profile has been updated.</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => {
-              const blob = new Blob([brandGuideHtml], { type: "text/html" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              a.href = url;
-              a.download = `${brandName}-design-guide.html`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const blob = new Blob([brandGuideHtml], { type: "text/html" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${brandName}-design-guide.html`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+            >
               <Download className="w-4 h-4 mr-1.5" /> Download
             </Button>
-            <Button variant="outline" size="sm" onClick={() => { setPhase("idle"); setBrandGuideHtml(""); setAuditFindings(null); }}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setPhase("idle");
+                setBrandGuideHtml("");
+                setAuditFindings(null);
+              }}
+            >
               Done
             </Button>
           </div>
         </div>
-
         <div className="border border-border rounded-lg overflow-hidden bg-white">
           <iframe
             ref={guideIframeRef}
