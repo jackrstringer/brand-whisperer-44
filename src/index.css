@@ -57,8 +57,7 @@
     --postit-yellow: 48 93% 84%;
     --postit-blue: 210 80% 88%;
     --postit-pink: 350 85% 90%;
-
-    --success: #22c55e;
+    --postit-green: 132 53% 88%;
   }
 
   .dark {
@@ -113,6 +112,7 @@
     --postit-yellow: 48 70% 60%;
     --postit-blue: 210 60% 65%;
     --postit-pink: 350 70% 70%;
+    --postit-green: 132 30% 42%;
 
     --success: #22c55e;
   }
