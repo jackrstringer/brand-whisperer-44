@@ -112,6 +112,28 @@ export default function BrandSetup() {
   // Confirmed properties from Figma/website extraction
   const [confirmedProperties, setConfirmedProperties] = useState<any>(null);
 
+  // Cached persistence result so the pipeline only writes uploads/db rows once.
+  const persistedInputsRef = useRef<{
+    brandId: string;
+    referenceImageUrls: string[];
+    referenceFileCategories: Record<string, string[]>;
+    extractionSources: string[];
+  } | null>(null);
+
+  // Pipeline events surfaced into ProcessingStatusPanel debug log + copy blob.
+  const [pipelineEvents, setPipelineEvents] = useState<DebugLogEntry[]>([]);
+  const pipelineEventsRef = useRef<DebugLogEntry[]>([]);
+  const pushEvent = useCallback((event: string, detail: string) => {
+    const entry: DebugLogEntry = { timestamp: Date.now(), event, detail };
+    pipelineEventsRef.current = [...pipelineEventsRef.current, entry];
+    setPipelineEvents([...pipelineEventsRef.current]);
+    if (event.endsWith("_error") || event === "error") {
+      console.error(`[BrandSetup] ${event}: ${detail}`);
+    } else {
+      console.log(`[BrandSetup] ${event}: ${detail}`);
+    }
+  }, []);
+
   const toggleSource = (source: SourceType) => {
     setSelectedSources((prev) =>
       prev.includes(source) ? prev.filter((s) => s !== source) : [...prev, source]
@@ -230,13 +252,14 @@ export default function BrandSetup() {
       }
     }
 
-    // ── Kill-switch 2: dev-mode spend confirm before audit ──
-    if (!confirmDevSpend("audit-brand")) return;
-
-    setStep("auditing");
+    pipelineEventsRef.current = [];
+    setPipelineEvents([]);
+    persistedInputsRef.current = null;
+    setStep("processing");
     setAuditError(null);
     setProgressValue(0);
     setProgressMessage(AUDIT_MESSAGES[0]);
+    pushEvent("pipeline_start", `brand=${brandName} sources=${selectedSources.join(",")}`);
 
     // Slow, realistic progress: takes ~3 min to reach 90%, then crawls
     const startTime = Date.now();
