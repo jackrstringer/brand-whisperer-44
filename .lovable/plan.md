@@ -1,48 +1,50 @@
 
-## Kill-switch plan — stop credit burn before any more fixes
+## Implementation plan
 
-Four targeted changes. No architecture work. No model changes. No silent fallbacks.
+### 1. One-time persistence
+- `BrandSetup.tsx`: call `ensureBrandAndInputsPersisted()` exactly once on Analyze click. Cache `brandId`, `referenceImageUrls`, `referenceFileCategories`, `extractionSources` in state. Remove the second call from `generateGuideFromAudit`.
+- `brandSetupPersistence.ts`: no behavior change, but reused only on first click.
 
-### 1. Rate limit guard in `src/pages/BrandSetup.tsx`
-Before `supabase.functions.invoke("audit-brand", ...)`:
-- Query: select `brand_profiles.processing_status, audit_findings, created_at` joined to `brands` filtered by `brands.user_id = auth.uid()` and `brand_profiles.created_at > now() - 1 hour`.
-- Count rows where `processing_status = 'failed'` OR `audit_findings->>'_error' IS NOT NULL`.
-- If count >= 2: show blocking alert ("Rate limit: 2+ failed brand setups in the last hour. Wait before retrying to avoid burning API credits.") and `return`. No invoke fires.
+### 2. Storage policy migration
+- New migration adding to `storage.objects`:
+  - `brand-references`: UPDATE policy scoped to `auth.uid()::text = (storage.foldername(name))[1]`
+  - `brand-assets`: SELECT/INSERT/UPDATE/DELETE scoped to user folder (replaces broad authenticated access)
+- After deploy, run `select policyname, cmd from pg_policies where tablename='objects' and policyname ilike '%brand-%'` and report the rows. If UPDATE policies are missing → flag immediately.
 
-### 2. Dev-mode confirm gate in `src/pages/BrandSetup.tsx`
-Add a small helper:
-```ts
-function confirmDevSpend(fnName: string): boolean {
-  if (!import.meta.env.DEV) return true;
-  return window.confirm(`About to call ${fnName}. This will cost real money. Continue?`);
-}
-```
-Gate the three invoke sites:
-- Before `audit-brand` invoke → `if (!confirmDevSpend("audit-brand")) return;`
-- Before `extract-brand` (spec mode) invoke → same guard.
-- Before `extract-brand` (guide mode) fetch → same guard.
+### 3. Single processing screen
+- `BrandSetup.tsx` Step type: remove `auditing` and `generating_guide`. Add `processing`. No back-compat shims.
+- One render branch for `processing` mounts `ProcessingStatusPanel` from Analyze click through completion. On success → swap to brand deck view in same route. On failure → `audit_failed` (kept) with full error.
 
-### 3. Persist parse failures in `supabase/functions/audit-brand/index.ts`
-- Ensure request body accepts `brandId` (frontend already has it during initial setup; pass it through — if missing, log a warning and continue without DB write).
-- Wrap the `extractJsonObject(...)` call in try/catch.
-- On parse failure, BEFORE re-throwing:
-  - If `brandId` present: `supabase.from("brand_profiles").update({ processing_status: "failed", processing_error: <msg>, audit_findings: { _error: <msg>, _raw_snippet: rawText.slice(0, 2000) } }).eq("brand_id", brandId)` inside its own try/catch (do not let the DB write error mask the original parse error).
-  - Then throw the original parse error so the function returns 500 with the real message.
-- Frontend `BrandSetup.tsx` already calls `audit-brand` before the profile row is created, so also handle the case where `brandId` is undefined: skip the DB write, just log and throw.
+### 4. Debug panel — full pipeline + table/path logging
+- `ProcessingStatusPanel.tsx`: accept external `events` prop (array of `{timestamp, event, detail}`) merged with internal poll/stream events into the displayed log + copy blob.
+- `BrandSetup.tsx`: push events at every step, including exact write targets:
+  - `db_write table=brands op=insert id=…`
+  - `db_write table=brand_profiles op=upsert brand_id=…`
+  - `db_write table=brand_assets op=insert rows=N`
+  - `storage_write bucket=brand-references path=<userId>/<brandId>/references/<cat>/<file>`
+  - `storage_write bucket=brand-assets path=<userId>/<brandId>/assets/<cat>/<file>`
+  - `fn_invoke name=audit-brand` / `fn_response name=audit-brand status=… ms=…`
+  - `fn_invoke name=extract-brand mode=spec` / `fn_response …`
+  - `fn_stream name=extract-brand mode=guide event=open|first_byte|end bytes=…`
+  - On any throw: `error scope=<step> msg=<…>`
+- `brandSetupPersistence.ts`: accept optional `onEvent` callback so storage paths are logged from inside the helper (where they're actually constructed).
 
-### 4. Hard stop on audit failure in `src/pages/BrandSetup.tsx`
-- Locate the `startAudit` flow and the catch block that currently proceeds to `generateGuideFromAudit` (or equivalent next step).
-- Replace any silent continuation with:
-  - Set step to a `failed` state.
-  - Surface the raw audit error message in the UI (red alert with full message + copy button).
-  - Explicitly do NOT call `extract-brand` (spec or guide), do NOT create the brand row, do NOT navigate.
-- Add a single console.error with `[BrandSetup] Audit failed, halting pipeline:` for log clarity.
+### 5. Harden `extract-brand` spec parsing
+- `supabase/functions/extract-brand/index.ts`: replace `specText.match(/\{[\s\S]*\}/)` with the same robust extractor used in `audit-brand` (`extractJsonObject`). On parse failure, write `processing_status='failed'` + `processing_error` to `brand_profiles` before throwing. No silent fallback.
 
-### Deploy
-- Deploy `audit-brand`. Report timestamp.
-- Frontend changes ship via the build (no separate deploy).
+### 6. Cleanup
+- Delete `confirmDevSpend` (lines 24–29 of `BrandSetup.tsx`) and both call sites (lines 241, 499). No dev popups anywhere.
+- Remove `RotateCcwIcon` wrapper in `ProcessingStatusPanel.tsx` (use `RefreshCw` directly) to clear the React ref warning.
 
-### Out of scope (per your instruction)
-- No architecture rewrite of the two-screen flow.
-- No changes to extract-brand transactional logic.
-- No model swaps. No prompt changes. No retries.
+### Files touched
+- `src/pages/BrandSetup.tsx`
+- `src/lib/brandSetupPersistence.ts`
+- `src/components/brand/ProcessingStatusPanel.tsx`
+- `supabase/functions/extract-brand/index.ts`
+- `supabase/migrations/<new>_storage_policies_brand_buckets.sql`
+
+### Deploy + verify
+- Deploy `extract-brand`.
+- Run the migration.
+- Query `pg_policies` for `brand-references` / `brand-assets` UPDATE policies and report results before claiming success.
+- If anything is missing or fails, surface immediately — no fake success.
