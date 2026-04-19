@@ -52,7 +52,11 @@
     --sidebar-border: var(--gray-4);
     --sidebar-ring: var(--gray-3);
 
-    --canvas: var(--gray-5);
+    --canvas: 60 18% 96%; /* warm cream #FAFAF8 — Flowline board */
+    --canvas-grid: 0 0% 0%;
+    --postit-yellow: 48 93% 84%;
+    --postit-blue: 210 80% 88%;
+    --postit-pink: 350 85% 90%;
 
     --success: #22c55e;
   }
