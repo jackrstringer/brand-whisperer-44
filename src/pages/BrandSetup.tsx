@@ -548,6 +548,14 @@ export default function BrandSetup() {
       // This keeps the gateway connection alive through streaming (Opus ~3-5min).
       // The edge function writes brand_guide_html + status="complete" to DB independently.
       try {
+        if (!confirmDevSpend("extract-brand (guide)")) {
+          setGuideStreamStatus("error");
+          await supabase.from("brand_profiles").update({
+            processing_status: "failed",
+            processing_error: "Cancelled by developer before guide call",
+          }).eq("brand_id", brandId);
+          return;
+        }
         setGuideStreamStatus("opening");
         const session = await supabase.auth.getSession();
         const accessToken = session.data.session?.access_token || "";
