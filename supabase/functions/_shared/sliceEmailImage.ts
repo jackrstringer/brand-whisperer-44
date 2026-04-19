@@ -742,7 +742,7 @@ function buildSlices(params: {
     slices.push({
       index: 0,
       label: "full-overview",
-      url: `${base}?tr=h-1568,fo-top,q-${IMAGEKIT_QUALITY},f-${IMAGEKIT_FORMAT}`,
+      url: `${base}?tr=h-2400,fo-top,q-${IMAGEKIT_QUALITY},f-${IMAGEKIT_FORMAT}`,
       yTop: 0,
       yBottom: originalHeight,
     });
