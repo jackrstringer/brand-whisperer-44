@@ -258,9 +258,11 @@ export default function BrandSetup() {
     }, 1000);
 
     try {
+      const persisted = await ensureBrandAndInputsPersisted();
+
       // === Parallel extraction: Figma + Website + Image slicing ===
       const extractionPromises: Promise<any>[] = [];
-      const extractionSources: string[] = ["screenshots"];
+      const extractionSources = [...persisted.extractionSources];
 
       // Figma extraction
       if (selectedSources.includes("figma") && figmaUrl && figmaToken) {
@@ -356,7 +358,7 @@ export default function BrandSetup() {
       console.log(`Sending ${slicedImages.length} slices from ${refFiles.length} refs to audit`);
 
       const { data, error } = await supabase.functions.invoke("audit-brand", {
-        body: { images: slicedImages, brandName, industry, confirmed_properties: merged, brandId: earlyBrandId || null },
+        body: { images: slicedImages, brandName, industry, confirmed_properties: merged, brandId: persisted.brandId },
       });
 
       clearInterval(interval);
@@ -463,117 +465,28 @@ export default function BrandSetup() {
     setProgressMessage("Uploading images & creating brand...");
 
     try {
-      // Step 1: Upload images (per category) and create brand + profile
-      let brandId = earlyBrandId;
-      if (!brandId) {
-        // Categorized uploads — preserve which bucket each ref image came from
-        const categoryBuckets: Record<string, File[]> = {
-          campaign: campaignFiles,
-          brand_deck: brandDeckFiles,
-          misc: miscRefFiles,
-          mockup: mockupFiles,
-        };
-        const categorizedUrls: Record<string, string[]> = { campaign: [], brand_deck: [], misc: [], mockup: [] };
-        const imageUrls: string[] = [];
-        for (const [category, files] of Object.entries(categoryBuckets)) {
-          for (const file of files) {
-            const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2)}-${file.name}`;
-            const { error: uploadError } = await supabase.storage.from("brand-references").upload(path, file);
-            if (!uploadError) {
-              const { data: urlData } = supabase.storage.from("brand-references").getPublicUrl(path);
-              categorizedUrls[category].push(urlData.publicUrl);
-              imageUrls.push(urlData.publicUrl);
-            }
-          }
-        }
+      const persisted = await ensureBrandAndInputsPersisted();
+      const brandId = persisted.brandId;
 
-        const { data: brand, error: brandError } = await supabase
-          .from("brands")
-          .insert({ name: brandName, industry: industry || null, user_id: user.id, website_url: websiteUrl || null, source_types: selectedSources, figma_url: figmaUrl || null } as any)
-          .select()
-          .single();
-        if (brandError) throw brandError;
-        brandId = brand.id;
-        setEarlyBrandId(brandId);
+      await supabase.from("brand_profiles").update({
+        audit_findings: auditData,
+        confirmed_properties: props || null,
+        extraction_sources: extractionSrcs,
+        processing_status: "running_spec",
+        processing_error: null,
+      }).eq("brand_id", brandId);
 
-        // Create brand_intelligence row if not already created
-        try { await supabase.from("brand_intelligence").insert({ brand_id: brandId, research_status: "pending" } as any); } catch {}
+      if (websiteUrl.trim()) {
+        supabase.functions.invoke("research-brand", {
+          body: { brand_id: brandId, domain: websiteUrl.trim(), brand_name: brandName, industry: industry || null },
+        }).catch((err: any) => console.warn("[BrandSetup] Background research failed:", err));
+      }
 
-        // Fire research in background if URL provided and not already fired
-        if (websiteUrl.trim()) {
-          supabase.functions.invoke("research-brand", {
-            body: { brand_id: brandId, domain: websiteUrl.trim(), brand_name: brandName, industry: industry || null },
-          }).catch((err: any) => console.warn("[BrandSetup] Background research failed:", err));
-        }
-
-        // Create profile with audit findings AND set processing_status to running_spec
-        // up-front so the ProcessingStatusPanel sees a non-idle status immediately.
-        const { error: profileError } = await supabase.from("brand_profiles").insert({
-          brand_id: brandId,
-          reference_image_urls: imageUrls,
-          reference_image_categories: categorizedUrls,
-          audit_findings: auditData,
-          confirmed_properties: props || null,
-          extraction_sources: extractionSrcs,
-          processing_status: "running_spec",
-        } as any);
-        if (profileError) throw profileError;
-
-        // Fire-and-forget: slice reference images for generation use
-        const sliceBrandId = brandId!;
-        const sliceImageUrls = [...imageUrls];
-        sliceAndUploadReferenceImages(user.id, sliceBrandId, sliceImageUrls)
-          .then((sliceUrls) => saveSliceUrls(sliceBrandId, sliceUrls))
+      const sliceImageUrls = persisted.referenceImageUrls.length > 0 ? persisted.referenceImageUrls : storedReferenceImageUrls;
+      if (sliceImageUrls.length > 0) {
+        sliceAndUploadReferenceImages(user.id, brandId, sliceImageUrls)
+          .then((sliceUrls) => saveSliceUrls(brandId, sliceUrls))
           .catch((e) => console.warn("Slice upload failed (non-blocking):", e));
-
-        // Fire-and-forget: upload asset files and analyze with AI in background
-        const assetBrandId = brandId!;
-        (async () => {
-          try {
-            const assetInserts: { brand_id: string; category: string; url: string; filename: string; description?: string; dominant_colors?: string[]; ai_category?: string }[] = [];
-            const uploadPromises: Promise<void>[] = [];
-            for (const [category, catData] of Object.entries(assetCategories)) {
-              for (const file of catData.files) {
-                const path = `${user.id}/${assetBrandId}/${category}/${Date.now()}-${file.name}`;
-                uploadPromises.push((async () => {
-                  const { error: uploadErr } = await supabase.storage.from("brand-assets").upload(path, file);
-                  if (uploadErr) return;
-                  const { data: urlData } = supabase.storage.from("brand-assets").getPublicUrl(path);
-                  const publicUrl = urlData.publicUrl;
-
-                  let description: string | undefined;
-                  let dominant_colors: string[] | undefined;
-                  let ai_category: string | undefined;
-                  try {
-                    const { data: analysis } = await supabase.functions.invoke("analyze-asset", {
-                      body: { imageUrl: publicUrl, filename: file.name, userCategory: category },
-                    });
-                    if (analysis && !analysis.error) {
-                      description = analysis.description;
-                      dominant_colors = analysis.dominant_colors;
-                      ai_category = analysis.suggested_category;
-                    }
-                  } catch {}
-
-                  assetInserts.push({ brand_id: assetBrandId, category, url: publicUrl, filename: file.name, description, dominant_colors, ai_category });
-                })());
-              }
-            }
-            await Promise.all(uploadPromises);
-            if (assetInserts.length > 0) {
-              await supabase.from("brand_assets").insert(assetInserts);
-            }
-            console.log(`Background asset upload complete: ${assetInserts.length} assets`);
-          } catch (err) {
-            console.warn("Background asset upload failed (non-blocking):", err);
-          }
-        })();
-      } else {
-        // Brand already exists — make sure processing_status is set so the panel doesn't get stuck on "idle"
-        await supabase.from("brand_profiles").update({
-          processing_status: "running_spec",
-          processing_error: null,
-        }).eq("brand_id", brandId);
       }
 
       // Step 2: Fire spec step. Backend will:
@@ -961,9 +874,9 @@ export default function BrandSetup() {
           <div className="text-center space-y-2">
             <AlertTriangle className="w-10 h-10 text-destructive mx-auto" />
             <h2 className="text-xl font-semibold">Brand audit failed</h2>
-            <p className="text-sm text-muted-foreground">
-              The pipeline was halted. No further API calls were made (no spec, no guide, no brand row created).
-            </p>
+              <p className="text-sm text-muted-foreground">
+                The pipeline was halted. Your uploaded inputs were preserved, and no further generation calls were made.
+              </p>
           </div>
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
             <div className="flex items-start justify-between gap-3 mb-2">
