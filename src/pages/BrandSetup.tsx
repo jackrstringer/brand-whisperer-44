@@ -501,16 +501,25 @@ export default function BrandSetup() {
           try {
             const { data: profile } = await supabase
               .from("brand_profiles")
-              .select("brand_guide_html, system_prompt, raw_extraction, audit_findings")
+              .select("brand_guide_html, system_prompt, raw_extraction, audit_findings, processing_status, processing_error")
               .eq("brand_id", brandId!)
               .single();
 
-            // Check for error state
+            // Fail loud on any failure status from the edge function
+            if ((profile as any)?.processing_status === "failed") {
+              clearInterval(pollTimer);
+              clearInterval(interval);
+              toast.error((profile as any).processing_error || "Brand processing failed", { duration: 10000 });
+              setStep("uploads");
+              return;
+            }
+
+            // Legacy error channel
             const findings = profile?.audit_findings as any;
             if (findings?._error) {
               clearInterval(pollTimer);
               clearInterval(interval);
-              toast.error(findings._error || "Guide generation failed");
+              toast.error(findings._error || "Guide generation failed", { duration: 10000 });
               setStep("uploads");
               return;
             }
@@ -530,7 +539,7 @@ export default function BrandSetup() {
             if (Date.now() - startTime > MAX_POLL_TIME) {
               clearInterval(pollTimer);
               clearInterval(interval);
-              toast.error("Guide generation timed out. Please try again.");
+              toast.error("Guide generation timed out. Please try again.", { duration: 10000 });
               setStep("uploads");
             }
           } catch {
