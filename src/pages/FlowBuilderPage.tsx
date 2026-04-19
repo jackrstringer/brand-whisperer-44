@@ -198,7 +198,8 @@ Subject direction: ${node.subject_direction || "(unspecified)"}
 Sections: ${JSON.stringify(node.sections || [])}
 Notes: ${node.notes || "none"}`;
 
-      const { data: result, error: genErr } = await supabase.functions.invoke(
+      // Kick off generation. The function now runs in the background and returns 202 immediately.
+      const { error: genErr } = await supabase.functions.invoke(
         "generate-campaign",
         {
           body: {
@@ -219,14 +220,34 @@ Notes: ${node.notes || "none"}`;
       );
       if (genErr) throw genErr;
 
-      const html = (result as any)?.html || "";
+      // Poll the campaigns table for ready/error (Opus generation can take 2-5 min).
+      const POLL_INTERVAL = 3000;
+      const POLL_TIMEOUT = 8 * 60 * 1000; // 8 min hard cap
+      const startedAt = Date.now();
+      let html = "";
+      while (Date.now() - startedAt < POLL_TIMEOUT) {
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL));
+        const { data: row } = await supabase
+          .from("campaigns")
+          .select("status, html")
+          .eq("id", campaign.id)
+          .maybeSingle();
+        if (row?.status === "ready" && row.html) {
+          html = row.html;
+          break;
+        }
+        if (row?.status === "error") {
+          throw new Error("Campaign generation failed (see backend logs).");
+        }
+      }
+      if (!html) throw new Error("Campaign generation timed out after 8 minutes.");
 
       await supabase
         .from("flow_emails")
         .update({
           html,
           campaign_id: campaign.id,
-          generation_status: html ? "complete" : "failed",
+          generation_status: "complete",
         })
         .eq("id", emailRow.id);
 

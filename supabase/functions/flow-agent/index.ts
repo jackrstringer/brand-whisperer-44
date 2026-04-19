@@ -16,8 +16,11 @@ const FLOW_SKILL_FILES: Record<string, string[]> = {
 };
 
 async function readSkill(filename: string): Promise<string> {
+  // Skills are co-located with this function (./skills/) so they bundle with deploy.
+  // Previously we read from ../_shared/flow-skills/ which doesn't exist in the
+  // bundled edge runtime path (/var/tmp/sb-compile-edge-runtime/...).
   try {
-    const url = new URL(`../_shared/flow-skills/${filename}`, import.meta.url);
+    const url = new URL(`./skills/${filename}`, import.meta.url);
     return await Deno.readTextFile(url);
   } catch (err) {
     console.error(`[flow-agent] Failed to read skill ${filename}:`, err);
@@ -376,10 +379,13 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
     const stream = new ReadableStream({
       async start(controller) {
         const enc = new TextEncoder();
-        const send = (obj: unknown) =>
-          controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
+        let closed = false;
+        const safeClose = () => { if (!closed) { closed = true; try { controller.close(); } catch {} } };
+        const send = (obj: unknown) => {
+          if (closed) return;
+          try { controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`)); } catch {}
+        };
 
-        let fullText = "";
         try {
           if (bootingFreshFlow) {
             send({ type: "progress", stage: "reading", label: "Reading brand research" });
@@ -409,7 +415,7 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
             const errText = await res.text();
             console.error("[flow-agent] Anthropic error:", res.status, errText);
             send({ type: "error", error: `Anthropic ${res.status}: ${errText.slice(0, 300)}` });
-            controller.close();
+            safeClose();
             return;
           }
 
@@ -510,11 +516,11 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
 
           await sb.from("flows").update(updates).eq("id", flow_id);
           send({ type: "done", skeleton_updated: !!skeletonMatch });
-          controller.close();
+          safeClose();
         } catch (err: any) {
           console.error("[flow-agent] Stream error:", err);
           send({ type: "error", error: err.message || "Unknown error" });
-          controller.close();
+          safeClose();
         }
       },
     });

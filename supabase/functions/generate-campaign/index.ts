@@ -7,37 +7,16 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+// Declare Deno's EdgeRuntime for background tasks (Supabase edge runtime)
+declare const EdgeRuntime: { waitUntil(promise: Promise<unknown>): void };
 
-  let campaignIdForError: string | null = null;
+async function runGeneration(body: any, campaignId: string, genStartedAt: string) {
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  );
   try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    const body = await req.json();
-    const { campaignId, _isSubGeneration } = body;
-    campaignIdForError = _isSubGeneration ? null : campaignId;
-
-    // Only mark campaign as generating if NOT a sub-generation call
-    const genStartedAt = new Date().toISOString();
-    if (!_isSubGeneration) {
-      await supabase.from("campaigns").update({ status: "generating", generation_started_at: genStartedAt, generation_duration_secs: null }).eq("id", campaignId);
-    }
-
-    // Call the shared core logic
     const { html } = await generateCampaignCore(body, supabase);
-
-    // In sub-generation mode, just return the HTML
-    if (_isSubGeneration) {
-      return new Response(JSON.stringify({ html }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
 
     // Derive a short campaign name
     const { data: existingCamp } = await supabase
@@ -79,18 +58,72 @@ Deno.serve(async (req) => {
     await supabase.from("chat_messages").insert({
       campaign_id: campaignId, role: "system", content: "Campaign generated",
     });
+    console.log(`[generate-campaign] Background generation complete for ${campaignId} in ${durationSecs}s`);
+  } catch (err: any) {
+    console.error("[generate-campaign] Background error:", err);
+    try {
+      await supabase.from("campaigns").update({ status: "error" }).eq("id", campaignId);
+    } catch {}
+  }
+}
 
-    return new Response(JSON.stringify({ html }), {
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const body = await req.json();
+    const { campaignId, _isSubGeneration } = body;
+
+    // Sub-generation mode: still synchronous (used internally by other functions that expect { html })
+    if (_isSubGeneration) {
+      const supabase = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+      );
+      const { html } = await generateCampaignCore(body, supabase);
+      return new Response(JSON.stringify({ html }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Top-level mode: kick off in background, return immediately so we don't hit the 150s edge timeout.
+    // Callers should poll the `campaigns` table for status === "ready" or "error".
+    if (!campaignId) {
+      return new Response(JSON.stringify({ error: "campaignId is required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+    const genStartedAt = new Date().toISOString();
+    await supabase.from("campaigns").update({
+      status: "generating", generation_started_at: genStartedAt, generation_duration_secs: null,
+    }).eq("id", campaignId);
+
+    // Run the heavy work as a background task. EdgeRuntime.waitUntil keeps the
+    // worker alive after the response is sent, so multi-minute Opus calls can finish.
+    if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+      EdgeRuntime.waitUntil(runGeneration(body, campaignId, genStartedAt));
+    } else {
+      // Fallback for local/dev where EdgeRuntime isn't defined
+      runGeneration(body, campaignId, genStartedAt);
+    }
+
+    return new Response(JSON.stringify({
+      status: "generating",
+      campaignId,
+      message: "Generation started. Poll the campaigns table for status === 'ready'.",
+    }), {
+      status: 202,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err: any) {
-    console.error("[generate-campaign] Error:", err);
-    if (campaignIdForError) {
-      try {
-        const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-        await sb.from("campaigns").update({ status: "error" }).eq("id", campaignIdForError);
-      } catch {}
-    }
+    console.error("[generate-campaign] Top-level error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
