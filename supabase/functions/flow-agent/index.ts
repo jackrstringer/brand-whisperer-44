@@ -516,11 +516,11 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
 
           await sb.from("flows").update(updates).eq("id", flow_id);
           send({ type: "done", skeleton_updated: !!skeletonMatch });
-          controller.close();
+          safeClose();
         } catch (err: any) {
           console.error("[flow-agent] Stream error:", err);
           send({ type: "error", error: err.message || "Unknown error" });
-          controller.close();
+          safeClose();
         }
       },
     });
