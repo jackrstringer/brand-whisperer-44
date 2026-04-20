@@ -60,6 +60,7 @@ Deno.serve(async (req) => {
       status: "generating",
       generation_started_at: new Date().toISOString(),
       variant_htmls: [],
+      last_error: null,
     }).eq("id", campaignId);
 
     // Use EdgeRuntime.waitUntil to process in the background
@@ -139,6 +140,11 @@ Deno.serve(async (req) => {
           }));
 
           const successCount = variantHtmls.filter((v) => v.html).length;
+          const failureReason = results
+            .filter((r) => !r.html && r.error)
+            .map((r) => `${r.label}: ${r.error}`)
+            .join("\n\n")
+            .slice(0, 1500);
           console.log(`[multi] ${successCount}/${variantCount} variants generated successfully`);
 
           // STATUS GUARD: only update if campaign is still in "generating" state
@@ -190,9 +196,11 @@ Deno.serve(async (req) => {
             html: originalHtml,
             status: successCount > 0 ? "variants_ready" : "error",
             name: campaignName,
+            last_error: successCount > 0 ? null : (failureReason || "All variants failed to generate."),
           }).eq("id", campaignId);
         } catch (err: any) {
           console.error("[multi] Background processing error:", err);
+          const reason = (err?.message || String(err) || "Variant generation failed").slice(0, 1500);
 
           const { data: latest } = await supabase
             .from("campaigns")
@@ -203,6 +211,7 @@ Deno.serve(async (req) => {
           if (latest?.status === "generating") {
             await supabase.from("campaigns").update({
               status: "error",
+              last_error: reason,
             }).eq("id", campaignId);
           }
         }
