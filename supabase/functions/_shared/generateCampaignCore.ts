@@ -149,7 +149,9 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-function capImageDimensions(url: string, maxDim = 2576): string {
+function capImageDimensions(url: string, maxDim = 1900): string {
+  // Anthropic many-image requests reject any image with a dimension > 2000px.
+  // Default to 1900 to leave a safety margin.
   if (!/^https:\/\/ik\.imagekit\.io\//i.test(url)) return url;
 
   const pathStyleMatch = url.match(/\/tr:([^/]+)\//i);
