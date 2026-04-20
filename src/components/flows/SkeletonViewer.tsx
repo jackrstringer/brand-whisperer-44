@@ -356,6 +356,7 @@ export function SkeletonViewer({
         setSelectedSticky(null);
         setEditingSticky(null);
         setEditingLabelOf(null);
+        if (expandedIndex !== null) onToggleExpand(null);
       }
       if (e.key === "v") setTool("select");
       if (e.key === "a") setTool("add");
