@@ -356,6 +356,7 @@ export function SkeletonViewer({
         setSelectedSticky(null);
         setEditingSticky(null);
         setEditingLabelOf(null);
+        if (expandedIndex !== null) onToggleExpand(null);
       }
       if (e.key === "v") setTool("select");
       if (e.key === "a") setTool("add");
@@ -641,6 +642,11 @@ export function SkeletonViewer({
                   ? () => onGenerateNode(n.emailIndex!)
                   : undefined
               }
+              onExpand={
+                typeof n.emailIndex === "number"
+                  ? () => onToggleExpand(n.emailIndex!)
+                  : undefined
+              }
               emailRow={
                 typeof n.emailIndex === "number"
                   ? emails.find((e) => e.sequence_index === n.emailIndex)
@@ -796,6 +802,72 @@ export function SkeletonViewer({
           </button>
         </div>
       </div>
+
+      {/* Expanded message preview */}
+      {expandedIndex !== null && (() => {
+        const row = emails.find((e) => e.sequence_index === expandedIndex);
+        if (!row?.html) return null;
+        const cm = row.campaign_id ? campaignMeta[row.campaign_id] : null;
+        return (
+          <div
+            onClick={() => onToggleExpand(null)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.6)",
+              backdropFilter: "blur(8px)",
+              zIndex: 100,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 32,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: 420,
+                maxHeight: "92vh",
+                background: "#fff",
+                borderRadius: 16,
+                overflow: "hidden",
+                boxShadow: "0 24px 80px rgba(0,0,0,0.4)",
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(0,0,0,0.08)", display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {cm?.subject_line || row.label || "Email"}
+                  </div>
+                  {cm?.preview_text && (
+                    <div style={{ fontSize: 11, color: "rgba(0,0,0,0.5)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {cm.preview_text}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => onToggleExpand(null)}
+                  style={{ width: 30, height: 30, borderRadius: 8, border: 0, background: "rgba(0,0,0,0.06)", cursor: "pointer", display: "grid", placeItems: "center" }}
+                  title="Close"
+                >
+                  <XIcon className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <iframe
+                title={`expanded-${row.id}`}
+                srcDoc={row.html}
+                style={{ flex: 1, width: "100%", border: 0, background: "#fff" }}
+              />
+            </div>
+            <div style={{ marginTop: 12, fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
+              Click outside or press Esc to close
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -812,6 +884,7 @@ function NodeView({
   onSelect,
   onDoubleClickTitle,
   onGenerate,
+  onExpand,
   emailRow,
   campaignMeta,
   isGenerating,
@@ -825,6 +898,7 @@ function NodeView({
   onSelect: () => void;
   onDoubleClickTitle: () => void;
   onGenerate?: () => void;
+  onExpand?: () => void;
   emailRow?: FlowEmailRow;
   campaignMeta: Record<string, FlowEmailMeta>;
   isGenerating: boolean;
@@ -994,6 +1068,7 @@ function NodeView({
           node={node}
           emailRow={emailRow}
           campaignMeta={campaignMeta}
+          onExpand={onExpand}
         />
       )}
     </div>
@@ -1004,15 +1079,18 @@ function MessagePreview({
   node,
   emailRow,
   campaignMeta,
+  onExpand,
 }: {
   node: BoardNode;
   emailRow?: FlowEmailRow;
   campaignMeta: Record<string, FlowEmailMeta>;
+  onExpand?: () => void;
 }) {
   const cm = emailRow?.campaign_id ? campaignMeta[emailRow.campaign_id] : null;
   const subject =
     cm?.subject_line || node.meta?.subject || node.label || "Subject…";
   const preview = cm?.preview_text || node.meta?.preview || "—";
+  const hasHtml = !!emailRow?.html;
 
   let statusEl: React.ReactNode = null;
   if (emailRow?.generation_status === "complete") {
@@ -1026,7 +1104,18 @@ function MessagePreview({
   }
 
   return (
-    <div className="fl-msg-preview" onMouseDown={(e) => e.stopPropagation()}>
+    <div
+      className="fl-msg-preview"
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        if (hasHtml && onExpand) {
+          e.stopPropagation();
+          onExpand();
+        }
+      }}
+      style={hasHtml && onExpand ? { cursor: "zoom-in" } : undefined}
+      title={hasHtml ? "Click to expand" : undefined}
+    >
       <div className="fl-msg-thumb">
         {emailRow?.html ? (
           <iframe
@@ -1044,6 +1133,26 @@ function MessagePreview({
             }}
           />
         ) : null}
+        {hasHtml && onExpand && (
+          <div
+            style={{
+              position: "absolute",
+              top: 4,
+              right: 4,
+              width: 22,
+              height: 22,
+              borderRadius: 6,
+              background: "rgba(0,0,0,0.6)",
+              color: "#fff",
+              display: "grid",
+              placeItems: "center",
+              backdropFilter: "blur(4px)",
+              pointerEvents: "none",
+            }}
+          >
+            <Maximize2 className="w-3 h-3" />
+          </div>
+        )}
       </div>
       <div className="fl-msg-meta">
         <div className="fl-msg-subject">{subject}</div>
