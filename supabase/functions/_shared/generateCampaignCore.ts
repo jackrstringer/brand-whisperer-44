@@ -288,28 +288,58 @@ async function prepareImageForAnthropic(
   const tooBigDim = original ? (original.width > 2000 || original.height > 2000) : false;
 
   if (tooBigDim || tooBigByte) {
-    // Force a host-agnostic downscale by routing the source URL through
-    // ImageKit's public remote-URL endpoint. This works for any HTTPS URL.
+    // Step A: Try ImageKit proxy first (fast CDN-side)
     const proxyUrl =
       `https://ik.imagekit.io/lovable/tr:c-at_max,w-${maxDim},h-${maxDim},f-jpg,q-85/` +
       encodeURIComponent(originalUrl);
+    let proxyOk = false;
     try {
       const r2 = await fetch(proxyUrl);
       if (r2.ok) {
-        mediaType = (r2.headers.get("content-type") || "image/jpeg").split(";")[0].trim();
-        buf = await r2.arrayBuffer();
-        bytes = new Uint8Array(buf);
-        const after = readImageSize(bytes);
-        console.log(
-          `[prepareImage:${sourceTag}] resized via proxy: ` +
-          `orig=${original?.width}x${original?.height} (${(buf.byteLength / 1_000_000).toFixed(1)}MB → ${(buf.byteLength / 1_000_000).toFixed(1)}MB), ` +
-          `now=${after?.width ?? "?"}x${after?.height ?? "?"} src=${originalUrl}`,
-        );
+        const ct = (r2.headers.get("content-type") || "image/jpeg").split(";")[0].trim();
+        const buf2 = await r2.arrayBuffer();
+        const bytes2 = new Uint8Array(buf2);
+        const after = readImageSize(bytes2);
+        if (after && after.width <= 2000 && after.height <= 2000) {
+          mediaType = ct;
+          buf = buf2;
+          bytes = bytes2;
+          proxyOk = true;
+          console.log(
+            `[prepareImage:${sourceTag}] proxy resize: ${original?.width}x${original?.height} → ${after.width}x${after.height} (${(buf.byteLength / 1_000_000).toFixed(2)}MB) src=${originalUrl}`,
+          );
+        } else {
+          console.warn(`[prepareImage:${sourceTag}] proxy returned untransformed ${after?.width ?? "?"}x${after?.height ?? "?"} — falling back to local resize`);
+        }
       } else {
-        console.warn(`[prepareImage:${sourceTag}] proxy resize HTTP ${r2.status} — falling back to original. src=${originalUrl}`);
+        console.warn(`[prepareImage:${sourceTag}] proxy HTTP ${r2.status} — falling back to local resize. src=${originalUrl}`);
       }
     } catch (err) {
-      console.warn(`[prepareImage:${sourceTag}] proxy resize failed:`, (err as any)?.message || err);
+      console.warn(`[prepareImage:${sourceTag}] proxy fetch failed:`, (err as any)?.message || err);
+    }
+
+    // Step B: GUARANTEED local downscale via ImageScript (works for any host)
+    if (!proxyOk) {
+      try {
+        const { Image } = await import("https://deno.land/x/imagescript@1.3.0/mod.ts");
+        const decoded = await Image.decode(bytes);
+        const w = decoded.width;
+        const h = decoded.height;
+        const scale = Math.min(1, maxDim / Math.max(w, h));
+        const targetW = Math.max(1, Math.floor(w * scale));
+        const targetH = Math.max(1, Math.floor(h * scale));
+        const resized = scale < 1 ? decoded.resize(targetW, targetH) : decoded;
+        const encoded = await resized.encodeJPEG(85);
+        buf = encoded.buffer.slice(encoded.byteOffset, encoded.byteOffset + encoded.byteLength) as ArrayBuffer;
+        bytes = new Uint8Array(buf);
+        mediaType = "image/jpeg";
+        console.log(
+          `[prepareImage:${sourceTag}] LOCAL resize: ${w}x${h} → ${targetW}x${targetH} (${(buf.byteLength / 1_000_000).toFixed(2)}MB) src=${originalUrl}`,
+        );
+      } catch (err) {
+        console.error(`[prepareImage:${sourceTag}] LOCAL resize failed — skipping image to avoid Anthropic 400. src=${originalUrl}`, (err as any)?.message || err);
+        return null;
+      }
     }
   } else {
     console.log(
@@ -318,8 +348,7 @@ async function prepareImageForAnthropic(
     );
   }
 
-  // Final hard guard — if we still have an oversized payload after resizing,
-  // refuse rather than silently sending an image that will crash generation.
+  // Final hard guard — refuse to send anything that would crash generation.
   if (buf.byteLength > 4_500_000) {
     console.warn(`[prepareImage:${sourceTag}] still >4.5MB after resize; skipping. src=${originalUrl}`);
     return null;
@@ -781,10 +810,13 @@ export async function generateCampaignCore(
     : [];
 
   const urlsToSend = sliceUrls.length > 0 ? sliceUrls : referenceUrls;
-  const maxRefs = sliceUrls.length > 0 ? 40 : 5;
+  // Anthropic enforces a hard 20-image-per-request cap. Reserve headroom for the
+  // selected reference + any later ad-hoc images, so brand refs cap at 12.
+  const MAX_BRAND_REF_IMAGES = 12;
+  const maxRefs = sliceUrls.length > 0 ? MAX_BRAND_REF_IMAGES : 5;
   const selectedReferenceUrls = urlsToSend.slice(0, maxRefs);
 
-  console.log(`[generateCampaignCore] Using ${sliceUrls.length > 0 ? 'slices' : 'full images'}: ${selectedReferenceUrls.length} reference images`);
+  console.log(`[generateCampaignCore] Using ${sliceUrls.length > 0 ? 'slices' : 'full images'}: ${selectedReferenceUrls.length} reference images (capped at ${maxRefs})`);
 
   let totalPayloadBytes = 0;
   const MAX_TOTAL_PAYLOAD = 28_000_000;
