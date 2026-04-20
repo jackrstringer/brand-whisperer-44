@@ -1108,10 +1108,19 @@ export default function CampaignEditor() {
           flowNotes: campaignMode === "flow" && flowNotes.trim() ? flowNotes.trim() : undefined,
         }),
       });
-      if (!resp.ok && resp.status !== 202) throw new Error(`Generation failed: ${resp.status}`);
+      const payload = await resp.json().catch(() => null);
+      if (!resp.ok && resp.status !== 202) {
+        throw new Error(payload?.error || `Generation failed: ${resp.status}`);
+      }
+      if (payload && payload.ok === false) {
+        throw new Error(payload.error || "Generation failed to start.");
+      }
     } catch (err: any) {
       console.error("[generate] Error:", err);
-      toast.error("Failed to start generation");
+      toast.error("Failed to start generation", {
+        description: err?.message || "Unknown backend error",
+        duration: 12000,
+      });
       setGenerating(false);
       setGenStartTime(null);
       return;
@@ -1174,10 +1183,14 @@ export default function CampaignEditor() {
           setCampaign(data as Campaign);
           setGenerating(false);
           setGenStartTime(null);
-          toast.error("Campaign generation failed. Please try again.");
+          const reason = (data.last_error || "Unknown backend error").slice(0, 1200);
+          toast.error("Campaign generation failed", {
+            description: reason,
+            duration: 16000,
+          });
           setMessages((prev) => [
             ...prev,
-            { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: "Generation failed", created_at: new Date().toISOString() },
+            { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Generation failed: ${reason}`, created_at: new Date().toISOString() },
           ]);
         }
       }
