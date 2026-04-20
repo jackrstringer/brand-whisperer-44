@@ -641,6 +641,11 @@ export function SkeletonViewer({
                   ? () => onGenerateNode(n.emailIndex!)
                   : undefined
               }
+              onExpand={
+                typeof n.emailIndex === "number"
+                  ? () => onToggleExpand(n.emailIndex!)
+                  : undefined
+              }
               emailRow={
                 typeof n.emailIndex === "number"
                   ? emails.find((e) => e.sequence_index === n.emailIndex)
