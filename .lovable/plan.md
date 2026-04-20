@@ -1,65 +1,88 @@
 
-Goal: redesign the flow builder so the whole experience matches the uploaded Flowline mockup and not just “make the old UI visible”.
+Goal: fix the real shared generation failure, make flow logic less dumb, restore a proper right-side AI chat rail, and let message nodes expand to show the actual brief.
 
-What’s wrong now
-- The current page is still an app-style split layout: top bar + fixed right chat rail + dark tokens + stacked cards.
-- The mockup is a canvas-first experience: warm light board, floating chrome, centered diagram, minimal composer, and almost invisible app scaffolding.
-- So this is not a small canvas bug anymore; it needs a layout/system redesign across the page shell, canvas renderer, and chat surface.
+Findings
+- The immediate failure is not “flow-specific.” Both normal campaigns and flow emails go through `supabase/functions/_shared/generateCampaignCore.ts`.
+- The deployed logs show the same hard failure in both paths: Anthropic rejects at least one image because a dimension still exceeds 2000px.
+- The current “fix” is incomplete because `capImageDimensions()` only rewrites ImageKit URLs. Any brand/reference slice URL that is not ImageKit-hosted bypasses the cap entirely, so oversized images still get base64-embedded and fail immediately.
+- That also explains failures when the user attaches no references: generation still auto-loads brand profile reference slices from `brand_profiles.reference_slice_urls`.
+- Conditional splits are currently rendered with a fake heuristic in `SkeletonViewer.tsx` that blindly alternates YES/NO branches after a split. That is why split visuals are wrong.
+- Expandable message briefs were never actually wired: `FlowBuilderPage` passes `expandedIndex`/`onToggleExpand`, but `SkeletonViewer` does not use them.
+- The chat was not removed from code, but the current post-skeleton UI is a bottom floating dock in `FlowAgentChat.tsx`, not the persistent right-hand rail you want.
 
 Implementation plan
 
-1. Rebuild the page shell around the canvas
-- Replace the current `FlowBuilderPage` desktop layout with a single full-screen canvas stage.
-- Move header controls into floating overlays that match the mockup:
-  - top-left: back + title + small status breadcrumb
-  - top-right: large floating “Approve & Generate All” pill
-  - bottom/right or bottom/center: floating chat composer / conversation panel
-- Remove the hard visual split caused by the fixed 400px right rail.
+1. Fix the true generation bug at the shared source
+- Update `_shared/generateCampaignCore.ts` so every image sent to Anthropic is dimension-normalized, not just ImageKit URLs.
+- Add a host-agnostic image preparation step:
+  - fetch image
+  - inspect actual dimensions
+  - if either side exceeds safe limit, downscale before base64 embedding
+  - then send the resized payload
+- Apply this to:
+  - brand profile slices/full images
+  - selected reference campaign slices/full images
+  - any other image blocks added to the vision payload
+- Keep the existing ImageKit rewrite as an optimization, but do not rely on it as the only safeguard.
+- Add explicit logging of source type + original dimensions + resized dimensions so future failures are diagnosable instead of opaque.
 
-2. Redesign `SkeletonViewer` to match the mockup feel
-- Switch from the current dark dotted workspace to a warm light canvas with subtle depth.
-- Rework node composition from stacked “app cards” into cleaner board nodes with:
-  - thinner outlines
-  - larger corner radius
-  - lighter shadows
-  - more diagram-like spacing
-- Add proper diagram layout behavior so trigger / branches / emails feel centered and intentional instead of a vertical list.
-- Keep zoom/pan, but hide the tooling visually unless needed and make the default framing land on the full skeleton.
+2. Surface real backend errors to the UI
+- Persist the actual generation failure reason instead of only setting `status = "error"`.
+- Add user-visible error fields for campaign and flow email generation state, then show them in the flow builder/editor instead of “see backend logs.”
+- This will follow your no-fake-success rule and make immediate failures self-explanatory.
 
-3. Make the skeleton board feel conversational and alive
-- While drafting, show ghost nodes appearing directly on the board instead of generic loading cards.
-- Preserve realtime skeleton updates, but render them as a live drafting state on-canvas.
-- When messages are generated, surface status and preview directly inside the nodes in a cleaner board style.
+3. Make flow strategy smarter: filters first, not repeated purchase splits
+- Tighten `flow-agent/index.ts` system prompt so flow-wide logic is expressed in:
+  - `[FILTERS]` for entry/profile gating
+  - `[EXIT]` for universal flow exit conditions
+- Explicitly ban repeated “Placed Order” conditional splits between each message unless there is a true branching strategy that changes downstream content.
+- Update the shared flow skill guidance so welcome/post-purchase/etc. default to:
+  - one intelligent entry filter set
+  - one exit block
+  - conditional splits only when there is a meaningful audience/content divergence
 
-4. Replace the current chat UI with Flowline-style interaction
-- Rebuild `FlowAgentChat` so it feels like a lightweight floating assistant, not a sidebar transcript.
-- Use a minimal Claude-like loading line only during active thinking.
-- Keep technical/control messages fully hidden.
-- For existing flows with a ready skeleton, show only relevant conversational edits and suppress legacy scaffolding/setup history.
+4. Replace fake split rendering with a real skeleton graph model
+- Stop the current heuristic YES/NO alternation in `SkeletonViewer.tsx`.
+- Extend the skeleton format/parser so split nodes carry explicit condition/branch metadata instead of inferred branches.
+- Render only branch structures that are actually encoded in the skeleton.
+- If a skeleton does not yet specify branch paths, render the split as logic-only instead of fabricating a wrong diagram.
 
-5. Align styling with the uploaded mockup exactly
-- Introduce a dedicated visual mode for flows:
-  - warm off-white background
-  - charcoal floating buttons
-  - soft gray borders
-  - sparse, premium typography
-  - larger whitespace and calmer contrast
-- This should override the current default dark/product UI patterns just for the flow builder.
+5. Add true message-node expansion for the actual brief
+- Wire `expandedIndex` and `onToggleExpand` through `SkeletonViewer`.
+- Clicking a message node should expand an inline panel or side detail card showing the real brief fields:
+  - timing
+  - job
+  - subject direction
+  - sections
+  - notes
+  - generation state / linked campaign status
+- Reuse saved `flow_emails` edits when present so what you expand is the real working brief, not a guessed summary.
 
-6. Preserve current functionality while changing presentation
-- Keep current skeleton parsing, realtime updates, node editing, per-node generation, and bulk generation logic.
-- Only remap these behaviors into the new canvas-first UI so existing flows still work.
-- Ensure current flows render immediately without needing regeneration.
+6. Restore the persistent right-side AI chat rail
+- Rework `FlowBuilderPage` into a two-pane shell:
+  - left: canvas
+  - right: always-visible chat rail
+- Keep the current centered pre-skeleton experience only for the empty-state if needed, but once a skeleton exists the agent should live permanently in the right rail.
+- The rail should support ongoing conversational edits to skeleton, filters, splits, and message briefs while the canvas updates live.
 
-Files to update
-- `src/pages/FlowBuilderPage.tsx` — replace split-shell layout with floating canvas-first shell
-- `src/components/flows/SkeletonViewer.tsx` — redesign board, node styling, framing, drafting state
-- `src/components/flows/FlowAgentChat.tsx` — convert to minimal floating conversational UI and hide legacy setup output
-- `src/components/AppLayout.tsx` — only if the flow route still needs shell adjustments for true edge-to-edge rendering
+Technical details
+- Files likely touched:
+  - `supabase/functions/_shared/generateCampaignCore.ts`
+  - `supabase/functions/generate-campaign/index.ts`
+  - `supabase/functions/generate-campaign-multi/index.ts`
+  - `supabase/functions/flow-agent/index.ts`
+  - `src/lib/flows/skeletonParser.ts`
+  - `src/components/flows/SkeletonViewer.tsx`
+  - `src/components/flows/FlowAgentChat.tsx`
+  - `src/pages/FlowBuilderPage.tsx`
+- Database change likely needed for clear user-facing failure visibility:
+  - add last-error fields on `campaigns` and `flow_emails`
 
 Verification
-- Existing skeleton-ready flows should immediately render a visible centered board.
-- The page should visually resemble the uploaded mockup in layout, spacing, contrast, and control placement.
-- Re-entering a flow should not re-show fake setup/loading states.
-- Editing via chat should feel conversational and update the skeleton on the board.
-- Generated emails should be viewable directly inside their nodes.
+- Normal campaign generation succeeds with no manually attached references.
+- Flow message generation succeeds for the same brand.
+- Logs show any oversized non-ImageKit references being resized before Anthropic.
+- A skeleton with no real branch metadata does not render fake YES/NO paths.
+- A skeleton with real split metadata renders correctly.
+- Clicking a message node expands the actual brief.
+- The AI chat is persistently visible on the right and can drive live skeleton updates.
