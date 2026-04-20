@@ -789,33 +789,19 @@ export async function generateCampaignCore(
   let totalPayloadBytes = 0;
   const MAX_TOTAL_PAYLOAD = 28_000_000;
 
-  const imagePromises = selectedReferenceUrls.map(async (url: string) => {
-    try {
-      const imgResp = await fetch(capImageDimensions(url));
-      if (!imgResp.ok) return null;
-      const contentType = imgResp.headers.get("content-type") || "image/jpeg";
-      const mediaType = contentType.split(";")[0].trim();
-      const buf = await imgResp.arrayBuffer();
-      if (buf.byteLength > 4_500_000) {
-        console.log(`[generateCampaignCore] Skipping oversized image (${(buf.byteLength / 1_000_000).toFixed(1)}MB)`);
-        return null;
-      }
-      const b64 = arrayBufferToBase64(buf);
-      return { type: "image" as const, source: { type: "base64" as const, media_type: mediaType, data: b64 }, _size: buf.byteLength };
-    } catch { return null; }
-  });
+  const imagePromises = selectedReferenceUrls.map((url: string) =>
+    prepareImageForAnthropic(url, "brand_reference", 1900),
+  );
 
   const imageResults = await Promise.all(imagePromises);
   for (const result of imageResults) {
     if (!result) continue;
-    const imgSize = (result as any)._size || 0;
-    if (totalPayloadBytes + imgSize > MAX_TOTAL_PAYLOAD) {
+    if (totalPayloadBytes + result.size > MAX_TOTAL_PAYLOAD) {
       console.log(`[generateCampaignCore] Stopping at ${imageBlocks.length} images to stay under 28MB payload limit`);
       break;
     }
-    totalPayloadBytes += imgSize;
-    const { _size, ...block } = result as any;
-    imageBlocks.push(block);
+    totalPayloadBytes += result.size;
+    imageBlocks.push(result.block);
   }
   console.log(`[generateCampaignCore] Total reference image payload: ${(totalPayloadBytes / 1_000_000).toFixed(1)}MB across ${imageBlocks.length} images`);
 
