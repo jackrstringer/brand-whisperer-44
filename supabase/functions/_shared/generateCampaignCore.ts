@@ -947,19 +947,9 @@ You MUST feature these products prominently in the campaign. Use at least one im
     const urlsToFetch = sliceImageUrls.length > 0 ? sliceImageUrls : reference.image_urls.slice(0, 10);
 
     for (const originalUrl of urlsToFetch) {
-      try {
-        const safeUrl = capImageDimensions(originalUrl);
-        const imgResp = await fetch(safeUrl);
-        if (!imgResp.ok) continue;
-        const contentType = imgResp.headers.get("content-type") || "image/jpeg";
-        const mediaType = contentType.split(";")[0].trim();
-        const buf = await imgResp.arrayBuffer();
-        if (buf.byteLength > 4_500_000) continue;
-        referenceImageBlocks.push({
-          type: "image",
-          source: { type: "base64", media_type: mediaType, data: arrayBufferToBase64(buf) },
-        });
-      } catch {}
+      const prepared = await prepareImageForAnthropic(originalUrl, "ref_campaign", 1900);
+      if (!prepared) continue;
+      referenceImageBlocks.push(prepared.block);
     }
 
     if (sliceImageUrls.length > 1 && referenceImageBlocks.length > 1) {
