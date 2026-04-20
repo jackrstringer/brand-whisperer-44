@@ -966,10 +966,23 @@ function NodeView({
           <div className="fl-split-cond">
             {node.meta?.condition || node.label}
           </div>
-          <div className="fl-branches">
-            <div className="fl-branch yes">YES</div>
-            <div className="fl-branch no">NO</div>
-          </div>
+          {Array.isArray(node.meta?.branches) && node.meta!.branches.length > 0 ? (
+            <div className="fl-branches">
+              {node.meta!.branches.map((b: any, i: number) => (
+                <div
+                  key={i}
+                  className={`fl-branch ${b.label?.toLowerCase().includes("yes") ? "yes" : b.label?.toLowerCase().includes("no") ? "no" : ""}`}
+                  title={b.description || ""}
+                >
+                  {b.label}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: 10, color: "var(--fl-ink-4)", marginTop: 6, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              Branches not specified
+            </div>
+          )}
         </div>
       )}
 
