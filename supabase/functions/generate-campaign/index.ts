@@ -60,9 +60,13 @@ async function runGeneration(body: any, campaignId: string, genStartedAt: string
     });
     console.log(`[generate-campaign] Background generation complete for ${campaignId} in ${durationSecs}s`);
   } catch (err: any) {
+    const reason = (err?.message || String(err) || "Unknown generation error").slice(0, 1500);
     console.error("[generate-campaign] Background error:", err);
     try {
-      await supabase.from("campaigns").update({ status: "error" }).eq("id", campaignId);
+      await supabase
+        .from("campaigns")
+        .update({ status: "error", last_error: reason })
+        .eq("id", campaignId);
     } catch {}
   }
 }
@@ -102,7 +106,7 @@ Deno.serve(async (req) => {
     );
     const genStartedAt = new Date().toISOString();
     await supabase.from("campaigns").update({
-      status: "generating", generation_started_at: genStartedAt, generation_duration_secs: null,
+      status: "generating", generation_started_at: genStartedAt, generation_duration_secs: null, last_error: null,
     }).eq("id", campaignId);
 
     // Run the heavy work as a background task. EdgeRuntime.waitUntil keeps the

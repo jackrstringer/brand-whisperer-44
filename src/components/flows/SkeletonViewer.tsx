@@ -85,6 +85,7 @@ interface Props {
   onSaveNodeEdit: (i: number, patch: Partial<ParsedFlowNode>) => void;
   generatingIndex: number | null;
   drafting?: boolean;
+  parsedNodesRaw?: ParsedFlowNode[];
 }
 
 /* ---------- Geometry ---------- */
@@ -156,65 +157,40 @@ function buildBoard(
     y += getNodeSize("filters").h + VGAP;
   }
 
-  // Walk parsed nodes; emails get an emailIndex assigned in parsed order
+  // Walk parsed nodes; emails get an emailIndex assigned in parsed order.
+  // We DO NOT fabricate YES/NO branches anymore. A split is rendered as a
+  // single logic node with its branch labels listed inside it. Real branch
+  // graph rendering will only kick in once the skeleton format encodes
+  // explicit branch paths.
   let emailIndex = 0;
-  let inBranch: "yes" | "no" | null = null;
-  let branchOriginId: string | null = null;
-  let lastInYes: string | null = null;
-  let lastInNo: string | null = null;
-  const SPLIT_W = NODE_W;
-  const BRANCH_OFFSET = 200; // horizontal offset for branches
-
   for (let i = 0; i < parsed.length; i++) {
     const p = parsed[i];
     const id = `n-${i}-${p.node_type}`;
     const kind: NodeKind = p.node_type as NodeKind;
 
-    if (kind === "split") {
-      const node: BoardNode = {
-        id,
-        kind: "split",
-        label: p.label || "Conditional Split",
-        x: COL,
-        y,
-        meta: { condition: p.notes || "" },
-      };
-      out.push(node);
-      edges.push({ id: `e-${prev}-${id}`, from: prev, to: id, branch: inBranch });
-      branchOriginId = id;
-      lastInYes = id;
-      lastInNo = id;
-      inBranch = null;
-      prev = id;
-      y += getNodeSize("split").h + VGAP;
-      // Look ahead: if next is a branch indicator the AI emits as a comment, ignore.
-      // Default behavior: alternate yes / no for the next two nodes if present.
-      // We keep things simple: subsequent nodes go to the YES branch until we see another split or exit.
-      inBranch = "yes";
-      continue;
-    }
-
-    let nodeX = COL;
-    if (branchOriginId && inBranch) {
-      nodeX = COL + (inBranch === "yes" ? -BRANCH_OFFSET : BRANCH_OFFSET);
-    }
-
     const node: BoardNode = {
       id,
       kind,
       label: p.label || (kind === "email" ? `Email ${emailIndex + 1}` : kind),
-      x: nodeX,
+      x: COL,
       y,
-      branch: inBranch,
       meta:
         kind === "delay"
           ? { duration: p.label || p.timing || "wait" }
+          : kind === "split"
+          ? {
+              condition: p.notes || p.label || "",
+              branches: p.branches || [],
+            }
           : kind === "email" || kind === "sms"
           ? {
               subject: p.subject_direction || "",
               preview: p.notes || p.job || "",
               sections: p.sections || [],
               timing: p.timing,
+              job: p.job,
+              subject_direction: p.subject_direction,
+              notes: p.notes,
             }
           : {},
     };
@@ -223,34 +199,9 @@ function buildBoard(
       emailIndex += 1;
     }
     out.push(node);
-
-    if (branchOriginId && inBranch === "yes") {
-      edges.push({ id: `e-${lastInYes}-${id}`, from: lastInYes!, to: id, branch: "yes" });
-      lastInYes = id;
-    } else if (branchOriginId && inBranch === "no") {
-      edges.push({ id: `e-${lastInNo}-${id}`, from: lastInNo!, to: id, branch: "no" });
-      lastInNo = id;
-    } else {
-      edges.push({ id: `e-${prev}-${id}`, from: prev, to: id });
-      prev = id;
-    }
+    edges.push({ id: `e-${prev}-${id}`, from: prev, to: id });
+    prev = id;
     y += getNodeSize(kind).h + VGAP;
-
-    // Toggle to NO branch halfway through the branch nodes (best-effort heuristic)
-    if (branchOriginId && inBranch === "yes") {
-      // After 1 node, switch to NO branch for the next sibling
-      inBranch = "no";
-      // Reset Y back so YES and NO sit at similar levels for visual symmetry
-      y -= getNodeSize(kind).h + VGAP;
-      // Add a small offset so NO isn't perfectly stacked
-      y += 0;
-    } else if (branchOriginId && inBranch === "no") {
-      inBranch = null; // close branch after NO leg
-      branchOriginId = null;
-      // Use whichever leg ended lower as the new "prev"
-      prev = lastInNo || lastInYes || prev;
-      y += getNodeSize(kind).h + VGAP;
-    }
   }
 
   // Exit
@@ -290,6 +241,8 @@ export function SkeletonViewer({
   flowType,
   emails,
   campaignMeta,
+  expandedIndex,
+  onToggleExpand,
   onGenerateNode,
   onSaveNodeEdit,
   generatingIndex,
@@ -1016,10 +969,23 @@ function NodeView({
           <div className="fl-split-cond">
             {node.meta?.condition || node.label}
           </div>
-          <div className="fl-branches">
-            <div className="fl-branch yes">YES</div>
-            <div className="fl-branch no">NO</div>
-          </div>
+          {Array.isArray(node.meta?.branches) && node.meta!.branches.length > 0 ? (
+            <div className="fl-branches">
+              {node.meta!.branches.map((b: any, i: number) => (
+                <div
+                  key={i}
+                  className={`fl-branch ${b.label?.toLowerCase().includes("yes") ? "yes" : b.label?.toLowerCase().includes("no") ? "no" : ""}`}
+                  title={b.description || ""}
+                >
+                  {b.label}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontSize: 10, color: "var(--fl-ink-4)", marginTop: 6, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              Branches not specified
+            </div>
+          )}
         </div>
       )}
 

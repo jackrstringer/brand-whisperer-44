@@ -376,6 +376,15 @@ ABSOLUTE RULES FOR THE SKELETON:
 - Total skeleton ≤90 lines.
 - When updating an existing skeleton, return the FULL updated skeleton in the same bracket format (including TRIGGER/FILTERS/EXIT).
 
+FILTERS-FIRST STRATEGY (CRITICAL — DO NOT VIOLATE):
+- Universal "are they still eligible?" gates belong in [FILTERS] or [EXIT], NOT as repeated [CONDITIONAL SPLIT] nodes between every email.
+- A [CONDITIONAL SPLIT] is ONLY justified when downstream content/structure ACTUALLY DIVERGES (e.g. "first-time vs returning buyer → different hero block + different offer"). If both branches would send roughly the same email, it is NOT a split — it's a filter.
+- ABSOLUTELY FORBIDDEN: Inserting a "Has Placed Order?" split between every email step. The "stop on conversion" behavior MUST be expressed once in [EXIT] as "Placed Order (primary exit)". Do this once at the top, never again.
+- Default skeleton shape for welcome / abandoned_checkout / browse_abandonment / winback / post_purchase: TRIGGER → FILTERS → EXIT → EMAIL → DELAY → EMAIL → DELAY → EMAIL (etc). Add a [CONDITIONAL SPLIT] only when there is a real, content-changing branching reason — and when you do, include explicit branch metadata in this format inside the split block:
+    Branches:
+    - YES: <what flows down this branch>
+    - NO: <what flows down this branch>
+
 CURRENT SKELETON:
 ${current_skeleton || "(none yet — build from scratch when ready)"}`;
 

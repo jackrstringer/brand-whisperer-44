@@ -414,6 +414,7 @@ export type Database = {
           id: string
           klaviyo_campaign_id: string | null
           klaviyo_template_id: string | null
+          last_error: string | null
           name: string
           pinned_asset_urls: string[] | null
           preview_text: string | null
@@ -451,6 +452,7 @@ export type Database = {
           id?: string
           klaviyo_campaign_id?: string | null
           klaviyo_template_id?: string | null
+          last_error?: string | null
           name?: string
           pinned_asset_urls?: string[] | null
           preview_text?: string | null
@@ -488,6 +490,7 @@ export type Database = {
           id?: string
           klaviyo_campaign_id?: string | null
           klaviyo_template_id?: string | null
+          last_error?: string | null
           name?: string
           pinned_asset_urls?: string[] | null
           preview_text?: string | null
@@ -689,6 +692,7 @@ export type Database = {
           id: string
           job: string | null
           label: string | null
+          last_error: string | null
           node_type: string
           notes: string | null
           sections: Json | null
@@ -706,6 +710,7 @@ export type Database = {
           id?: string
           job?: string | null
           label?: string | null
+          last_error?: string | null
           node_type: string
           notes?: string | null
           sections?: Json | null
@@ -723,6 +728,7 @@ export type Database = {
           id?: string
           job?: string | null
           label?: string | null
+          last_error?: string | null
           node_type?: string
           notes?: string | null
           sections?: Json | null

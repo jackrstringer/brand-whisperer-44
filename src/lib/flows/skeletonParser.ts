@@ -5,6 +5,13 @@
 
 export type FlowNodeType = "email" | "delay" | "split" | "sms";
 
+export interface SplitBranch {
+  /** Short label, e.g. "YES" / "NO" / "Subscribed" */
+  label: string;
+  /** Optional human-readable description of what flows down this branch */
+  description?: string;
+}
+
 export interface ParsedFlowNode {
   node_type: FlowNodeType;
   label?: string;
@@ -13,6 +20,8 @@ export interface ParsedFlowNode {
   subject_direction?: string;
   sections?: string[];
   notes?: string;
+  /** For splits only: explicit branch metadata if the agent provided it. */
+  branches?: SplitBranch[];
   raw: string;
 }
 
@@ -158,10 +167,29 @@ export function parseSkeleton(markdown: string | null | undefined): ParsedFlowNo
     }
 
     if (type === "split") {
+      // Parse explicit branch metadata if present.
+      // Supported shapes inside the split block:
+      //   Branches:
+      //   - YES: <description>
+      //   - NO: <description>
+      // (also accepts "If yes" / "If no" / arbitrary labels)
+      const branches: SplitBranch[] = [];
+      const branchSection = block.match(/branches?\s*[:\-]\s*\n([\s\S]*?)(?:\n\s*\n|\n[A-Z][a-zA-Z ]+:|$)/i);
+      if (branchSection) {
+        for (const line of branchSection[1].split("\n")) {
+          const m = line.match(/^\s*[-*•]\s*([^:]+?)\s*[:\-]\s*(.+)$/);
+          if (m) branches.push({ label: m[1].trim(), description: m[2].trim() });
+          else {
+            const bare = line.match(/^\s*[-*•]\s*(.+)$/);
+            if (bare) branches.push({ label: bare[1].trim() });
+          }
+        }
+      }
       nodes.push({
         node_type: "split",
         label: label || "Conditional Split",
         notes: lines.slice(1).join("\n").trim() || undefined,
+        branches: branches.length ? branches : undefined,
         raw: block,
       });
       continue;

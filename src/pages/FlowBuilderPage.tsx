@@ -235,7 +235,8 @@ Notes: ${node.notes || "none"}`;
           break;
         }
         if (row?.status === "error") {
-          throw new Error("Campaign generation failed (see backend logs).");
+          const reason = (row as any).last_error || "Generation failed (no error message captured).";
+          throw new Error(reason);
         }
       }
       if (!html) throw new Error("Campaign generation timed out after 8 minutes.");
