@@ -810,10 +810,13 @@ export async function generateCampaignCore(
     : [];
 
   const urlsToSend = sliceUrls.length > 0 ? sliceUrls : referenceUrls;
-  const maxRefs = sliceUrls.length > 0 ? 40 : 5;
+  // Anthropic enforces a hard 20-image-per-request cap. Reserve headroom for the
+  // selected reference + any later ad-hoc images, so brand refs cap at 12.
+  const MAX_BRAND_REF_IMAGES = 12;
+  const maxRefs = sliceUrls.length > 0 ? MAX_BRAND_REF_IMAGES : 5;
   const selectedReferenceUrls = urlsToSend.slice(0, maxRefs);
 
-  console.log(`[generateCampaignCore] Using ${sliceUrls.length > 0 ? 'slices' : 'full images'}: ${selectedReferenceUrls.length} reference images`);
+  console.log(`[generateCampaignCore] Using ${sliceUrls.length > 0 ? 'slices' : 'full images'}: ${selectedReferenceUrls.length} reference images (capped at ${maxRefs})`);
 
   let totalPayloadBytes = 0;
   const MAX_TOTAL_PAYLOAD = 28_000_000;
