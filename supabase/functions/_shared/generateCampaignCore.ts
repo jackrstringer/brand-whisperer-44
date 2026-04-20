@@ -152,17 +152,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 function capImageDimensions(url: string, maxDim = 1900): string {
   // Anthropic many-image requests reject any image with a dimension > 2000px.
   // Default to 1900 to leave a safety margin.
-  if (!/^https:\/\/ik\.imagekit\.io\//i.test(url)) {
-    // Non-ImageKit URLs can't be transformed in-place. Proxy through ImageKit
-    // so we can still cap dimensions and avoid the 2000px many-image limit.
-    const endpoint = Deno.env.get("IMAGEKIT_URL_ENDPOINT") || "https://ik.imagekit.io/redwood";
-    try {
-      const proxied = `${endpoint.replace(/\/$/, "")}/tr:c-at_max,w-${maxDim},h-${maxDim}/${encodeURI(url)}`;
-      return proxied;
-    } catch {
-      return url;
-    }
-  }
+  if (!/^https:\/\/ik\.imagekit\.io\//i.test(url)) return url;
 
   const pathStyleMatch = url.match(/\/tr:([^/]+)\//i);
   if (pathStyleMatch) {
