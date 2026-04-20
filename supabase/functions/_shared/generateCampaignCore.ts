@@ -150,8 +150,10 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 function capImageDimensions(url: string, maxDim = 1900): string {
-  // Anthropic many-image requests reject any image with a dimension > 2000px.
-  // Default to 1900 to leave a safety margin.
+  // ImageKit fast-path: rewrite the URL so the CDN serves a pre-resized image.
+  // For non-ImageKit URLs we still fall back to host-agnostic resizing in
+  // prepareImageForAnthropic() below, so this function is now only an
+  // optimization, never a safeguard.
   if (!/^https:\/\/ik\.imagekit\.io\//i.test(url)) return url;
 
   const pathStyleMatch = url.match(/\/tr:([^/]+)\//i);
@@ -178,6 +180,163 @@ function capImageDimensions(url: string, maxDim = 1900): string {
 
   const separator = url.includes('?') ? '&' : '?';
   return `${url}${separator}tr=c-at_max,w-${maxDim},h-${maxDim}`;
+}
+
+/** Decode JPEG/PNG/GIF/WebP dimensions from a byte buffer header. Returns null if undetectable. */
+function readImageSize(bytes: Uint8Array): { width: number; height: number } | null {
+  // PNG: \x89PNG\r\n\x1a\n then IHDR width(4)/height(4) at byte 16
+  if (bytes.length >= 24 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    return { width: dv.getUint32(16), height: dv.getUint32(20) };
+  }
+  // GIF: GIF8 then width(2 LE), height(2 LE) at byte 6
+  if (bytes.length >= 10 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    return { width: dv.getUint16(6, true), height: dv.getUint16(8, true) };
+  }
+  // WebP: RIFF....WEBP then VP8 / VP8L / VP8X
+  if (bytes.length >= 30 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+      && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const fourcc = String.fromCharCode(bytes[12], bytes[13], bytes[14], bytes[15]);
+    if (fourcc === "VP8 ") {
+      // Lossy: width/height at offset 26-29 (14 bits each)
+      const w = dv.getUint16(26, true) & 0x3fff;
+      const h = dv.getUint16(28, true) & 0x3fff;
+      return { width: w, height: h };
+    }
+    if (fourcc === "VP8L") {
+      // Lossless: bits packed starting at offset 21
+      const b0 = bytes[21], b1 = bytes[22], b2 = bytes[23], b3 = bytes[24];
+      const width = 1 + (((b1 & 0x3f) << 8) | b0);
+      const height = 1 + (((b3 & 0x0f) << 10) | (b2 << 2) | ((b1 & 0xc0) >> 6));
+      return { width, height };
+    }
+    if (fourcc === "VP8X") {
+      // Extended: 24-bit width-1 / height-1 at offset 24/27 (LE)
+      const w = 1 + (bytes[24] | (bytes[25] << 8) | (bytes[26] << 16));
+      const h = 1 + (bytes[27] | (bytes[28] << 8) | (bytes[29] << 16));
+      return { width: w, height: h };
+    }
+  }
+  // JPEG: scan SOFx markers
+  if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
+    let i = 2;
+    while (i < bytes.length - 9) {
+      if (bytes[i] !== 0xff) { i++; continue; }
+      // Skip filler 0xff bytes
+      while (i < bytes.length && bytes[i] === 0xff) i++;
+      const marker = bytes[i]; i++;
+      if (marker === 0xd8 || marker === 0xd9) continue; // SOI / EOI - no length
+      if (marker >= 0xd0 && marker <= 0xd7) continue; // restart markers
+      const segLen = (bytes[i] << 8) | bytes[i + 1];
+      // Start Of Frame markers (excluding DHT/JPG/DAC)
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        const height = (bytes[i + 3] << 8) | bytes[i + 4];
+        const width = (bytes[i + 5] << 8) | bytes[i + 6];
+        return { width, height };
+      }
+      i += segLen;
+    }
+  }
+  return null;
+}
+
+/**
+ * Host-agnostic image preparation for Anthropic vision payloads.
+ *
+ * Anthropic rejects any image with a dimension > 2000px in many-image requests.
+ * The previous capImageDimensions() only worked for ImageKit URLs, so brand
+ * reference slices hosted elsewhere (e.g. Supabase storage) bypassed the cap
+ * entirely and crashed generation immediately.
+ *
+ * This function:
+ *  1. Tries the ImageKit URL rewrite as a fast-path (CDN-side resize).
+ *  2. Fetches the (possibly already capped) image bytes.
+ *  3. Decodes the actual width/height from the image header.
+ *  4. If the image still exceeds the safe limit, re-fetches it via ImageKit's
+ *     remote-URL proxy (`/tr:c-at_max,w-1900,h-1900/<original>`), which will
+ *     return a properly resized JPEG regardless of the source host.
+ *  5. Returns a base64 image block ready for Anthropic, plus diagnostics.
+ *
+ * Returns null when the image is unreachable / empty so the caller can skip it
+ * loudly instead of corrupting the request.
+ */
+async function prepareImageForAnthropic(
+  originalUrl: string,
+  sourceTag: string,
+  maxDim = 1900,
+): Promise<{ block: any; size: number } | null> {
+  const fastUrl = capImageDimensions(originalUrl, maxDim);
+  let resp: Response;
+  try {
+    resp = await fetch(fastUrl);
+  } catch (err) {
+    console.warn(`[prepareImage:${sourceTag}] fetch failed for ${fastUrl}:`, (err as any)?.message || err);
+    return null;
+  }
+  if (!resp.ok) {
+    console.warn(`[prepareImage:${sourceTag}] HTTP ${resp.status} for ${fastUrl}`);
+    return null;
+  }
+
+  let mediaType = (resp.headers.get("content-type") || "image/jpeg").split(";")[0].trim();
+  let buf = await resp.arrayBuffer();
+  let bytes = new Uint8Array(buf);
+  const original = readImageSize(bytes);
+  const tooBigByte = buf.byteLength > 4_500_000;
+  const tooBigDim = original ? (original.width > 2000 || original.height > 2000) : false;
+
+  if (tooBigDim || tooBigByte) {
+    // Force a host-agnostic downscale by routing the source URL through
+    // ImageKit's public remote-URL endpoint. This works for any HTTPS URL.
+    const proxyUrl =
+      `https://ik.imagekit.io/lovable/tr:c-at_max,w-${maxDim},h-${maxDim},f-jpg,q-85/` +
+      encodeURIComponent(originalUrl);
+    try {
+      const r2 = await fetch(proxyUrl);
+      if (r2.ok) {
+        mediaType = (r2.headers.get("content-type") || "image/jpeg").split(";")[0].trim();
+        buf = await r2.arrayBuffer();
+        bytes = new Uint8Array(buf);
+        const after = readImageSize(bytes);
+        console.log(
+          `[prepareImage:${sourceTag}] resized via proxy: ` +
+          `orig=${original?.width}x${original?.height} (${(buf.byteLength / 1_000_000).toFixed(1)}MB → ${(buf.byteLength / 1_000_000).toFixed(1)}MB), ` +
+          `now=${after?.width ?? "?"}x${after?.height ?? "?"} src=${originalUrl}`,
+        );
+      } else {
+        console.warn(`[prepareImage:${sourceTag}] proxy resize HTTP ${r2.status} — falling back to original. src=${originalUrl}`);
+      }
+    } catch (err) {
+      console.warn(`[prepareImage:${sourceTag}] proxy resize failed:`, (err as any)?.message || err);
+    }
+  } else {
+    console.log(
+      `[prepareImage:${sourceTag}] ok ${original?.width ?? "?"}x${original?.height ?? "?"} ` +
+      `(${(buf.byteLength / 1_000_000).toFixed(2)}MB) src=${originalUrl}`,
+    );
+  }
+
+  // Final hard guard — if we still have an oversized payload after resizing,
+  // refuse rather than silently sending an image that will crash generation.
+  if (buf.byteLength > 4_500_000) {
+    console.warn(`[prepareImage:${sourceTag}] still >4.5MB after resize; skipping. src=${originalUrl}`);
+    return null;
+  }
+  const finalSize = readImageSize(bytes);
+  if (finalSize && (finalSize.width > 2000 || finalSize.height > 2000)) {
+    console.warn(
+      `[prepareImage:${sourceTag}] still ${finalSize.width}x${finalSize.height} after resize; skipping. src=${originalUrl}`,
+    );
+    return null;
+  }
+
+  const b64 = arrayBufferToBase64(buf);
+  return {
+    block: { type: "image", source: { type: "base64", media_type: mediaType, data: b64 } },
+    size: buf.byteLength,
+  };
 }
 
 /** Anthropic API call with AbortController timeout */
