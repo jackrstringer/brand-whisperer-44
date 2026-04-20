@@ -817,6 +817,7 @@ function NodeView({
   onSelect,
   onDoubleClickTitle,
   onGenerate,
+  onExpand,
   emailRow,
   campaignMeta,
   isGenerating,
@@ -830,6 +831,7 @@ function NodeView({
   onSelect: () => void;
   onDoubleClickTitle: () => void;
   onGenerate?: () => void;
+  onExpand?: () => void;
   emailRow?: FlowEmailRow;
   campaignMeta: Record<string, FlowEmailMeta>;
   isGenerating: boolean;

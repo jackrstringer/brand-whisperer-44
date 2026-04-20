@@ -2802,10 +2802,10 @@ export default function CampaignEditor() {
   // For flow campaigns: only hide raw Liquid while a real Klaviyo render is actively in flight.
   // If there is no trigger_metric_id configured (e.g. user hasn't connected Klaviyo / picked a trigger),
   // we have nothing to render against — fall back to showing the generated HTML directly so the user can see it.
-  const flowConfig = (campaign as any)?.flow_config as FlowConfig | undefined;
-  const flowCanRender = !!flowConfig?.trigger_metric_id;
+  const _flowConfigForPreview = (campaign as any)?.flow_config as FlowConfig | undefined;
+  const _flowCanRender = !!_flowConfigForPreview?.trigger_metric_id;
   const isFlowAwaitingPreview =
-    campaignMode === "flow" && campaign?.html && !flowPreviewHtml && !generating && flowCanRender;
+    campaignMode === "flow" && campaign?.html && !flowPreviewHtml && !generating && _flowCanRender;
   const htmlForPreview = isFlowAwaitingPreview
     ? "" // Don't show raw Liquid — wait for cached/rendered preview
     : (displayHtml ? replaceLikelyBrokenImageUrls(displayHtml, previewFallbackUrls) : "");
