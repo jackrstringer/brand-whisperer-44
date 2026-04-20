@@ -5,6 +5,13 @@
 
 export type FlowNodeType = "email" | "delay" | "split" | "sms";
 
+export interface SplitBranch {
+  /** Short label, e.g. "YES" / "NO" / "Subscribed" */
+  label: string;
+  /** Optional human-readable description of what flows down this branch */
+  description?: string;
+}
+
 export interface ParsedFlowNode {
   node_type: FlowNodeType;
   label?: string;
@@ -13,6 +20,8 @@ export interface ParsedFlowNode {
   subject_direction?: string;
   sections?: string[];
   notes?: string;
+  /** For splits only: explicit branch metadata if the agent provided it. */
+  branches?: SplitBranch[];
   raw: string;
 }
 
