@@ -85,6 +85,7 @@ interface Props {
   onSaveNodeEdit: (i: number, patch: Partial<ParsedFlowNode>) => void;
   generatingIndex: number | null;
   drafting?: boolean;
+  parsedNodesRaw?: ParsedFlowNode[];
 }
 
 /* ---------- Geometry ---------- */
@@ -240,6 +241,8 @@ export function SkeletonViewer({
   flowType,
   emails,
   campaignMeta,
+  expandedIndex,
+  onToggleExpand,
   onGenerateNode,
   onSaveNodeEdit,
   generatingIndex,
