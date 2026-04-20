@@ -227,7 +227,7 @@ Notes: ${node.notes || "none"}`;
         await new Promise((r) => setTimeout(r, POLL_INTERVAL));
         const { data: row } = await supabase
           .from("campaigns")
-          .select("status, html")
+          .select("status, html, last_error")
           .eq("id", campaign.id)
           .maybeSingle();
         if (row?.status === "ready" && row.html) {
@@ -258,7 +258,7 @@ Notes: ${node.notes || "none"}`;
       if (emailRow) {
         await supabase
           .from("flow_emails")
-          .update({ generation_status: "failed" })
+          .update({ generation_status: "failed", last_error: err.message || "Unknown backend error" })
           .eq("id", emailRow.id);
       }
       toast({
