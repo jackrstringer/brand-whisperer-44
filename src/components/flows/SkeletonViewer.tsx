@@ -793,7 +793,7 @@ export function SkeletonViewer({
   const getCanvasPreviewPosition = (node: BoardNode) => {
     const stage = stageRef.current?.getBoundingClientRect();
     const nodeSize = getNodeSize(node.kind);
-    const panelWidth = 430;
+    const panelWidth = Math.round(nodeSize.w * 1.25);
     const margin = 16;
     const gap = 18;
     const stageWidth = stage?.width || window.innerWidth;
@@ -810,7 +810,7 @@ export function SkeletonViewer({
       Math.max(margin, nodeTop - 12),
       Math.max(margin, stageHeight - panelMaxHeight - margin)
     );
-    return { x, y, maxHeight: panelMaxHeight };
+    return { x, y, width: panelWidth, maxHeight: panelMaxHeight };
   };
 
   const isStickyTarget = (target: BoardNode | Sticky | null): target is Sticky => {
