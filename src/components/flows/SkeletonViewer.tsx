@@ -1574,7 +1574,7 @@ function FlowSummaryCard({
           <div className="fl-brief-kicker">Flow summary</div>
           <div className="fl-brief-title">{title}</div>
         </div>
-        <div className="fl-brief-pill">{open ? "Collapse" : "Expand"}</div>
+        <div className="fl-brief-pill">Details</div>
       </button>
     </div>
   );
