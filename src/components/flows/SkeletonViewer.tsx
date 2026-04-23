@@ -289,12 +289,24 @@ export function SkeletonViewer({
     () => buildBoard(parsedNodes, meta, flowType),
     [parsedNodes, meta, flowType]
   );
+  const [layoutNodes, setLayoutNodes] = useState<BoardNode[]>(board.nodes);
+
+  useEffect(() => {
+    setLayoutNodes((prev) => {
+      const prevById = Object.fromEntries(prev.map((n) => [n.id, n]));
+      return resolveNodeCollisions(
+        board.nodes.map((n) => ({ ...n, x: prevById[n.id]?.x ?? n.x, y: prevById[n.id]?.y ?? n.y }))
+      );
+    });
+  }, [board.nodes]);
+
+  const displayBoard = useMemo(() => ({ ...board, nodes: layoutNodes }), [board, layoutNodes]);
 
   const nodeById = useMemo(() => {
     const m: Record<string, BoardNode> = {};
-    for (const n of board.nodes) m[n.id] = n;
+    for (const n of displayBoard.nodes) m[n.id] = n;
     return m;
-  }, [board]);
+  }, [displayBoard.nodes]);
 
   /* -------- Coords -------- */
   const screenToWorld = useCallback(
@@ -311,12 +323,12 @@ export function SkeletonViewer({
 
   /* -------- Initial fit -------- */
   useLayoutEffect(() => {
-    if (!stageRef.current || !board.nodes.length) return;
+    if (!stageRef.current || !displayBoard.nodes.length) return;
     let minX = Infinity,
       minY = Infinity,
       maxX = -Infinity,
       maxY = -Infinity;
-    for (const n of board.nodes) {
+    for (const n of displayBoard.nodes) {
       const sz = getNodeSize(n.kind);
       minX = Math.min(minX, n.x);
       minY = Math.min(minY, n.y);
@@ -334,7 +346,7 @@ export function SkeletonViewer({
       y: 80 - minY * z,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [board.nodes.length]);
+  }, [displayBoard.nodes.length]);
 
   /* -------- Wheel: pinch zoom or two-finger pan, NEVER scroll page -------- */
   useEffect(() => {
@@ -435,12 +447,12 @@ export function SkeletonViewer({
   };
 
   const fitToView = () => {
-    if (!stageRef.current || !board.nodes.length) return;
+    if (!stageRef.current || !displayBoard.nodes.length) return;
     let minX = Infinity,
       minY = Infinity,
       maxX = -Infinity,
       maxY = -Infinity;
-    for (const n of board.nodes) {
+    for (const n of displayBoard.nodes) {
       const sz = getNodeSize(n.kind);
       minX = Math.min(minX, n.x);
       minY = Math.min(minY, n.y);
@@ -491,7 +503,7 @@ export function SkeletonViewer({
   };
 
   /* -------- Compute edge paths -------- */
-  const edgePaths = board.edges
+  const edgePaths = displayBoard.edges
     .map((edge) => {
       const a = nodeById[edge.from];
       const b = nodeById[edge.to];
