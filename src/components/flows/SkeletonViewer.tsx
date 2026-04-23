@@ -616,6 +616,16 @@ export function SkeletonViewer({
           className="fl-viewport"
           style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
         >
+          {triggerNode && (
+            <FlowSummaryCard
+              trigger={triggerNode}
+              flowType={flowType}
+              meta={meta}
+              open={briefOpen}
+              onToggle={() => setBriefOpen((v) => !v)}
+            />
+          )}
+
           {/* Edges */}
           <svg className="fl-edges" style={{ overflow: "visible" }}>
             <defs>
@@ -642,16 +652,7 @@ export function SkeletonViewer({
                     height="22"
                     style={{ overflow: "visible" }}
                   >
-                    <div
-                      className="fl-edge-label"
-                      style={{
-                        background:
-                          edge.branch === "yes" ? "hsl(140 60% 92%)" : "hsl(10 70% 93%)",
-                        color: edge.branch === "yes" ? "hsl(140 60% 28%)" : "hsl(10 70% 38%)",
-                        borderColor: "transparent",
-                        textTransform: "uppercase",
-                      }}
-                    >
+                    <div className={`fl-edge-label ${edge.branch}`}>
                       {edge.branch}
                     </div>
                   </foreignObject>
@@ -789,15 +790,12 @@ export function SkeletonViewer({
           </button>
           <button
             className={tool === "add" ? "on" : ""}
-            onClick={() => {
-              setTool("add");
-              const r = stageRef.current?.getBoundingClientRect();
-              if (r) setAddPop({ x: r.left + 80, y: r.top + r.height / 2 });
-            }}
+            onClick={() => setTool("add")}
             title="Add node (A)"
           >
             <Plus className="w-4 h-4" />
           </button>
+          <NodePalette onAdd={(kind) => addNodeAt(kind, window.innerWidth / 2, window.innerHeight / 2)} />
           <button
             className={tool === "sticky" ? "on" : ""}
             onClick={() => setTool("sticky")}
