@@ -26,7 +26,10 @@ import {
   RefreshCw,
   X as XIcon,
   Trash2,
+  ExternalLink,
+  Play,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,6 +46,7 @@ import {
   FLOW_TRIGGERS,
   FLOW_TYPE_META,
 } from "@/lib/flows/skeletonParser";
+import { FlowEmailDetail } from "@/components/flows/FlowEmailDetail";
 
 /* ---------- Types ---------- */
 
@@ -61,7 +65,7 @@ export interface FlowEmailMeta {
 
 type NodeKind = "trigger" | "filters" | "email" | "delay" | "split" | "trigger_split" | "sms" | "push" | "webhook" | "exit";
 
-interface BoardNode {
+export interface BoardNode {
   id: string;
   kind: NodeKind;
   label: string;
@@ -98,6 +102,7 @@ interface Props {
   nodes: ParsedFlowNode[];
   meta: ParsedFlowMeta;
   flowType: string;
+  brandId: string;
   emails: FlowEmailRow[];
   campaignMeta: Record<string, FlowEmailMeta>;
   expandedIndex: number | null;
@@ -395,6 +400,7 @@ export function SkeletonViewer({
   nodes: parsedNodes,
   meta,
   flowType,
+  brandId,
   emails,
   campaignMeta,
   expandedIndex,
@@ -404,6 +410,7 @@ export function SkeletonViewer({
   generatingIndex,
   drafting,
 }: Props) {
+  const navigate = useNavigate();
   const stageRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(0.85);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -645,7 +652,7 @@ export function SkeletonViewer({
     window.addEventListener("mouseup", upH);
   };
 
-  const startNodeDrag = (e: React.MouseEvent, node: BoardNode) => {
+  const startNodeDrag = (e: React.MouseEvent, node: BoardNode, clickAction?: () => void) => {
     if (e.button !== 0 || spaceHeld || editingLabelOf) return;
     e.stopPropagation();
     setSelected(node.id);
@@ -666,6 +673,7 @@ export function SkeletonViewer({
     const upH = () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", upH);
+      if (!dragging) clickAction?.();
     };
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", upH);
@@ -965,8 +973,13 @@ export function SkeletonViewer({
                 setSelectedSticky(null);
               }}
               onOpenDetails={() => setDetailsNode(n)}
+              onOpenPreview={
+                typeof n.emailIndex === "number"
+                  ? () => onToggleExpand(n.emailIndex!)
+                  : undefined
+              }
               onRequestDelete={() => setDeleteTarget(n)}
-              onStartDrag={(e) => startNodeDrag(e, n)}
+              onStartDrag={(e, clickAction) => startNodeDrag(e, n, clickAction)}
               onDoubleClickTitle={() => {
                 setLabelDraft(n.label);
                 setEditingLabelOf(n.id);
@@ -1083,71 +1096,79 @@ export function SkeletonViewer({
 
       {/* Expanded message preview */}
       {expandedIndex !== null && (() => {
+        const previewNode = displayBoard.nodes.find((n) => n.emailIndex === expandedIndex);
         const row = emails.find((e) => e.sequence_index === expandedIndex);
         if (!row?.html) return null;
         const cm = row.campaign_id ? campaignMeta[row.campaign_id] : null;
         return (
           <div
             onClick={() => onToggleExpand(null)}
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.6)",
-              backdropFilter: "blur(8px)",
-              zIndex: 100,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 32,
-            }}
+            className="fl-campaign-preview-backdrop"
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              style={{
-                width: 420,
-                maxHeight: "92vh",
-                background: "#fff",
-                borderRadius: 16,
-                overflow: "hidden",
-                boxShadow: "0 24px 80px rgba(0,0,0,0.4)",
-                display: "flex",
-                flexDirection: "column",
-              }}
+              className="fl-campaign-preview-shell"
             >
-              <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(0,0,0,0.08)", display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <div className="fl-campaign-preview-topbar">
+                <div className="fl-campaign-preview-meta">
+                  <div className="fl-campaign-preview-subject">
                     {cm?.subject_line || row.label || "Email"}
                   </div>
                   {cm?.preview_text && (
-                    <div style={{ fontSize: 11, color: "rgba(0,0,0,0.5)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <div className="fl-campaign-preview-text">
                       {cm.preview_text}
                     </div>
                   )}
                 </div>
+                {row.campaign_id && (
+                  <button
+                    onClick={() => navigate(`/brands/${brandId}/campaigns/${row.campaign_id}`)}
+                    className="fl-campaign-preview-icon"
+                    title="Open in Editor"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 <button
                   onClick={() => onToggleExpand(null)}
-                  style={{ width: 30, height: 30, borderRadius: 8, border: 0, background: "rgba(0,0,0,0.06)", cursor: "pointer", display: "grid", placeItems: "center" }}
+                  className="fl-campaign-preview-icon"
                   title="Close"
                 >
                   <XIcon className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <iframe
-                title={`expanded-${row.id}`}
-                srcDoc={row.html}
-                style={{ flex: 1, width: "100%", border: 0, background: "#fff" }}
-              />
-            </div>
-            <div style={{ marginTop: 12, fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
-              Click outside or press Esc to close
+              <div className="fl-campaign-preview-frame">
+                <iframe title={`expanded-${row.id}`} srcDoc={row.html} sandbox="allow-same-origin" />
+              </div>
+              <div className="fl-campaign-preview-actions">
+                {row.campaign_id && (
+                  <button onClick={() => navigate(`/brands/${brandId}/campaigns/${row.campaign_id}`)}>
+                    <ExternalLink className="w-3.5 h-3.5" /> Open in Editor
+                  </button>
+                )}
+                {previewNode?.emailIndex !== undefined && (
+                  <button onClick={() => onGenerateNode(previewNode.emailIndex!)} disabled={generatingIndex === previewNode.emailIndex}>
+                    {generatingIndex === previewNode.emailIndex ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                    {row.html ? "Regenerate" : "Generate"}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         );
       })()}
 
-      {detailsNode && (
+      {detailsNode && (detailsNode.kind === "email" || detailsNode.kind === "sms") ? (
+        <FlowEmailDetail
+          node={detailsNode}
+          emailRow={typeof detailsNode.emailIndex === "number" ? emails.find((e) => e.sequence_index === detailsNode.emailIndex) : undefined}
+          campaignMeta={campaignMeta}
+          brandId={brandId}
+          flowType={flowType}
+          onClose={() => setDetailsNode(null)}
+          onGenerate={typeof detailsNode.emailIndex === "number" ? () => onGenerateNode(detailsNode.emailIndex!) : undefined}
+        />
+      ) : detailsNode && (
         <div className="fl-details-backdrop" onMouseDown={() => setDetailsNode(null)}>
           <div className="fl-details" onMouseDown={(e) => e.stopPropagation()}>
             <div className="fl-details-head">
@@ -1222,6 +1243,7 @@ function NodeView({
   onLabelCommit,
   onSelect,
   onOpenDetails,
+  onOpenPreview,
   onRequestDelete,
   onStartDrag,
   onDoubleClickTitle,
@@ -1239,8 +1261,9 @@ function NodeView({
   onLabelCommit: () => void;
   onSelect: () => void;
   onOpenDetails: () => void;
+  onOpenPreview?: () => void;
   onRequestDelete: () => void;
-  onStartDrag: (e: React.MouseEvent) => void;
+  onStartDrag: (e: React.MouseEvent, clickAction?: () => void) => void;
   onDoubleClickTitle: () => void;
   onGenerate?: () => void;
   onExpand?: () => void;
@@ -1260,11 +1283,7 @@ function NodeView({
         onMouseDown={(e) => {
           e.stopPropagation();
           onSelect();
-          onStartDrag(e);
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpenDetails();
+          onStartDrag(e, onOpenDetails);
         }}
         title={node.meta?.items?.[0] || "Exit the flow"}
       >
@@ -1288,16 +1307,21 @@ function NodeView({
         width: sz.w,
       }}
       onMouseDown={(e) => {
+        if (node.kind === "email" || node.kind === "sms") return;
         e.stopPropagation();
         onSelect();
-        onStartDrag(e);
-      }}
-      onClick={(e) => {
-        e.stopPropagation();
-        onOpenDetails();
+        onStartDrag(e, onOpenDetails);
       }}
     >
-      <div className="fl-node-head">
+      <div
+        className={`fl-node-head ${node.kind === "email" || node.kind === "sms" ? "fl-node-zone fl-node-zone-details" : ""}`}
+        onMouseDown={(e) => {
+          if (node.kind !== "email" && node.kind !== "sms") return;
+          e.stopPropagation();
+          onSelect();
+          onStartDrag(e, onOpenDetails);
+        }}
+      >
         <div className={`fl-badge ${node.kind === "trigger" ? "trigger" : ""}`}>
           <I className="w-3.5 h-3.5" />
         </div>
@@ -1340,6 +1364,7 @@ function NodeView({
         </div>
         {onGenerate && (
           <button
+            className="fl-node-generate"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
@@ -1347,18 +1372,6 @@ function NodeView({
             }}
             disabled={isGenerating}
             title="Generate this email"
-            style={{
-              flexShrink: 0,
-              width: 26,
-              height: 26,
-              borderRadius: 7,
-              background: "var(--fl-ink)",
-              color: "#fff",
-              border: 0,
-              display: "grid",
-              placeItems: "center",
-              cursor: "pointer",
-            }}
           >
             {isGenerating ? (
               <Loader2 className="w-3 h-3 animate-spin" />
@@ -1447,7 +1460,9 @@ function NodeView({
           node={node}
           emailRow={emailRow}
           campaignMeta={campaignMeta}
-          onExpand={onExpand}
+          onOpenPreview={onOpenPreview || onExpand}
+          onStartPreviewDrag={(e) => onStartDrag(e, emailRow?.html ? (onOpenPreview || onExpand) : undefined)}
+          onSelect={onSelect}
         />
       )}
     </div>
@@ -1458,12 +1473,16 @@ function MessagePreview({
   node,
   emailRow,
   campaignMeta,
-  onExpand,
+  onOpenPreview,
+  onStartPreviewDrag,
+  onSelect,
 }: {
   node: BoardNode;
   emailRow?: FlowEmailRow;
   campaignMeta: Record<string, FlowEmailMeta>;
-  onExpand?: () => void;
+  onOpenPreview?: () => void;
+  onStartPreviewDrag: (e: React.MouseEvent) => void;
+  onSelect: () => void;
 }) {
   const cm = emailRow?.campaign_id ? campaignMeta[emailRow.campaign_id] : null;
   const subject =
@@ -1485,15 +1504,12 @@ function MessagePreview({
   return (
     <div
       className="fl-msg-preview"
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        if (hasHtml && onExpand) {
-          e.stopPropagation();
-          onExpand();
-        }
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        onSelect();
+        onStartPreviewDrag(e);
       }}
-      style={hasHtml && onExpand ? { cursor: "zoom-in" } : undefined}
-      title={hasHtml ? "Click to expand" : undefined}
+      title={hasHtml ? "Open campaign preview" : undefined}
     >
       <div className="fl-msg-thumb">
         {emailRow?.html ? (
@@ -1512,7 +1528,7 @@ function MessagePreview({
             }}
           />
         ) : null}
-        {hasHtml && onExpand && (
+        {hasHtml && onOpenPreview && (
           <div
             style={{
               position: "absolute",
