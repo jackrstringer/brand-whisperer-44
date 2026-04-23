@@ -1100,6 +1100,23 @@ function NodeView({
   const km = KIND_META[node.kind];
   const I = km.Icon;
 
+  if (node.kind === "exit") {
+    return (
+      <div
+        className={`fl-node fl-exit-chip kind-${node.kind} ${selected ? "sel" : ""}`}
+        style={{ transform: `translate(${node.x}px, ${node.y}px)`, width: sz.w, height: sz.h }}
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          onSelect();
+          onStartDrag(e);
+        }}
+        title={node.meta?.items?.[0] || "Exit the flow"}
+      >
+        <I className="w-4 h-4" />
+      </div>
+    );
+  }
+
   return (
     <div
       className={`fl-node kind-${node.kind} ${selected ? "sel" : ""} ${
