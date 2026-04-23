@@ -1228,16 +1228,6 @@ function NodeView({
         </div>
       )}
 
-      {node.kind === "exit" && (
-        <div className="fl-body">
-          {(node.meta?.items || []).slice(0, 3).map((it: string, i: number) => (
-            <div key={i} className="fl-row" style={{ borderTop: i ? "1px dashed var(--fl-line)" : "none", paddingTop: i ? 6 : 0 }}>
-              <span className="v" style={{ textAlign: "left", fontSize: 11, color: "var(--fl-ink-2)" }}>{it}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
       {node.kind === "delay" && (
         <div className="fl-body" style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ fontSize: 16, fontWeight: 600, color: "var(--fl-ink)" }}>
