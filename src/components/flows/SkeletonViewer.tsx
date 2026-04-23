@@ -1381,15 +1381,7 @@ function FlowSummaryCard({
   const filterCount = meta.filters?.length || 0;
   const exitCount = meta.exit?.length || 0;
   return (
-    <div className={`fl-brief ${open ? "open" : ""}`} style={{ transform: `translate(${trigger.x - 140}px, ${trigger.y - 72}px)` }}>
-      {open && (
-        <div className="fl-brief-body">
-          <div><p className="fl-brief-label">Trigger</p><p className="fl-brief-text">{trigger.label}</p></div>
-          <div><p className="fl-brief-label">Logic</p><p className="fl-brief-text">{filterCount} entry filters · {exitCount} exits</p></div>
-          <div><p className="fl-brief-label">Entry filters</p><p className="fl-brief-text">{meta.filters?.join(" • ") || "None specified"}</p></div>
-          <div><p className="fl-brief-label">Exit rules</p><p className="fl-brief-text">{meta.exit?.join(" • ") || "Default flow completion"}</p></div>
-        </div>
-      )}
+    <div className={`fl-brief ${open ? "open" : ""}`} style={{ transform: `translate(${trigger.x - 140}px, ${trigger.y - 72}px) translateY(-100%)` }}>
       <button className="fl-brief-head" onClick={onToggle} onMouseDown={(e) => e.stopPropagation()}>
         <div className="fl-brief-badge"><Wand2 className="w-3.5 h-3.5" /></div>
         <div className="fl-brief-main">
@@ -1398,6 +1390,14 @@ function FlowSummaryCard({
         </div>
         <div className="fl-brief-pill">{open ? "Collapse" : "Expand"}</div>
       </button>
+      {open && (
+        <div className="fl-brief-body">
+          <div><p className="fl-brief-label">Trigger</p><p className="fl-brief-text">{trigger.label}</p></div>
+          <div><p className="fl-brief-label">Logic</p><p className="fl-brief-text">{filterCount} entry filters · {exitCount} exits</p></div>
+          <div><p className="fl-brief-label">Entry filters</p><p className="fl-brief-text">{meta.filters?.join(" • ") || "None specified"}</p></div>
+          <div><p className="fl-brief-label">Exit rules</p><p className="fl-brief-text">{meta.exit?.join(" • ") || "Default flow completion"}</p></div>
+        </div>
+      )}
     </div>
   );
 }
