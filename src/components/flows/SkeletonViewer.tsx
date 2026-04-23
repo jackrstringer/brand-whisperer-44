@@ -106,6 +106,7 @@ const BRANCH_Y = 92;
 const LINEAR_Y_GAP = 64;
 const SPLIT_Y_GAP = 104;
 const SIBLING_X_GAP = 96;
+const SPLIT_BRANCH_GAP = 112;
 function getNodeSize(kind: NodeKind) {
   if (kind === "delay") return { w: 220, h: 70 };
   if (kind === "split") return { w: 260, h: 130 };
@@ -334,13 +335,17 @@ function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[]): BoardNode[] {
       return;
     }
 
-    const widths = children.map((edge) => measure(edge.to, nextSeen));
-    const totalWidth = widths.reduce((sum, width) => sum + width, 0) + SIBLING_X_GAP * Math.max(0, widths.length - 1);
+    const widths = children.map((edge) => {
+      const child = byId[edge.to];
+      return node.kind === "split" ? getNodeSize(child.kind).w : measure(edge.to, nextSeen);
+    });
+    const siblingGap = node.kind === "split" ? SPLIT_BRANCH_GAP : SIBLING_X_GAP;
+    const totalWidth = widths.reduce((sum, width) => sum + width, 0) + siblingGap * Math.max(0, widths.length - 1);
     let cursor = centerX - totalWidth / 2;
     children.forEach((edge, index) => {
       const childCenter = cursor + widths[index] / 2;
       place(edge.to, childCenter, childY, nextSeen);
-      cursor += widths[index] + SIBLING_X_GAP;
+      cursor += widths[index] + siblingGap;
     });
   };
 
