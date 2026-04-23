@@ -2,93 +2,61 @@
 
 ## Goal
 
-Replace the current vertical skeleton-list flow builder with a Miro-style infinite canvas flow builder powered by React Flow, wired to the existing backend (flows, flow_emails, edit-campaign, generate-campaign, Klaviyo trigger config). UI follows the spec; backend reuses what already works.
+Rebuild the flow builder visuals to match the rest of the app (light, monochrome, Geist/Inter, no emojis, real hover/active states) while keeping the Teenage-Engineering-meets-Apple-meets-Miro feel. Functionality stays; only the visual layer and interaction polish change.
 
-## Architecture
+## What's wrong now
 
-```text
-FlowBuilderPage (canvas route, full-width)
-├── TopBar (flow name, status, analytics toggle, save, undo/redo)
-├── StrategySummaryPanel (collapsible TOC, click-to-scroll)
-├── LeftSidebar (node palette ↔ node config, contextual)
-├── ReactFlow Canvas (dark, dotted grid, minimap, viewport ctrls)
-│   ├── Custom nodes: Trigger, TimeDelay, Email, SMS, Push,
-│   │   ConditionalSplit, TriggerSplit, UpdateProperty,
-│   │   ListUpdate, Webhook, InternalAlert, CustomAction
-│   └── Custom edges with hover "+" insertion + YES/NO labels
-├── MessageDetailFlyout (right-slide, tabs: Preview/Content/
-│   Analytics/Activity/Notes) — reuses CampaignEditor preview
-└── AIChatPanel (right strip, expand to 420px)
-    └── Routes to flow-agent for plan, edit-campaign for edits
-```
+- Hardcoded `--flow-canvas`, `--flow-card`, `--flow-border` tokens force dark mode, ignoring the app's existing light monochrome system.
+- Emoji icons (✉, ⏱, ◆, ⚡, 🔔, ⚙️, 📝, 📋, 🔗, 💬, 🔔) in `NODE_KIND_META` and node headers — the rest of the app uses Lucide icons exclusively.
+- Cards have no real hover/active feedback, no shadow elevation, no scale, no border transitions.
+- Palette tiles are flat black squares with no affordance.
+- Top bar, sidebar, strategy panel, chat panel all use ad-hoc dark colors instead of `bg-card`, `border-border`, `text-foreground`, `text-muted-foreground`.
+- Edges, minimap, controls all themed to a dark canvas that doesn't exist anywhere else in the product.
 
-## Backend wiring (reuses existing system)
+## Visual system (matches existing app)
 
-- `flows` table: add `canvas_state jsonb` (node positions, viewport, edges) and `trigger_config jsonb` (metric/list/segment + filters + flow frequency + smart sending). Keep `skeleton_markdown` for AI plan import.
-- `flow_emails` table: add `node_type` values for `delay`, `conditional_split`, `trigger_split`, `update_property`, `list_update`, `webhook`, `internal_alert`, `custom_action`, `sms`, `push`. Add `canvas_position jsonb` and `node_config jsonb` for type-specific data (delay duration, split conditions, etc.).
-- New table `flow_edges` (id, flow_id, source_node_id, target_node_id, source_handle, label) so split branches and arbitrary topology work — current schema assumes linear sequence_index.
-- New table `flow_node_comments` for the Notes tab (mirrors campaign chat_messages shape).
-- `flow-agent` edge function: extend to emit canvas-aware ops (add_node, remove_node, connect, set_config) instead of only skeleton markdown. Existing skeleton parser becomes the import path for legacy flows.
-- `generate-campaign`: unchanged. Each Email/SMS node fires it with the existing flowConfig payload (trigger_metric_name, step_number, total_steps, step_goal). Polling architecture stays as-is.
-- Klaviyo trigger picker: reuse `klaviyo-fetch-schema` for metrics list and add a list/segment fetch path. If no Klaviyo connection, show the "Connect Klaviyo" empty state already used elsewhere.
+- **Canvas**: `bg-background` (light), dot grid using `border` token at low opacity. Same surface as Ideate page.
+- **Cards**: `bg-card`, `border-border`, `rounded-xl`, subtle `shadow-sm` at rest → `shadow-md` + `border-foreground/20` on hover → `border-foreground` + `shadow-lg` + `scale-[1.01]` on select. 200ms spring on all.
+- **Type**: Geist/Inter (already loaded). Node titles `text-[13px] font-semibold tracking-tight`. Metadata `text-[11px] text-muted-foreground`. Monospace only for delay durations and metric numbers (`font-mono tabular-nums`).
+- **Icons**: Lucide only — `Mail`, `MessageSquare`, `Bell`, `Clock`, `GitBranch`, `Zap`, `UserPen`, `ListPlus`, `Webhook`, `BellRing`, `Settings2`. 14px, `text-foreground/70`, in a `w-7 h-7 rounded-lg bg-muted` tile inside the card header.
+- **Status pills**: replace colored dots. `Live` = `bg-foreground text-background`, `Manual` = `bg-muted text-foreground`, `Draft` = `border border-border text-muted-foreground`. All `text-[10px] uppercase tracking-[0.08em] px-2 py-0.5 rounded-full`.
+- **Edges**: `border` token color at rest, `foreground` on hover, `foreground` + `stroke-width 2.5` when selected. "+" insertion button becomes a clean `bg-foreground text-background` circle with Lucide `Plus`, scales 1 → 1.08 on hover.
+- **YES/NO labels**: monospace `text-[10px]`, `bg-card border border-border`, no green/red tinting (kept monochrome — branch identity comes from position + label, not color).
+- **Minimap + Controls**: `bg-card border-border`, rounded, same elevation as everywhere else. No frosted glass.
 
-## Frontend work
+## Interaction polish
 
-New files:
-- `src/pages/FlowBuilderCanvas.tsx` — replaces current `FlowBuilderPage.tsx` content
-- `src/components/flowbuilder/Canvas.tsx` — React Flow wrapper, viewport, minimap, grid
-- `src/components/flowbuilder/nodes/*` — one file per node type, all sharing `BaseNodeCard`
-- `src/components/flowbuilder/edges/InsertableEdge.tsx` — hover "+" + YES/NO labels
-- `src/components/flowbuilder/TopBar.tsx`
-- `src/components/flowbuilder/StrategyPanel.tsx`
-- `src/components/flowbuilder/LeftSidebar.tsx` (palette + config router)
-- `src/components/flowbuilder/configs/*` — per-node config panels
-- `src/components/flowbuilder/MessageFlyout.tsx` — uses existing email preview iframe
-- `src/components/flowbuilder/ChatPanel.tsx` — replaces FlowAgentChat, talks to extended flow-agent
-- `src/components/flowbuilder/QuickAddMenu.tsx` — floating add menu for "+" / double-click
-- `src/hooks/useFlowCanvas.ts` — load/save canvas_state, undo/redo stack, autosave debounce
-- `src/hooks/useFlowAgentActions.ts` — applies AI ops to canvas with diff preview
+- Every clickable element: 150ms transition on `bg`, `border`, `shadow`, `transform`.
+- Node hover: card lifts (shadow + 1px border darken), drag handle dots fade in on the right.
+- Node select: border thickens to `foreground`, slight scale, soft outer shadow ring.
+- Palette tiles: hover fills `bg-muted`, active scales 0.98, drag start lifts with shadow.
+- Edge "+" only appears on edge hover, fades in 120ms.
+- QuickAddMenu: scales from click point (0.95 → 1, 150ms), `bg-popover border-border shadow-lg`, items use `hover:bg-muted` like every other menu in the app.
+- Chat panel collapsed strip: 48px, vertical "AI" label, hover widens border. Expanded: matches `ChatBar` styling from ideation.
+- Top bar: same height/padding as `AppLayout` headers, status as a `Select` from shadcn instead of native, undo/redo as ghost icon buttons.
+- Strategy panel: collapsible like the ideation `SplitPane`, monospace TOC with hover row highlight, click → `setCenter` with 400ms ease.
 
-Reused as-is:
-- `edit-campaign`, `generate-campaign`, `visual-qa`, `klaviyo-render-preview`
-- `CampaignEditor` preview iframe inside the flyout's Preview tab
-- Existing dark theme tokens; design system already matches the spec's palette intent
+## Files to change
 
-`AppLayout.tsx`: confirm `/flows/` is in `FULL_WIDTH_ROUTES` (it already is).
+- `src/index.css` — remove the dark `--flow-*` tokens; either delete or remap them to existing semantic tokens (`--background`, `--card`, `--border`, `--foreground`, `--muted`, `--muted-foreground`, `--popover`).
+- `src/components/flowbuilder/types.ts` — drop emoji from `NODE_KIND_META`, replace with Lucide icon component refs.
+- `src/components/flowbuilder/nodes/BaseNodeCard.tsx` — restyle header, status pill, hover/select states, drag handle.
+- `src/components/flowbuilder/nodes/{Trigger,TimeDelay,Email,Sms,ConditionalSplit,Simple}Node.tsx` — swap emoji for Lucide, update typography, monochrome status, real hover.
+- `src/components/flowbuilder/edges/InsertableEdge.tsx` — monochrome stroke, Lucide `Plus`, monochrome YES/NO labels.
+- `src/components/flowbuilder/Canvas.tsx` — light dot grid, restyle `Background`/`Controls`/`MiniMap` to use semantic tokens.
+- `src/components/flowbuilder/QuickAddMenu.tsx` — match shadcn popover/menu styling, Lucide icons, search input matches app inputs.
+- `src/components/flowbuilder/LeftSidebar.tsx` — light sidebar matching `AppSidebar` aesthetic, palette tiles with proper affordance, config panel uses standard `Label`/`Input`/`Select`/`Textarea` from shadcn.
+- `src/components/flowbuilder/TopBar.tsx` — match app header height and tokens, shadcn `Select` for status, ghost icon buttons for undo/redo, inline-editable name like Ideate.
+- `src/components/flowbuilder/StrategyPanel.tsx` — collapsible card, monospace TOC, hover rows, no emoji.
+- `src/components/flowbuilder/MessageFlyout.tsx` — restyle as a sheet/peek panel matching `TaskDetail` (the existing ClickUp-inspired peek panel), reuse its visual language.
+- `src/components/flowbuilder/ChatPanel.tsx` — collapsed vertical strip + expanded panel that visually matches `ChatBar` from ideation.
 
-## Behavior rules (matching spec)
+## Behavior unchanged
 
-- Canvas: dot grid, snap to 20px, zoom 10–200%, minimap bottom-right, viewport pill bottom-left.
-- Selection: single click select, shift+click multi, drag-rect on empty canvas, Cmd+A/D/C/V, Delete with confirm for message nodes that have generated HTML.
-- Edge insertion: hover edge → "+" at midpoint → QuickAddMenu → atomic delete-edge / create-node / create-two-edges.
-- Conditional/Trigger splits: two output handles (`yes`, `no`), labeled edges, live counts come from `flow_emails.recipients` once Klaviyo data is wired.
-- Email node thumbnail: render existing `flow_emails.html` to a 60x80 thumbnail via `klaviyo-render-preview` cache (already used for previews).
-- Analytics toggle: top-bar switch flips `showAnalytics` state; metric bars expand with Framer Motion layout animation.
-- Strategy panel TOC: derived from current nodes/edges, click → `reactFlowInstance.setCenter(node.position)`.
-- Chat panel: collapsed 48px strip default; expanded 420px; routes user message to `flow-agent` which returns either text-only reply or an ops array; ops apply with diff preview + `Apply / Modify / Cancel`; Undo All restores prior canvas snapshot.
-- Trigger setup on flow creation: welcome flows → list dropdown, others → metric dropdown; if no Klaviyo connection, inline "Connect Klaviyo" message (no silent failure, per project rule).
-- Failure handling: per the no-graceful-fallback rule, AI op apply errors surface the actual error and the failing op; generation failures already use the existing polling + last_error path.
+- All data, autosave, undo/redo, edge insertion, drag-from-palette, double-click-to-add, flyout open, chat routing — none of it changes. Pure visual + interaction-feedback rebuild.
 
-## Migration path
+## Out of scope
 
-- Existing flows with `skeleton_markdown` and linear `flow_emails` auto-import on first canvas load: parser places nodes in a vertical column at x=0, y=index*200, and creates `flow_edges` rows linking them in order.
-- `canvas_state` saved on every change (debounced 500ms) so the layout becomes the source of truth going forward.
-
-## Out of scope for v1
-
-- A/B test wrapper container (spec section 3.14)
-- Push notification node beyond stub
-- Webhook / Custom Action runtime (UI + storage only, no execution)
-- Comments @mentions and attachments
-- Pop-out floating chat window
-- Mobile/tablet support (desktop-only, ≥1024px, per spec)
-
-## Phasing
-
-1. Schema migration (canvas_state, trigger_config, flow_edges, node_config, flow_node_comments) + legacy import.
-2. Canvas + Trigger / TimeDelay / Email / ConditionalSplit nodes + edge insertion + autosave.
-3. TopBar, StrategyPanel, LeftSidebar (palette + config), MessageFlyout (Preview + Content + Analytics tabs).
-4. Remaining node types (SMS, Push, TriggerSplit, UpdateProperty, ListUpdate, Webhook, InternalAlert, CustomAction).
-5. ChatPanel + extended flow-agent ops + diff preview + undo.
-6. Analytics overlay + Notes tab + keyboard shortcuts + minimap polish.
+- Adding new features from the original spec (analytics overlay, A/B wrapper, keyboard shortcuts beyond what exists).
+- Touching backend or edge functions.
 
