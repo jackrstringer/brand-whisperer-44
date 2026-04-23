@@ -720,6 +720,18 @@ export function SkeletonViewer({
             ))}
           </svg>
 
+          {/* Path insertion targets — only active while dragging from the rail */}
+          {activeDragKind && dropTargets.map((target) => (
+            <div
+              key={target.id}
+              className={`fl-drop-target ${hoveredDropTarget === target.id ? "over" : ""}`}
+              style={{ transform: `translate(${target.x - 76}px, ${target.y - 16}px)` }}
+            >
+              <Plus className="w-3 h-3" />
+              <span>{target.edge.branch ? target.edge.branch.toUpperCase() : "INSERT"}</span>
+            </div>
+          ))}
+
           {/* Stickies (under nodes) */}
           {stickies.map((s) => (
             <div
@@ -838,19 +850,12 @@ export function SkeletonViewer({
           )}
         </div>
 
-        {/* Floating left toolbar */}
+        {/* Permanent left node rail */}
         <div className="fl-tool" onMouseDown={(e) => e.stopPropagation()}>
-          <button
-            className={tool === "select" ? "on" : ""}
-            onClick={() => setTool("select")}
-            title="Select (V)"
-          >
-            <MousePointer2 className="w-4 h-4" />
-          </button>
           <NodePalette onStartDrag={startPaletteDrag} />
           <button
-            className={tool === "sticky" ? "on" : ""}
-            onClick={() => setTool("sticky")}
+            className={stickyArmed ? "on" : ""}
+            onClick={() => setStickyArmed((v) => !v)}
             title="Sticky note (N)"
           >
             <StickyNote className="w-4 h-4" />
