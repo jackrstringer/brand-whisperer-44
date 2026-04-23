@@ -1271,7 +1271,9 @@ function NodePalette({ onStartDrag }: { onStartDrag: (kind: NodeKind, e: React.M
   const items: NodeKind[] = ["email", "sms", "push", "delay", "split", "trigger_split", "webhook", "exit"];
   return (
     <div className="fl-node-palette">
-      <div className="fl-node-palette-label">Nodes</div>
+      <button className="fl-node-palette-anchor" type="button" title="Drag a node into the flow">
+        <Plus className="w-4 h-4" />
+      </button>
       <div className="fl-node-palette-panel">
         {items.map((kind) => {
           const { Icon, label } = KIND_META[kind];
