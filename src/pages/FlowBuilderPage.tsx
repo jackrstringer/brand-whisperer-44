@@ -18,6 +18,7 @@ import {
   FlowEmailRow,
   FlowEmailMeta,
 } from "@/components/flows/SkeletonViewer";
+import { SplitPane } from "@/components/ideation/SplitPane";
 
 interface FlowRow {
   id: string;
@@ -371,28 +372,38 @@ Notes: ${node.notes || "none"}`;
         />
       ) : (
         <>
-          <SkeletonViewer
-            key={`${flow.id}:ready`}
-            nodes={parsedNodes}
-            meta={parsedMeta}
-            flowType={flow.flow_type}
-            emails={emails}
-            campaignMeta={campaignMeta}
-            expandedIndex={expandedIndex}
-            onToggleExpand={setExpandedIndex}
-            onGenerateNode={generateSingleEmail}
-            onSaveNodeEdit={saveNodeEdit}
-            generatingIndex={generatingIndex}
-            drafting={flow.status === "draft" || flow.status === "generating"}
-          />
-          <FlowAgentChat
-            key={`${flow.id}:chat`}
-            flowId={flow.id}
-            brandId={flow.brand_id}
-            flowType={flow.flow_type}
-            initialMessages={Array.isArray(flow.messages) ? (flow.messages as any) : []}
-            currentSkeleton={flow.skeleton_markdown}
-            onSkeletonUpdated={handleSkeletonUpdated}
+          <SplitPane
+            defaultLeftWidth={Math.max(760, window.innerWidth - 520)}
+            minLeftWidth={620}
+            minRightWidth={380}
+            left={
+              <SkeletonViewer
+                key={`${flow.id}:ready`}
+                nodes={parsedNodes}
+                meta={parsedMeta}
+                flowType={flow.flow_type}
+                emails={emails}
+                campaignMeta={campaignMeta}
+                expandedIndex={expandedIndex}
+                onToggleExpand={setExpandedIndex}
+                onGenerateNode={generateSingleEmail}
+                onSaveNodeEdit={saveNodeEdit}
+                generatingIndex={generatingIndex}
+                drafting={flow.status === "draft" || flow.status === "generating"}
+              />
+            }
+            right={
+              <FlowAgentChat
+                key={`${flow.id}:chat`}
+                flowId={flow.id}
+                brandId={flow.brand_id}
+                flowType={flow.flow_type}
+                initialMessages={Array.isArray(flow.messages) ? (flow.messages as any) : []}
+                currentSkeleton={flow.skeleton_markdown}
+                onSkeletonUpdated={handleSkeletonUpdated}
+                panel
+              />
+            }
           />
         </>
       )}
