@@ -319,7 +319,6 @@ export function SkeletonViewer({
   const [stickies, setStickies] = useState<Sticky[]>([]);
   const [selectedSticky, setSelectedSticky] = useState<string | null>(null);
   const [editingSticky, setEditingSticky] = useState<string | null>(null);
-  const [addPop, setAddPop] = useState<{ x: number; y: number } | null>(null);
   const [editingLabelOf, setEditingLabelOf] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState("");
   const [briefOpen, setBriefOpen] = useState(false);
@@ -425,7 +424,6 @@ export function SkeletonViewer({
         setSpaceHeld(true);
       }
       if (e.key === "Escape") {
-        setAddPop(null);
         setSelected(null);
         setSelectedSticky(null);
         setEditingSticky(null);
@@ -474,10 +472,6 @@ export function SkeletonViewer({
       setSelectedSticky(id);
       setEditingSticky(id);
       setTool("select");
-      return;
-    }
-    if (tool === "add") {
-      setAddPop({ x: e.clientX, y: e.clientY });
       return;
     }
     setSelected(null);
@@ -586,14 +580,43 @@ export function SkeletonViewer({
 
   const triggerNode = nodeById.trigger;
 
-  /* -------- Add node via popover (placeholder — saves visually only) -------- */
   const addNodeAt = (kind: NodeKind, screenX: number, screenY: number) => {
-    // We don't yet have a backend mutation for raw skeleton additions.
-    // Add a sticky note placeholder so the action is at least visible.
     const w = screenToWorld(screenX, screenY);
-    const id = `s-${Date.now()}`;
-    setStickies((s) => [
-      ...s,
+    const id = `manual-${kind}-${Date.now()}`;
+    const node: BoardNode = {
+      id,
+      kind,
+      label: KIND_META[kind].label,
+      x: w.x - getNodeSize(kind).w / 2,
+      y: w.y - getNodeSize(kind).h / 2,
+      meta: kind === "split" || kind === "trigger_split" ? { condition: "New split", branches: [{ label: "YES" }, { label: "NO" }] } : {},
+    };
+    setLayoutNodes((arr) => resolveNodeCollisions([...arr, node]));
+    setSelected(id);
+    setTool("select");
+  };
+
+  const startPaletteDrag = (kind: NodeKind, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const ghost = document.createElement("div");
+    ghost.className = "fl-drag-ghost";
+    ghost.textContent = KIND_META[kind].label;
+    document.body.appendChild(ghost);
+    const move = (ev: MouseEvent) => {
+      ghost.style.left = `${ev.clientX + 12}px`;
+      ghost.style.top = `${ev.clientY + 12}px`;
+    };
+    const up = (ev: MouseEvent) => {
+      ghost.remove();
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      addNodeAt(kind, ev.clientX, ev.clientY);
+    };
+    move(e.nativeEvent);
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
       {
         id,
         x: w.x - 90,
