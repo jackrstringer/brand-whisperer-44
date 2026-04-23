@@ -562,7 +562,7 @@
   background: var(--fl-surface-2);
   font-size: 10px; line-height: 1.35; color: var(--fl-ink-2);
   font-family: var(--fl-mono);
-  margin-bottom: 6px;
+  margin-bottom: 0;
   border: 1px dashed var(--fl-line-2);
 }
 .fl-node.kind-split:hover .fl-split-cond,
@@ -582,6 +582,9 @@
 .fl-branch.no  { background: hsl(10 70% 93%);  color: hsl(10 70% 38%); }
 .dark .fl-branch.yes { background: hsl(140 30% 22%); color: hsl(140 50% 80%); }
 .dark .fl-branch.no  { background: hsl(10 35% 25%); color: hsl(10 60% 82%); }
+.fl-delay-body { display: flex; align-items: center; gap: 10px; padding-top: 2px; }
+.fl-delay-value { font-size: 13px; line-height: 1.25; font-weight: 650; color: var(--fl-ink); min-width: 0; }
+.fl-delay-label { margin-left: auto; font-family: var(--fl-mono); font-size: 9px; color: var(--fl-ink-4); text-transform: uppercase; letter-spacing: 0.07em; }
 
 /* Email/SMS message preview pill */
 .fl-msg-preview {
@@ -603,8 +606,8 @@
 }
 .fl-msg-preview:hover .fl-msg-thumb { border-color: var(--fl-accent); box-shadow: 0 0 0 1px var(--fl-accent); }
 .fl-msg-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
-.fl-msg-subject { font-size: 12px; font-weight: 600; color: var(--fl-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.fl-msg-snip    { font-size: 11px; color: var(--fl-ink-4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl-msg-subject { font-size: 12px; line-height: 1.25; font-weight: 600; color: var(--fl-ink); white-space: normal; overflow: visible; text-overflow: clip; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.fl-msg-snip    { font-size: 11px; line-height: 1.25; color: var(--fl-ink-4); white-space: normal; overflow: visible; text-overflow: clip; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .fl-msg-status  { font-size: 9px; color: var(--fl-ink-4); font-family: var(--fl-mono); letter-spacing: 0.06em; padding-top: 2px; text-transform: uppercase; }
 .fl-msg-status.ready { color: hsl(140 50% 35%); }
 .fl-msg-status.gen   { color: hsl(265 60% 55%); }
