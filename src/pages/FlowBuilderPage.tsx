@@ -382,6 +382,7 @@ Notes: ${node.notes || "none"}`;
                 nodes={parsedNodes}
                 meta={parsedMeta}
                 flowType={flow.flow_type}
+                brandId={flow.brand_id}
                 emails={emails}
                 campaignMeta={campaignMeta}
                 expandedIndex={expandedIndex}
