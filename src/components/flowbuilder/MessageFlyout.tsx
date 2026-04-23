@@ -41,6 +41,29 @@ export function MessageFlyout({ node, brandId, flowId, flowType, onClose, onUpda
     setPreviewHeight(900);
   }, [node?.id, node?.data.html]);
 
+  useEffect(() => {
+    const campaignId = node?.data.campaign_id as string | undefined;
+    if (!node || !campaignId || node.data.html) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("campaigns")
+        .select("html,status,last_error")
+        .eq("id", campaignId)
+        .single();
+      if (cancelled) return;
+      if (error) {
+        toast.error(`Could not load generated campaign: ${error.message}`);
+        return;
+      }
+      if (data?.html) onUpdate(node.id, { html: data.html, generation_status: "complete" });
+      if (data?.status === "error") onUpdate(node.id, { generation_status: "failed", last_error: data.last_error });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [node, onUpdate]);
+
   if (!node) return null;
   const d = node.data;
   const meta = NODE_KIND_META[d.kind];
@@ -66,10 +89,11 @@ export function MessageFlyout({ node, brandId, flowId, flowType, onClose, onUpda
 
   const ensureFlowEmail = async (campaignId: string) => {
     if (d.flow_email_id) {
-      await supabase
+      const { error } = await supabase
         .from("flow_emails")
         .update({ campaign_id: campaignId, generation_status: "generating" })
         .eq("id", d.flow_email_id);
+      if (error) throw error;
       return d.flow_email_id;
     }
 
@@ -129,15 +153,8 @@ export function MessageFlyout({ node, brandId, flowId, flowType, onClose, onUpda
       const flowEmailId = await ensureFlowEmail(campaign.id);
       onUpdate(node.id, { campaign_id: campaign.id, flow_email_id: flowEmailId, generation_status: "generating" });
 
-      const session = (await supabase.auth.getSession()).data.session;
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-campaign`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          Authorization: `Bearer ${session?.access_token}`,
-        },
-        body: JSON.stringify({
+      const { error: invokeError } = await supabase.functions.invoke("generate-campaign", {
+        body: {
           brandId,
           campaignId: campaign.id,
           brief: d.job || d.notes || d.label,
@@ -146,10 +163,10 @@ export function MessageFlyout({ node, brandId, flowId, flowType, onClose, onUpda
           subjectLine: d.subject_direction || undefined,
           campaignMode: "flow",
           flowConfig: { flowId, nodeId: node.id, nodeType: d.kind, trigger: flowType },
-        }),
+        },
       });
 
-      if (!resp.ok && resp.status !== 202) throw new Error(await resp.text());
+      if (invokeError) throw invokeError;
 
       const html = await pollCampaign(campaign.id);
       await supabase
@@ -161,6 +178,9 @@ export function MessageFlyout({ node, brandId, flowId, flowType, onClose, onUpda
       toast.success("Flow email generated");
     } catch (err: any) {
       onUpdate(node.id, { generation_status: "failed" });
+      if (d.flow_email_id) {
+        await supabase.from("flow_emails").update({ generation_status: "failed", last_error: err?.message || "Generation failed" }).eq("id", d.flow_email_id);
+      }
       toast.error(err?.message || "Generation failed");
     } finally {
       setIsGenerating(false);
@@ -336,7 +356,7 @@ export function MessageFlyout({ node, brandId, flowId, flowType, onClose, onUpda
         )}
 
         {tab === "Notes" && d.flow_email_id && (
-          <NotesTab flowEmailId={d.flow_email_id} flowId={node.id} />
+          <NotesTab flowEmailId={d.flow_email_id} flowId={flowId} />
         )}
         {tab === "Notes" && !d.flow_email_id && (
           <div className="p-4 text-[12px] text-muted-foreground">
