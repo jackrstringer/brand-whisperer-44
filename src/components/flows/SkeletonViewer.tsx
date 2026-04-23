@@ -7,7 +7,6 @@ import {
   useState,
 } from "react";
 import {
-  MousePointer2,
   Plus,
   StickyNote,
   Wand2,
@@ -48,7 +47,6 @@ export interface FlowEmailMeta {
   preview_text: string | null;
 }
 
-type Tool = "select" | "add" | "sticky";
 type NodeKind = "trigger" | "filters" | "email" | "delay" | "split" | "trigger_split" | "sms" | "push" | "webhook" | "exit";
 
 interface BoardNode {
@@ -67,6 +65,14 @@ interface BoardEdge {
   from: string;
   to: string;
   branch?: "yes" | "no" | null;
+}
+
+interface DropTarget {
+  id: string;
+  edge: BoardEdge;
+  x: number;
+  y: number;
+  label: string;
 }
 
 interface Sticky {
@@ -312,7 +318,6 @@ export function SkeletonViewer({
   const stageRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(0.85);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [tool, setTool] = useState<Tool>("select");
   const [panning, setPanning] = useState(false);
   const [spaceHeld, setSpaceHeld] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -322,12 +327,17 @@ export function SkeletonViewer({
   const [editingLabelOf, setEditingLabelOf] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState("");
   const [briefOpen, setBriefOpen] = useState(false);
+  const [stickyArmed, setStickyArmed] = useState(false);
+  const [activeDragKind, setActiveDragKind] = useState<NodeKind | null>(null);
+  const [hoveredDropTarget, setHoveredDropTarget] = useState<string | null>(null);
 
   const board = useMemo(
     () => buildBoard(parsedNodes, meta, flowType),
     [parsedNodes, meta, flowType]
   );
   const [layoutNodes, setLayoutNodes] = useState<BoardNode[]>(board.nodes);
+  const [graphEdges, setGraphEdges] = useState<BoardEdge[]>(board.edges);
+  const hoveredDropTargetRef = useRef<string | null>(null);
 
   useEffect(() => {
     setLayoutNodes((prev) => {
@@ -336,9 +346,10 @@ export function SkeletonViewer({
         board.nodes.map((n) => ({ ...n, x: prevById[n.id]?.x ?? n.x, y: prevById[n.id]?.y ?? n.y }))
       );
     });
+    setGraphEdges(board.edges);
   }, [board.nodes]);
 
-  const displayBoard = useMemo(() => ({ ...board, nodes: layoutNodes }), [board, layoutNodes]);
+  const displayBoard = useMemo(() => ({ ...board, nodes: layoutNodes, edges: graphEdges }), [board, layoutNodes, graphEdges]);
 
   const nodeById = useMemo(() => {
     const m: Record<string, BoardNode> = {};
@@ -430,9 +441,7 @@ export function SkeletonViewer({
         setEditingLabelOf(null);
         if (expandedIndex !== null) onToggleExpand(null);
       }
-      if (e.key === "v") setTool("select");
-      if (e.key === "a") setTool("add");
-      if (e.key === "n") setTool("sticky");
+      if (e.key === "n") setStickyArmed(true);
     };
     const up = (e: KeyboardEvent) => {
       if (e.code === "Space") setSpaceHeld(false);
@@ -443,7 +452,7 @@ export function SkeletonViewer({
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
-  }, []);
+  }, [expandedIndex, onToggleExpand]);
 
   /* -------- Stage mouse down: pan, marquee deselect, tool place -------- */
   const handleStageMouseDown = (e: React.MouseEvent) => {
@@ -465,13 +474,13 @@ export function SkeletonViewer({
     }
     if (!onEmpty) return;
 
-    if (tool === "sticky") {
+    if (stickyArmed) {
       const w = screenToWorld(e.clientX, e.clientY);
       const id = `s-${Date.now()}`;
       setStickies((s) => [...s, { id, x: w.x - 90, y: w.y - 50, text: "" }]);
       setSelectedSticky(id);
       setEditingSticky(id);
-      setTool("select");
+      setStickyArmed(false);
       return;
     }
     setSelected(null);
@@ -580,25 +589,43 @@ export function SkeletonViewer({
 
   const triggerNode = nodeById.trigger;
 
-  const addNodeAt = (kind: NodeKind, screenX: number, screenY: number) => {
-    const w = screenToWorld(screenX, screenY);
+  const dropTargets = useMemo<DropTarget[]>(() => {
+    return edgePaths.map(({ edge, from, to }) => ({
+      id: `drop-${edge.id}`,
+      edge,
+      x: (from.x + to.x) / 2,
+      y: (from.y + to.y) / 2,
+      label: edge.branch ? `Drop on ${edge.branch.toUpperCase()} path` : "Drop into path",
+    }));
+  }, [edgePaths]);
+
+  const insertNodeOnTarget = (kind: NodeKind, targetId: string) => {
+    const target = dropTargets.find((t) => t.id === targetId);
+    if (!target) return;
     const id = `manual-${kind}-${Date.now()}`;
+    const size = getNodeSize(kind);
     const node: BoardNode = {
       id,
       kind,
       label: KIND_META[kind].label,
-      x: w.x - getNodeSize(kind).w / 2,
-      y: w.y - getNodeSize(kind).h / 2,
+      x: target.x - size.w / 2,
+      y: target.y - size.h / 2,
+      branch: target.edge.branch ?? null,
       meta: kind === "split" || kind === "trigger_split" ? { condition: "New split", branches: [{ label: "YES" }, { label: "NO" }] } : {},
     };
     setLayoutNodes((arr) => resolveNodeCollisions([...arr, node]));
+    setGraphEdges((edges) => [
+      ...edges.filter((e) => e.id !== target.edge.id),
+      { id: `e-${target.edge.from}-${id}`, from: target.edge.from, to: id, branch: target.edge.branch ?? null },
+      { id: `e-${id}-${target.edge.to}`, from: id, to: target.edge.to, branch: target.edge.branch ?? null },
+    ]);
     setSelected(id);
-    setTool("select");
   };
 
   const startPaletteDrag = (kind: NodeKind, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    setActiveDragKind(kind);
     const ghost = document.createElement("div");
     ghost.className = "fl-drag-ghost";
     ghost.textContent = KIND_META[kind].label;
@@ -606,12 +633,25 @@ export function SkeletonViewer({
     const move = (ev: MouseEvent) => {
       ghost.style.left = `${ev.clientX + 12}px`;
       ghost.style.top = `${ev.clientY + 12}px`;
+      const r = stageRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const world = screenToWorld(ev.clientX, ev.clientY);
+      const target = dropTargets.reduce<{ id: string; d: number } | null>((best, t) => {
+        const d = Math.hypot(t.x - world.x, t.y - world.y);
+        return d < 110 && (!best || d < best.d) ? { id: t.id, d } : best;
+      }, null);
+      hoveredDropTargetRef.current = target?.id ?? null;
+      setHoveredDropTarget(target?.id ?? null);
     };
     const up = (ev: MouseEvent) => {
       ghost.remove();
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
-      addNodeAt(kind, ev.clientX, ev.clientY);
+      setActiveDragKind(null);
+      const targetId = hoveredDropTargetRef.current;
+      hoveredDropTargetRef.current = null;
+      setHoveredDropTarget(null);
+      if (targetId) insertNodeOnTarget(kind, targetId);
     };
     move(e.nativeEvent);
     window.addEventListener("mousemove", move);
@@ -679,6 +719,18 @@ export function SkeletonViewer({
               </g>
             ))}
           </svg>
+
+          {/* Path insertion targets — only active while dragging from the rail */}
+          {activeDragKind && dropTargets.map((target) => (
+            <div
+              key={target.id}
+              className={`fl-drop-target ${hoveredDropTarget === target.id ? "over" : ""}`}
+              style={{ transform: `translate(${target.x - 76}px, ${target.y - 16}px)` }}
+            >
+              <Plus className="w-3 h-3" />
+              <span>{target.edge.branch ? target.edge.branch.toUpperCase() : "INSERT"}</span>
+            </div>
+          ))}
 
           {/* Stickies (under nodes) */}
           {stickies.map((s) => (
@@ -798,19 +850,12 @@ export function SkeletonViewer({
           )}
         </div>
 
-        {/* Floating left toolbar */}
+        {/* Permanent left node rail */}
         <div className="fl-tool" onMouseDown={(e) => e.stopPropagation()}>
-          <button
-            className={tool === "select" ? "on" : ""}
-            onClick={() => setTool("select")}
-            title="Select (V)"
-          >
-            <MousePointer2 className="w-4 h-4" />
-          </button>
           <NodePalette onStartDrag={startPaletteDrag} />
           <button
-            className={tool === "sticky" ? "on" : ""}
-            onClick={() => setTool("sticky")}
+            className={stickyArmed ? "on" : ""}
+            onClick={() => setStickyArmed((v) => !v)}
             title="Sticky note (N)"
           >
             <StickyNote className="w-4 h-4" />
@@ -1271,20 +1316,15 @@ function NodePalette({ onStartDrag }: { onStartDrag: (kind: NodeKind, e: React.M
   const items: NodeKind[] = ["email", "sms", "push", "delay", "split", "trigger_split", "webhook", "exit"];
   return (
     <div className="fl-node-palette">
-      <button className="fl-node-palette-anchor" type="button" title="Drag a node into the flow">
-        <Plus className="w-4 h-4" />
-      </button>
-      <div className="fl-node-palette-panel">
-        {items.map((kind) => {
-          const { Icon, label } = KIND_META[kind];
-          return (
-            <button key={kind} onMouseDown={(e) => onStartDrag(kind, e)} title={`Drag ${label}`}>
-              <span className="sw"><Icon className="w-3.5 h-3.5" /></span>
-              <span>{label}</span>
-            </button>
-          );
-        })}
-      </div>
+      {items.map((kind) => {
+        const { Icon, label } = KIND_META[kind];
+        return (
+          <button key={kind} onMouseDown={(e) => onStartDrag(kind, e)} title={`Drag ${label} into a path`}>
+            <span className="sw"><Icon className="w-3.5 h-3.5" /></span>
+            <span>{label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
