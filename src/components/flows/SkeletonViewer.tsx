@@ -1484,12 +1484,16 @@ function MessagePreview({
   node,
   emailRow,
   campaignMeta,
-  onExpand,
+  onOpenPreview,
+  onStartPreviewDrag,
+  onSelect,
 }: {
   node: BoardNode;
   emailRow?: FlowEmailRow;
   campaignMeta: Record<string, FlowEmailMeta>;
-  onExpand?: () => void;
+  onOpenPreview?: () => void;
+  onStartPreviewDrag: (e: React.MouseEvent) => void;
+  onSelect: () => void;
 }) {
   const cm = emailRow?.campaign_id ? campaignMeta[emailRow.campaign_id] : null;
   const subject =
@@ -1511,15 +1515,12 @@ function MessagePreview({
   return (
     <div
       className="fl-msg-preview"
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => {
-        if (hasHtml && onExpand) {
-          e.stopPropagation();
-          onExpand();
-        }
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        onSelect();
+        onStartPreviewDrag(e);
       }}
-      style={hasHtml && onExpand ? { cursor: "zoom-in" } : undefined}
-      title={hasHtml ? "Click to expand" : undefined}
+      title={hasHtml ? "Open campaign preview" : undefined}
     >
       <div className="fl-msg-thumb">
         {emailRow?.html ? (
@@ -1538,7 +1539,7 @@ function MessagePreview({
             }}
           />
         ) : null}
-        {hasHtml && onExpand && (
+        {hasHtml && onOpenPreview && (
           <div
             style={{
               position: "absolute",
