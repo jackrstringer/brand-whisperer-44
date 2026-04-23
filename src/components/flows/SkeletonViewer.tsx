@@ -244,6 +244,37 @@ function nodeByIdBranch(prevId: string, nextKind: NodeKind): "yes" | "no" | null
   return prevId.includes("-split") && nextKind !== "exit" ? "yes" : null;
 }
 
+function overlaps(a: BoardNode, b: BoardNode): boolean {
+  const as = getNodeSize(a.kind);
+  const bs = getNodeSize(b.kind);
+  return !(
+    a.x + as.w + NODE_MARGIN <= b.x ||
+    b.x + bs.w + NODE_MARGIN <= a.x ||
+    a.y + as.h + NODE_MARGIN <= b.y ||
+    b.y + bs.h + NODE_MARGIN <= a.y
+  );
+}
+
+function resolveNodeCollisions(nodes: BoardNode[]): BoardNode[] {
+  const resolved = nodes.map((n) => ({ ...n }));
+  for (let pass = 0; pass < 12; pass++) {
+    let changed = false;
+    for (let i = 0; i < resolved.length; i++) {
+      for (let j = i + 1; j < resolved.length; j++) {
+        if (!overlaps(resolved[i], resolved[j])) continue;
+        const aSize = getNodeSize(resolved[i].kind);
+        const targetY = resolved[i].y + aSize.h + NODE_MARGIN;
+        if (resolved[j].y < targetY) {
+          resolved[j].y = targetY;
+          changed = true;
+        }
+      }
+    }
+    if (!changed) break;
+  }
+  return resolved;
+}
+
 /* ---------- Icons ---------- */
 
 const KIND_META: Record<NodeKind, { Icon: any; label: string }> = {
