@@ -28,6 +28,7 @@ import {
   ParsedFlowNode,
   ParsedFlowMeta,
   FLOW_TRIGGERS,
+  FLOW_TYPE_META,
 } from "@/lib/flows/skeletonParser";
 
 /* ---------- Types ---------- */
@@ -91,6 +92,9 @@ interface Props {
 /* ---------- Geometry ---------- */
 
 const NODE_W = 260;
+const NODE_MARGIN = 44;
+const BRANCH_X = 210;
+const BRANCH_Y = 92;
 function getNodeSize(kind: NodeKind) {
   if (kind === "delay") return { w: 220, h: 70 };
   if (kind === "split") return { w: 260, h: 130 };
@@ -158,10 +162,9 @@ function buildBoard(
   }
 
   // Walk parsed nodes; emails get an emailIndex assigned in parsed order.
-  // We DO NOT fabricate YES/NO branches anymore. A split is rendered as a
-  // single logic node with its branch labels listed inside it. Real branch
-  // graph rendering will only kick in once the skeleton format encodes
-  // explicit branch paths.
+  // Conditional splits always render as real Klaviyo-style YES/NO branches.
+  // Until explicit branch paths exist in the skeleton, the continuing path is
+  // YES and the empty branch is a real "Exit flow" node instead of a fake line.
   let emailIndex = 0;
   for (let i = 0; i < parsed.length; i++) {
     const p = parsed[i];
@@ -199,7 +202,24 @@ function buildBoard(
       emailIndex += 1;
     }
     out.push(node);
-    edges.push({ id: `e-${prev}-${id}`, from: prev, to: id });
+    edges.push({ id: `e-${prev}-${id}`, from: prev, to: id, branch: nodeByIdBranch(prev, kind) });
+
+    if (kind === "split") {
+      const splitSize = getNodeSize("split");
+      const yesExitId = `${id}-yes-exit`;
+      const noExitId = `${id}-no-exit`;
+      const isTerminalSplit = i === parsed.length - 1;
+      if (isTerminalSplit) {
+        out.push({ id: yesExitId, kind: "exit", label: "Exit the flow", x: COL - BRANCH_X, y: y + splitSize.h + BRANCH_Y, branch: "yes", meta: { items: ["No additional YES path configured"] } });
+        edges.push({ id: `e-${id}-yes-exit`, from: id, to: yesExitId, branch: "yes" });
+      }
+      out.push({ id: noExitId, kind: "exit", label: "Exit the flow", x: COL + BRANCH_X, y: y + splitSize.h + BRANCH_Y, branch: "no", meta: { items: ["No additional NO path configured"] } });
+      edges.push({ id: `e-${id}-no-exit`, from: id, to: noExitId, branch: "no" });
+      prev = id;
+      y += splitSize.h + VGAP + 30;
+      continue;
+    }
+
     prev = id;
     y += getNodeSize(kind).h + VGAP;
   }
@@ -219,6 +239,41 @@ function buildBoard(
   }
 
   return { nodes: out, edges };
+}
+
+function nodeByIdBranch(prevId: string, nextKind: NodeKind): "yes" | "no" | null {
+  return prevId.includes("-split") && nextKind !== "exit" ? "yes" : null;
+}
+
+function overlaps(a: BoardNode, b: BoardNode): boolean {
+  const as = getNodeSize(a.kind);
+  const bs = getNodeSize(b.kind);
+  return !(
+    a.x + as.w + NODE_MARGIN <= b.x ||
+    b.x + bs.w + NODE_MARGIN <= a.x ||
+    a.y + as.h + NODE_MARGIN <= b.y ||
+    b.y + bs.h + NODE_MARGIN <= a.y
+  );
+}
+
+function resolveNodeCollisions(nodes: BoardNode[]): BoardNode[] {
+  const resolved = nodes.map((n) => ({ ...n }));
+  for (let pass = 0; pass < 12; pass++) {
+    let changed = false;
+    for (let i = 0; i < resolved.length; i++) {
+      for (let j = i + 1; j < resolved.length; j++) {
+        if (!overlaps(resolved[i], resolved[j])) continue;
+        const aSize = getNodeSize(resolved[i].kind);
+        const targetY = resolved[i].y + aSize.h + NODE_MARGIN;
+        if (resolved[j].y < targetY) {
+          resolved[j].y = targetY;
+          changed = true;
+        }
+      }
+    }
+    if (!changed) break;
+  }
+  return resolved;
 }
 
 /* ---------- Icons ---------- */
@@ -261,17 +316,30 @@ export function SkeletonViewer({
   const [addPop, setAddPop] = useState<{ x: number; y: number } | null>(null);
   const [editingLabelOf, setEditingLabelOf] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState("");
+  const [briefOpen, setBriefOpen] = useState(false);
 
   const board = useMemo(
     () => buildBoard(parsedNodes, meta, flowType),
     [parsedNodes, meta, flowType]
   );
+  const [layoutNodes, setLayoutNodes] = useState<BoardNode[]>(board.nodes);
+
+  useEffect(() => {
+    setLayoutNodes((prev) => {
+      const prevById = Object.fromEntries(prev.map((n) => [n.id, n]));
+      return resolveNodeCollisions(
+        board.nodes.map((n) => ({ ...n, x: prevById[n.id]?.x ?? n.x, y: prevById[n.id]?.y ?? n.y }))
+      );
+    });
+  }, [board.nodes]);
+
+  const displayBoard = useMemo(() => ({ ...board, nodes: layoutNodes }), [board, layoutNodes]);
 
   const nodeById = useMemo(() => {
     const m: Record<string, BoardNode> = {};
-    for (const n of board.nodes) m[n.id] = n;
+    for (const n of displayBoard.nodes) m[n.id] = n;
     return m;
-  }, [board]);
+  }, [displayBoard.nodes]);
 
   /* -------- Coords -------- */
   const screenToWorld = useCallback(
@@ -288,12 +356,12 @@ export function SkeletonViewer({
 
   /* -------- Initial fit -------- */
   useLayoutEffect(() => {
-    if (!stageRef.current || !board.nodes.length) return;
+    if (!stageRef.current || !displayBoard.nodes.length) return;
     let minX = Infinity,
       minY = Infinity,
       maxX = -Infinity,
       maxY = -Infinity;
-    for (const n of board.nodes) {
+    for (const n of displayBoard.nodes) {
       const sz = getNodeSize(n.kind);
       minX = Math.min(minX, n.x);
       minY = Math.min(minY, n.y);
@@ -311,7 +379,7 @@ export function SkeletonViewer({
       y: 80 - minY * z,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [board.nodes.length]);
+  }, [displayBoard.nodes.length]);
 
   /* -------- Wheel: pinch zoom or two-finger pan, NEVER scroll page -------- */
   useEffect(() => {
@@ -412,12 +480,12 @@ export function SkeletonViewer({
   };
 
   const fitToView = () => {
-    if (!stageRef.current || !board.nodes.length) return;
+    if (!stageRef.current || !displayBoard.nodes.length) return;
     let minX = Infinity,
       minY = Infinity,
       maxX = -Infinity,
       maxY = -Infinity;
-    for (const n of board.nodes) {
+    for (const n of displayBoard.nodes) {
       const sz = getNodeSize(n.kind);
       minX = Math.min(minX, n.x);
       minY = Math.min(minY, n.y);
@@ -467,8 +535,33 @@ export function SkeletonViewer({
     window.addEventListener("mouseup", upH);
   };
 
+  const startNodeDrag = (e: React.MouseEvent, node: BoardNode) => {
+    if (e.button !== 0 || spaceHeld || editingLabelOf) return;
+    e.stopPropagation();
+    setSelected(node.id);
+    setSelectedSticky(null);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const orig = { x: node.x, y: node.y };
+    const move = (ev: MouseEvent) => {
+      const dx = (ev.clientX - startX) / zoom;
+      const dy = (ev.clientY - startY) / zoom;
+      setLayoutNodes((arr) =>
+        resolveNodeCollisions(
+          arr.map((n) => (n.id === node.id ? { ...n, x: orig.x + dx, y: orig.y + dy } : n))
+        )
+      );
+    };
+    const upH = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", upH);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", upH);
+  };
+
   /* -------- Compute edge paths -------- */
-  const edgePaths = board.edges
+  const edgePaths = displayBoard.edges
     .map((edge) => {
       const a = nodeById[edge.from];
       const b = nodeById[edge.to];
@@ -484,6 +577,8 @@ export function SkeletonViewer({
       return { edge, from, to, path: orthPath(from, to) };
     })
     .filter(Boolean) as { edge: BoardEdge; from: any; to: any; path: string }[];
+
+  const triggerNode = nodeById.trigger;
 
   /* -------- Add node via popover (placeholder — saves visually only) -------- */
   const addNodeAt = (kind: NodeKind, screenX: number, screenY: number) => {
@@ -522,6 +617,16 @@ export function SkeletonViewer({
           className="fl-viewport"
           style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
         >
+          {triggerNode && (
+            <FlowSummaryCard
+              trigger={triggerNode}
+              flowType={flowType}
+              meta={meta}
+              open={briefOpen}
+              onToggle={() => setBriefOpen((v) => !v)}
+            />
+          )}
+
           {/* Edges */}
           <svg className="fl-edges" style={{ overflow: "visible" }}>
             <defs>
@@ -548,16 +653,7 @@ export function SkeletonViewer({
                     height="22"
                     style={{ overflow: "visible" }}
                   >
-                    <div
-                      className="fl-edge-label"
-                      style={{
-                        background:
-                          edge.branch === "yes" ? "hsl(140 60% 92%)" : "hsl(10 70% 93%)",
-                        color: edge.branch === "yes" ? "hsl(140 60% 28%)" : "hsl(10 70% 38%)",
-                        borderColor: "transparent",
-                        textTransform: "uppercase",
-                      }}
-                    >
+                    <div className={`fl-edge-label ${edge.branch}`}>
                       {edge.branch}
                     </div>
                   </foreignObject>
@@ -615,7 +711,7 @@ export function SkeletonViewer({
           ))}
 
           {/* Nodes */}
-          {board.nodes.map((n) => (
+          {displayBoard.nodes.map((n) => (
             <NodeView
               key={n.id}
               node={n}
@@ -633,6 +729,7 @@ export function SkeletonViewer({
                 setSelected(n.id);
                 setSelectedSticky(null);
               }}
+              onStartDrag={(e) => startNodeDrag(e, n)}
               onDoubleClickTitle={() => {
                 setLabelDraft(n.label);
                 setEditingLabelOf(n.id);
@@ -694,15 +791,12 @@ export function SkeletonViewer({
           </button>
           <button
             className={tool === "add" ? "on" : ""}
-            onClick={() => {
-              setTool("add");
-              const r = stageRef.current?.getBoundingClientRect();
-              if (r) setAddPop({ x: r.left + 80, y: r.top + r.height / 2 });
-            }}
+            onClick={() => setTool("add")}
             title="Add node (A)"
           >
             <Plus className="w-4 h-4" />
           </button>
+          <NodePalette onAdd={(kind) => addNodeAt(kind, window.innerWidth / 2, window.innerHeight / 2)} />
           <button
             className={tool === "sticky" ? "on" : ""}
             onClick={() => setTool("sticky")}
@@ -759,7 +853,7 @@ export function SkeletonViewer({
         )}
 
         {/* Bottom-left minimap */}
-        <Minimap board={board} pan={pan} zoom={zoom} stageRef={stageRef} />
+        <Minimap board={displayBoard} pan={pan} zoom={zoom} stageRef={stageRef} />
 
         {/* Bottom-right zoom control */}
         <div className="fl-zoom" onMouseDown={(e) => e.stopPropagation()}>
@@ -882,6 +976,7 @@ function NodeView({
   onLabelDraft,
   onLabelCommit,
   onSelect,
+  onStartDrag,
   onDoubleClickTitle,
   onGenerate,
   onExpand,
@@ -896,6 +991,7 @@ function NodeView({
   onLabelDraft: (v: string) => void;
   onLabelCommit: () => void;
   onSelect: () => void;
+  onStartDrag: (e: React.MouseEvent) => void;
   onDoubleClickTitle: () => void;
   onGenerate?: () => void;
   onExpand?: () => void;
@@ -919,6 +1015,7 @@ function NodeView({
       onMouseDown={(e) => {
         e.stopPropagation();
         onSelect();
+        onStartDrag(e);
       }}
     >
       <div className="fl-node-head">
@@ -1158,6 +1255,64 @@ function MessagePreview({
         <div className="fl-msg-subject">{subject}</div>
         <div className="fl-msg-snip">{preview}</div>
         {statusEl}
+      </div>
+    </div>
+  );
+}
+
+function FlowSummaryCard({
+  trigger,
+  flowType,
+  meta,
+  open,
+  onToggle,
+}: {
+  trigger: BoardNode;
+  flowType: string;
+  meta: ParsedFlowMeta;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const title = FLOW_TYPE_META[flowType]?.label || "Flow Strategy";
+  const filterCount = meta.filters?.length || 0;
+  const exitCount = meta.exit?.length || 0;
+  return (
+    <div className={`fl-brief ${open ? "open" : ""}`} style={{ transform: `translate(${trigger.x - 140}px, ${trigger.y - (open ? 250 : 72)}px)` }}>
+      <button className="fl-brief-head" onClick={onToggle} onMouseDown={(e) => e.stopPropagation()}>
+        <div className="fl-brief-badge"><Wand2 className="w-3.5 h-3.5" /></div>
+        <div className="fl-brief-main">
+          <div className="fl-brief-kicker">Flow summary</div>
+          <div className="fl-brief-title">{title}</div>
+        </div>
+        <div className="fl-brief-pill">{open ? "Collapse" : "Expand"}</div>
+      </button>
+      {open && (
+        <div className="fl-brief-body">
+          <div><p className="fl-brief-label">Trigger</p><p className="fl-brief-text">{trigger.label}</p></div>
+          <div><p className="fl-brief-label">Logic</p><p className="fl-brief-text">{filterCount} entry filters · {exitCount} exits</p></div>
+          <div><p className="fl-brief-label">Entry filters</p><p className="fl-brief-text">{meta.filters?.join(" • ") || "None specified"}</p></div>
+          <div><p className="fl-brief-label">Exit rules</p><p className="fl-brief-text">{meta.exit?.join(" • ") || "Default flow completion"}</p></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NodePalette({ onAdd }: { onAdd: (kind: NodeKind) => void }) {
+  const items: NodeKind[] = ["email", "sms", "delay", "split", "exit"];
+  return (
+    <div className="fl-node-palette">
+      <div className="fl-node-palette-label">Nodes</div>
+      <div className="fl-node-palette-panel">
+        {items.map((kind) => {
+          const { Icon, label } = KIND_META[kind];
+          return (
+            <button key={kind} onClick={() => onAdd(kind)} title={`Add ${label}`}>
+              <span className="sw"><Icon className="w-3.5 h-3.5" /></span>
+              <span>{label}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
