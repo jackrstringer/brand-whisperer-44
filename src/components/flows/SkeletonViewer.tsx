@@ -1267,8 +1267,8 @@ function FlowSummaryCard({
   );
 }
 
-function NodePalette({ onAdd }: { onAdd: (kind: NodeKind) => void }) {
-  const items: NodeKind[] = ["email", "sms", "delay", "split", "exit"];
+function NodePalette({ onStartDrag }: { onStartDrag: (kind: NodeKind, e: React.MouseEvent) => void }) {
+  const items: NodeKind[] = ["email", "sms", "push", "delay", "split", "trigger_split", "webhook", "exit"];
   return (
     <div className="fl-node-palette">
       <div className="fl-node-palette-label">Nodes</div>
@@ -1276,7 +1276,7 @@ function NodePalette({ onAdd }: { onAdd: (kind: NodeKind) => void }) {
         {items.map((kind) => {
           const { Icon, label } = KIND_META[kind];
           return (
-            <button key={kind} onClick={() => onAdd(kind)} title={`Add ${label}`}>
+            <button key={kind} onMouseDown={(e) => onStartDrag(kind, e)} title={`Drag ${label}`}>
               <span className="sw"><Icon className="w-3.5 h-3.5" /></span>
               <span>{label}</span>
             </button>
