@@ -1,32 +1,30 @@
 import { ReactNode } from "react";
 import { Handle, Position } from "@xyflow/react";
+import { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface BaseNodeCardProps {
-  icon: string;
+  icon: LucideIcon;
   title: string;
   status?: "draft" | "manual" | "live";
   selected?: boolean;
   warning?: boolean;
   children?: ReactNode;
-  /** Render two output handles for split nodes */
   splitOutputs?: boolean;
-  /** Hide the input handle (for trigger nodes) */
   noInput?: boolean;
-  /** Hide the output handle */
   noOutput?: boolean;
   width?: number;
   onOpenDetail?: () => void;
 }
 
 const statusStyles: Record<string, string> = {
-  live: "bg-emerald-500/15 text-emerald-400",
-  manual: "bg-amber-500/15 text-amber-400",
-  draft: "bg-foreground/10 text-foreground/55",
+  live: "bg-foreground text-background",
+  manual: "bg-muted text-foreground",
+  draft: "border border-border text-muted-foreground bg-transparent",
 };
 
 export function BaseNodeCard({
-  icon,
+  icon: Icon,
   title,
   status = "draft",
   selected,
@@ -42,39 +40,41 @@ export function BaseNodeCard({
     <div
       style={{ width }}
       className={cn(
-        "relative rounded-xl bg-card border transition-all",
-        "shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4)]",
+        "group relative rounded-xl bg-card border transition-all duration-200",
+        "shadow-sm",
         selected
-          ? "border-[hsl(var(--flow-select))] shadow-[0_8px_24px_-6px_hsl(var(--flow-select)/0.35)]"
-          : "border-foreground/15 hover:border-foreground/35",
-        warning && "ring-1 ring-[hsl(45_93%_55%/0.4)]"
+          ? "border-foreground shadow-lg scale-[1.01] ring-1 ring-foreground/10"
+          : "border-border hover:border-foreground/30 hover:shadow-md hover:-translate-y-px",
+        warning && "ring-1 ring-amber-500/40"
       )}
     >
       {!noInput && (
         <Handle
           type="target"
           position={Position.Top}
-          className="!w-2.5 !h-2.5 !bg-foreground/30 !border-2 !border-card"
+          className="!w-2 !h-2 !bg-muted-foreground/50 !border-2 !border-card"
         />
       )}
 
       {warning && (
-        <div className="absolute left-0 top-2 bottom-2 w-1 rounded-r bg-[hsl(45_93%_55%/0.7)]" />
+        <div className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r bg-amber-500/70" />
       )}
 
       <div
-        className="flex items-center justify-between px-3 h-10 border-b border-foreground/10 cursor-pointer"
+        className="flex items-center justify-between gap-2 px-3 h-11 border-b border-border/60 cursor-pointer"
         onDoubleClick={onOpenDetail}
       >
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[13px] leading-none text-foreground/70">{icon}</span>
-          <span className="text-[12.5px] font-mono font-semibold tracking-tight text-foreground truncate">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+            <Icon className="w-3.5 h-3.5 text-foreground/70" strokeWidth={2} />
+          </div>
+          <span className="text-[13px] font-semibold tracking-tight text-foreground truncate">
             {title}
           </span>
         </div>
         <span
           className={cn(
-            "text-[9px] uppercase tracking-[0.08em] font-semibold px-1.5 py-0.5 rounded",
+            "text-[9px] uppercase tracking-[0.08em] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap",
             statusStyles[status]
           )}
         >
@@ -82,13 +82,13 @@ export function BaseNodeCard({
         </span>
       </div>
 
-      {children && <div className="p-3 text-[12px] text-foreground/70">{children}</div>}
+      {children && <div className="px-3 py-2.5 text-[12px] text-muted-foreground">{children}</div>}
 
       {!noOutput && !splitOutputs && (
         <Handle
           type="source"
           position={Position.Bottom}
-          className="!w-2.5 !h-2.5 !bg-foreground/30 !border-2 !border-card"
+          className="!w-2 !h-2 !bg-muted-foreground/50 !border-2 !border-card"
         />
       )}
 
@@ -99,14 +99,14 @@ export function BaseNodeCard({
             type="source"
             position={Position.Bottom}
             style={{ left: "30%" }}
-            className="!w-2.5 !h-2.5 !bg-[hsl(142_71%_45%/0.8)] !border-2 !border-card"
+            className="!w-2 !h-2 !bg-foreground/60 !border-2 !border-card"
           />
           <Handle
             id="no"
             type="source"
             position={Position.Bottom}
             style={{ left: "70%" }}
-            className="!w-2.5 !h-2.5 !bg-[hsl(45_93%_55%/0.8)] !border-2 !border-card"
+            className="!w-2 !h-2 !bg-foreground/60 !border-2 !border-card"
           />
         </>
       )}

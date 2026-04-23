@@ -59,15 +59,15 @@
     --postit-pink: 350 85% 90%;
     --postit-green: 132 53% 88%;
 
-    /* Flow Builder Canvas */
-    --flow-canvas: 240 6% 4%;
-    --flow-grid: 240 5% 11%;
-    --flow-card: 240 5% 9%;
-    --flow-card-hover: 240 5% 12%;
-    --flow-border: 240 5% 18%;
-    --flow-edge: 240 5% 24%;
-    --flow-select: 20 100% 60%; /* warm signal orange */
-    --flow-action: 217 91% 60%; /* action blue */
+    /* Flow Builder Canvas — remap to semantic monochrome tokens */
+    --flow-canvas: var(--background);
+    --flow-grid: var(--border);
+    --flow-card: var(--card);
+    --flow-card-hover: var(--muted);
+    --flow-border: var(--border);
+    --flow-edge: var(--border);
+    --flow-select: var(--foreground);
+    --flow-action: var(--foreground);
   }
 
   .dark {

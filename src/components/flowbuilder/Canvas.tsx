@@ -66,7 +66,6 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
   } | null>(null);
   const rf = useReactFlow();
 
-  // Force every edge to use our insertable type
   const decoratedEdges = useMemo(
     () => edges.map((e) => ({ ...e, type: "insertable" as const })),
     [edges]
@@ -100,7 +99,6 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
       setNodes((nds) => [...nds, newNode]);
 
       if (quickAdd.insertOnEdgeId) {
-        // Atomic edge split: remove old edge, create source→new and new→target
         setEdges((eds) => {
           const target = eds.find((e) => e.id === quickAdd.insertOnEdgeId);
           if (!target) return eds;
@@ -117,7 +115,6 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
     [quickAdd, setNodes, setEdges]
   );
 
-  // Listen for edge "+" insertion events
   useEffect(() => {
     const onInsert = (e: Event) => {
       const detail = (e as CustomEvent).detail as { edgeId: string; x: number; y: number };
@@ -149,8 +146,7 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
 
   return (
     <div
-      className="absolute inset-0"
-      style={{ background: "hsl(var(--flow-canvas))" }}
+      className="absolute inset-0 bg-background"
       onDoubleClick={(e) => {
         const target = e.target as HTMLElement;
         if (!target.closest(".react-flow__pane")) return;
@@ -198,30 +194,22 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
         <Background
           variant={BackgroundVariant.Dots}
           gap={20}
-          size={1.2}
-          color="hsl(var(--flow-grid))"
+          size={1}
+          color="hsl(var(--border))"
         />
         <Controls
           position="bottom-left"
           showInteractive={false}
-          style={{
-            background: "hsl(var(--flow-card))",
-            borderRadius: 999,
-            border: "1px solid hsl(var(--flow-border))",
-            padding: 4,
-          }}
+          className="!bg-card !border !border-border !rounded-lg !shadow-sm overflow-hidden"
         />
         <MiniMap
           position="bottom-right"
           pannable
           zoomable
-          maskColor="hsl(var(--flow-canvas) / 0.7)"
-          style={{
-            background: "hsl(var(--flow-card))",
-            border: "1px solid hsl(var(--flow-border))",
-            borderRadius: 8,
-          }}
-          nodeColor={() => "hsl(var(--flow-edge))"}
+          maskColor="hsl(var(--background) / 0.7)"
+          className="!bg-card !border !border-border !rounded-lg !shadow-sm"
+          nodeColor={() => "hsl(var(--muted-foreground))"}
+          nodeStrokeColor="hsl(var(--border))"
         />
       </ReactFlow>
 
@@ -232,6 +220,18 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
           onClose={() => setQuickAdd(null)}
         />
       )}
+
+      {/* React Flow control button overrides */}
+      <style>{`
+        .react-flow__controls-button {
+          background: hsl(var(--card)) !important;
+          border-bottom: 1px solid hsl(var(--border)) !important;
+          color: hsl(var(--foreground)) !important;
+        }
+        .react-flow__controls-button:hover { background: hsl(var(--muted)) !important; }
+        .react-flow__controls-button svg { fill: currentColor; }
+        .react-flow__minimap-mask { fill: hsl(var(--background) / 0.7); }
+      `}</style>
     </div>
   );
 }
