@@ -39,9 +39,10 @@ export function BaseNodeCard({
   return (
     <div
       style={{ width }}
+      onClick={onOpenDetail}
       className={cn(
         "group relative rounded-xl bg-card border transition-all duration-200",
-        "shadow-sm",
+        "shadow-sm cursor-pointer",
         selected
           ? "border-foreground shadow-lg scale-[1.01] ring-1 ring-foreground/10"
           : "border-border hover:border-foreground/30 hover:shadow-md hover:-translate-y-px",
@@ -62,7 +63,6 @@ export function BaseNodeCard({
 
       <div
         className="flex items-center justify-between gap-2 px-3 h-11 border-b border-border/60 cursor-pointer"
-        onDoubleClick={onOpenDetail}
       >
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
