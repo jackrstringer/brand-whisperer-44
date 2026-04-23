@@ -26,7 +26,10 @@ import {
   RefreshCw,
   X as XIcon,
   Trash2,
+  ExternalLink,
+  Play,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,6 +46,7 @@ import {
   FLOW_TRIGGERS,
   FLOW_TYPE_META,
 } from "@/lib/flows/skeletonParser";
+import { FlowEmailDetail } from "@/components/flows/FlowEmailDetail";
 
 /* ---------- Types ---------- */
 
@@ -61,7 +65,7 @@ export interface FlowEmailMeta {
 
 type NodeKind = "trigger" | "filters" | "email" | "delay" | "split" | "trigger_split" | "sms" | "push" | "webhook" | "exit";
 
-interface BoardNode {
+export interface BoardNode {
   id: string;
   kind: NodeKind;
   label: string;
@@ -98,6 +102,7 @@ interface Props {
   nodes: ParsedFlowNode[];
   meta: ParsedFlowMeta;
   flowType: string;
+  brandId: string;
   emails: FlowEmailRow[];
   campaignMeta: Record<string, FlowEmailMeta>;
   expandedIndex: number | null;
@@ -395,6 +400,7 @@ export function SkeletonViewer({
   nodes: parsedNodes,
   meta,
   flowType,
+  brandId,
   emails,
   campaignMeta,
   expandedIndex,
@@ -404,6 +410,7 @@ export function SkeletonViewer({
   generatingIndex,
   drafting,
 }: Props) {
+  const navigate = useNavigate();
   const stageRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(0.85);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -645,7 +652,7 @@ export function SkeletonViewer({
     window.addEventListener("mouseup", upH);
   };
 
-  const startNodeDrag = (e: React.MouseEvent, node: BoardNode) => {
+  const startNodeDrag = (e: React.MouseEvent, node: BoardNode, clickAction?: () => void) => {
     if (e.button !== 0 || spaceHeld || editingLabelOf) return;
     e.stopPropagation();
     setSelected(node.id);
@@ -666,6 +673,7 @@ export function SkeletonViewer({
     const upH = () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", upH);
+      if (!dragging) clickAction?.();
     };
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", upH);
