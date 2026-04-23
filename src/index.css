@@ -474,16 +474,18 @@
   border: 1px solid var(--fl-line); border-radius: 12px;
   min-width: 240px;
   box-shadow: 0 1px 2px rgba(10,10,10,0.04);
-  transition: border-color 160ms, transform 160ms, box-shadow 160ms;
+  transition: border-color 90ms ease, box-shadow 90ms ease, background 90ms ease;
 }
 .fl-node:hover {
   border-color: var(--fl-line-strong);
   box-shadow: 0 8px 22px rgba(10,10,10,0.08), 0 1px 3px rgba(10,10,10,0.05);
-  transform: translateY(-1px); z-index: 2;
+  background: color-mix(in srgb, var(--fl-surface) 92%, var(--fl-surface-2));
+  z-index: 2;
 }
 .fl-node.sel {
   border-color: var(--fl-accent);
-  box-shadow: 0 0 0 2px var(--fl-accent), 0 8px 22px rgba(10,10,10,0.10);
+  box-shadow: 0 0 0 2px var(--fl-accent), 0 10px 24px rgba(10,10,10,0.12);
+  z-index: 5;
 }
 .fl-node.tiny { min-width: 200px; }
 .fl-node.kind-delay,
@@ -504,6 +506,17 @@
 .fl-node.kind-delay .fl-body,
 .fl-node.kind-exit .fl-body,
 .fl-node.kind-split .fl-body { padding: 4px 10px 10px; }
+.fl-exit-chip {
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--fl-surface);
+  color: var(--fl-ink-3);
+  cursor: grab;
+}
+.fl-exit-chip:hover { color: var(--fl-ink); border-color: var(--fl-line-strong); }
+.fl-exit-chip.sel { color: var(--fl-accent); }
 .fl-node-head {
   display: flex; align-items: center; gap: 10px; padding: 10px 12px;
 }
