@@ -132,13 +132,20 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
       const detail = (e as CustomEvent).detail as { nodeId: string };
       onNodeOpenDetail?.(detail.nodeId);
     };
+    const onCenter = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { nodeId: string };
+      const node = nodes.find((n) => n.id === detail.nodeId);
+      if (node) rf.setCenter(node.position.x + 140, node.position.y + 60, { zoom: 1, duration: 400 });
+    };
     window.addEventListener("flowbuilder:insert-on-edge", onInsert);
     window.addEventListener("flowbuilder:open-detail", onOpen);
+    window.addEventListener("flowbuilder:center-on-node", onCenter);
     return () => {
       window.removeEventListener("flowbuilder:insert-on-edge", onInsert);
       window.removeEventListener("flowbuilder:open-detail", onOpen);
+      window.removeEventListener("flowbuilder:center-on-node", onCenter);
     };
-  }, [rf, onNodeOpenDetail]);
+  }, [rf, onNodeOpenDetail, nodes]);
 
   return (
     <div
