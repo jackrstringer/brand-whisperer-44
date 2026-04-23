@@ -3,7 +3,7 @@ import { Clock } from "lucide-react";
 import { BaseNodeCard } from "./BaseNodeCard";
 import { FlowNodeData } from "../types";
 
-export function TimeDelayNode({ data, selected }: NodeProps) {
+export function TimeDelayNode({ data, selected, id }: NodeProps) {
   const d = data as FlowNodeData;
   const value = d.delay_value ?? 0;
   const unit = d.delay_unit || "hours";
@@ -14,6 +14,7 @@ export function TimeDelayNode({ data, selected }: NodeProps) {
       status={d.status || "draft"}
       selected={selected}
       width={240}
+      onOpenDetail={() => window.dispatchEvent(new CustomEvent("flowbuilder:open-detail", { detail: { nodeId: id } }))}
     >
       {value > 0 ? (
         <div className="flex items-baseline gap-1.5">
