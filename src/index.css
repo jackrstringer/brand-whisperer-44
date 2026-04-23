@@ -390,10 +390,10 @@
 .fl-tool button:active { transform: scale(0.94); }
 .fl-tool button.on { background: var(--fl-ink); color: #fff; }
 .fl-tool .fl-sep { height: 1px; background: var(--fl-line); margin: 4px 4px; }
-.fl-node-palette { position: relative; }
-.fl-node-palette-label { position: absolute; left: 44px; top: 3px; height: 32px; padding: 0 10px; border-radius: 9px; background: var(--fl-surface); border: 1px solid var(--fl-line); display: grid; place-items: center; font-family: var(--fl-mono); font-size: 10px; color: var(--fl-ink-4); opacity: 0; pointer-events: none; transform: translateX(-8px); transition: opacity 160ms, transform 160ms; white-space: nowrap; }
+.fl-node-palette { position: relative; width: 38px; height: 38px; }
+.fl-tool .fl-node-palette-anchor { width: 38px; height: 38px; border-radius: 10px; background: transparent; border: none; cursor: default; display: grid; place-items: center; color: var(--fl-ink-2); }
+.fl-node-palette:hover .fl-node-palette-anchor { background: var(--fl-surface-2); color: var(--fl-ink); }
 .fl-node-palette-panel { position: absolute; left: 52px; top: -58px; width: 190px; padding: 7px; border-radius: 13px; background: var(--fl-surface); border: 1px solid var(--fl-line); box-shadow: 0 16px 48px rgba(10,10,10,0.18); opacity: 0; pointer-events: none; transform: translateX(-8px) scale(0.98); transition: opacity 160ms, transform 160ms; }
-.fl-node-palette:hover .fl-node-palette-label { opacity: 0; }
 .fl-node-palette:hover .fl-node-palette-panel { opacity: 1; pointer-events: auto; transform: translateX(0) scale(1); }
 .fl-node-palette-panel button { width: 100%; height: auto; display: flex; justify-content: flex-start; gap: 8px; padding: 8px; }
 .fl-node-palette-panel .sw { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--fl-surface-2); flex: none; }
