@@ -681,10 +681,41 @@ export type Database = {
           },
         ]
       }
+      flow_edges: {
+        Row: {
+          created_at: string
+          flow_id: string
+          id: string
+          label: string | null
+          source_handle: string | null
+          source_node_id: string
+          target_node_id: string
+        }
+        Insert: {
+          created_at?: string
+          flow_id: string
+          id?: string
+          label?: string | null
+          source_handle?: string | null
+          source_node_id: string
+          target_node_id: string
+        }
+        Update: {
+          created_at?: string
+          flow_id?: string
+          id?: string
+          label?: string | null
+          source_handle?: string | null
+          source_node_id?: string
+          target_node_id?: string
+        }
+        Relationships: []
+      }
       flow_emails: {
         Row: {
           brand_id: string
           campaign_id: string | null
+          canvas_position: Json | null
           created_at: string
           flow_id: string
           generation_status: string
@@ -693,6 +724,7 @@ export type Database = {
           job: string | null
           label: string | null
           last_error: string | null
+          node_config: Json | null
           node_type: string
           notes: string | null
           sections: Json | null
@@ -703,6 +735,7 @@ export type Database = {
         Insert: {
           brand_id: string
           campaign_id?: string | null
+          canvas_position?: Json | null
           created_at?: string
           flow_id: string
           generation_status?: string
@@ -711,6 +744,7 @@ export type Database = {
           job?: string | null
           label?: string | null
           last_error?: string | null
+          node_config?: Json | null
           node_type: string
           notes?: string | null
           sections?: Json | null
@@ -721,6 +755,7 @@ export type Database = {
         Update: {
           brand_id?: string
           campaign_id?: string | null
+          canvas_position?: Json | null
           created_at?: string
           flow_id?: string
           generation_status?: string
@@ -729,6 +764,7 @@ export type Database = {
           job?: string | null
           label?: string | null
           last_error?: string | null
+          node_config?: Json | null
           node_type?: string
           notes?: string | null
           sections?: Json | null
@@ -760,9 +796,40 @@ export type Database = {
           },
         ]
       }
+      flow_node_comments: {
+        Row: {
+          author_id: string
+          author_name: string | null
+          content: string
+          created_at: string
+          flow_email_id: string
+          flow_id: string
+          id: string
+        }
+        Insert: {
+          author_id: string
+          author_name?: string | null
+          content: string
+          created_at?: string
+          flow_email_id: string
+          flow_id: string
+          id?: string
+        }
+        Update: {
+          author_id?: string
+          author_name?: string | null
+          content?: string
+          created_at?: string
+          flow_email_id?: string
+          flow_id?: string
+          id?: string
+        }
+        Relationships: []
+      }
       flows: {
         Row: {
           brand_id: string
+          canvas_state: Json | null
           created_at: string
           flow_type: string
           id: string
@@ -770,10 +837,12 @@ export type Database = {
           name: string
           skeleton_markdown: string | null
           status: string
+          trigger_config: Json | null
           updated_at: string
         }
         Insert: {
           brand_id: string
+          canvas_state?: Json | null
           created_at?: string
           flow_type: string
           id?: string
@@ -781,10 +850,12 @@ export type Database = {
           name: string
           skeleton_markdown?: string | null
           status?: string
+          trigger_config?: Json | null
           updated_at?: string
         }
         Update: {
           brand_id?: string
+          canvas_state?: Json | null
           created_at?: string
           flow_type?: string
           id?: string
@@ -792,6 +863,7 @@ export type Database = {
           name?: string
           skeleton_markdown?: string | null
           status?: string
+          trigger_config?: Json | null
           updated_at?: string
         }
         Relationships: [
