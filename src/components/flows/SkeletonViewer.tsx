@@ -115,7 +115,7 @@ interface Props {
 
 /* ---------- Geometry ---------- */
 
-const NODE_W = 260;
+const NODE_W = 300;
 const NODE_MARGIN = 44;
 const BRANCH_X = 210;
 const BRANCH_Y = 92;
@@ -124,13 +124,13 @@ const SPLIT_Y_GAP = 104;
 const SIBLING_X_GAP = 96;
 const SPLIT_BRANCH_GAP = 112;
 function getNodeSize(kind: NodeKind) {
-  if (kind === "delay") return { w: 220, h: 86 };
-  if (kind === "split") return { w: 260, h: 118 };
+  if (kind === "delay") return { w: 190, h: 64 };
+  if (kind === "split") return { w: 240, h: 84 };
   if (kind === "trigger_split") return { w: 280, h: 120 };
   if (kind === "filters") return { w: 260, h: 100 };
   if (kind === "exit") return { w: 46, h: 46 };
   if (kind === "trigger") return { w: 240, h: 96 };
-  return { w: 280, h: 110 }; // email / sms
+  return { w: 320, h: 122 }; // email / sms
 }
 
 function orthPath(
@@ -793,7 +793,7 @@ export function SkeletonViewer({
   const getCanvasPreviewPosition = (node: BoardNode) => {
     const stage = stageRef.current?.getBoundingClientRect();
     const nodeSize = getNodeSize(node.kind);
-    const panelWidth = 430;
+    const panelWidth = Math.round(nodeSize.w * 1.25);
     const margin = 16;
     const gap = 18;
     const stageWidth = stage?.width || window.innerWidth;
@@ -810,7 +810,7 @@ export function SkeletonViewer({
       Math.max(margin, nodeTop - 12),
       Math.max(margin, stageHeight - panelMaxHeight - margin)
     );
-    return { x, y, maxHeight: panelMaxHeight };
+    return { x, y, width: panelWidth, maxHeight: panelMaxHeight };
   };
 
   const isStickyTarget = (target: BoardNode | Sticky | null): target is Sticky => {
@@ -997,7 +997,7 @@ export function SkeletonViewer({
               onOpenDetails={() => setDetailsNode(n)}
               onOpenPreview={
                 typeof n.emailIndex === "number"
-                  ? () => onToggleExpand(n.emailIndex!)
+                  ? () => onToggleExpand(expandedIndex === n.emailIndex ? null : n.emailIndex!)
                   : undefined
               }
               onRequestDelete={() => setDeleteTarget(n)}
@@ -1013,7 +1013,7 @@ export function SkeletonViewer({
               }
               onExpand={
                 typeof n.emailIndex === "number"
-                  ? () => onToggleExpand(n.emailIndex!)
+                  ? () => onToggleExpand(expandedIndex === n.emailIndex ? null : n.emailIndex!)
                   : undefined
               }
               emailRow={
@@ -1398,11 +1398,11 @@ function NodeView({
       )}
 
       {node.kind === "delay" && (
-        <div className="fl-body" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 16, fontWeight: 600, color: "var(--fl-ink)" }}>
+        <div className="fl-body fl-delay-body">
+          <div className="fl-delay-value">
             {node.meta?.duration || "—"}
           </div>
-          <div style={{ marginLeft: "auto", fontFamily: "var(--fl-mono)", fontSize: 10, color: "var(--fl-ink-4)", textTransform: "uppercase" }}>
+          <div className="fl-delay-label">
             wait
           </div>
         </div>
@@ -1413,23 +1413,6 @@ function NodeView({
           <div className="fl-split-cond">
             {node.meta?.condition || node.label}
           </div>
-          {Array.isArray(node.meta?.branches) && node.meta!.branches.length > 0 ? (
-            <div className="fl-branches">
-              {node.meta!.branches.map((b: any, i: number) => (
-                <div
-                  key={i}
-                  className={`fl-branch ${b.label?.toLowerCase().includes("yes") ? "yes" : b.label?.toLowerCase().includes("no") ? "no" : ""}`}
-                  title={b.description || ""}
-                >
-                  {b.label}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ fontSize: 10, color: "var(--fl-ink-4)", marginTop: 6, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              Branches not specified
-            </div>
-          )}
         </div>
       )}
 
@@ -1506,26 +1489,6 @@ function MessagePreview({
             }}
           />
         ) : null}
-        {hasHtml && onOpenPreview && (
-          <div
-            style={{
-              position: "absolute",
-              top: 4,
-              right: 4,
-              width: 22,
-              height: 22,
-              borderRadius: 6,
-              background: "rgba(0,0,0,0.6)",
-              color: "#fff",
-              display: "grid",
-              placeItems: "center",
-              backdropFilter: "blur(4px)",
-              pointerEvents: "none",
-            }}
-          >
-            <Maximize2 className="w-3 h-3" />
-          </div>
-        )}
       </div>
       <div className="fl-msg-meta">
         <div className="fl-msg-subject">{subject}</div>
@@ -1547,7 +1510,7 @@ function CanvasCampaignPreview({
   onOpenEditor,
 }: {
   node: BoardNode;
-  position: { x: number; y: number; maxHeight: number };
+  position: { x: number; y: number; width: number; maxHeight: number };
   row: FlowEmailRow;
   meta: FlowEmailMeta | null;
   generating: boolean;
@@ -1560,7 +1523,7 @@ function CanvasCampaignPreview({
   return (
     <div
       className="fl-canvas-preview"
-      style={{ transform: `translate(${position.x}px, ${position.y}px)`, maxHeight: position.maxHeight }}
+      style={{ transform: `translate(${position.x}px, ${position.y}px)`, width: position.width, maxHeight: position.maxHeight }}
       onMouseDown={(e) => e.stopPropagation()}
     >
       <div className="fl-canvas-preview-head">
