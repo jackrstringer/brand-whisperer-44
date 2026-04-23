@@ -1489,26 +1489,6 @@ function MessagePreview({
             }}
           />
         ) : null}
-        {hasHtml && onOpenPreview && (
-          <div
-            style={{
-              position: "absolute",
-              top: 4,
-              right: 4,
-              width: 22,
-              height: 22,
-              borderRadius: 6,
-              background: "rgba(0,0,0,0.6)",
-              color: "#fff",
-              display: "grid",
-              placeItems: "center",
-              backdropFilter: "blur(4px)",
-              pointerEvents: "none",
-            }}
-          >
-            <Maximize2 className="w-3 h-3" />
-          </div>
-        )}
       </div>
       <div className="fl-msg-meta">
         <div className="fl-msg-subject">{subject}</div>
@@ -1530,7 +1510,7 @@ function CanvasCampaignPreview({
   onOpenEditor,
 }: {
   node: BoardNode;
-  position: { x: number; y: number; maxHeight: number };
+  position: { x: number; y: number; width: number; maxHeight: number };
   row: FlowEmailRow;
   meta: FlowEmailMeta | null;
   generating: boolean;
@@ -1543,7 +1523,7 @@ function CanvasCampaignPreview({
   return (
     <div
       className="fl-canvas-preview"
-      style={{ transform: `translate(${position.x}px, ${position.y}px)`, maxHeight: position.maxHeight }}
+      style={{ transform: `translate(${position.x}px, ${position.y}px)`, width: position.width, maxHeight: position.maxHeight }}
       onMouseDown={(e) => e.stopPropagation()}
     >
       <div className="fl-canvas-preview-head">
