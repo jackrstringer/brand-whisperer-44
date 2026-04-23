@@ -115,7 +115,7 @@ interface Props {
 
 /* ---------- Geometry ---------- */
 
-const NODE_W = 260;
+const NODE_W = 300;
 const NODE_MARGIN = 44;
 const BRANCH_X = 210;
 const BRANCH_Y = 92;
@@ -124,13 +124,13 @@ const SPLIT_Y_GAP = 104;
 const SIBLING_X_GAP = 96;
 const SPLIT_BRANCH_GAP = 112;
 function getNodeSize(kind: NodeKind) {
-  if (kind === "delay") return { w: 220, h: 86 };
-  if (kind === "split") return { w: 260, h: 118 };
+  if (kind === "delay") return { w: 190, h: 64 };
+  if (kind === "split") return { w: 240, h: 84 };
   if (kind === "trigger_split") return { w: 280, h: 120 };
   if (kind === "filters") return { w: 260, h: 100 };
   if (kind === "exit") return { w: 46, h: 46 };
   if (kind === "trigger") return { w: 240, h: 96 };
-  return { w: 280, h: 110 }; // email / sms
+  return { w: 320, h: 122 }; // email / sms
 }
 
 function orthPath(
