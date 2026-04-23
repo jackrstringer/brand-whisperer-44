@@ -1006,6 +1006,27 @@ export function SkeletonViewer({
             />
           ))}
 
+          {expandedIndex !== null && (() => {
+            const previewNode = displayBoard.nodes.find((n) => n.emailIndex === expandedIndex);
+            const row = emails.find((e) => e.sequence_index === expandedIndex);
+            if (!previewNode || !row?.html) return null;
+            const cm = row.campaign_id ? campaignMeta[row.campaign_id] : null;
+            const nodeSize = getNodeSize(previewNode.kind);
+            return (
+              <CanvasCampaignPreview
+                node={previewNode}
+                nodeSize={nodeSize}
+                row={row}
+                meta={cm}
+                brandId={brandId}
+                generating={generatingIndex === previewNode.emailIndex}
+                onClose={() => onToggleExpand(null)}
+                onGenerate={() => onGenerateNode(previewNode.emailIndex!)}
+                onOpenEditor={() => row.campaign_id && navigate(`/brands/${brandId}/campaigns/${row.campaign_id}`)}
+              />
+            );
+          })()}
+
           {/* Drafting ghost */}
           {drafting && parsedNodes.length === 0 && (
             <div
@@ -1093,70 +1114,6 @@ export function SkeletonViewer({
           </button>
         </div>
       </div>
-
-      {/* Expanded message preview */}
-      {expandedIndex !== null && (() => {
-        const previewNode = displayBoard.nodes.find((n) => n.emailIndex === expandedIndex);
-        const row = emails.find((e) => e.sequence_index === expandedIndex);
-        if (!row?.html) return null;
-        const cm = row.campaign_id ? campaignMeta[row.campaign_id] : null;
-        return (
-          <div
-            onClick={() => onToggleExpand(null)}
-            className="fl-campaign-preview-backdrop"
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className="fl-campaign-preview-shell"
-            >
-              <div className="fl-campaign-preview-topbar">
-                <div className="fl-campaign-preview-meta">
-                  <div className="fl-campaign-preview-subject">
-                    {cm?.subject_line || row.label || "Email"}
-                  </div>
-                  {cm?.preview_text && (
-                    <div className="fl-campaign-preview-text">
-                      {cm.preview_text}
-                    </div>
-                  )}
-                </div>
-                {row.campaign_id && (
-                  <button
-                    onClick={() => navigate(`/brands/${brandId}/campaigns/${row.campaign_id}`)}
-                    className="fl-campaign-preview-icon"
-                    title="Open in Editor"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                <button
-                  onClick={() => onToggleExpand(null)}
-                  className="fl-campaign-preview-icon"
-                  title="Close"
-                >
-                  <XIcon className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              <div className="fl-campaign-preview-frame">
-                <iframe title={`expanded-${row.id}`} srcDoc={row.html} sandbox="allow-same-origin" />
-              </div>
-              <div className="fl-campaign-preview-actions">
-                {row.campaign_id && (
-                  <button onClick={() => navigate(`/brands/${brandId}/campaigns/${row.campaign_id}`)}>
-                    <ExternalLink className="w-3.5 h-3.5" /> Open in Editor
-                  </button>
-                )}
-                {previewNode?.emailIndex !== undefined && (
-                  <button onClick={() => onGenerateNode(previewNode.emailIndex!)} disabled={generatingIndex === previewNode.emailIndex}>
-                    {generatingIndex === previewNode.emailIndex ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-                    {row.html ? "Regenerate" : "Generate"}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {detailsNode && (detailsNode.kind === "email" || detailsNode.kind === "sms") ? (
         <FlowEmailDetail
@@ -1553,6 +1510,65 @@ function MessagePreview({
         <div className="fl-msg-subject">{subject}</div>
         <div className="fl-msg-snip">{preview}</div>
         {statusEl}
+      </div>
+    </div>
+  );
+}
+
+function CanvasCampaignPreview({
+  node,
+  nodeSize,
+  row,
+  meta,
+  generating,
+  onClose,
+  onGenerate,
+  onOpenEditor,
+}: {
+  node: BoardNode;
+  nodeSize: { w: number; h: number };
+  row: FlowEmailRow;
+  meta: FlowEmailMeta | null;
+  brandId: string;
+  generating: boolean;
+  onClose: () => void;
+  onGenerate: () => void;
+  onOpenEditor: () => void;
+}) {
+  return (
+    <div
+      className="fl-canvas-preview"
+      style={{ transform: `translate(${node.x + nodeSize.w + 22}px, ${node.y - 12}px)` }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div className="fl-canvas-preview-head">
+        <div className="fl-canvas-preview-meta">
+          <div className="fl-canvas-preview-title">{node.label}</div>
+          <div className="fl-canvas-preview-kicker">Email · Preview</div>
+        </div>
+        {row.campaign_id && (
+          <button onClick={onOpenEditor} title="Open in Editor">
+            <ExternalLink className="w-3.5 h-3.5" />
+          </button>
+        )}
+        <button onClick={onClose} title="Close">
+          <XIcon className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <div className="fl-canvas-preview-envelope">
+        <div className="fl-canvas-preview-to">To &lt;customer@example.com&gt;</div>
+        <div className="fl-canvas-preview-subject">{meta?.subject_line || row.label || node.label}</div>
+        {meta?.preview_text && <div className="fl-canvas-preview-text">{meta.preview_text}</div>}
+      </div>
+      <div className="fl-canvas-preview-frame">
+        <iframe title={`canvas-preview-${row.id}`} srcDoc={row.html || ""} sandbox="allow-same-origin" />
+      </div>
+      <div className="fl-canvas-preview-actions">
+        {row.campaign_id && <button onClick={onOpenEditor}><ExternalLink className="w-3.5 h-3.5" />Open in Editor</button>}
+        <button onClick={onGenerate} disabled={generating}>
+          {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+          Regenerate
+        </button>
       </div>
     </div>
   );
