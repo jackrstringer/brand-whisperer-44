@@ -13,9 +13,11 @@ import {
   Wand2,
   Sparkles,
   Mail,
+  Bell,
   Clock,
   GitBranch,
   Smartphone,
+  Webhook,
   LogOut,
   Filter,
   Zap,
@@ -47,7 +49,7 @@ export interface FlowEmailMeta {
 }
 
 type Tool = "select" | "add" | "sticky";
-type NodeKind = "trigger" | "filters" | "email" | "delay" | "split" | "sms" | "exit";
+type NodeKind = "trigger" | "filters" | "email" | "delay" | "split" | "trigger_split" | "sms" | "push" | "webhook" | "exit";
 
 interface BoardNode {
   id: string;
@@ -98,6 +100,7 @@ const BRANCH_Y = 92;
 function getNodeSize(kind: NodeKind) {
   if (kind === "delay") return { w: 220, h: 70 };
   if (kind === "split") return { w: 260, h: 130 };
+  if (kind === "trigger_split") return { w: 280, h: 120 };
   if (kind === "filters" || kind === "exit") return { w: 260, h: 100 };
   if (kind === "trigger") return { w: 240, h: 96 };
   return { w: 280, h: 110 }; // email / sms
@@ -283,8 +286,11 @@ const KIND_META: Record<NodeKind, { Icon: any; label: string }> = {
   filters: { Icon: Filter, label: "Entry Filters" },
   email: { Icon: Mail, label: "Email" },
   sms: { Icon: Smartphone, label: "SMS" },
+  push: { Icon: Bell, label: "Push Notification" },
+  webhook: { Icon: Webhook, label: "Webhook" },
   delay: { Icon: Clock, label: "Time Delay" },
   split: { Icon: GitBranch, label: "Conditional Split" },
+  trigger_split: { Icon: GitBranch, label: "Trigger Split" },
   exit: { Icon: LogOut, label: "Exit Flow" },
 };
 
@@ -313,7 +319,6 @@ export function SkeletonViewer({
   const [stickies, setStickies] = useState<Sticky[]>([]);
   const [selectedSticky, setSelectedSticky] = useState<string | null>(null);
   const [editingSticky, setEditingSticky] = useState<string | null>(null);
-  const [addPop, setAddPop] = useState<{ x: number; y: number } | null>(null);
   const [editingLabelOf, setEditingLabelOf] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState("");
   const [briefOpen, setBriefOpen] = useState(false);
@@ -419,7 +424,6 @@ export function SkeletonViewer({
         setSpaceHeld(true);
       }
       if (e.key === "Escape") {
-        setAddPop(null);
         setSelected(null);
         setSelectedSticky(null);
         setEditingSticky(null);
@@ -468,10 +472,6 @@ export function SkeletonViewer({
       setSelectedSticky(id);
       setEditingSticky(id);
       setTool("select");
-      return;
-    }
-    if (tool === "add") {
-      setAddPop({ x: e.clientX, y: e.clientY });
       return;
     }
     setSelected(null);
@@ -580,24 +580,42 @@ export function SkeletonViewer({
 
   const triggerNode = nodeById.trigger;
 
-  /* -------- Add node via popover (placeholder — saves visually only) -------- */
   const addNodeAt = (kind: NodeKind, screenX: number, screenY: number) => {
-    // We don't yet have a backend mutation for raw skeleton additions.
-    // Add a sticky note placeholder so the action is at least visible.
     const w = screenToWorld(screenX, screenY);
-    const id = `s-${Date.now()}`;
-    setStickies((s) => [
-      ...s,
-      {
-        id,
-        x: w.x - 90,
-        y: w.y - 40,
-        text: `+ ${KIND_META[kind].label}\n(ask the agent below to add this)`,
-      },
-    ]);
-    setSelectedSticky(id);
-    setAddPop(null);
+    const id = `manual-${kind}-${Date.now()}`;
+    const node: BoardNode = {
+      id,
+      kind,
+      label: KIND_META[kind].label,
+      x: w.x - getNodeSize(kind).w / 2,
+      y: w.y - getNodeSize(kind).h / 2,
+      meta: kind === "split" || kind === "trigger_split" ? { condition: "New split", branches: [{ label: "YES" }, { label: "NO" }] } : {},
+    };
+    setLayoutNodes((arr) => resolveNodeCollisions([...arr, node]));
+    setSelected(id);
     setTool("select");
+  };
+
+  const startPaletteDrag = (kind: NodeKind, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const ghost = document.createElement("div");
+    ghost.className = "fl-drag-ghost";
+    ghost.textContent = KIND_META[kind].label;
+    document.body.appendChild(ghost);
+    const move = (ev: MouseEvent) => {
+      ghost.style.left = `${ev.clientX + 12}px`;
+      ghost.style.top = `${ev.clientY + 12}px`;
+    };
+    const up = (ev: MouseEvent) => {
+      ghost.remove();
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      addNodeAt(kind, ev.clientX, ev.clientY);
+    };
+    move(e.nativeEvent);
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
   };
 
   /* -------- Render -------- */
@@ -789,14 +807,7 @@ export function SkeletonViewer({
           >
             <MousePointer2 className="w-4 h-4" />
           </button>
-          <button
-            className={tool === "add" ? "on" : ""}
-            onClick={() => setTool("add")}
-            title="Add node (A)"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-          <NodePalette onAdd={(kind) => addNodeAt(kind, window.innerWidth / 2, window.innerHeight / 2)} />
+          <NodePalette onStartDrag={startPaletteDrag} />
           <button
             className={tool === "sticky" ? "on" : ""}
             onClick={() => setTool("sticky")}
@@ -809,48 +820,6 @@ export function SkeletonViewer({
             <Maximize2 className="w-4 h-4" />
           </button>
         </div>
-
-        {/* Add-node popover */}
-        {addPop && (
-          <div
-            className="fl-add-pop"
-            style={{ left: Math.min(addPop.x, window.innerWidth - 260), top: Math.min(addPop.y, window.innerHeight - 320) }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <h4>Messages</h4>
-            <div className="grid">
-              <button onClick={() => addNodeAt("email", addPop.x, addPop.y)}>
-                <span className="sw"><Mail className="w-3 h-3" /></span> Email
-              </button>
-              <button onClick={() => addNodeAt("sms", addPop.x, addPop.y)}>
-                <span className="sw"><Smartphone className="w-3 h-3" /></span> SMS
-              </button>
-            </div>
-            <h4 style={{ marginTop: 6 }}>Timing</h4>
-            <div className="grid">
-              <button onClick={() => addNodeAt("delay", addPop.x, addPop.y)}>
-                <span className="sw"><Clock className="w-3 h-3" /></span> Delay
-              </button>
-            </div>
-            <h4 style={{ marginTop: 6 }}>Logic</h4>
-            <div className="grid">
-              <button onClick={() => addNodeAt("split", addPop.x, addPop.y)}>
-                <span className="sw"><GitBranch className="w-3 h-3" /></span> Split
-              </button>
-              <button onClick={() => addNodeAt("exit", addPop.x, addPop.y)}>
-                <span className="sw"><LogOut className="w-3 h-3" /></span> Exit
-              </button>
-            </div>
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
-              <button
-                style={{ fontSize: 11, color: "var(--fl-ink-4)" }}
-                onClick={() => setAddPop(null)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Bottom-left minimap */}
         <Minimap board={displayBoard} pan={pan} zoom={zoom} stageRef={stageRef} />
@@ -1298,8 +1267,8 @@ function FlowSummaryCard({
   );
 }
 
-function NodePalette({ onAdd }: { onAdd: (kind: NodeKind) => void }) {
-  const items: NodeKind[] = ["email", "sms", "delay", "split", "exit"];
+function NodePalette({ onStartDrag }: { onStartDrag: (kind: NodeKind, e: React.MouseEvent) => void }) {
+  const items: NodeKind[] = ["email", "sms", "push", "delay", "split", "trigger_split", "webhook", "exit"];
   return (
     <div className="fl-node-palette">
       <div className="fl-node-palette-label">Nodes</div>
@@ -1307,7 +1276,7 @@ function NodePalette({ onAdd }: { onAdd: (kind: NodeKind) => void }) {
         {items.map((kind) => {
           const { Icon, label } = KIND_META[kind];
           return (
-            <button key={kind} onClick={() => onAdd(kind)} title={`Add ${label}`}>
+            <button key={kind} onMouseDown={(e) => onStartDrag(kind, e)} title={`Drag ${label}`}>
               <span className="sw"><Icon className="w-3.5 h-3.5" /></span>
               <span>{label}</span>
             </button>
