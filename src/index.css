@@ -486,6 +486,24 @@
   box-shadow: 0 0 0 2px var(--fl-accent), 0 8px 22px rgba(10,10,10,0.10);
 }
 .fl-node.tiny { min-width: 200px; }
+.fl-node.kind-delay,
+.fl-node.kind-exit,
+.fl-node.kind-split { border-radius: 8px; border-color: rgba(10,10,10,0.12); }
+.fl-node.kind-delay .fl-node-head,
+.fl-node.kind-exit .fl-node-head,
+.fl-node.kind-split .fl-node-head { padding: 8px 10px 4px; gap: 8px; }
+.fl-node.kind-delay .fl-badge,
+.fl-node.kind-exit .fl-badge,
+.fl-node.kind-split .fl-badge { width: 22px; height: 22px; border-radius: 6px; }
+.fl-node.kind-delay .fl-title,
+.fl-node.kind-exit .fl-title,
+.fl-node.kind-split .fl-title { font-size: 12px; }
+.fl-node.kind-delay .fl-kind,
+.fl-node.kind-exit .fl-kind,
+.fl-node.kind-split .fl-kind { font-size: 9px; letter-spacing: 0.055em; }
+.fl-node.kind-delay .fl-body,
+.fl-node.kind-exit .fl-body,
+.fl-node.kind-split .fl-body { padding: 4px 10px 10px; }
 .fl-node-head {
   display: flex; align-items: center; gap: 10px; padding: 10px 12px;
 }
@@ -507,11 +525,11 @@
 
 /* Conditional split — proper YES/NO branches */
 .fl-split-cond {
-  padding: 6px 8px; border-radius: 6px;
+  padding: 5px 7px; border-radius: 5px;
   background: var(--fl-surface-2);
-  font-size: 11px; color: var(--fl-ink-2);
+  font-size: 10px; line-height: 1.35; color: var(--fl-ink-2);
   font-family: var(--fl-mono);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   border: 1px dashed var(--fl-line-2);
 }
 .fl-branches { display: flex; gap: 6px; }
@@ -594,6 +612,7 @@
   border-radius: 14px;
   box-shadow: 0 12px 40px rgba(10,10,10,0.06), 0 2px 8px rgba(10,10,10,0.04);
   overflow: hidden; width: 520px; z-index: 4;
+  display: flex; flex-direction: column-reverse;
   transition: transform 220ms cubic-bezier(0.2,0.8,0.2,1), box-shadow 180ms;
 }
 .fl-brief.open { box-shadow: 0 22px 70px rgba(10,10,10,0.12), 0 2px 8px rgba(10,10,10,0.05); }
@@ -612,7 +631,7 @@
 .fl-brief-badge svg { width: 14px; height: 14px; }
 .fl-brief-kicker { font-family: var(--fl-mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fl-ink-4); }
 .fl-brief-title { font-size: 14px; font-weight: 600; color: var(--fl-ink); margin-top: 2px; }
-.fl-brief-body { padding: 10px 16px 16px; border-top: 1px solid var(--fl-line); display: grid; grid-template-columns: 1fr 1fr; gap: 14px 22px; }
+.fl-brief-body { padding: 16px 16px 10px; border-bottom: 1px solid var(--fl-line); display: grid; grid-template-columns: 1fr 1fr; gap: 14px 22px; }
 .fl-brief-label { font-family: var(--fl-mono); font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--fl-ink-4); margin: 0 0 6px; }
 .fl-brief-text  { font-size: 12.5px; line-height: 1.5; color: var(--fl-ink-2); margin: 0; }
 
