@@ -23,6 +23,7 @@ import {
   Loader2,
   Minus as MinusIcon,
   Maximize2,
+  RefreshCw,
   X as XIcon,
 } from "lucide-react";
 import {
@@ -112,7 +113,7 @@ function getNodeSize(kind: NodeKind) {
   if (kind === "split") return { w: 260, h: 118 };
   if (kind === "trigger_split") return { w: 280, h: 120 };
   if (kind === "filters") return { w: 260, h: 100 };
-  if (kind === "exit") return { w: 260, h: 82 };
+  if (kind === "exit") return { w: 46, h: 46 };
   if (kind === "trigger") return { w: 240, h: 96 };
   return { w: 280, h: 110 }; // email / sms
 }
