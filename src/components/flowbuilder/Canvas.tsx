@@ -24,6 +24,7 @@ import { ConditionalSplitNode } from "./nodes/ConditionalSplitNode";
 import { SimpleNode } from "./nodes/SimpleNode";
 import { InsertableEdge } from "./edges/InsertableEdge";
 import { QuickAddMenu } from "./QuickAddMenu";
+import { Button } from "@/components/ui/button";
 import {
   FlowCanvasNode,
   FlowCanvasEdge,
@@ -126,7 +127,6 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
   );
   const rf = useReactFlow();
 
-  const laidOutNodes = useMemo(() => autoLayout(nodes, edges), [nodes, edges]);
   const decoratedEdges = useMemo(
     () =>
       edges.map((e) => ({
@@ -140,9 +140,7 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
   const onNodesChange = useCallback(
     (changes: NodeChange[]) =>
       setNodes((nds) => {
-        // Block position changes from dragging — auto-layout is the source of truth
-        const filtered = changes.filter((c) => c.type !== "position" && c.type !== "dimensions");
-        return applyNodeChanges(filtered, nds) as FlowCanvasNode[];
+        return applyNodeChanges(changes, nds) as FlowCanvasNode[];
       }),
     [setNodes]
   );
@@ -166,12 +164,11 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
         position: { x: 0, y: 0 }, // auto-layout will place it
         data,
       };
-      setNodes((nds) => [...nds, newNode]);
       setEdges((eds) => {
         const target = eds.find((e) => e.id === edgeId);
         if (!target) return eds;
         const remaining = eds.filter((e) => e.id !== edgeId);
-        return [
+        const nextEdges = [
           ...remaining,
           {
             id: crypto.randomUUID(),
@@ -182,6 +179,8 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
           },
           { id: crypto.randomUUID(), source: id, target: target.target, type: "insertable" },
         ];
+        setNodes((nds) => autoLayout([...nds, newNode], nextEdges));
+        return nextEdges;
       });
     },
     [setNodes, setEdges]
@@ -198,12 +197,17 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
         position: { x: 0, y: 0 },
         data,
       };
-      setNodes((nds) => [...nds, newNode]);
       if (afterNodeId) {
-        setEdges((eds) => [
-          ...eds,
-          { id: crypto.randomUUID(), source: afterNodeId, target: id, type: "insertable" },
-        ]);
+        setEdges((eds) => {
+          const nextEdges = [
+            ...eds,
+            { id: crypto.randomUUID(), source: afterNodeId, target: id, type: "insertable" },
+          ];
+          setNodes((nds) => autoLayout([...nds, newNode], nextEdges));
+          return nextEdges;
+        });
+      } else {
+        setNodes((nds) => [...nds, newNode]);
       }
     },
     [setNodes, setEdges]
