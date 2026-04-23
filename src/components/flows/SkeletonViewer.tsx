@@ -108,10 +108,11 @@ const SPLIT_Y_GAP = 104;
 const SIBLING_X_GAP = 96;
 const SPLIT_BRANCH_GAP = 112;
 function getNodeSize(kind: NodeKind) {
-  if (kind === "delay") return { w: 220, h: 70 };
-  if (kind === "split") return { w: 260, h: 130 };
+  if (kind === "delay") return { w: 220, h: 86 };
+  if (kind === "split") return { w: 260, h: 118 };
   if (kind === "trigger_split") return { w: 280, h: 120 };
-  if (kind === "filters" || kind === "exit") return { w: 260, h: 100 };
+  if (kind === "filters") return { w: 260, h: 100 };
+  if (kind === "exit") return { w: 260, h: 82 };
   if (kind === "trigger") return { w: 240, h: 96 };
   return { w: 280, h: 110 }; // email / sms
 }
@@ -1091,7 +1092,7 @@ function NodeView({
 
   return (
     <div
-      className={`fl-node ${selected ? "sel" : ""} ${
+      className={`fl-node kind-${node.kind} ${selected ? "sel" : ""} ${
         node.kind === "delay" ? "tiny" : ""
       }`}
       style={{
@@ -1363,15 +1364,7 @@ function FlowSummaryCard({
   const filterCount = meta.filters?.length || 0;
   const exitCount = meta.exit?.length || 0;
   return (
-    <div className={`fl-brief ${open ? "open" : ""}`} style={{ transform: `translate(${trigger.x - 140}px, ${trigger.y - (open ? 250 : 72)}px)` }}>
-      <button className="fl-brief-head" onClick={onToggle} onMouseDown={(e) => e.stopPropagation()}>
-        <div className="fl-brief-badge"><Wand2 className="w-3.5 h-3.5" /></div>
-        <div className="fl-brief-main">
-          <div className="fl-brief-kicker">Flow summary</div>
-          <div className="fl-brief-title">{title}</div>
-        </div>
-        <div className="fl-brief-pill">{open ? "Collapse" : "Expand"}</div>
-      </button>
+    <div className={`fl-brief ${open ? "open" : ""}`} style={{ transform: `translate(${trigger.x - 140}px, ${trigger.y - 72}px)` }}>
       {open && (
         <div className="fl-brief-body">
           <div><p className="fl-brief-label">Trigger</p><p className="fl-brief-text">{trigger.label}</p></div>
@@ -1380,6 +1373,14 @@ function FlowSummaryCard({
           <div><p className="fl-brief-label">Exit rules</p><p className="fl-brief-text">{meta.exit?.join(" • ") || "Default flow completion"}</p></div>
         </div>
       )}
+      <button className="fl-brief-head" onClick={onToggle} onMouseDown={(e) => e.stopPropagation()}>
+        <div className="fl-brief-badge"><Wand2 className="w-3.5 h-3.5" /></div>
+        <div className="fl-brief-main">
+          <div className="fl-brief-kicker">Flow summary</div>
+          <div className="fl-brief-title">{title}</div>
+        </div>
+        <div className="fl-brief-pill">{open ? "Collapse" : "Expand"}</div>
+      </button>
     </div>
   );
 }
