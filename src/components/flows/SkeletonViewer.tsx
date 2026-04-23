@@ -7,7 +7,6 @@ import {
   useState,
 } from "react";
 import {
-  MousePointer2,
   Plus,
   StickyNote,
   Wand2,
@@ -48,7 +47,6 @@ export interface FlowEmailMeta {
   preview_text: string | null;
 }
 
-type Tool = "select" | "add" | "sticky";
 type NodeKind = "trigger" | "filters" | "email" | "delay" | "split" | "trigger_split" | "sms" | "push" | "webhook" | "exit";
 
 interface BoardNode {
@@ -67,6 +65,14 @@ interface BoardEdge {
   from: string;
   to: string;
   branch?: "yes" | "no" | null;
+}
+
+interface DropTarget {
+  id: string;
+  edge: BoardEdge;
+  x: number;
+  y: number;
+  label: string;
 }
 
 interface Sticky {
