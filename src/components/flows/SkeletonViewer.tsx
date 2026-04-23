@@ -807,14 +807,7 @@ export function SkeletonViewer({
           >
             <MousePointer2 className="w-4 h-4" />
           </button>
-          <button
-            className={tool === "add" ? "on" : ""}
-            onClick={() => setTool("add")}
-            title="Add node (A)"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-          <NodePalette onAdd={(kind) => addNodeAt(kind, window.innerWidth / 2, window.innerHeight / 2)} />
+          <NodePalette onStartDrag={startPaletteDrag} />
           <button
             className={tool === "sticky" ? "on" : ""}
             onClick={() => setTool("sticky")}
@@ -827,48 +820,6 @@ export function SkeletonViewer({
             <Maximize2 className="w-4 h-4" />
           </button>
         </div>
-
-        {/* Add-node popover */}
-        {addPop && (
-          <div
-            className="fl-add-pop"
-            style={{ left: Math.min(addPop.x, window.innerWidth - 260), top: Math.min(addPop.y, window.innerHeight - 320) }}
-            onMouseDown={(e) => e.stopPropagation()}
-          >
-            <h4>Messages</h4>
-            <div className="grid">
-              <button onClick={() => addNodeAt("email", addPop.x, addPop.y)}>
-                <span className="sw"><Mail className="w-3 h-3" /></span> Email
-              </button>
-              <button onClick={() => addNodeAt("sms", addPop.x, addPop.y)}>
-                <span className="sw"><Smartphone className="w-3 h-3" /></span> SMS
-              </button>
-            </div>
-            <h4 style={{ marginTop: 6 }}>Timing</h4>
-            <div className="grid">
-              <button onClick={() => addNodeAt("delay", addPop.x, addPop.y)}>
-                <span className="sw"><Clock className="w-3 h-3" /></span> Delay
-              </button>
-            </div>
-            <h4 style={{ marginTop: 6 }}>Logic</h4>
-            <div className="grid">
-              <button onClick={() => addNodeAt("split", addPop.x, addPop.y)}>
-                <span className="sw"><GitBranch className="w-3 h-3" /></span> Split
-              </button>
-              <button onClick={() => addNodeAt("exit", addPop.x, addPop.y)}>
-                <span className="sw"><LogOut className="w-3 h-3" /></span> Exit
-              </button>
-            </div>
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
-              <button
-                style={{ fontSize: 11, color: "var(--fl-ink-4)" }}
-                onClick={() => setAddPop(null)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Bottom-left minimap */}
         <Minimap board={displayBoard} pan={pan} zoom={zoom} stageRef={stageRef} />
