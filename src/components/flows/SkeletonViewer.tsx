@@ -533,6 +533,31 @@ export function SkeletonViewer({
     window.addEventListener("mouseup", upH);
   };
 
+  const startNodeDrag = (e: React.MouseEvent, node: BoardNode) => {
+    if (e.button !== 0 || spaceHeld || editingLabelOf) return;
+    e.stopPropagation();
+    setSelected(node.id);
+    setSelectedSticky(null);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const orig = { x: node.x, y: node.y };
+    const move = (ev: MouseEvent) => {
+      const dx = (ev.clientX - startX) / zoom;
+      const dy = (ev.clientY - startY) / zoom;
+      setLayoutNodes((arr) =>
+        resolveNodeCollisions(
+          arr.map((n) => (n.id === node.id ? { ...n, x: orig.x + dx, y: orig.y + dy } : n))
+        )
+      );
+    };
+    const upH = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", upH);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", upH);
+  };
+
   /* -------- Compute edge paths -------- */
   const edgePaths = displayBoard.edges
     .map((edge) => {
@@ -681,7 +706,7 @@ export function SkeletonViewer({
           ))}
 
           {/* Nodes */}
-          {board.nodes.map((n) => (
+          {displayBoard.nodes.map((n) => (
             <NodeView
               key={n.id}
               node={n}
@@ -699,6 +724,7 @@ export function SkeletonViewer({
                 setSelected(n.id);
                 setSelectedSticky(null);
               }}
+              onStartDrag={(e) => startNodeDrag(e, n)}
               onDoubleClickTitle={() => {
                 setLabelDraft(n.label);
                 setEditingLabelOf(n.id);
@@ -825,7 +851,7 @@ export function SkeletonViewer({
         )}
 
         {/* Bottom-left minimap */}
-        <Minimap board={board} pan={pan} zoom={zoom} stageRef={stageRef} />
+        <Minimap board={displayBoard} pan={pan} zoom={zoom} stageRef={stageRef} />
 
         {/* Bottom-right zoom control */}
         <div className="fl-zoom" onMouseDown={(e) => e.stopPropagation()}>
