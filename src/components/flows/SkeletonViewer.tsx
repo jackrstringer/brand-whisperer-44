@@ -1283,11 +1283,7 @@ function NodeView({
         onMouseDown={(e) => {
           e.stopPropagation();
           onSelect();
-          onStartDrag(e);
-        }}
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpenDetails();
+          onStartDrag(e, onOpenDetails);
         }}
         title={node.meta?.items?.[0] || "Exit the flow"}
       >
@@ -1311,16 +1307,21 @@ function NodeView({
         width: sz.w,
       }}
       onMouseDown={(e) => {
+        if (node.kind === "email" || node.kind === "sms") return;
         e.stopPropagation();
         onSelect();
-        onStartDrag(e);
-      }}
-      onClick={(e) => {
-        e.stopPropagation();
-        onOpenDetails();
+        onStartDrag(e, onOpenDetails);
       }}
     >
-      <div className="fl-node-head">
+      <div
+        className={`fl-node-head ${node.kind === "email" || node.kind === "sms" ? "fl-node-zone fl-node-zone-details" : ""}`}
+        onMouseDown={(e) => {
+          if (node.kind !== "email" && node.kind !== "sms") return;
+          e.stopPropagation();
+          onSelect();
+          onStartDrag(e, onOpenDetails);
+        }}
+      >
         <div className={`fl-badge ${node.kind === "trigger" ? "trigger" : ""}`}>
           <I className="w-3.5 h-3.5" />
         </div>
@@ -1470,7 +1471,9 @@ function NodeView({
           node={node}
           emailRow={emailRow}
           campaignMeta={campaignMeta}
-          onExpand={onExpand}
+          onOpenPreview={onOpenPreview || onExpand}
+          onStartPreviewDrag={(e) => onStartDrag(e, emailRow?.html ? (onOpenPreview || onExpand) : undefined)}
+          onSelect={onSelect}
         />
       )}
     </div>
