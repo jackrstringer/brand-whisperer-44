@@ -27,7 +27,6 @@ import {
   X as XIcon,
   Trash2,
   ExternalLink,
-  Play,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -791,6 +790,29 @@ export function SkeletonViewer({
     setDeleteTarget(null);
   };
 
+  const getCanvasPreviewPosition = (node: BoardNode) => {
+    const stage = stageRef.current?.getBoundingClientRect();
+    const nodeSize = getNodeSize(node.kind);
+    const panelWidth = 430;
+    const margin = 16;
+    const gap = 18;
+    const stageWidth = stage?.width || window.innerWidth;
+    const stageHeight = stage?.height || window.innerHeight;
+    const panelMaxHeight = Math.min(680, Math.max(420, stageHeight - margin * 2));
+    const nodeLeft = node.x * zoom + pan.x;
+    const nodeTop = node.y * zoom + pan.y;
+    const nodeRight = nodeLeft + nodeSize.w * zoom;
+    const rightX = nodeRight + gap;
+    const leftX = nodeLeft - panelWidth - gap;
+    const unclampedX = rightX + panelWidth <= stageWidth - margin ? rightX : leftX;
+    const x = Math.min(Math.max(margin, unclampedX), Math.max(margin, stageWidth - panelWidth - margin));
+    const y = Math.min(
+      Math.max(margin, nodeTop - 12),
+      Math.max(margin, stageHeight - panelMaxHeight - margin)
+    );
+    return { x, y, maxHeight: panelMaxHeight };
+  };
+
   const isStickyTarget = (target: BoardNode | Sticky | null): target is Sticky => {
     return !!target && "text" in target;
   };
@@ -1006,27 +1028,6 @@ export function SkeletonViewer({
             />
           ))}
 
-          {expandedIndex !== null && (() => {
-            const previewNode = displayBoard.nodes.find((n) => n.emailIndex === expandedIndex);
-            const row = emails.find((e) => e.sequence_index === expandedIndex);
-            if (!previewNode || !row?.html) return null;
-            const cm = row.campaign_id ? campaignMeta[row.campaign_id] : null;
-            const nodeSize = getNodeSize(previewNode.kind);
-            return (
-              <CanvasCampaignPreview
-                node={previewNode}
-                nodeSize={nodeSize}
-                row={row}
-                meta={cm}
-                brandId={brandId}
-                generating={generatingIndex === previewNode.emailIndex}
-                onClose={() => onToggleExpand(null)}
-                onGenerate={() => onGenerateNode(previewNode.emailIndex!)}
-                onOpenEditor={() => row.campaign_id && navigate(`/brands/${brandId}/campaigns/${row.campaign_id}`)}
-              />
-            );
-          })()}
-
           {/* Drafting ghost */}
           {drafting && parsedNodes.length === 0 && (
             <div
@@ -1050,6 +1051,26 @@ export function SkeletonViewer({
             </div>
           )}
         </div>
+
+        {expandedIndex !== null && (() => {
+          const previewNode = displayBoard.nodes.find((n) => n.emailIndex === expandedIndex);
+          const row = emails.find((e) => e.sequence_index === expandedIndex);
+          if (!previewNode || !row?.html) return null;
+          const cm = row.campaign_id ? campaignMeta[row.campaign_id] : null;
+          const previewPosition = getCanvasPreviewPosition(previewNode);
+          return (
+            <CanvasCampaignPreview
+              node={previewNode}
+              position={previewPosition}
+              row={row}
+              meta={cm}
+              generating={generatingIndex === previewNode.emailIndex}
+              onClose={() => onToggleExpand(null)}
+              onGenerate={() => onGenerateNode(previewNode.emailIndex!)}
+              onOpenEditor={() => row.campaign_id && navigate(`/brands/${brandId}/campaigns/${row.campaign_id}`)}
+            />
+          );
+        })()}
 
         {/* Permanent left node rail */}
         <div className="fl-tool" onMouseDown={(e) => e.stopPropagation()}>
