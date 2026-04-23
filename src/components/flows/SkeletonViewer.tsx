@@ -586,25 +586,43 @@ export function SkeletonViewer({
 
   const triggerNode = nodeById.trigger;
 
-  const addNodeAt = (kind: NodeKind, screenX: number, screenY: number) => {
-    const w = screenToWorld(screenX, screenY);
+  const dropTargets = useMemo<DropTarget[]>(() => {
+    return edgePaths.map(({ edge, from, to }) => ({
+      id: `drop-${edge.id}`,
+      edge,
+      x: (from.x + to.x) / 2,
+      y: (from.y + to.y) / 2,
+      label: edge.branch ? `Drop on ${edge.branch.toUpperCase()} path` : "Drop into path",
+    }));
+  }, [edgePaths]);
+
+  const insertNodeOnTarget = (kind: NodeKind, targetId: string) => {
+    const target = dropTargets.find((t) => t.id === targetId);
+    if (!target) return;
     const id = `manual-${kind}-${Date.now()}`;
+    const size = getNodeSize(kind);
     const node: BoardNode = {
       id,
       kind,
       label: KIND_META[kind].label,
-      x: w.x - getNodeSize(kind).w / 2,
-      y: w.y - getNodeSize(kind).h / 2,
+      x: target.x - size.w / 2,
+      y: target.y - size.h / 2,
+      branch: target.edge.branch ?? null,
       meta: kind === "split" || kind === "trigger_split" ? { condition: "New split", branches: [{ label: "YES" }, { label: "NO" }] } : {},
     };
     setLayoutNodes((arr) => resolveNodeCollisions([...arr, node]));
+    displayBoard.edges = displayBoard.edges.filter((e) => e.id !== target.edge.id);
+    displayBoard.edges.push(
+      { id: `e-${target.edge.from}-${id}`, from: target.edge.from, to: id, branch: target.edge.branch ?? null },
+      { id: `e-${id}-${target.edge.to}`, from: id, to: target.edge.to, branch: target.edge.branch ?? null }
+    );
     setSelected(id);
-    setTool("select");
   };
 
   const startPaletteDrag = (kind: NodeKind, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    setActiveDragKind(kind);
     const ghost = document.createElement("div");
     ghost.className = "fl-drag-ghost";
     ghost.textContent = KIND_META[kind].label;
@@ -612,12 +630,23 @@ export function SkeletonViewer({
     const move = (ev: MouseEvent) => {
       ghost.style.left = `${ev.clientX + 12}px`;
       ghost.style.top = `${ev.clientY + 12}px`;
+      const r = stageRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const world = screenToWorld(ev.clientX, ev.clientY);
+      const target = dropTargets.reduce<{ id: string; d: number } | null>((best, t) => {
+        const d = Math.hypot(t.x - world.x, t.y - world.y);
+        return d < 110 && (!best || d < best.d) ? { id: t.id, d } : best;
+      }, null);
+      setHoveredDropTarget(target?.id ?? null);
     };
     const up = (ev: MouseEvent) => {
       ghost.remove();
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
-      addNodeAt(kind, ev.clientX, ev.clientY);
+      setActiveDragKind(null);
+      const targetId = hoveredDropTarget;
+      setHoveredDropTarget(null);
+      if (targetId) insertNodeOnTarget(kind, targetId);
     };
     move(e.nativeEvent);
     window.addEventListener("mousemove", move);
