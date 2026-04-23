@@ -28,6 +28,7 @@ import {
   ParsedFlowNode,
   ParsedFlowMeta,
   FLOW_TRIGGERS,
+  FLOW_TYPE_META,
 } from "@/lib/flows/skeletonParser";
 
 /* ---------- Types ---------- */
