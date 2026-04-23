@@ -344,7 +344,8 @@ function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[]): BoardNode[] {
     });
   };
 
-  place(byId.trigger ? "trigger" : nodes[0]?.id, 0, 80);
+  const rootId = byId.trigger ? "trigger" : nodes[0]?.id;
+  if (rootId) place(rootId, 0, 80);
   let orphanY = 80;
   return nodes.map((node) => {
     if (positioned[node.id]) return positioned[node.id];
@@ -412,7 +413,7 @@ export function SkeletonViewer({
   useEffect(() => {
     setGraphEdges(board.edges);
     setLayoutNodes(layoutFlowGraph(board.nodes, board.edges));
-  }, [board.nodes]);
+  }, [board.nodes, board.edges]);
 
   const displayBoard = useMemo(() => ({ ...board, nodes: layoutNodes, edges: graphEdges }), [board, layoutNodes, graphEdges]);
 
