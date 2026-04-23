@@ -101,6 +101,8 @@ export default function FlowBuilderPage() {
         <MessageFlyout
           node={flyoutNode}
           brandId={brandId!}
+          flowId={flow.id}
+          flowType={flow.flow_type}
           onClose={() => setFlyoutNodeId(null)}
           onUpdate={(id, patch) => updateNodeData(id, patch)}
         />
