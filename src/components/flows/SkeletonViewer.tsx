@@ -653,7 +653,10 @@ export function SkeletonViewer({
     const startX = e.clientX;
     const startY = e.clientY;
     const orig = { x: node.x, y: node.y };
+    let dragging = false;
     const move = (ev: MouseEvent) => {
+      if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 4) return;
+      dragging = true;
       const dx = (ev.clientX - startX) / zoom;
       const dy = (ev.clientY - startY) / zoom;
       setLayoutNodes((arr) =>
