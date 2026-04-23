@@ -1,88 +1,94 @@
 
-Goal: fix the real shared generation failure, make flow logic less dumb, restore a proper right-side AI chat rail, and let message nodes expand to show the actual brief.
 
-Findings
-- The immediate failure is not “flow-specific.” Both normal campaigns and flow emails go through `supabase/functions/_shared/generateCampaignCore.ts`.
-- The deployed logs show the same hard failure in both paths: Anthropic rejects at least one image because a dimension still exceeds 2000px.
-- The current “fix” is incomplete because `capImageDimensions()` only rewrites ImageKit URLs. Any brand/reference slice URL that is not ImageKit-hosted bypasses the cap entirely, so oversized images still get base64-embedded and fail immediately.
-- That also explains failures when the user attaches no references: generation still auto-loads brand profile reference slices from `brand_profiles.reference_slice_urls`.
-- Conditional splits are currently rendered with a fake heuristic in `SkeletonViewer.tsx` that blindly alternates YES/NO branches after a split. That is why split visuals are wrong.
-- Expandable message briefs were never actually wired: `FlowBuilderPage` passes `expandedIndex`/`onToggleExpand`, but `SkeletonViewer` does not use them.
-- The chat was not removed from code, but the current post-skeleton UI is a bottom floating dock in `FlowAgentChat.tsx`, not the persistent right-hand rail you want.
+## Goal
 
-Implementation plan
+Replace the current vertical skeleton-list flow builder with a Miro-style infinite canvas flow builder powered by React Flow, wired to the existing backend (flows, flow_emails, edit-campaign, generate-campaign, Klaviyo trigger config). UI follows the spec; backend reuses what already works.
 
-1. Fix the true generation bug at the shared source
-- Update `_shared/generateCampaignCore.ts` so every image sent to Anthropic is dimension-normalized, not just ImageKit URLs.
-- Add a host-agnostic image preparation step:
-  - fetch image
-  - inspect actual dimensions
-  - if either side exceeds safe limit, downscale before base64 embedding
-  - then send the resized payload
-- Apply this to:
-  - brand profile slices/full images
-  - selected reference campaign slices/full images
-  - any other image blocks added to the vision payload
-- Keep the existing ImageKit rewrite as an optimization, but do not rely on it as the only safeguard.
-- Add explicit logging of source type + original dimensions + resized dimensions so future failures are diagnosable instead of opaque.
+## Architecture
 
-2. Surface real backend errors to the UI
-- Persist the actual generation failure reason instead of only setting `status = "error"`.
-- Add user-visible error fields for campaign and flow email generation state, then show them in the flow builder/editor instead of “see backend logs.”
-- This will follow your no-fake-success rule and make immediate failures self-explanatory.
+```text
+FlowBuilderPage (canvas route, full-width)
+├── TopBar (flow name, status, analytics toggle, save, undo/redo)
+├── StrategySummaryPanel (collapsible TOC, click-to-scroll)
+├── LeftSidebar (node palette ↔ node config, contextual)
+├── ReactFlow Canvas (dark, dotted grid, minimap, viewport ctrls)
+│   ├── Custom nodes: Trigger, TimeDelay, Email, SMS, Push,
+│   │   ConditionalSplit, TriggerSplit, UpdateProperty,
+│   │   ListUpdate, Webhook, InternalAlert, CustomAction
+│   └── Custom edges with hover "+" insertion + YES/NO labels
+├── MessageDetailFlyout (right-slide, tabs: Preview/Content/
+│   Analytics/Activity/Notes) — reuses CampaignEditor preview
+└── AIChatPanel (right strip, expand to 420px)
+    └── Routes to flow-agent for plan, edit-campaign for edits
+```
 
-3. Make flow strategy smarter: filters first, not repeated purchase splits
-- Tighten `flow-agent/index.ts` system prompt so flow-wide logic is expressed in:
-  - `[FILTERS]` for entry/profile gating
-  - `[EXIT]` for universal flow exit conditions
-- Explicitly ban repeated “Placed Order” conditional splits between each message unless there is a true branching strategy that changes downstream content.
-- Update the shared flow skill guidance so welcome/post-purchase/etc. default to:
-  - one intelligent entry filter set
-  - one exit block
-  - conditional splits only when there is a meaningful audience/content divergence
+## Backend wiring (reuses existing system)
 
-4. Replace fake split rendering with a real skeleton graph model
-- Stop the current heuristic YES/NO alternation in `SkeletonViewer.tsx`.
-- Extend the skeleton format/parser so split nodes carry explicit condition/branch metadata instead of inferred branches.
-- Render only branch structures that are actually encoded in the skeleton.
-- If a skeleton does not yet specify branch paths, render the split as logic-only instead of fabricating a wrong diagram.
+- `flows` table: add `canvas_state jsonb` (node positions, viewport, edges) and `trigger_config jsonb` (metric/list/segment + filters + flow frequency + smart sending). Keep `skeleton_markdown` for AI plan import.
+- `flow_emails` table: add `node_type` values for `delay`, `conditional_split`, `trigger_split`, `update_property`, `list_update`, `webhook`, `internal_alert`, `custom_action`, `sms`, `push`. Add `canvas_position jsonb` and `node_config jsonb` for type-specific data (delay duration, split conditions, etc.).
+- New table `flow_edges` (id, flow_id, source_node_id, target_node_id, source_handle, label) so split branches and arbitrary topology work — current schema assumes linear sequence_index.
+- New table `flow_node_comments` for the Notes tab (mirrors campaign chat_messages shape).
+- `flow-agent` edge function: extend to emit canvas-aware ops (add_node, remove_node, connect, set_config) instead of only skeleton markdown. Existing skeleton parser becomes the import path for legacy flows.
+- `generate-campaign`: unchanged. Each Email/SMS node fires it with the existing flowConfig payload (trigger_metric_name, step_number, total_steps, step_goal). Polling architecture stays as-is.
+- Klaviyo trigger picker: reuse `klaviyo-fetch-schema` for metrics list and add a list/segment fetch path. If no Klaviyo connection, show the "Connect Klaviyo" empty state already used elsewhere.
 
-5. Add true message-node expansion for the actual brief
-- Wire `expandedIndex` and `onToggleExpand` through `SkeletonViewer`.
-- Clicking a message node should expand an inline panel or side detail card showing the real brief fields:
-  - timing
-  - job
-  - subject direction
-  - sections
-  - notes
-  - generation state / linked campaign status
-- Reuse saved `flow_emails` edits when present so what you expand is the real working brief, not a guessed summary.
+## Frontend work
 
-6. Restore the persistent right-side AI chat rail
-- Rework `FlowBuilderPage` into a two-pane shell:
-  - left: canvas
-  - right: always-visible chat rail
-- Keep the current centered pre-skeleton experience only for the empty-state if needed, but once a skeleton exists the agent should live permanently in the right rail.
-- The rail should support ongoing conversational edits to skeleton, filters, splits, and message briefs while the canvas updates live.
+New files:
+- `src/pages/FlowBuilderCanvas.tsx` — replaces current `FlowBuilderPage.tsx` content
+- `src/components/flowbuilder/Canvas.tsx` — React Flow wrapper, viewport, minimap, grid
+- `src/components/flowbuilder/nodes/*` — one file per node type, all sharing `BaseNodeCard`
+- `src/components/flowbuilder/edges/InsertableEdge.tsx` — hover "+" + YES/NO labels
+- `src/components/flowbuilder/TopBar.tsx`
+- `src/components/flowbuilder/StrategyPanel.tsx`
+- `src/components/flowbuilder/LeftSidebar.tsx` (palette + config router)
+- `src/components/flowbuilder/configs/*` — per-node config panels
+- `src/components/flowbuilder/MessageFlyout.tsx` — uses existing email preview iframe
+- `src/components/flowbuilder/ChatPanel.tsx` — replaces FlowAgentChat, talks to extended flow-agent
+- `src/components/flowbuilder/QuickAddMenu.tsx` — floating add menu for "+" / double-click
+- `src/hooks/useFlowCanvas.ts` — load/save canvas_state, undo/redo stack, autosave debounce
+- `src/hooks/useFlowAgentActions.ts` — applies AI ops to canvas with diff preview
 
-Technical details
-- Files likely touched:
-  - `supabase/functions/_shared/generateCampaignCore.ts`
-  - `supabase/functions/generate-campaign/index.ts`
-  - `supabase/functions/generate-campaign-multi/index.ts`
-  - `supabase/functions/flow-agent/index.ts`
-  - `src/lib/flows/skeletonParser.ts`
-  - `src/components/flows/SkeletonViewer.tsx`
-  - `src/components/flows/FlowAgentChat.tsx`
-  - `src/pages/FlowBuilderPage.tsx`
-- Database change likely needed for clear user-facing failure visibility:
-  - add last-error fields on `campaigns` and `flow_emails`
+Reused as-is:
+- `edit-campaign`, `generate-campaign`, `visual-qa`, `klaviyo-render-preview`
+- `CampaignEditor` preview iframe inside the flyout's Preview tab
+- Existing dark theme tokens; design system already matches the spec's palette intent
 
-Verification
-- Normal campaign generation succeeds with no manually attached references.
-- Flow message generation succeeds for the same brand.
-- Logs show any oversized non-ImageKit references being resized before Anthropic.
-- A skeleton with no real branch metadata does not render fake YES/NO paths.
-- A skeleton with real split metadata renders correctly.
-- Clicking a message node expands the actual brief.
-- The AI chat is persistently visible on the right and can drive live skeleton updates.
+`AppLayout.tsx`: confirm `/flows/` is in `FULL_WIDTH_ROUTES` (it already is).
+
+## Behavior rules (matching spec)
+
+- Canvas: dot grid, snap to 20px, zoom 10–200%, minimap bottom-right, viewport pill bottom-left.
+- Selection: single click select, shift+click multi, drag-rect on empty canvas, Cmd+A/D/C/V, Delete with confirm for message nodes that have generated HTML.
+- Edge insertion: hover edge → "+" at midpoint → QuickAddMenu → atomic delete-edge / create-node / create-two-edges.
+- Conditional/Trigger splits: two output handles (`yes`, `no`), labeled edges, live counts come from `flow_emails.recipients` once Klaviyo data is wired.
+- Email node thumbnail: render existing `flow_emails.html` to a 60x80 thumbnail via `klaviyo-render-preview` cache (already used for previews).
+- Analytics toggle: top-bar switch flips `showAnalytics` state; metric bars expand with Framer Motion layout animation.
+- Strategy panel TOC: derived from current nodes/edges, click → `reactFlowInstance.setCenter(node.position)`.
+- Chat panel: collapsed 48px strip default; expanded 420px; routes user message to `flow-agent` which returns either text-only reply or an ops array; ops apply with diff preview + `Apply / Modify / Cancel`; Undo All restores prior canvas snapshot.
+- Trigger setup on flow creation: welcome flows → list dropdown, others → metric dropdown; if no Klaviyo connection, inline "Connect Klaviyo" message (no silent failure, per project rule).
+- Failure handling: per the no-graceful-fallback rule, AI op apply errors surface the actual error and the failing op; generation failures already use the existing polling + last_error path.
+
+## Migration path
+
+- Existing flows with `skeleton_markdown` and linear `flow_emails` auto-import on first canvas load: parser places nodes in a vertical column at x=0, y=index*200, and creates `flow_edges` rows linking them in order.
+- `canvas_state` saved on every change (debounced 500ms) so the layout becomes the source of truth going forward.
+
+## Out of scope for v1
+
+- A/B test wrapper container (spec section 3.14)
+- Push notification node beyond stub
+- Webhook / Custom Action runtime (UI + storage only, no execution)
+- Comments @mentions and attachments
+- Pop-out floating chat window
+- Mobile/tablet support (desktop-only, ≥1024px, per spec)
+
+## Phasing
+
+1. Schema migration (canvas_state, trigger_config, flow_edges, node_config, flow_node_comments) + legacy import.
+2. Canvas + Trigger / TimeDelay / Email / ConditionalSplit nodes + edge insertion + autosave.
+3. TopBar, StrategyPanel, LeftSidebar (palette + config), MessageFlyout (Preview + Content + Analytics tabs).
+4. Remaining node types (SMS, Push, TriggerSplit, UpdateProperty, ListUpdate, Webhook, InternalAlert, CustomAction).
+5. ChatPanel + extended flow-agent ops + diff preview + undo.
+6. Analytics overlay + Notes tab + keyboard shortcuts + minimap polish.
+
