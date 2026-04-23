@@ -722,10 +722,12 @@
 .fl-campaign-preview-actions button:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .fl-canvas-preview {
-  position: absolute; z-index: 19; width: 430px;
+  position: absolute; z-index: 19;
   background: var(--fl-bg); border: 1px solid var(--fl-line-2); border-radius: 12px;
   overflow: hidden; display: flex; flex-direction: column; color: var(--fl-ink); animation: flFadeIn 80ms ease-out;
+  scrollbar-width: none; -ms-overflow-style: none;
 }
+.fl-canvas-preview::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .fl-canvas-preview-head { height: 46px; padding: 8px 9px 8px 14px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--fl-line); background: var(--fl-bg); }
 .fl-canvas-preview-meta { flex: 1; min-width: 0; }
 .fl-canvas-preview-title { font-size: 13px; font-weight: 700; color: var(--fl-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -735,7 +737,8 @@
 .fl-canvas-preview-envelope { padding: 9px 14px 10px; border-bottom: 1px solid var(--fl-line); background: var(--fl-bg); display: grid; gap: 5px; }
 .fl-canvas-preview-line { display: grid; grid-template-columns: 24px minmax(0, 1fr); align-items: baseline; gap: 8px; }
 .fl-canvas-preview-line span { font-family: var(--fl-mono); font-size: 9px; letter-spacing: 0.08em; color: var(--fl-ink-4); }
-.fl-canvas-preview-line p { margin: 0; font-size: 11.5px; line-height: 1.35; color: var(--fl-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl-canvas-preview-line p { margin: 0; font-size: 11.5px; line-height: 1.35; color: var(--fl-ink-2); white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
 .fl-canvas-preview-frame { overflow: auto; scrollbar-width: none; -ms-overflow-style: none; background: var(--fl-bg); padding: 12px 0; flex: 1; min-height: 0; }
-.fl-canvas-preview-frame::-webkit-scrollbar { display: none; }
-.fl-canvas-preview-frame iframe { display: block; width: 390px; height: 560px; margin: 0 auto; border: 1px solid var(--fl-line); border-radius: 8px; background: hsl(0 0% 100%); }
+.fl-canvas-preview-frame::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.fl-canvas-preview-frame iframe { display: block; width: calc(100% - 20px); height: 560px; margin: 0 auto; border: 1px solid var(--fl-line); border-radius: 8px; background: hsl(0 0% 100%); scrollbar-width: none; }
+.fl-canvas-preview-frame iframe::-webkit-scrollbar { display: none; width: 0; height: 0; }
