@@ -1538,7 +1538,7 @@ function MessagePreview({
 
 function CanvasCampaignPreview({
   node,
-  nodeSize,
+  position,
   row,
   meta,
   generating,
@@ -1547,49 +1547,44 @@ function CanvasCampaignPreview({
   onOpenEditor,
 }: {
   node: BoardNode;
-  nodeSize: { w: number; h: number };
+  position: { x: number; y: number; maxHeight: number };
   row: FlowEmailRow;
   meta: FlowEmailMeta | null;
-  brandId: string;
   generating: boolean;
   onClose: () => void;
   onGenerate: () => void;
   onOpenEditor: () => void;
 }) {
+  const subject = meta?.subject_line || node.meta?.subject || row.label || node.label;
+  const previewText = meta?.preview_text || node.meta?.preview || "—";
   return (
     <div
       className="fl-canvas-preview"
-      style={{ transform: `translate(${node.x + nodeSize.w + 22}px, ${node.y - 12}px)` }}
+      style={{ transform: `translate(${position.x}px, ${position.y}px)`, maxHeight: position.maxHeight }}
       onMouseDown={(e) => e.stopPropagation()}
     >
       <div className="fl-canvas-preview-head">
         <div className="fl-canvas-preview-meta">
           <div className="fl-canvas-preview-title">{node.label}</div>
-          <div className="fl-canvas-preview-kicker">Email · Preview</div>
         </div>
         {row.campaign_id && (
           <button onClick={onOpenEditor} title="Open in Editor">
             <ExternalLink className="w-3.5 h-3.5" />
           </button>
         )}
+        <button onClick={onGenerate} disabled={generating} title="Regenerate">
+          {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+        </button>
         <button onClick={onClose} title="Close">
           <XIcon className="w-3.5 h-3.5" />
         </button>
       </div>
       <div className="fl-canvas-preview-envelope">
-        <div className="fl-canvas-preview-to">To &lt;customer@example.com&gt;</div>
-        <div className="fl-canvas-preview-subject">{meta?.subject_line || row.label || node.label}</div>
-        {meta?.preview_text && <div className="fl-canvas-preview-text">{meta.preview_text}</div>}
+        <div className="fl-canvas-preview-line"><span>SL</span><p>{subject}</p></div>
+        <div className="fl-canvas-preview-line"><span>PT</span><p>{previewText}</p></div>
       </div>
       <div className="fl-canvas-preview-frame">
         <iframe title={`canvas-preview-${row.id}`} srcDoc={row.html || ""} sandbox="allow-same-origin" />
-      </div>
-      <div className="fl-canvas-preview-actions">
-        {row.campaign_id && <button onClick={onOpenEditor}><ExternalLink className="w-3.5 h-3.5" />Open in Editor</button>}
-        <button onClick={onGenerate} disabled={generating}>
-          {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
-          Regenerate
-        </button>
       </div>
     </div>
   );
