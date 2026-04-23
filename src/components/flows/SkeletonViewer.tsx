@@ -410,13 +410,8 @@ export function SkeletonViewer({
   const hoveredDropTargetRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setLayoutNodes((prev) => {
-      const prevById = Object.fromEntries(prev.map((n) => [n.id, n]));
-      return resolveNodeCollisions(
-        board.nodes.map((n) => ({ ...n, x: prevById[n.id]?.x ?? n.x, y: prevById[n.id]?.y ?? n.y }))
-      );
-    });
     setGraphEdges(board.edges);
+    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges));
   }, [board.nodes]);
 
   const displayBoard = useMemo(() => ({ ...board, nodes: layoutNodes, edges: graphEdges }), [board, layoutNodes, graphEdges]);
@@ -626,9 +621,7 @@ export function SkeletonViewer({
       const dx = (ev.clientX - startX) / zoom;
       const dy = (ev.clientY - startY) / zoom;
       setLayoutNodes((arr) =>
-        resolveNodeCollisions(
-          arr.map((n) => (n.id === node.id ? { ...n, x: orig.x + dx, y: orig.y + dy } : n))
-        )
+        arr.map((n) => (n.id === node.id ? { ...n, x: orig.x + dx, y: orig.y + dy } : n))
       );
     };
     const upH = () => {
@@ -683,12 +676,15 @@ export function SkeletonViewer({
       branch: target.edge.branch ?? null,
       meta: kind === "split" || kind === "trigger_split" ? { condition: "New split", branches: [{ label: "YES" }, { label: "NO" }] } : {},
     };
-    setLayoutNodes((arr) => resolveNodeCollisions([...arr, node]));
-    setGraphEdges((edges) => [
-      ...edges.filter((e) => e.id !== target.edge.id),
-      { id: `e-${target.edge.from}-${id}`, from: target.edge.from, to: id, branch: target.edge.branch ?? null },
-      { id: `e-${id}-${target.edge.to}`, from: id, to: target.edge.to, branch: target.edge.branch ?? null },
-    ]);
+    setGraphEdges((edges) => {
+      const nextEdges = [
+        ...edges.filter((e) => e.id !== target.edge.id),
+        { id: `e-${target.edge.from}-${id}`, from: target.edge.from, to: id, branch: target.edge.branch ?? null },
+        { id: `e-${id}-${target.edge.to}`, from: id, to: target.edge.to, branch: target.edge.branch ?? null },
+      ];
+      setLayoutNodes((arr) => layoutFlowGraph([...arr, node], nextEdges));
+      return nextEdges;
+    });
     setSelected(id);
   };
 
