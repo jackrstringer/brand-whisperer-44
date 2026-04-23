@@ -617,17 +617,6 @@ export function SkeletonViewer({
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
   };
-      {
-        id,
-        x: w.x - 90,
-        y: w.y - 40,
-        text: `+ ${KIND_META[kind].label}\n(ask the agent below to add this)`,
-      },
-    ]);
-    setSelectedSticky(id);
-    setAddPop(null);
-    setTool("select");
-  };
 
   /* -------- Render -------- */
   return (
