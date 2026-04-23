@@ -3,8 +3,9 @@ import { EdgeProps, getSmoothStepPath, EdgeLabelRenderer, BaseEdge } from "@xyfl
 import { Plus } from "lucide-react";
 
 export function InsertableEdge(props: EdgeProps) {
-  const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, sourceHandleId, selected } = props;
+  const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, sourceHandleId, selected, data } = props;
   const [hover, setHover] = useState(false);
+  const highlighted = (data as { highlighted?: boolean } | undefined)?.highlighted;
   const [path, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
@@ -18,12 +19,10 @@ export function InsertableEdge(props: EdgeProps) {
   const branchLabel =
     sourceHandleId === "yes" ? "YES" : sourceHandleId === "no" ? "NO" : null;
 
-  const stroke = selected
-    ? "hsl(var(--foreground))"
-    : hover
-    ? "hsl(var(--foreground))"
-    : "hsl(var(--border))";
-  const strokeWidth = selected ? 2.5 : hover ? 2 : 1.5;
+  const stroke =
+    selected || hover || highlighted ? "var(--foreground)" : "var(--gray-2)";
+  const strokeWidth = highlighted ? 3 : selected ? 2.5 : hover ? 2.25 : 1.75;
+  const strokeDasharray = highlighted ? "6 4" : undefined;
 
   return (
     <>
@@ -33,6 +32,7 @@ export function InsertableEdge(props: EdgeProps) {
         style={{
           stroke,
           strokeWidth,
+          strokeDasharray,
           transition: "stroke 150ms, stroke-width 150ms",
         }}
       />
