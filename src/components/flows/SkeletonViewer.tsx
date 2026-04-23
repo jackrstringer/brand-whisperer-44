@@ -25,7 +25,18 @@ import {
   Maximize2,
   RefreshCw,
   X as XIcon,
+  Trash2,
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   ParsedFlowNode,
   ParsedFlowMeta,
@@ -408,6 +419,8 @@ export function SkeletonViewer({
   const [stickyArmed, setStickyArmed] = useState(false);
   const [activeDragKind, setActiveDragKind] = useState<NodeKind | null>(null);
   const [hoveredDropTarget, setHoveredDropTarget] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BoardNode | Sticky | null>(null);
+  const [detailsNode, setDetailsNode] = useState<BoardNode | null>(null);
 
   const board = useMemo(
     () => buildBoard(parsedNodes, meta, flowType),
@@ -512,7 +525,16 @@ export function SkeletonViewer({
         setSelectedSticky(null);
         setEditingSticky(null);
         setEditingLabelOf(null);
+        setDeleteTarget(null);
+        setDetailsNode(null);
         if (expandedIndex !== null) onToggleExpand(null);
+      }
+      if ((e.key === "Delete" || e.key === "Backspace") && (selected || selectedSticky)) {
+        e.preventDefault();
+        const node = selected ? layoutNodes.find((n) => n.id === selected) : null;
+        const sticky = selectedSticky ? stickies.find((s) => s.id === selectedSticky) : null;
+        if (node) setDeleteTarget(node);
+        if (sticky) setDeleteTarget(sticky);
       }
       if (e.key === "n") setStickyArmed(true);
     };
@@ -525,7 +547,7 @@ export function SkeletonViewer({
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
-  }, [expandedIndex, onToggleExpand]);
+  }, [expandedIndex, onToggleExpand, selected, selectedSticky, layoutNodes, stickies]);
 
   /* -------- Stage mouse down: pan, marquee deselect, tool place -------- */
   const handleStageMouseDown = (e: React.MouseEvent) => {
@@ -631,7 +653,10 @@ export function SkeletonViewer({
     const startX = e.clientX;
     const startY = e.clientY;
     const orig = { x: node.x, y: node.y };
+    let dragging = false;
     const move = (ev: MouseEvent) => {
+      if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 4) return;
+      dragging = true;
       const dx = (ev.clientX - startX) / zoom;
       const dy = (ev.clientY - startY) / zoom;
       setLayoutNodes((arr) =>
@@ -700,6 +725,66 @@ export function SkeletonViewer({
       return nextEdges;
     });
     setSelected(id);
+  };
+
+  const relayoutGraph = (nodes: BoardNode[], edges: BoardEdge[]) => {
+    setGraphEdges(edges);
+    setLayoutNodes(resolveNodeCollisions(layoutFlowGraph(nodes, edges)));
+  };
+
+  const deleteSticky = (id: string) => {
+    setStickies((arr) => arr.filter((s) => s.id !== id));
+    if (selectedSticky === id) setSelectedSticky(null);
+    setDeleteTarget(null);
+  };
+
+  const deleteLinearNode = (nodeId: string) => {
+    const incoming = graphEdges.filter((e) => e.to === nodeId);
+    const outgoing = graphEdges.filter((e) => e.from === nodeId);
+    const rewired: BoardEdge[] = [];
+    if (incoming.length === 1 && outgoing.length === 1) {
+      rewired.push({
+        id: `e-${incoming[0].from}-${outgoing[0].to}-${Date.now()}`,
+        from: incoming[0].from,
+        to: outgoing[0].to,
+        branch: incoming[0].branch ?? outgoing[0].branch ?? null,
+      });
+    }
+    const nextNodes = layoutNodes.filter((n) => n.id !== nodeId);
+    const nextEdges = graphEdges.filter((e) => e.from !== nodeId && e.to !== nodeId).concat(rewired);
+    relayoutGraph(nextNodes, nextEdges);
+    setSelected(null);
+    setDetailsNode(null);
+    setDeleteTarget(null);
+  };
+
+  const collectBranchNodeIds = (splitId: string, branch: "yes" | "no") => {
+    const startEdges = graphEdges.filter((e) => e.from === splitId && e.branch === branch);
+    const ids = new Set<string>();
+    const visit = (id: string) => {
+      if (ids.has(id)) return;
+      ids.add(id);
+      graphEdges.filter((e) => e.from === id).forEach((e) => visit(e.to));
+    };
+    startEdges.forEach((e) => visit(e.to));
+    return ids;
+  };
+
+  const deleteSplitPath = (splitId: string, mode: "yes" | "no" | "both") => {
+    const ids = new Set<string>();
+    if (mode === "yes" || mode === "both") collectBranchNodeIds(splitId, "yes").forEach((id) => ids.add(id));
+    if (mode === "no" || mode === "both") collectBranchNodeIds(splitId, "no").forEach((id) => ids.add(id));
+    if (mode === "both") ids.add(splitId);
+    const nextNodes = layoutNodes.filter((n) => !ids.has(n.id));
+    const nextEdges = graphEdges.filter((e) => !ids.has(e.from) && !ids.has(e.to));
+    relayoutGraph(nextNodes, nextEdges);
+    setSelected(null);
+    setDetailsNode(null);
+    setDeleteTarget(null);
+  };
+
+  const isStickyTarget = (target: BoardNode | Sticky | null): target is Sticky => {
+    return !!target && "text" in target;
   };
 
   const startPaletteDrag = (kind: NodeKind, e: React.MouseEvent) => {
@@ -879,6 +964,8 @@ export function SkeletonViewer({
                 setSelected(n.id);
                 setSelectedSticky(null);
               }}
+              onOpenDetails={() => setDetailsNode(n)}
+              onRequestDelete={() => setDeleteTarget(n)}
               onStartDrag={(e) => startNodeDrag(e, n)}
               onDoubleClickTitle={() => {
                 setLabelDraft(n.label);
@@ -1059,6 +1146,67 @@ export function SkeletonViewer({
           </div>
         );
       })()}
+
+      {detailsNode && (
+        <div className="fl-details-backdrop" onMouseDown={() => setDetailsNode(null)}>
+          <div className="fl-details" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="fl-details-head">
+              <div>
+                <div className="fl-kind">{KIND_META[detailsNode.kind].label}</div>
+                <div className="fl-details-title">{detailsNode.label}</div>
+              </div>
+              <button onClick={() => setDetailsNode(null)} title="Close"><XIcon className="w-4 h-4" /></button>
+            </div>
+            <div className="fl-details-body">
+              {Object.entries(detailsNode.meta || {}).map(([key, value]) => (
+                <div key={key} className="fl-details-row">
+                  <span>{key.replace(/_/g, " ")}</span>
+                  <p>{typeof value === "string" ? value : JSON.stringify(value, null, 2)}</p>
+                </div>
+              ))}
+              {!Object.keys(detailsNode.meta || {}).length && <p>No additional details.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteTarget && !isStickyTarget(deleteTarget) && deleteTarget.kind === "split"
+                ? "Delete split path?"
+                : "Delete this item?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget && !isStickyTarget(deleteTarget) && deleteTarget.kind === "split"
+                ? "Choose which branch to remove. Deleting both removes the split and everything branching from it."
+                : "This removes the selected item from the canvas."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteTarget && !isStickyTarget(deleteTarget) && deleteTarget.kind === "split" ? (
+            <AlertDialogFooter className="gap-2 sm:space-x-0">
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => deleteSplitPath(deleteTarget.id, "yes")}>Delete YES path</AlertDialogAction>
+              <AlertDialogAction onClick={() => deleteSplitPath(deleteTarget.id, "no")}>Delete NO path</AlertDialogAction>
+              <AlertDialogAction onClick={() => deleteSplitPath(deleteTarget.id, "both")}>Delete both</AlertDialogAction>
+            </AlertDialogFooter>
+          ) : (
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (!deleteTarget) return;
+                  if (isStickyTarget(deleteTarget)) deleteSticky(deleteTarget.id);
+                  else deleteLinearNode(deleteTarget.id);
+                }}
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          )}
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -1073,6 +1221,8 @@ function NodeView({
   onLabelDraft,
   onLabelCommit,
   onSelect,
+  onOpenDetails,
+  onRequestDelete,
   onStartDrag,
   onDoubleClickTitle,
   onGenerate,
@@ -1088,6 +1238,8 @@ function NodeView({
   onLabelDraft: (v: string) => void;
   onLabelCommit: () => void;
   onSelect: () => void;
+  onOpenDetails: () => void;
+  onRequestDelete: () => void;
   onStartDrag: (e: React.MouseEvent) => void;
   onDoubleClickTitle: () => void;
   onGenerate?: () => void;
@@ -1110,9 +1262,18 @@ function NodeView({
           onSelect();
           onStartDrag(e);
         }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpenDetails();
+        }}
         title={node.meta?.items?.[0] || "Exit the flow"}
       >
         <I className="w-4 h-4" />
+        {selected && (
+          <button className="fl-node-delete" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onRequestDelete(); }} title="Delete">
+            <Trash2 className="w-3 h-3" />
+          </button>
+        )}
       </div>
     );
   }
@@ -1130,6 +1291,10 @@ function NodeView({
         e.stopPropagation();
         onSelect();
         onStartDrag(e);
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpenDetails();
       }}
     >
       <div className="fl-node-head">
@@ -1200,6 +1365,19 @@ function NodeView({
             ) : (
               <Sparkles className="w-3 h-3" />
             )}
+          </button>
+        )}
+        {selected && (
+          <button
+            className="fl-node-delete"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRequestDelete();
+            }}
+            title="Delete"
+          >
+            <Trash2 className="w-3 h-3" />
           </button>
         )}
       </div>
@@ -1381,15 +1559,7 @@ function FlowSummaryCard({
   const filterCount = meta.filters?.length || 0;
   const exitCount = meta.exit?.length || 0;
   return (
-    <div className={`fl-brief ${open ? "open" : ""}`} style={{ transform: `translate(${trigger.x - 140}px, ${trigger.y - 72}px) translateY(-100%)` }}>
-      <button className="fl-brief-head" onClick={onToggle} onMouseDown={(e) => e.stopPropagation()}>
-        <div className="fl-brief-badge"><Wand2 className="w-3.5 h-3.5" /></div>
-        <div className="fl-brief-main">
-          <div className="fl-brief-kicker">Flow summary</div>
-          <div className="fl-brief-title">{title}</div>
-        </div>
-        <div className="fl-brief-pill">{open ? "Collapse" : "Expand"}</div>
-      </button>
+    <div className={`fl-brief ${open ? "open" : ""}`} style={{ transform: `translate(${trigger.x - 140}px, ${trigger.y - 72}px)` }}>
       {open && (
         <div className="fl-brief-body">
           <div><p className="fl-brief-label">Trigger</p><p className="fl-brief-text">{trigger.label}</p></div>
@@ -1398,6 +1568,14 @@ function FlowSummaryCard({
           <div><p className="fl-brief-label">Exit rules</p><p className="fl-brief-text">{meta.exit?.join(" • ") || "Default flow completion"}</p></div>
         </div>
       )}
+      <button className="fl-brief-head" onClick={onToggle} onMouseDown={(e) => e.stopPropagation()}>
+        <div className="fl-brief-badge"><Wand2 className="w-3.5 h-3.5" /></div>
+        <div className="fl-brief-main">
+          <div className="fl-brief-kicker">Flow summary</div>
+          <div className="fl-brief-title">{title}</div>
+        </div>
+        <div className="fl-brief-pill">{open ? "Collapse" : "Expand"}</div>
+      </button>
     </div>
   );
 }

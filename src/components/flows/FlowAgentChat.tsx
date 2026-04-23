@@ -29,6 +29,8 @@ interface Props {
   onSkeletonUpdated: () => void;
   /** When true, render as a centered hero panel instead of a floating dock. */
   centered?: boolean;
+  /** When true, render as the persistent right-side flow chat panel. */
+  panel?: boolean;
 }
 
 interface FlowQuestion {
@@ -100,6 +102,7 @@ export function FlowAgentChat({
   currentSkeleton,
   onSkeletonUpdated,
   centered = false,
+  panel = false,
 }: Props) {
   const [messages, setMessages] = useState<Msg[]>(initialMessages);
   const [input, setInput] = useState("");
@@ -337,6 +340,66 @@ export function FlowAgentChat({
           />
         </div>
       </div>
+    );
+  }
+
+  if (panel) {
+    return (
+      <aside className="h-full w-full border-l border-border bg-card flex flex-col overflow-hidden">
+        <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-foreground/70">
+            <MessageSquare className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-[13px] font-semibold text-foreground">AI Flow Editor</div>
+            <div className="text-[11px] text-muted-foreground">Refine strategy, filters, and messages</div>
+          </div>
+        </div>
+
+        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+          {visibleMessages.map((m, i) => {
+            const isLastAssistant = i === lastAssistantIdx;
+            const question = m.role === "assistant" ? extractQuestion(m.content) : null;
+            return (
+              <MessageBubble
+                key={i}
+                role={m.role}
+                content={m.content}
+                question={null}
+                synth={null}
+                showQuestionChips={isLastAssistant && !streaming && !!question}
+                onAnswer={(answer) => sendMessage(answer)}
+                disabled={streaming}
+              />
+            );
+          })}
+          {streaming && (
+            streamBuf && stripFences(streamBuf) ? (
+              <MessageBubble
+                role="assistant"
+                content={streamBuf}
+                streaming
+                question={null}
+                synth={null}
+                showQuestionChips={false}
+                disabled
+              />
+            ) : (
+              <InlineShimmer label={currentStageLabel} />
+            )
+          )}
+        </div>
+
+        <div className="p-3 border-t border-border bg-card">
+          <Composer
+            input={input}
+            setInput={setInput}
+            send={() => sendMessage(input)}
+            streaming={streaming}
+            placeholder="Tell the AI what to change…"
+          />
+        </div>
+      </aside>
     );
   }
 
