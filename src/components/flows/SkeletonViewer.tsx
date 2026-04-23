@@ -103,6 +103,9 @@ const NODE_W = 260;
 const NODE_MARGIN = 44;
 const BRANCH_X = 210;
 const BRANCH_Y = 92;
+const LINEAR_Y_GAP = 64;
+const SPLIT_Y_GAP = 104;
+const SIBLING_X_GAP = 96;
 function getNodeSize(kind: NodeKind) {
   if (kind === "delay") return { w: 220, h: 70 };
   if (kind === "split") return { w: 260, h: 130 };
@@ -285,6 +288,74 @@ function resolveNodeCollisions(nodes: BoardNode[]): BoardNode[] {
   return resolved;
 }
 
+function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[]): BoardNode[] {
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
+  const childrenById: Record<string, BoardEdge[]> = {};
+  for (const edge of edges) {
+    if (!byId[edge.from] || !byId[edge.to]) continue;
+    (childrenById[edge.from] ||= []).push(edge);
+  }
+
+  const sortEdges = (items: BoardEdge[]) =>
+    [...items].sort((a, b) => {
+      const rank = (branch?: "yes" | "no" | null) => (branch === "yes" ? 0 : branch === "no" ? 1 : 2);
+      return rank(a.branch) - rank(b.branch) || a.to.localeCompare(b.to);
+    });
+
+  const widthCache: Record<string, number> = {};
+  const measure = (id: string, seen = new Set<string>()): number => {
+    const node = byId[id];
+    if (!node || seen.has(id)) return 0;
+    if (widthCache[id]) return widthCache[id];
+    const size = getNodeSize(node.kind);
+    const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
+    if (!children.length) return (widthCache[id] = size.w);
+    const nextSeen = new Set(seen).add(id);
+    const childWidth = children.reduce((sum, edge, index) => {
+      return sum + measure(edge.to, nextSeen) + (index > 0 ? SIBLING_X_GAP : 0);
+    }, 0);
+    return (widthCache[id] = Math.max(size.w, childWidth));
+  };
+
+  const positioned: Record<string, BoardNode> = {};
+  const place = (id: string, centerX: number, y: number, seen = new Set<string>()) => {
+    const node = byId[id];
+    if (!node || seen.has(id)) return;
+    const size = getNodeSize(node.kind);
+    positioned[id] = { ...node, x: centerX - size.w / 2, y };
+
+    const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
+    if (!children.length) return;
+
+    const childY = y + size.h + (children.length > 1 || node.kind === "split" ? SPLIT_Y_GAP : LINEAR_Y_GAP);
+    const nextSeen = new Set(seen).add(id);
+    if (children.length === 1 && node.kind !== "split") {
+      place(children[0].to, centerX, childY, nextSeen);
+      return;
+    }
+
+    const widths = children.map((edge) => measure(edge.to, nextSeen));
+    const totalWidth = widths.reduce((sum, width) => sum + width, 0) + SIBLING_X_GAP * Math.max(0, widths.length - 1);
+    let cursor = centerX - totalWidth / 2;
+    children.forEach((edge, index) => {
+      const childCenter = cursor + widths[index] / 2;
+      place(edge.to, childCenter, childY, nextSeen);
+      cursor += widths[index] + SIBLING_X_GAP;
+    });
+  };
+
+  const rootId = byId.trigger ? "trigger" : nodes[0]?.id;
+  if (rootId) place(rootId, 0, 80);
+  let orphanY = 80;
+  return nodes.map((node) => {
+    if (positioned[node.id]) return positioned[node.id];
+    const size = getNodeSize(node.kind);
+    const fallback = { ...node, x: -size.w / 2, y: orphanY };
+    orphanY += size.h + LINEAR_Y_GAP;
+    return fallback;
+  });
+}
+
 /* ---------- Icons ---------- */
 
 const KIND_META: Record<NodeKind, { Icon: any; label: string }> = {
@@ -340,14 +411,9 @@ export function SkeletonViewer({
   const hoveredDropTargetRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setLayoutNodes((prev) => {
-      const prevById = Object.fromEntries(prev.map((n) => [n.id, n]));
-      return resolveNodeCollisions(
-        board.nodes.map((n) => ({ ...n, x: prevById[n.id]?.x ?? n.x, y: prevById[n.id]?.y ?? n.y }))
-      );
-    });
     setGraphEdges(board.edges);
-  }, [board.nodes]);
+    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges));
+  }, [board.nodes, board.edges]);
 
   const displayBoard = useMemo(() => ({ ...board, nodes: layoutNodes, edges: graphEdges }), [board, layoutNodes, graphEdges]);
 
@@ -556,9 +622,7 @@ export function SkeletonViewer({
       const dx = (ev.clientX - startX) / zoom;
       const dy = (ev.clientY - startY) / zoom;
       setLayoutNodes((arr) =>
-        resolveNodeCollisions(
-          arr.map((n) => (n.id === node.id ? { ...n, x: orig.x + dx, y: orig.y + dy } : n))
-        )
+        arr.map((n) => (n.id === node.id ? { ...n, x: orig.x + dx, y: orig.y + dy } : n))
       );
     };
     const upH = () => {
@@ -613,12 +677,15 @@ export function SkeletonViewer({
       branch: target.edge.branch ?? null,
       meta: kind === "split" || kind === "trigger_split" ? { condition: "New split", branches: [{ label: "YES" }, { label: "NO" }] } : {},
     };
-    setLayoutNodes((arr) => resolveNodeCollisions([...arr, node]));
-    setGraphEdges((edges) => [
-      ...edges.filter((e) => e.id !== target.edge.id),
-      { id: `e-${target.edge.from}-${id}`, from: target.edge.from, to: id, branch: target.edge.branch ?? null },
-      { id: `e-${id}-${target.edge.to}`, from: id, to: target.edge.to, branch: target.edge.branch ?? null },
-    ]);
+    setGraphEdges((edges) => {
+      const nextEdges = [
+        ...edges.filter((e) => e.id !== target.edge.id),
+        { id: `e-${target.edge.from}-${id}`, from: target.edge.from, to: id, branch: target.edge.branch ?? null },
+        { id: `e-${id}-${target.edge.to}`, from: id, to: target.edge.to, branch: target.edge.branch ?? null },
+      ];
+      setLayoutNodes((arr) => layoutFlowGraph([...arr, node], nextEdges));
+      return nextEdges;
+    });
     setSelected(id);
   };
 
