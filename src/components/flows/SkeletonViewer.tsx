@@ -997,7 +997,7 @@ export function SkeletonViewer({
               onOpenDetails={() => setDetailsNode(n)}
               onOpenPreview={
                 typeof n.emailIndex === "number"
-                  ? () => onToggleExpand(n.emailIndex!)
+                  ? () => onToggleExpand(expandedIndex === n.emailIndex ? null : n.emailIndex!)
                   : undefined
               }
               onRequestDelete={() => setDeleteTarget(n)}
@@ -1013,7 +1013,7 @@ export function SkeletonViewer({
               }
               onExpand={
                 typeof n.emailIndex === "number"
-                  ? () => onToggleExpand(n.emailIndex!)
+                  ? () => onToggleExpand(expandedIndex === n.emailIndex ? null : n.emailIndex!)
                   : undefined
               }
               emailRow={
