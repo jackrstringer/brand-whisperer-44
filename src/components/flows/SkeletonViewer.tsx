@@ -318,7 +318,6 @@ export function SkeletonViewer({
   const stageRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(0.85);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [tool, setTool] = useState<Tool>("select");
   const [panning, setPanning] = useState(false);
   const [spaceHeld, setSpaceHeld] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -328,6 +327,9 @@ export function SkeletonViewer({
   const [editingLabelOf, setEditingLabelOf] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState("");
   const [briefOpen, setBriefOpen] = useState(false);
+  const [stickyArmed, setStickyArmed] = useState(false);
+  const [activeDragKind, setActiveDragKind] = useState<NodeKind | null>(null);
+  const [hoveredDropTarget, setHoveredDropTarget] = useState<string | null>(null);
 
   const board = useMemo(
     () => buildBoard(parsedNodes, meta, flowType),
@@ -436,9 +438,7 @@ export function SkeletonViewer({
         setEditingLabelOf(null);
         if (expandedIndex !== null) onToggleExpand(null);
       }
-      if (e.key === "v") setTool("select");
-      if (e.key === "a") setTool("add");
-      if (e.key === "n") setTool("sticky");
+      if (e.key === "n") setStickyArmed(true);
     };
     const up = (e: KeyboardEvent) => {
       if (e.code === "Space") setSpaceHeld(false);
@@ -449,7 +449,7 @@ export function SkeletonViewer({
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
-  }, []);
+  }, [expandedIndex, onToggleExpand]);
 
   /* -------- Stage mouse down: pan, marquee deselect, tool place -------- */
   const handleStageMouseDown = (e: React.MouseEvent) => {
@@ -471,13 +471,13 @@ export function SkeletonViewer({
     }
     if (!onEmpty) return;
 
-    if (tool === "sticky") {
+    if (stickyArmed) {
       const w = screenToWorld(e.clientX, e.clientY);
       const id = `s-${Date.now()}`;
       setStickies((s) => [...s, { id, x: w.x - 90, y: w.y - 50, text: "" }]);
       setSelectedSticky(id);
       setEditingSticky(id);
-      setTool("select");
+      setStickyArmed(false);
       return;
     }
     setSelected(null);
