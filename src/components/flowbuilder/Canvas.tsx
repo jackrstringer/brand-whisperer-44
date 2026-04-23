@@ -49,6 +49,63 @@ const nodeTypes = {
 
 const edgeTypes = { insertable: InsertableEdge };
 
+// Vertical auto-layout: stack nodes in a single column.
+// Splits get their two children placed side-by-side under them.
+const NODE_GAP_Y = 160;
+const COL_X = 0;
+
+function autoLayout(
+  nodes: FlowCanvasNode[],
+  edges: FlowCanvasEdge[]
+): FlowCanvasNode[] {
+  if (nodes.length === 0) return nodes;
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const childrenOf = new Map<string, string[]>();
+  for (const e of edges) {
+    const arr = childrenOf.get(e.source) || [];
+    arr.push(e.target);
+    childrenOf.set(e.source, arr);
+  }
+  // Find roots (nodes that are not anyone's target)
+  const targets = new Set(edges.map((e) => e.target));
+  const roots = nodes.filter((n) => !targets.has(n.id));
+  const start = roots[0] || nodes[0];
+
+  const positions = new Map<string, { x: number; y: number }>();
+  let y = 0;
+  const visited = new Set<string>();
+  const walk = (id: string, x: number) => {
+    if (visited.has(id)) return;
+    visited.add(id);
+    positions.set(id, { x, y });
+    y += NODE_GAP_Y;
+    const kids = childrenOf.get(id) || [];
+    if (kids.length <= 1) {
+      for (const k of kids) walk(k, x);
+    } else {
+      // Split: spread kids horizontally
+      const span = 320;
+      kids.forEach((k, i) => {
+        const offset = (i - (kids.length - 1) / 2) * span;
+        walk(k, x + offset);
+      });
+    }
+  };
+  walk(start.id, COL_X);
+  // Any orphans: stack at the bottom
+  for (const n of nodes) {
+    if (!positions.has(n.id)) {
+      positions.set(n.id, { x: COL_X, y });
+      y += NODE_GAP_Y;
+    }
+  }
+  return nodes.map((n) => {
+    const p = positions.get(n.id)!;
+    if (n.position.x === p.x && n.position.y === p.y) return n;
+    return { ...n, position: p };
+  });
+}
+
 interface CanvasProps {
   nodes: FlowCanvasNode[];
   edges: FlowCanvasEdge[];
@@ -64,15 +121,29 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
     flow: { x: number; y: number };
     insertOnEdgeId?: string;
   } | null>(null);
+  const [dropPreview, setDropPreview] = useState<{ edgeId: string | null; afterNodeId: string | null } | null>(
+    null
+  );
   const rf = useReactFlow();
 
+  const laidOutNodes = useMemo(() => autoLayout(nodes, edges), [nodes, edges]);
   const decoratedEdges = useMemo(
-    () => edges.map((e) => ({ ...e, type: "insertable" as const })),
-    [edges]
+    () =>
+      edges.map((e) => ({
+        ...e,
+        type: "insertable" as const,
+        data: { ...(e.data || {}), highlighted: dropPreview?.edgeId === e.id },
+      })),
+    [edges, dropPreview]
   );
 
   const onNodesChange = useCallback(
-    (changes: NodeChange[]) => setNodes((nds) => applyNodeChanges(changes, nds) as FlowCanvasNode[]),
+    (changes: NodeChange[]) =>
+      setNodes((nds) => {
+        // Block position changes from dragging — auto-layout is the source of truth
+        const filtered = changes.filter((c) => c.type !== "position" && c.type !== "dimensions");
+        return applyNodeChanges(filtered, nds) as FlowCanvasNode[];
+      }),
     [setNodes]
   );
   const onEdgesChange = useCallback(
@@ -84,35 +155,73 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
     [setEdges]
   );
 
-  const handleAddNode = useCallback(
-    (kind: FlowNodeKind) => {
-      if (!quickAdd) return;
+  const insertNodeOnEdge = useCallback(
+    (kind: FlowNodeKind, edgeId: string) => {
       const id = crypto.randomUUID();
       const meta = NODE_KIND_META[kind];
       const data: FlowNodeData = { kind, label: meta.label, status: "draft" };
       const newNode: FlowCanvasNode = {
         id,
         type: kind,
-        position: { x: quickAdd.flow.x - 140, y: quickAdd.flow.y - 30 },
+        position: { x: 0, y: 0 }, // auto-layout will place it
         data,
       };
       setNodes((nds) => [...nds, newNode]);
+      setEdges((eds) => {
+        const target = eds.find((e) => e.id === edgeId);
+        if (!target) return eds;
+        const remaining = eds.filter((e) => e.id !== edgeId);
+        return [
+          ...remaining,
+          {
+            id: crypto.randomUUID(),
+            source: target.source,
+            sourceHandle: target.sourceHandle,
+            target: id,
+            type: "insertable",
+          },
+          { id: crypto.randomUUID(), source: id, target: target.target, type: "insertable" },
+        ];
+      });
+    },
+    [setNodes, setEdges]
+  );
 
+  const appendNodeAfter = useCallback(
+    (kind: FlowNodeKind, afterNodeId: string | null) => {
+      const id = crypto.randomUUID();
+      const meta = NODE_KIND_META[kind];
+      const data: FlowNodeData = { kind, label: meta.label, status: "draft" };
+      const newNode: FlowCanvasNode = {
+        id,
+        type: kind,
+        position: { x: 0, y: 0 },
+        data,
+      };
+      setNodes((nds) => [...nds, newNode]);
+      if (afterNodeId) {
+        setEdges((eds) => [
+          ...eds,
+          { id: crypto.randomUUID(), source: afterNodeId, target: id, type: "insertable" },
+        ]);
+      }
+    },
+    [setNodes, setEdges]
+  );
+
+  const handleAddNode = useCallback(
+    (kind: FlowNodeKind) => {
+      if (!quickAdd) return;
       if (quickAdd.insertOnEdgeId) {
-        setEdges((eds) => {
-          const target = eds.find((e) => e.id === quickAdd.insertOnEdgeId);
-          if (!target) return eds;
-          const remaining = eds.filter((e) => e.id !== quickAdd.insertOnEdgeId);
-          return [
-            ...remaining,
-            { id: crypto.randomUUID(), source: target.source, sourceHandle: target.sourceHandle, target: id, type: "insertable" },
-            { id: crypto.randomUUID(), source: id, target: target.target, type: "insertable" },
-          ];
-        });
+        insertNodeOnEdge(kind, quickAdd.insertOnEdgeId);
+      } else {
+        // Append to end of last node
+        const last = [...nodes].sort((a, b) => b.position.y - a.position.y)[0];
+        appendNodeAfter(kind, last?.id || null);
       }
       setQuickAdd(null);
     },
-    [quickAdd, setNodes, setEdges]
+    [quickAdd, nodes, insertNodeOnEdge, appendNodeAfter]
   );
 
   useEffect(() => {
@@ -144,6 +253,28 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
     };
   }, [rf, onNodeOpenDetail, nodes]);
 
+  // Find nearest edge to a flow-coordinate point (for drop preview)
+  const findNearestEdge = useCallback(
+    (x: number, y: number): string | null => {
+      let bestId: string | null = null;
+      let bestDist = Infinity;
+      for (const e of edges) {
+        const s = laidOutNodes.find((n) => n.id === e.source);
+        const t = laidOutNodes.find((n) => n.id === e.target);
+        if (!s || !t) continue;
+        const mx = (s.position.x + t.position.x) / 2 + 140;
+        const my = (s.position.y + t.position.y) / 2 + 60;
+        const d = Math.hypot(mx - x, my - y);
+        if (d < bestDist && d < 200) {
+          bestDist = d;
+          bestId = e.id;
+        }
+      }
+      return bestId;
+    },
+    [edges, laidOutNodes]
+  );
+
   return (
     <div
       className="absolute inset-0 bg-background"
@@ -157,24 +288,29 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
         if (e.dataTransfer.types.includes("application/flowbuilder-kind")) {
           e.preventDefault();
           e.dataTransfer.dropEffect = "move";
+          const flow = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+          const edgeId = findNearestEdge(flow.x, flow.y);
+          setDropPreview({ edgeId, afterNodeId: null });
         }
       }}
+      onDragLeave={() => setDropPreview(null)}
       onDrop={(e) => {
         const kind = e.dataTransfer.getData("application/flowbuilder-kind") as FlowNodeKind;
         if (!kind) return;
         e.preventDefault();
         const flow = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
-        const id = crypto.randomUUID();
-        const meta = NODE_KIND_META[kind];
-        const data: FlowNodeData = { kind, label: meta.label, status: "draft" };
-        setNodes((nds) => [
-          ...nds,
-          { id, type: kind, position: { x: flow.x - 140, y: flow.y - 30 }, data },
-        ]);
+        const edgeId = findNearestEdge(flow.x, flow.y);
+        setDropPreview(null);
+        if (edgeId) {
+          insertNodeOnEdge(kind, edgeId);
+        } else {
+          const last = [...nodes].sort((a, b) => b.position.y - a.position.y)[0];
+          appendNodeAfter(kind, last?.id || null);
+        }
       }}
     >
       <ReactFlow
-        nodes={nodes}
+        nodes={laidOutNodes}
         edges={decoratedEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
@@ -182,10 +318,15 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onSelectionChange={(sel) => onSelectionChange?.(sel.nodes.map((n) => n.id))}
-        snapToGrid
-        snapGrid={[20, 20]}
+        nodesDraggable={false}
         minZoom={0.1}
         maxZoom={2}
+        panOnScroll
+        panOnScrollSpeed={1}
+        zoomOnScroll={false}
+        zoomOnPinch
+        zoomOnDoubleClick={false}
+        preventScrolling={false}
         defaultEdgeOptions={{ type: "insertable" }}
         fitView
         fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
@@ -193,9 +334,9 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
       >
         <Background
           variant={BackgroundVariant.Dots}
-          gap={20}
+          gap={24}
           size={1}
-          color="hsl(var(--border))"
+          color="var(--gray-3)"
         />
         <Controls
           position="bottom-left"
@@ -206,10 +347,10 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
           position="bottom-right"
           pannable
           zoomable
-          maskColor="hsl(var(--background) / 0.7)"
+          maskColor="rgba(250,250,250,0.7)"
           className="!bg-card !border !border-border !rounded-lg !shadow-sm"
-          nodeColor={() => "hsl(var(--muted-foreground))"}
-          nodeStrokeColor="hsl(var(--border))"
+          nodeColor={() => "var(--gray-2)"}
+          nodeStrokeColor="var(--gray-3)"
         />
       </ReactFlow>
 
@@ -230,7 +371,11 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
         }
         .react-flow__controls-button:hover { background: hsl(var(--muted)) !important; }
         .react-flow__controls-button svg { fill: currentColor; }
-        .react-flow__minimap-mask { fill: hsl(var(--background) / 0.7); }
+        .react-flow__minimap-mask { fill: rgba(250,250,250,0.7); }
+        .react-flow__node {
+          transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        .react-flow__node.dragging { transition: none; }
       `}</style>
     </div>
   );
