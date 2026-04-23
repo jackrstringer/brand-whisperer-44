@@ -13,9 +13,11 @@ import {
   Wand2,
   Sparkles,
   Mail,
+  Bell,
   Clock,
   GitBranch,
   Smartphone,
+  Webhook,
   LogOut,
   Filter,
   Zap,
@@ -47,7 +49,7 @@ export interface FlowEmailMeta {
 }
 
 type Tool = "select" | "add" | "sticky";
-type NodeKind = "trigger" | "filters" | "email" | "delay" | "split" | "sms" | "exit";
+type NodeKind = "trigger" | "filters" | "email" | "delay" | "split" | "trigger_split" | "sms" | "push" | "webhook" | "exit";
 
 interface BoardNode {
   id: string;
@@ -98,6 +100,7 @@ const BRANCH_Y = 92;
 function getNodeSize(kind: NodeKind) {
   if (kind === "delay") return { w: 220, h: 70 };
   if (kind === "split") return { w: 260, h: 130 };
+  if (kind === "trigger_split") return { w: 280, h: 120 };
   if (kind === "filters" || kind === "exit") return { w: 260, h: 100 };
   if (kind === "trigger") return { w: 240, h: 96 };
   return { w: 280, h: 110 }; // email / sms
