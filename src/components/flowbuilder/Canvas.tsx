@@ -319,10 +319,14 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
         onConnect={onConnect}
         onSelectionChange={(sel) => onSelectionChange?.(sel.nodes.map((n) => n.id))}
         nodesDraggable={false}
+        elementsSelectable
         minZoom={0.1}
         maxZoom={2}
+        panOnDrag={[1, 2]}
         panOnScroll
         panOnScrollSpeed={1}
+        selectionOnDrag
+        selectNodesOnDrag={false}
         zoomOnScroll={false}
         zoomOnPinch
         zoomOnDoubleClick={false}
@@ -376,6 +380,18 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
           transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
         }
         .react-flow__node.dragging { transition: none; }
+        .react-flow__pane { cursor: default; }
+        .react-flow__pane.selection { cursor: crosshair; }
+        .react-flow__selection {
+          background: hsl(var(--foreground) / 0.06) !important;
+          border: 1px solid hsl(var(--foreground) / 0.28) !important;
+          border-radius: 6px;
+        }
+        .react-flow__nodesselection-rect {
+          border: 1px solid hsl(var(--foreground)) !important;
+          border-radius: 10px;
+          box-shadow: 0 0 0 4px hsl(var(--foreground) / 0.05);
+        }
       `}</style>
     </div>
   );
