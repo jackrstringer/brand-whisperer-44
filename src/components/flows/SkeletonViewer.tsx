@@ -1364,6 +1364,7 @@ function NodeView({
         </div>
         {onGenerate && (
           <button
+            className="fl-node-generate"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.stopPropagation();
@@ -1371,18 +1372,6 @@ function NodeView({
             }}
             disabled={isGenerating}
             title="Generate this email"
-            style={{
-              flexShrink: 0,
-              width: 26,
-              height: 26,
-              borderRadius: 7,
-              background: "var(--fl-ink)",
-              color: "#fff",
-              border: 0,
-              display: "grid",
-              placeItems: "center",
-              cursor: "pointer",
-            }}
           >
             {isGenerating ? (
               <Loader2 className="w-3 h-3 animate-spin" />
