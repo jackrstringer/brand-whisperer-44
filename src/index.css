@@ -58,16 +58,6 @@
     --postit-blue: 210 80% 88%;
     --postit-pink: 350 85% 90%;
     --postit-green: 132 53% 88%;
-
-    /* Flow Builder Canvas — remap to semantic monochrome tokens */
-    --flow-canvas: var(--background);
-    --flow-grid: var(--border);
-    --flow-card: var(--card);
-    --flow-card-hover: var(--muted);
-    --flow-border: var(--border);
-    --flow-edge: var(--border);
-    --flow-select: var(--foreground);
-    --flow-action: var(--foreground);
   }
 
   .dark {

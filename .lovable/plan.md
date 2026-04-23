@@ -1,62 +1,88 @@
 
+Goal: fix the real shared generation failure, make flow logic less dumb, restore a proper right-side AI chat rail, and let message nodes expand to show the actual brief.
 
-## Goal
+Findings
+- The immediate failure is not “flow-specific.” Both normal campaigns and flow emails go through `supabase/functions/_shared/generateCampaignCore.ts`.
+- The deployed logs show the same hard failure in both paths: Anthropic rejects at least one image because a dimension still exceeds 2000px.
+- The current “fix” is incomplete because `capImageDimensions()` only rewrites ImageKit URLs. Any brand/reference slice URL that is not ImageKit-hosted bypasses the cap entirely, so oversized images still get base64-embedded and fail immediately.
+- That also explains failures when the user attaches no references: generation still auto-loads brand profile reference slices from `brand_profiles.reference_slice_urls`.
+- Conditional splits are currently rendered with a fake heuristic in `SkeletonViewer.tsx` that blindly alternates YES/NO branches after a split. That is why split visuals are wrong.
+- Expandable message briefs were never actually wired: `FlowBuilderPage` passes `expandedIndex`/`onToggleExpand`, but `SkeletonViewer` does not use them.
+- The chat was not removed from code, but the current post-skeleton UI is a bottom floating dock in `FlowAgentChat.tsx`, not the persistent right-hand rail you want.
 
-Rebuild the flow builder visuals to match the rest of the app (light, monochrome, Geist/Inter, no emojis, real hover/active states) while keeping the Teenage-Engineering-meets-Apple-meets-Miro feel. Functionality stays; only the visual layer and interaction polish change.
+Implementation plan
 
-## What's wrong now
+1. Fix the true generation bug at the shared source
+- Update `_shared/generateCampaignCore.ts` so every image sent to Anthropic is dimension-normalized, not just ImageKit URLs.
+- Add a host-agnostic image preparation step:
+  - fetch image
+  - inspect actual dimensions
+  - if either side exceeds safe limit, downscale before base64 embedding
+  - then send the resized payload
+- Apply this to:
+  - brand profile slices/full images
+  - selected reference campaign slices/full images
+  - any other image blocks added to the vision payload
+- Keep the existing ImageKit rewrite as an optimization, but do not rely on it as the only safeguard.
+- Add explicit logging of source type + original dimensions + resized dimensions so future failures are diagnosable instead of opaque.
 
-- Hardcoded `--flow-canvas`, `--flow-card`, `--flow-border` tokens force dark mode, ignoring the app's existing light monochrome system.
-- Emoji icons (✉, ⏱, ◆, ⚡, 🔔, ⚙️, 📝, 📋, 🔗, 💬, 🔔) in `NODE_KIND_META` and node headers — the rest of the app uses Lucide icons exclusively.
-- Cards have no real hover/active feedback, no shadow elevation, no scale, no border transitions.
-- Palette tiles are flat black squares with no affordance.
-- Top bar, sidebar, strategy panel, chat panel all use ad-hoc dark colors instead of `bg-card`, `border-border`, `text-foreground`, `text-muted-foreground`.
-- Edges, minimap, controls all themed to a dark canvas that doesn't exist anywhere else in the product.
+2. Surface real backend errors to the UI
+- Persist the actual generation failure reason instead of only setting `status = "error"`.
+- Add user-visible error fields for campaign and flow email generation state, then show them in the flow builder/editor instead of “see backend logs.”
+- This will follow your no-fake-success rule and make immediate failures self-explanatory.
 
-## Visual system (matches existing app)
+3. Make flow strategy smarter: filters first, not repeated purchase splits
+- Tighten `flow-agent/index.ts` system prompt so flow-wide logic is expressed in:
+  - `[FILTERS]` for entry/profile gating
+  - `[EXIT]` for universal flow exit conditions
+- Explicitly ban repeated “Placed Order” conditional splits between each message unless there is a true branching strategy that changes downstream content.
+- Update the shared flow skill guidance so welcome/post-purchase/etc. default to:
+  - one intelligent entry filter set
+  - one exit block
+  - conditional splits only when there is a meaningful audience/content divergence
 
-- **Canvas**: `bg-background` (light), dot grid using `border` token at low opacity. Same surface as Ideate page.
-- **Cards**: `bg-card`, `border-border`, `rounded-xl`, subtle `shadow-sm` at rest → `shadow-md` + `border-foreground/20` on hover → `border-foreground` + `shadow-lg` + `scale-[1.01]` on select. 200ms spring on all.
-- **Type**: Geist/Inter (already loaded). Node titles `text-[13px] font-semibold tracking-tight`. Metadata `text-[11px] text-muted-foreground`. Monospace only for delay durations and metric numbers (`font-mono tabular-nums`).
-- **Icons**: Lucide only — `Mail`, `MessageSquare`, `Bell`, `Clock`, `GitBranch`, `Zap`, `UserPen`, `ListPlus`, `Webhook`, `BellRing`, `Settings2`. 14px, `text-foreground/70`, in a `w-7 h-7 rounded-lg bg-muted` tile inside the card header.
-- **Status pills**: replace colored dots. `Live` = `bg-foreground text-background`, `Manual` = `bg-muted text-foreground`, `Draft` = `border border-border text-muted-foreground`. All `text-[10px] uppercase tracking-[0.08em] px-2 py-0.5 rounded-full`.
-- **Edges**: `border` token color at rest, `foreground` on hover, `foreground` + `stroke-width 2.5` when selected. "+" insertion button becomes a clean `bg-foreground text-background` circle with Lucide `Plus`, scales 1 → 1.08 on hover.
-- **YES/NO labels**: monospace `text-[10px]`, `bg-card border border-border`, no green/red tinting (kept monochrome — branch identity comes from position + label, not color).
-- **Minimap + Controls**: `bg-card border-border`, rounded, same elevation as everywhere else. No frosted glass.
+4. Replace fake split rendering with a real skeleton graph model
+- Stop the current heuristic YES/NO alternation in `SkeletonViewer.tsx`.
+- Extend the skeleton format/parser so split nodes carry explicit condition/branch metadata instead of inferred branches.
+- Render only branch structures that are actually encoded in the skeleton.
+- If a skeleton does not yet specify branch paths, render the split as logic-only instead of fabricating a wrong diagram.
 
-## Interaction polish
+5. Add true message-node expansion for the actual brief
+- Wire `expandedIndex` and `onToggleExpand` through `SkeletonViewer`.
+- Clicking a message node should expand an inline panel or side detail card showing the real brief fields:
+  - timing
+  - job
+  - subject direction
+  - sections
+  - notes
+  - generation state / linked campaign status
+- Reuse saved `flow_emails` edits when present so what you expand is the real working brief, not a guessed summary.
 
-- Every clickable element: 150ms transition on `bg`, `border`, `shadow`, `transform`.
-- Node hover: card lifts (shadow + 1px border darken), drag handle dots fade in on the right.
-- Node select: border thickens to `foreground`, slight scale, soft outer shadow ring.
-- Palette tiles: hover fills `bg-muted`, active scales 0.98, drag start lifts with shadow.
-- Edge "+" only appears on edge hover, fades in 120ms.
-- QuickAddMenu: scales from click point (0.95 → 1, 150ms), `bg-popover border-border shadow-lg`, items use `hover:bg-muted` like every other menu in the app.
-- Chat panel collapsed strip: 48px, vertical "AI" label, hover widens border. Expanded: matches `ChatBar` styling from ideation.
-- Top bar: same height/padding as `AppLayout` headers, status as a `Select` from shadcn instead of native, undo/redo as ghost icon buttons.
-- Strategy panel: collapsible like the ideation `SplitPane`, monospace TOC with hover row highlight, click → `setCenter` with 400ms ease.
+6. Restore the persistent right-side AI chat rail
+- Rework `FlowBuilderPage` into a two-pane shell:
+  - left: canvas
+  - right: always-visible chat rail
+- Keep the current centered pre-skeleton experience only for the empty-state if needed, but once a skeleton exists the agent should live permanently in the right rail.
+- The rail should support ongoing conversational edits to skeleton, filters, splits, and message briefs while the canvas updates live.
 
-## Files to change
+Technical details
+- Files likely touched:
+  - `supabase/functions/_shared/generateCampaignCore.ts`
+  - `supabase/functions/generate-campaign/index.ts`
+  - `supabase/functions/generate-campaign-multi/index.ts`
+  - `supabase/functions/flow-agent/index.ts`
+  - `src/lib/flows/skeletonParser.ts`
+  - `src/components/flows/SkeletonViewer.tsx`
+  - `src/components/flows/FlowAgentChat.tsx`
+  - `src/pages/FlowBuilderPage.tsx`
+- Database change likely needed for clear user-facing failure visibility:
+  - add last-error fields on `campaigns` and `flow_emails`
 
-- `src/index.css` — remove the dark `--flow-*` tokens; either delete or remap them to existing semantic tokens (`--background`, `--card`, `--border`, `--foreground`, `--muted`, `--muted-foreground`, `--popover`).
-- `src/components/flowbuilder/types.ts` — drop emoji from `NODE_KIND_META`, replace with Lucide icon component refs.
-- `src/components/flowbuilder/nodes/BaseNodeCard.tsx` — restyle header, status pill, hover/select states, drag handle.
-- `src/components/flowbuilder/nodes/{Trigger,TimeDelay,Email,Sms,ConditionalSplit,Simple}Node.tsx` — swap emoji for Lucide, update typography, monochrome status, real hover.
-- `src/components/flowbuilder/edges/InsertableEdge.tsx` — monochrome stroke, Lucide `Plus`, monochrome YES/NO labels.
-- `src/components/flowbuilder/Canvas.tsx` — light dot grid, restyle `Background`/`Controls`/`MiniMap` to use semantic tokens.
-- `src/components/flowbuilder/QuickAddMenu.tsx` — match shadcn popover/menu styling, Lucide icons, search input matches app inputs.
-- `src/components/flowbuilder/LeftSidebar.tsx` — light sidebar matching `AppSidebar` aesthetic, palette tiles with proper affordance, config panel uses standard `Label`/`Input`/`Select`/`Textarea` from shadcn.
-- `src/components/flowbuilder/TopBar.tsx` — match app header height and tokens, shadcn `Select` for status, ghost icon buttons for undo/redo, inline-editable name like Ideate.
-- `src/components/flowbuilder/StrategyPanel.tsx` — collapsible card, monospace TOC, hover rows, no emoji.
-- `src/components/flowbuilder/MessageFlyout.tsx` — restyle as a sheet/peek panel matching `TaskDetail` (the existing ClickUp-inspired peek panel), reuse its visual language.
-- `src/components/flowbuilder/ChatPanel.tsx` — collapsed vertical strip + expanded panel that visually matches `ChatBar` from ideation.
-
-## Behavior unchanged
-
-- All data, autosave, undo/redo, edge insertion, drag-from-palette, double-click-to-add, flyout open, chat routing — none of it changes. Pure visual + interaction-feedback rebuild.
-
-## Out of scope
-
-- Adding new features from the original spec (analytics overlay, A/B wrapper, keyboard shortcuts beyond what exists).
-- Touching backend or edge functions.
-
+Verification
+- Normal campaign generation succeeds with no manually attached references.
+- Flow message generation succeeds for the same brand.
+- Logs show any oversized non-ImageKit references being resized before Anthropic.
+- A skeleton with no real branch metadata does not render fake YES/NO paths.
+- A skeleton with real split metadata renders correctly.
+- Clicking a message node expands the actual brief.
+- The AI chat is persistently visible on the right and can drive live skeleton updates.
