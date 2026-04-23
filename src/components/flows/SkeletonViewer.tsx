@@ -1233,6 +1233,7 @@ function NodeView({
   onLabelCommit,
   onSelect,
   onOpenDetails,
+  onOpenPreview,
   onRequestDelete,
   onStartDrag,
   onDoubleClickTitle,
@@ -1250,6 +1251,7 @@ function NodeView({
   onLabelCommit: () => void;
   onSelect: () => void;
   onOpenDetails: () => void;
+  onOpenPreview?: () => void;
   onRequestDelete: () => void;
   onStartDrag: (e: React.MouseEvent) => void;
   onDoubleClickTitle: () => void;
