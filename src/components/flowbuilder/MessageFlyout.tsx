@@ -257,9 +257,18 @@ export function MessageFlyout({ node, brandId, flowId, flowType, onClose, onUpda
                     title="Email preview"
                     srcDoc={d.html}
                     sandbox="allow-same-origin"
+                    onLoad={(e) => {
+                      const doc = e.currentTarget.contentDocument;
+                      const height = Math.max(
+                        doc?.documentElement?.scrollHeight || 0,
+                        doc?.body?.scrollHeight || 0,
+                        900,
+                      );
+                      setPreviewHeight(height + 24);
+                    }}
                     style={{
                       width: device === "mobile" ? 390 : "100%",
-                      height: 600,
+                      height: previewHeight,
                       border: "1px solid hsl(var(--border))",
                       borderRadius: 8,
                       background: "white",
