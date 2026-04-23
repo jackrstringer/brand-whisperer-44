@@ -419,6 +419,8 @@ export function SkeletonViewer({
   const [stickyArmed, setStickyArmed] = useState(false);
   const [activeDragKind, setActiveDragKind] = useState<NodeKind | null>(null);
   const [hoveredDropTarget, setHoveredDropTarget] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BoardNode | Sticky | null>(null);
+  const [detailsNode, setDetailsNode] = useState<BoardNode | null>(null);
 
   const board = useMemo(
     () => buildBoard(parsedNodes, meta, flowType),
@@ -523,7 +525,16 @@ export function SkeletonViewer({
         setSelectedSticky(null);
         setEditingSticky(null);
         setEditingLabelOf(null);
+        setDeleteTarget(null);
+        setDetailsNode(null);
         if (expandedIndex !== null) onToggleExpand(null);
+      }
+      if ((e.key === "Delete" || e.key === "Backspace") && (selected || selectedSticky)) {
+        e.preventDefault();
+        const node = selected ? layoutNodes.find((n) => n.id === selected) : null;
+        const sticky = selectedSticky ? stickies.find((s) => s.id === selectedSticky) : null;
+        if (node) setDeleteTarget(node);
+        if (sticky) setDeleteTarget(sticky);
       }
       if (e.key === "n") setStickyArmed(true);
     };
@@ -536,7 +547,7 @@ export function SkeletonViewer({
       window.removeEventListener("keydown", down);
       window.removeEventListener("keyup", up);
     };
-  }, [expandedIndex, onToggleExpand]);
+  }, [expandedIndex, onToggleExpand, selected, selectedSticky, layoutNodes, stickies]);
 
   /* -------- Stage mouse down: pan, marquee deselect, tool place -------- */
   const handleStageMouseDown = (e: React.MouseEvent) => {
