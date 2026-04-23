@@ -1006,6 +1006,27 @@ export function SkeletonViewer({
             />
           ))}
 
+          {expandedIndex !== null && (() => {
+            const previewNode = displayBoard.nodes.find((n) => n.emailIndex === expandedIndex);
+            const row = emails.find((e) => e.sequence_index === expandedIndex);
+            if (!previewNode || !row?.html) return null;
+            const cm = row.campaign_id ? campaignMeta[row.campaign_id] : null;
+            const nodeSize = getNodeSize(previewNode.kind);
+            return (
+              <CanvasCampaignPreview
+                node={previewNode}
+                nodeSize={nodeSize}
+                row={row}
+                meta={cm}
+                brandId={brandId}
+                generating={generatingIndex === previewNode.emailIndex}
+                onClose={() => onToggleExpand(null)}
+                onGenerate={() => onGenerateNode(previewNode.emailIndex!)}
+                onOpenEditor={() => row.campaign_id && navigate(`/brands/${brandId}/campaigns/${row.campaign_id}`)}
+              />
+            );
+          })()}
+
           {/* Drafting ghost */}
           {drafting && parsedNodes.length === 0 && (
             <div
