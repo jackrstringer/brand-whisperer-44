@@ -1201,7 +1201,7 @@ function NodeView({
           onSelect();
           onStartDrag(e);
         }}
-        onDoubleClick={(e) => {
+        onClick={(e) => {
           e.stopPropagation();
           onOpenDetails();
         }}
@@ -1231,7 +1231,7 @@ function NodeView({
         onSelect();
         onStartDrag(e);
       }}
-      onDoubleClick={(e) => {
+      onClick={(e) => {
         e.stopPropagation();
         onOpenDetails();
       }}
