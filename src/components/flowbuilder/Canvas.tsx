@@ -383,9 +383,12 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSel
         .react-flow__pane { cursor: default; }
         .react-flow__pane.selection { cursor: crosshair; }
         .react-flow__selection {
-          background: hsl(var(--foreground) / 0.06) !important;
-          border: 1px solid hsl(var(--foreground) / 0.28) !important;
-          border-radius: 6px;
+          z-index: 20 !important;
+          background: hsl(var(--foreground) / 0.08) !important;
+          border: 1.5px solid hsl(var(--foreground) / 0.55) !important;
+          border-radius: 8px;
+          box-shadow: inset 0 0 0 1px hsl(var(--background) / 0.7), 0 8px 24px hsl(var(--foreground) / 0.08);
+          pointer-events: none;
         }
         .react-flow__nodesselection-rect {
           border: 1px solid hsl(var(--foreground)) !important;
