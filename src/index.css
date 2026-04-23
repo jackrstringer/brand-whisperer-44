@@ -474,14 +474,16 @@
   border: 1px solid var(--fl-line); border-radius: 12px;
   min-width: 240px;
   box-shadow: 0 1px 2px rgba(10,10,10,0.04);
-  transition: border-color 90ms ease, box-shadow 90ms ease, background 90ms ease;
+  transition: border-color 80ms ease, box-shadow 80ms ease, background 80ms ease, transform 80ms ease;
+  cursor: grab;
 }
 .fl-node:hover {
-  border-color: var(--fl-line-strong);
-  box-shadow: 0 8px 22px rgba(10,10,10,0.08), 0 1px 3px rgba(10,10,10,0.05);
+  border-color: var(--fl-accent);
+  box-shadow: 0 0 0 1px var(--fl-accent), 0 8px 22px rgba(10,10,10,0.08), 0 1px 3px rgba(10,10,10,0.05);
   background: color-mix(in srgb, var(--fl-surface) 92%, var(--fl-surface-2));
   z-index: 2;
 }
+.fl-node:active { cursor: grabbing; }
 .fl-node.sel {
   border-color: var(--fl-accent);
   box-shadow: 0 0 0 2px var(--fl-accent), 0 10px 24px rgba(10,10,10,0.12);
@@ -520,6 +522,13 @@
 .fl-node-head {
   display: flex; align-items: center; gap: 10px; padding: 10px 12px;
 }
+.fl-node-head:hover .fl-title { color: var(--fl-ink); }
+.fl-node-delete {
+  width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--fl-line);
+  background: var(--fl-surface-2); color: var(--fl-ink-3); cursor: pointer;
+  display: grid; place-items: center; flex: none; transition: background 80ms ease, color 80ms ease, border-color 80ms ease;
+}
+.fl-node-delete:hover { background: var(--fl-ink); color: var(--fl-surface); border-color: var(--fl-ink); }
 .fl-badge {
   width: 26px; height: 26px; border-radius: 8px;
   display: grid; place-items: center; flex-shrink: 0;
@@ -544,6 +553,13 @@
   font-family: var(--fl-mono);
   margin-bottom: 6px;
   border: 1px dashed var(--fl-line-2);
+}
+.fl-node.kind-split:hover .fl-split-cond,
+.fl-node.kind-delay:hover .fl-body,
+.fl-node.kind-filters:hover .fl-body,
+.fl-node.kind-trigger:hover .fl-body {
+  background: color-mix(in srgb, var(--fl-surface-2) 86%, var(--fl-accent-soft));
+  border-color: var(--fl-accent);
 }
 .fl-branches { display: flex; gap: 6px; }
 .fl-branch {
@@ -605,6 +621,7 @@
   border-radius: 3px; cursor: grab;
   white-space: pre-wrap;
 }
+.fl-sticky:hover { outline: 1px solid rgba(10,10,10,0.22); outline-offset: 3px; }
 .fl-sticky.sel { outline: 2px solid var(--fl-accent); outline-offset: 3px; }
 .fl-sticky textarea {
   width: 100%; min-height: 70px; border: 0; outline: 0;
@@ -621,18 +638,21 @@
 /* Brief card — floats above trigger */
 .fl-brief {
   position: absolute;
-  background: var(--fl-surface); border: 1px solid var(--fl-line);
+  background: transparent; border: 0;
   border-radius: 14px;
-  box-shadow: 0 12px 40px rgba(10,10,10,0.06), 0 2px 8px rgba(10,10,10,0.04);
-  overflow: hidden; width: 520px; z-index: 4;
-  transition: box-shadow 90ms ease;
+  width: 520px; z-index: 4;
+  display: flex; flex-direction: column;
+  transition: filter 80ms ease;
 }
-.fl-brief.open { box-shadow: 0 22px 70px rgba(10,10,10,0.12), 0 2px 8px rgba(10,10,10,0.05); }
+.fl-brief.open { z-index: 8; }
 .fl-brief-head {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 16px; cursor: pointer;
-  width: 100%; border: 0; background: transparent; color: inherit; font: inherit; text-align: left;
+  width: 100%; border: 1px solid var(--fl-line); background: var(--fl-surface); color: inherit; font: inherit; text-align: left;
+  border-radius: 14px; box-shadow: 0 12px 40px rgba(10,10,10,0.06), 0 2px 8px rgba(10,10,10,0.04);
+  transition: border-color 80ms ease, background 80ms ease, box-shadow 80ms ease;
 }
+.fl-brief-head:hover, .fl-brief.open .fl-brief-head { border-color: var(--fl-accent); background: color-mix(in srgb, var(--fl-surface) 92%, var(--fl-surface-2)); box-shadow: 0 0 0 1px var(--fl-accent), 0 12px 34px rgba(10,10,10,0.10); }
 .fl-brief-main { flex: 1; min-width: 0; }
 .fl-brief-pill { padding: 5px 8px; border-radius: 999px; background: var(--fl-surface-2); font-family: var(--fl-mono); font-size: 9.5px; color: var(--fl-ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
 .fl-brief-badge {
@@ -643,9 +663,20 @@
 .fl-brief-badge svg { width: 14px; height: 14px; }
 .fl-brief-kicker { font-family: var(--fl-mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fl-ink-4); }
 .fl-brief-title { font-size: 14px; font-weight: 600; color: var(--fl-ink); margin-top: 2px; }
-.fl-brief-body { padding: 10px 16px 16px; border-top: 1px solid var(--fl-line); display: grid; grid-template-columns: 1fr 1fr; gap: 14px 22px; }
+.fl-brief-body { padding: 14px 16px 16px; border: 1px solid var(--fl-line); border-bottom: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 22px; background: var(--fl-surface); border-radius: 14px 14px 0 0; box-shadow: 0 22px 70px rgba(10,10,10,0.12), 0 2px 8px rgba(10,10,10,0.05); animation: flBriefUp 100ms ease-out; }
 .fl-brief-label { font-family: var(--fl-mono); font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--fl-ink-4); margin: 0 0 6px; }
 .fl-brief-text  { font-size: 12.5px; line-height: 1.5; color: var(--fl-ink-2); margin: 0; }
 
 @keyframes flFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes flBriefUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .fl-sticky { animation: flFadeIn 140ms ease-out; }
+
+.fl-details-backdrop { position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,0.28); display: grid; place-items: center; }
+.fl-details { width: min(520px, calc(100vw - 48px)); max-height: min(680px, calc(100vh - 64px)); overflow: hidden; background: var(--fl-surface); border: 1px solid var(--fl-line); border-radius: 14px; color: var(--fl-ink); display: flex; flex-direction: column; }
+.fl-details-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border-bottom: 1px solid var(--fl-line); }
+.fl-details-title { font-size: 15px; font-weight: 700; margin-top: 2px; }
+.fl-details-head button { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; border: 1px solid var(--fl-line); background: var(--fl-surface-2); color: var(--fl-ink-3); cursor: pointer; }
+.fl-details-head button:hover { color: var(--fl-ink); border-color: var(--fl-line-strong); }
+.fl-details-body { padding: 16px; overflow: auto; display: grid; gap: 12px; }
+.fl-details-row span { display: block; font-family: var(--fl-mono); font-size: 10px; color: var(--fl-ink-4); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 4px; }
+.fl-details-row p, .fl-details-body > p { margin: 0; white-space: pre-wrap; font-size: 12.5px; line-height: 1.5; color: var(--fl-ink-2); }
