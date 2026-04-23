@@ -973,6 +973,11 @@ export function SkeletonViewer({
                 setSelectedSticky(null);
               }}
               onOpenDetails={() => setDetailsNode(n)}
+              onOpenPreview={
+                typeof n.emailIndex === "number"
+                  ? () => onToggleExpand(n.emailIndex!)
+                  : undefined
+              }
               onRequestDelete={() => setDeleteTarget(n)}
               onStartDrag={(e) => startNodeDrag(e, n)}
               onDoubleClickTitle={() => {
@@ -1091,65 +1096,63 @@ export function SkeletonViewer({
 
       {/* Expanded message preview */}
       {expandedIndex !== null && (() => {
+        const previewNode = displayBoard.nodes.find((n) => n.emailIndex === expandedIndex);
         const row = emails.find((e) => e.sequence_index === expandedIndex);
         if (!row?.html) return null;
         const cm = row.campaign_id ? campaignMeta[row.campaign_id] : null;
         return (
           <div
             onClick={() => onToggleExpand(null)}
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.6)",
-              backdropFilter: "blur(8px)",
-              zIndex: 100,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 32,
-            }}
+            className="fl-campaign-preview-backdrop"
           >
             <div
               onClick={(e) => e.stopPropagation()}
-              style={{
-                width: 420,
-                maxHeight: "92vh",
-                background: "#fff",
-                borderRadius: 16,
-                overflow: "hidden",
-                boxShadow: "0 24px 80px rgba(0,0,0,0.4)",
-                display: "flex",
-                flexDirection: "column",
-              }}
+              className="fl-campaign-preview-shell"
             >
-              <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(0,0,0,0.08)", display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <div className="fl-campaign-preview-topbar">
+                <div className="fl-campaign-preview-meta">
+                  <div className="fl-campaign-preview-subject">
                     {cm?.subject_line || row.label || "Email"}
                   </div>
                   {cm?.preview_text && (
-                    <div style={{ fontSize: 11, color: "rgba(0,0,0,0.5)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    <div className="fl-campaign-preview-text">
                       {cm.preview_text}
                     </div>
                   )}
                 </div>
+                {row.campaign_id && (
+                  <button
+                    onClick={() => navigate(`/brands/${brandId}/campaigns/${row.campaign_id}`)}
+                    className="fl-campaign-preview-icon"
+                    title="Open in Editor"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 <button
                   onClick={() => onToggleExpand(null)}
-                  style={{ width: 30, height: 30, borderRadius: 8, border: 0, background: "rgba(0,0,0,0.06)", cursor: "pointer", display: "grid", placeItems: "center" }}
+                  className="fl-campaign-preview-icon"
                   title="Close"
                 >
                   <XIcon className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <iframe
-                title={`expanded-${row.id}`}
-                srcDoc={row.html}
-                style={{ flex: 1, width: "100%", border: 0, background: "#fff" }}
-              />
-            </div>
-            <div style={{ marginTop: 12, fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
-              Click outside or press Esc to close
+              <div className="fl-campaign-preview-frame">
+                <iframe title={`expanded-${row.id}`} srcDoc={row.html} sandbox="allow-same-origin" />
+              </div>
+              <div className="fl-campaign-preview-actions">
+                {row.campaign_id && (
+                  <button onClick={() => navigate(`/brands/${brandId}/campaigns/${row.campaign_id}`)}>
+                    <ExternalLink className="w-3.5 h-3.5" /> Open in Editor
+                  </button>
+                )}
+                {previewNode?.emailIndex !== undefined && (
+                  <button onClick={() => onGenerateNode(previewNode.emailIndex!)} disabled={generatingIndex === previewNode.emailIndex}>
+                    {generatingIndex === previewNode.emailIndex ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                    {row.html ? "Regenerate" : "Generate"}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         );
