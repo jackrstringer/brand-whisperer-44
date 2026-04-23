@@ -1,4 +1,18 @@
 import type { Node, Edge } from "@xyflow/react";
+import type { LucideIcon } from "lucide-react";
+import {
+  Mail,
+  MessageSquare,
+  Bell,
+  Clock,
+  GitBranch,
+  Zap,
+  UserPen,
+  ListPlus,
+  Webhook,
+  BellRing,
+  Settings2,
+} from "lucide-react";
 
 export type FlowNodeKind =
   | "trigger"
@@ -53,18 +67,18 @@ export interface CanvasState {
 
 export const NODE_KIND_META: Record<
   FlowNodeKind,
-  { label: string; category: "messages" | "logic" | "data"; icon: string }
+  { label: string; category: "messages" | "logic" | "data"; icon: LucideIcon }
 > = {
-  trigger: { label: "Trigger", category: "logic", icon: "⚡" },
-  time_delay: { label: "Time Delay", category: "logic", icon: "⏱" },
-  email: { label: "Email", category: "messages", icon: "✉" },
-  sms: { label: "SMS", category: "messages", icon: "💬" },
-  push: { label: "Push", category: "messages", icon: "🔔" },
-  conditional_split: { label: "Conditional Split", category: "logic", icon: "◆" },
-  trigger_split: { label: "Trigger Split", category: "logic", icon: "⚡" },
-  update_property: { label: "Update Property", category: "data", icon: "📝" },
-  list_update: { label: "List Update", category: "data", icon: "📋" },
-  webhook: { label: "Webhook", category: "data", icon: "🔗" },
-  internal_alert: { label: "Internal Alert", category: "data", icon: "🔔" },
-  custom_action: { label: "Custom Action", category: "data", icon: "⚙️" },
+  trigger: { label: "Trigger", category: "logic", icon: Zap },
+  time_delay: { label: "Time Delay", category: "logic", icon: Clock },
+  email: { label: "Email", category: "messages", icon: Mail },
+  sms: { label: "SMS", category: "messages", icon: MessageSquare },
+  push: { label: "Push", category: "messages", icon: Bell },
+  conditional_split: { label: "Conditional Split", category: "logic", icon: GitBranch },
+  trigger_split: { label: "Trigger Split", category: "logic", icon: Zap },
+  update_property: { label: "Update Property", category: "data", icon: UserPen },
+  list_update: { label: "List Update", category: "data", icon: ListPlus },
+  webhook: { label: "Webhook", category: "data", icon: Webhook },
+  internal_alert: { label: "Internal Alert", category: "data", icon: BellRing },
+  custom_action: { label: "Custom Action", category: "data", icon: Settings2 },
 };
