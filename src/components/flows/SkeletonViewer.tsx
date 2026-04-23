@@ -1316,20 +1316,15 @@ function NodePalette({ onStartDrag }: { onStartDrag: (kind: NodeKind, e: React.M
   const items: NodeKind[] = ["email", "sms", "push", "delay", "split", "trigger_split", "webhook", "exit"];
   return (
     <div className="fl-node-palette">
-      <button className="fl-node-palette-anchor" type="button" title="Drag a node into the flow">
-        <Plus className="w-4 h-4" />
-      </button>
-      <div className="fl-node-palette-panel">
-        {items.map((kind) => {
-          const { Icon, label } = KIND_META[kind];
-          return (
-            <button key={kind} onMouseDown={(e) => onStartDrag(kind, e)} title={`Drag ${label}`}>
-              <span className="sw"><Icon className="w-3.5 h-3.5" /></span>
-              <span>{label}</span>
-            </button>
-          );
-        })}
-      </div>
+      {items.map((kind) => {
+        const { Icon, label } = KIND_META[kind];
+        return (
+          <button key={kind} onMouseDown={(e) => onStartDrag(kind, e)} title={`Drag ${label} into a path`}>
+            <span className="sw"><Icon className="w-3.5 h-3.5" /></span>
+            <span>{label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
