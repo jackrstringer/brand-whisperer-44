@@ -45,9 +45,9 @@ export function BaseNodeCard({
         "relative rounded-xl bg-card border transition-all",
         "shadow-[0_2px_8px_-2px_rgba(0,0,0,0.4)]",
         selected
-          ? "border-[hsl(20_90%_60%)] shadow-[0_8px_24px_-6px_rgba(255,107,53,0.35)]"
+          ? "border-[hsl(var(--flow-select))] shadow-[0_8px_24px_-6px_hsl(var(--flow-select)/0.35)]"
           : "border-foreground/15 hover:border-foreground/35",
-        warning && "ring-1 ring-amber-500/40"
+        warning && "ring-1 ring-[hsl(45_93%_55%/0.4)]"
       )}
     >
       {!noInput && (
@@ -59,7 +59,7 @@ export function BaseNodeCard({
       )}
 
       {warning && (
-        <div className="absolute left-0 top-2 bottom-2 w-1 rounded-r bg-amber-500/70" />
+        <div className="absolute left-0 top-2 bottom-2 w-1 rounded-r bg-[hsl(45_93%_55%/0.7)]" />
       )}
 
       <div
@@ -99,14 +99,14 @@ export function BaseNodeCard({
             type="source"
             position={Position.Bottom}
             style={{ left: "30%" }}
-            className="!w-2.5 !h-2.5 !bg-emerald-500/70 !border-2 !border-card"
+            className="!w-2.5 !h-2.5 !bg-[hsl(142_71%_45%/0.8)] !border-2 !border-card"
           />
           <Handle
             id="no"
             type="source"
             position={Position.Bottom}
             style={{ left: "70%" }}
-            className="!w-2.5 !h-2.5 !bg-amber-500/70 !border-2 !border-card"
+            className="!w-2.5 !h-2.5 !bg-[hsl(45_93%_55%/0.8)] !border-2 !border-card"
           />
         </>
       )}
