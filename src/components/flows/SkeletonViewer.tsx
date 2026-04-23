@@ -286,8 +286,11 @@ const KIND_META: Record<NodeKind, { Icon: any; label: string }> = {
   filters: { Icon: Filter, label: "Entry Filters" },
   email: { Icon: Mail, label: "Email" },
   sms: { Icon: Smartphone, label: "SMS" },
+  push: { Icon: Bell, label: "Push Notification" },
+  webhook: { Icon: Webhook, label: "Webhook" },
   delay: { Icon: Clock, label: "Time Delay" },
   split: { Icon: GitBranch, label: "Conditional Split" },
+  trigger_split: { Icon: GitBranch, label: "Trigger Split" },
   exit: { Icon: LogOut, label: "Exit Flow" },
 };
 
