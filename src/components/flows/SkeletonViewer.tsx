@@ -1146,6 +1146,67 @@ export function SkeletonViewer({
           </div>
         );
       })()}
+
+      {detailsNode && (
+        <div className="fl-details-backdrop" onMouseDown={() => setDetailsNode(null)}>
+          <div className="fl-details" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="fl-details-head">
+              <div>
+                <div className="fl-kind">{KIND_META[detailsNode.kind].label}</div>
+                <div className="fl-details-title">{detailsNode.label}</div>
+              </div>
+              <button onClick={() => setDetailsNode(null)} title="Close"><XIcon className="w-4 h-4" /></button>
+            </div>
+            <div className="fl-details-body">
+              {Object.entries(detailsNode.meta || {}).map(([key, value]) => (
+                <div key={key} className="fl-details-row">
+                  <span>{key.replace(/_/g, " ")}</span>
+                  <p>{typeof value === "string" ? value : JSON.stringify(value, null, 2)}</p>
+                </div>
+              ))}
+              {!Object.keys(detailsNode.meta || {}).length && <p>No additional details.</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteTarget && !isStickyTarget(deleteTarget) && deleteTarget.kind === "split"
+                ? "Delete split path?"
+                : "Delete this item?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget && !isStickyTarget(deleteTarget) && deleteTarget.kind === "split"
+                ? "Choose which branch to remove. Deleting both removes the split and everything branching from it."
+                : "This removes the selected item from the canvas."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteTarget && !isStickyTarget(deleteTarget) && deleteTarget.kind === "split" ? (
+            <AlertDialogFooter className="gap-2 sm:space-x-0">
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => deleteSplitPath(deleteTarget.id, "yes")}>Delete YES path</AlertDialogAction>
+              <AlertDialogAction onClick={() => deleteSplitPath(deleteTarget.id, "no")}>Delete NO path</AlertDialogAction>
+              <AlertDialogAction onClick={() => deleteSplitPath(deleteTarget.id, "both")}>Delete both</AlertDialogAction>
+            </AlertDialogFooter>
+          ) : (
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (!deleteTarget) return;
+                  if (isStickyTarget(deleteTarget)) deleteSticky(deleteTarget.id);
+                  else deleteLinearNode(deleteTarget.id);
+                }}
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          )}
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
