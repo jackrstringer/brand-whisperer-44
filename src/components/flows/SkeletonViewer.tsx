@@ -1398,11 +1398,11 @@ function NodeView({
       )}
 
       {node.kind === "delay" && (
-        <div className="fl-body" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 16, fontWeight: 600, color: "var(--fl-ink)" }}>
+        <div className="fl-body fl-delay-body">
+          <div className="fl-delay-value">
             {node.meta?.duration || "—"}
           </div>
-          <div style={{ marginLeft: "auto", fontFamily: "var(--fl-mono)", fontSize: 10, color: "var(--fl-ink-4)", textTransform: "uppercase" }}>
+          <div className="fl-delay-label">
             wait
           </div>
         </div>
@@ -1413,23 +1413,6 @@ function NodeView({
           <div className="fl-split-cond">
             {node.meta?.condition || node.label}
           </div>
-          {Array.isArray(node.meta?.branches) && node.meta!.branches.length > 0 ? (
-            <div className="fl-branches">
-              {node.meta!.branches.map((b: any, i: number) => (
-                <div
-                  key={i}
-                  className={`fl-branch ${b.label?.toLowerCase().includes("yes") ? "yes" : b.label?.toLowerCase().includes("no") ? "no" : ""}`}
-                  title={b.description || ""}
-                >
-                  {b.label}
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ fontSize: 10, color: "var(--fl-ink-4)", marginTop: 6, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              Branches not specified
-            </div>
-          )}
         </div>
       )}
 
