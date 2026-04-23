@@ -55,9 +55,10 @@ interface CanvasProps {
   setNodes: React.Dispatch<React.SetStateAction<FlowCanvasNode[]>>;
   setEdges: React.Dispatch<React.SetStateAction<FlowCanvasEdge[]>>;
   onNodeOpenDetail?: (nodeId: string) => void;
+  onSelectionChange?: (selectedIds: string[]) => void;
 }
 
-function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail }: CanvasProps) {
+function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail, onSelectionChange }: CanvasProps) {
   const [quickAdd, setQuickAdd] = useState<{
     screen: { x: number; y: number };
     flow: { x: number; y: number };
@@ -149,6 +150,25 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail }: Can
         const flow = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
         setQuickAdd({ screen: { x: e.clientX, y: e.clientY }, flow });
       }}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("application/flowbuilder-kind")) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+        }
+      }}
+      onDrop={(e) => {
+        const kind = e.dataTransfer.getData("application/flowbuilder-kind") as FlowNodeKind;
+        if (!kind) return;
+        e.preventDefault();
+        const flow = rf.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+        const id = crypto.randomUUID();
+        const meta = NODE_KIND_META[kind];
+        const data: FlowNodeData = { kind, label: meta.label, status: "draft" };
+        setNodes((nds) => [
+          ...nds,
+          { id, type: kind, position: { x: flow.x - 140, y: flow.y - 30 }, data },
+        ]);
+      }}
     >
       <ReactFlow
         nodes={nodes}
@@ -158,6 +178,7 @@ function CanvasInner({ nodes, edges, setNodes, setEdges, onNodeOpenDetail }: Can
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onSelectionChange={(sel) => onSelectionChange?.(sel.nodes.map((n) => n.id))}
         snapToGrid
         snapGrid={[20, 20]}
         minZoom={0.1}
