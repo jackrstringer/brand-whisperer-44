@@ -10,6 +10,17 @@ interface QuickAddMenuProps {
 export function QuickAddMenu({ position, onSelect, onClose }: QuickAddMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
+  const closeTimer = useRef<number | null>(null);
+  const cancelClose = () => {
+    if (closeTimer.current) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimer.current = window.setTimeout(() => onClose(), 220);
+  };
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -23,6 +34,7 @@ export function QuickAddMenu({ position, onSelect, onClose }: QuickAddMenuProps)
     return () => {
       document.removeEventListener("mousedown", handler);
       document.removeEventListener("keydown", escHandler);
+      if (closeTimer.current) window.clearTimeout(closeTimer.current);
     };
   }, [onClose]);
 
@@ -39,6 +51,8 @@ export function QuickAddMenu({ position, onSelect, onClose }: QuickAddMenuProps)
   return (
     <div
       ref={ref}
+      onMouseEnter={cancelClose}
+      onMouseLeave={scheduleClose}
       style={{
         left: position.x,
         top: position.y,
