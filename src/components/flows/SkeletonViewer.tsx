@@ -336,6 +336,8 @@ export function SkeletonViewer({
     [parsedNodes, meta, flowType]
   );
   const [layoutNodes, setLayoutNodes] = useState<BoardNode[]>(board.nodes);
+  const [graphEdges, setGraphEdges] = useState<BoardEdge[]>(board.edges);
+  const hoveredDropTargetRef = useRef<string | null>(null);
 
   useEffect(() => {
     setLayoutNodes((prev) => {
@@ -344,9 +346,10 @@ export function SkeletonViewer({
         board.nodes.map((n) => ({ ...n, x: prevById[n.id]?.x ?? n.x, y: prevById[n.id]?.y ?? n.y }))
       );
     });
+    setGraphEdges(board.edges);
   }, [board.nodes]);
 
-  const displayBoard = useMemo(() => ({ ...board, nodes: layoutNodes }), [board, layoutNodes]);
+  const displayBoard = useMemo(() => ({ ...board, nodes: layoutNodes, edges: graphEdges }), [board, layoutNodes, graphEdges]);
 
   const nodeById = useMemo(() => {
     const m: Record<string, BoardNode> = {};
@@ -611,11 +614,11 @@ export function SkeletonViewer({
       meta: kind === "split" || kind === "trigger_split" ? { condition: "New split", branches: [{ label: "YES" }, { label: "NO" }] } : {},
     };
     setLayoutNodes((arr) => resolveNodeCollisions([...arr, node]));
-    displayBoard.edges = displayBoard.edges.filter((e) => e.id !== target.edge.id);
-    displayBoard.edges.push(
+    setGraphEdges((edges) => [
+      ...edges.filter((e) => e.id !== target.edge.id),
       { id: `e-${target.edge.from}-${id}`, from: target.edge.from, to: id, branch: target.edge.branch ?? null },
-      { id: `e-${id}-${target.edge.to}`, from: id, to: target.edge.to, branch: target.edge.branch ?? null }
-    );
+      { id: `e-${id}-${target.edge.to}`, from: id, to: target.edge.to, branch: target.edge.branch ?? null },
+    ]);
     setSelected(id);
   };
 
@@ -637,6 +640,7 @@ export function SkeletonViewer({
         const d = Math.hypot(t.x - world.x, t.y - world.y);
         return d < 110 && (!best || d < best.d) ? { id: t.id, d } : best;
       }, null);
+      hoveredDropTargetRef.current = target?.id ?? null;
       setHoveredDropTarget(target?.id ?? null);
     };
     const up = (ev: MouseEvent) => {
@@ -644,7 +648,8 @@ export function SkeletonViewer({
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
       setActiveDragKind(null);
-      const targetId = hoveredDropTarget;
+      const targetId = hoveredDropTargetRef.current;
+      hoveredDropTargetRef.current = null;
       setHoveredDropTarget(null);
       if (targetId) insertNodeOnTarget(kind, targetId);
     };
