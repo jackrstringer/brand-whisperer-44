@@ -1,64 +1,74 @@
 
-Implement the flow message click behavior exactly as requested:
+Implement the campaign preview as a minimal, stable in-canvas panel that stays at a fixed screen size and does not glitch when opened.
 
-1. Split message-node click zones
-   - Update `SkeletonViewer.tsx` so email/message nodes have two explicit interactive regions:
-     - Top half/header: opens the full details flyout.
-     - Bottom half/preview area: opens the rendered campaign preview.
-   - Prevent drag/click conflicts by keeping the existing drag threshold, but routing clicks by region after the pointer is released.
-   - Keep node selection behavior: clicking either region still selects the node, but only the correct region opens the correct UI.
+1. Fix the open-position glitch
+   - Move the campaign preview rendering out of the zoom-transformed `.fl-viewport`.
+   - Render it as an absolute overlay inside `.fl-stage` instead, using the clicked node’s screen-space position.
+   - This prevents the “jump to top of screen then open” behavior caused by mixing canvas coordinates with transformed zoom/pan coordinates.
 
-2. Replace the current flow “details” modal with the actual ideate task flyout pattern
-   - Reuse the existing `TaskDetail` implementation style and structure from `src/components/ideation/TaskDetail.tsx`.
-   - Create a flow-specific adapter component that maps a `flow_email` / parsed flow node into the same detail panel UI shape:
-     - Title / label
-     - Status
-     - Flow step metadata
-     - Brief / job
-     - Subject direction
-     - Preview text
-     - Copy notes
-     - Sections
-     - Timing
-     - Campaign preview if generated
-     - Open in Editor if `campaign_id` exists
-     - Regenerate / generate action
-   - This avoids the current small generic `.fl-details` pop-up and gives flow messages the same large side/center peek experience used by calendar/list tasks.
+2. Make preview size independent from canvas zoom
+   - Compute the preview’s screen position from:
+     - node canvas coordinates
+     - current `pan`
+     - current `zoom`
+     - node dimensions
+   - Keep the preview panel itself unscaled.
+   - Set a fixed standard preview width, e.g. `430px` panel shell with a `390px` email iframe viewport.
+   - When the user zooms in/out while the preview is already open, recompute only its anchor position, not its width.
 
-3. Implement the campaign preview overlay matching the provided reference
-   - Replace the current centered basic iframe modal with a cleaner email preview modal:
-     - White, rounded, high-polish preview shell.
-     - Compact top bar with subject line, preview text, close button, and optional expand/open controls.
-     - Rendered email iframe in a constrained campaign preview frame.
-     - Bottom action bar with “Open in Editor” and “Regenerate” where available.
-   - This preview opens only from the bottom half of the message node.
+3. Keep the preview beside the message node
+   - Anchor the panel to the right side of the selected message node by default.
+   - If there is not enough room on the right, flip it to the left side.
+   - Clamp the panel within the visible canvas area so it never renders partly off-screen.
 
-4. Keep non-message nodes simple
-   - Delay, split, trigger, filter, and exit nodes can continue opening their lightweight metadata/details behavior unless they need the full flyout later.
-   - Exit remains a tiny icon node.
+4. Remove visible scrollbars
+   - Apply scrollbar-hidden styling to the preview scroll container.
+   - Preserve vertical scrolling via wheel/trackpad/touch.
+   - Do not use any fake scrolling affordances or overlays.
 
-5. Tighten hover and selected states for the new regions
-   - Add clear hover states separately for:
-     - Entire node
-     - Top/header details zone
-     - Bottom campaign preview zone
-     - Preview thumbnail
-     - Generate button
-     - Delete button
-   - Make selected state persist visually after click.
-   - Ensure hover states do not move, resize, or jitter the node.
+5. Simplify the preview header content
+   - Header top row:
+     - Message title only, e.g. “Welcome + offer delivery”
+     - Compact action icons on the right:
+       - Open in editor
+       - Regenerate
+       - Close
+   - Remove:
+     - “Email · Preview”
+     - “To <customer@example.com>”
+     - duplicate title/subject restatement
+   - Replace the current envelope area with two compact metadata rows:
+     - `SL` label + subject line
+     - `PT` label + preview text
+   - Use the subject line from `campaignMeta.subject_line` first, then fallback to node metadata.
+   - Use preview text from `campaignMeta.preview_text` first, then fallback to node metadata.
 
-6. Technical changes
-   - Files to update:
-     - `src/components/flows/SkeletonViewer.tsx`
-     - `src/pages/FlowBuilderPage.tsx`
-     - `src/index.css`
-   - Likely add a new component:
-     - `src/components/flows/FlowEmailDetail.tsx`
-   - Use the existing `TaskDetail.tsx` layout patterns rather than inventing a new modal:
-     - Portal-based panel.
-     - Side/center peek mode behavior.
-     - Same top bar controls.
-     - Same details section structure.
-     - Same campaign preview section behavior.
-   - No database schema changes are required.
+6. Remove the bottom action bar
+   - Delete `.fl-canvas-preview-actions` from the preview structure.
+   - Move “Open in Editor” and “Regenerate” into the header as icon buttons.
+   - Keep button hover states crisp and minimal.
+
+7. Make the panel visually cleaner
+   - Use the same background as the canvas/page surface instead of a darker preview background.
+   - Rely on thin strokes, subtle dividers, and radius rather than heavy shadows or darkened sections.
+   - Remove the darker email frame background.
+   - Keep the email iframe white and centered at 390px.
+   - Reduce visual density around the subject/pretext metadata.
+
+8. Implementation targets
+   - Update `src/components/flows/SkeletonViewer.tsx`:
+     - Replace the current transformed `CanvasCampaignPreview` placement with stage-level screen-space placement.
+     - Store the currently previewed node/email index as-is, but render the preview outside `.fl-viewport`.
+     - Add helper logic to calculate fixed-size preview position based on `pan`, `zoom`, stage bounds, and node bounds.
+     - Update preview header markup and remove footer actions.
+   - Update `src/index.css`:
+     - Rewrite `.fl-canvas-preview*` styles for fixed-size, scrollbar-hidden, minimal in-canvas panel.
+     - Remove/stop using footer action styles.
+     - Add compact header icon button styling and `SL` / `PT` metadata row styling.
+
+9. Expected behavior after implementation
+   - Clicking the bottom half of a generated message node opens the preview next to that node.
+   - The preview no longer jumps to the top before opening.
+   - The preview remains a constant width regardless of canvas zoom.
+   - The user can continue navigating the canvas while the preview is open.
+   - The preview is minimal: title, SL/PT metadata, email render, and compact top-right actions only.
