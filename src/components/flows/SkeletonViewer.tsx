@@ -1259,6 +1259,64 @@ function MessagePreview({
   );
 }
 
+function FlowSummaryCard({
+  trigger,
+  flowType,
+  meta,
+  open,
+  onToggle,
+}: {
+  trigger: BoardNode;
+  flowType: string;
+  meta: ParsedFlowMeta;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const title = FLOW_TYPE_META[flowType]?.label || "Flow Strategy";
+  const filterCount = meta.filters?.length || 0;
+  const exitCount = meta.exit?.length || 0;
+  return (
+    <div className={`fl-brief ${open ? "open" : ""}`} style={{ transform: `translate(${trigger.x - 140}px, ${trigger.y - (open ? 250 : 72)}px)` }}>
+      <button className="fl-brief-head" onClick={onToggle} onMouseDown={(e) => e.stopPropagation()}>
+        <div className="fl-brief-badge"><Wand2 className="w-3.5 h-3.5" /></div>
+        <div className="fl-brief-main">
+          <div className="fl-brief-kicker">Flow summary</div>
+          <div className="fl-brief-title">{title}</div>
+        </div>
+        <div className="fl-brief-pill">{open ? "Collapse" : "Expand"}</div>
+      </button>
+      {open && (
+        <div className="fl-brief-body">
+          <div><p className="fl-brief-label">Trigger</p><p className="fl-brief-text">{trigger.label}</p></div>
+          <div><p className="fl-brief-label">Logic</p><p className="fl-brief-text">{filterCount} entry filters · {exitCount} exits</p></div>
+          <div><p className="fl-brief-label">Entry filters</p><p className="fl-brief-text">{meta.filters?.join(" • ") || "None specified"}</p></div>
+          <div><p className="fl-brief-label">Exit rules</p><p className="fl-brief-text">{meta.exit?.join(" • ") || "Default flow completion"}</p></div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NodePalette({ onAdd }: { onAdd: (kind: NodeKind) => void }) {
+  const items: NodeKind[] = ["email", "sms", "delay", "split", "exit"];
+  return (
+    <div className="fl-node-palette">
+      <div className="fl-node-palette-label">Nodes</div>
+      <div className="fl-node-palette-panel">
+        {items.map((kind) => {
+          const { Icon, label } = KIND_META[kind];
+          return (
+            <button key={kind} onClick={() => onAdd(kind)} title={`Add ${label}`}>
+              <span className="sw"><Icon className="w-3.5 h-3.5" /></span>
+              <span>{label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- Minimap ---------- */
 
 function Minimap({
