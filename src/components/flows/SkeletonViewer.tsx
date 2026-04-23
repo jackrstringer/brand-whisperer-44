@@ -315,6 +315,7 @@ export function SkeletonViewer({
   const [addPop, setAddPop] = useState<{ x: number; y: number } | null>(null);
   const [editingLabelOf, setEditingLabelOf] = useState<string | null>(null);
   const [labelDraft, setLabelDraft] = useState("");
+  const [briefOpen, setBriefOpen] = useState(false);
 
   const board = useMemo(
     () => buildBoard(parsedNodes, meta, flowType),
@@ -575,6 +576,8 @@ export function SkeletonViewer({
       return { edge, from, to, path: orthPath(from, to) };
     })
     .filter(Boolean) as { edge: BoardEdge; from: any; to: any; path: string }[];
+
+  const triggerNode = nodeById.trigger;
 
   /* -------- Add node via popover (placeholder — saves visually only) -------- */
   const addNodeAt = (kind: NodeKind, screenX: number, screenY: number) => {
