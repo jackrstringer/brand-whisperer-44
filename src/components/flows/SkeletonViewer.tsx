@@ -91,6 +91,9 @@ interface Props {
 /* ---------- Geometry ---------- */
 
 const NODE_W = 260;
+const NODE_MARGIN = 44;
+const BRANCH_X = 210;
+const BRANCH_Y = 92;
 function getNodeSize(kind: NodeKind) {
   if (kind === "delay") return { w: 220, h: 70 };
   if (kind === "split") return { w: 260, h: 130 };
@@ -158,10 +161,9 @@ function buildBoard(
   }
 
   // Walk parsed nodes; emails get an emailIndex assigned in parsed order.
-  // We DO NOT fabricate YES/NO branches anymore. A split is rendered as a
-  // single logic node with its branch labels listed inside it. Real branch
-  // graph rendering will only kick in once the skeleton format encodes
-  // explicit branch paths.
+  // Conditional splits always render as real Klaviyo-style YES/NO branches.
+  // Until explicit branch paths exist in the skeleton, the continuing path is
+  // YES and the empty branch is a real "Exit flow" node instead of a fake line.
   let emailIndex = 0;
   for (let i = 0; i < parsed.length; i++) {
     const p = parsed[i];
@@ -199,7 +201,24 @@ function buildBoard(
       emailIndex += 1;
     }
     out.push(node);
-    edges.push({ id: `e-${prev}-${id}`, from: prev, to: id });
+    edges.push({ id: `e-${prev}-${id}`, from: prev, to: id, branch: nodeByIdBranch(prev, kind) });
+
+    if (kind === "split") {
+      const splitSize = getNodeSize("split");
+      const yesExitId = `${id}-yes-exit`;
+      const noExitId = `${id}-no-exit`;
+      const isTerminalSplit = i === parsed.length - 1;
+      if (isTerminalSplit) {
+        out.push({ id: yesExitId, kind: "exit", label: "Exit the flow", x: COL - BRANCH_X, y: y + splitSize.h + BRANCH_Y, branch: "yes", meta: { items: ["No additional YES path configured"] } });
+        edges.push({ id: `e-${id}-yes-exit`, from: id, to: yesExitId, branch: "yes" });
+      }
+      out.push({ id: noExitId, kind: "exit", label: "Exit the flow", x: COL + BRANCH_X, y: y + splitSize.h + BRANCH_Y, branch: "no", meta: { items: ["No additional NO path configured"] } });
+      edges.push({ id: `e-${id}-no-exit`, from: id, to: noExitId, branch: "no" });
+      prev = id;
+      y += splitSize.h + VGAP + 30;
+      continue;
+    }
+
     prev = id;
     y += getNodeSize(kind).h + VGAP;
   }
@@ -219,6 +238,10 @@ function buildBoard(
   }
 
   return { nodes: out, edges };
+}
+
+function nodeByIdBranch(prevId: string, nextKind: NodeKind): "yes" | "no" | null {
+  return prevId.includes("-split") && nextKind !== "exit" ? "yes" : null;
 }
 
 /* ---------- Icons ---------- */
