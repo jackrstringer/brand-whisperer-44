@@ -979,7 +979,7 @@ export function SkeletonViewer({
                   : undefined
               }
               onRequestDelete={() => setDeleteTarget(n)}
-              onStartDrag={(e) => startNodeDrag(e, n)}
+              onStartDrag={(e, clickAction) => startNodeDrag(e, n, clickAction)}
               onDoubleClickTitle={() => {
                 setLabelDraft(n.label);
                 setEditingLabelOf(n.id);
@@ -1158,7 +1158,17 @@ export function SkeletonViewer({
         );
       })()}
 
-      {detailsNode && (
+      {detailsNode && (detailsNode.kind === "email" || detailsNode.kind === "sms") ? (
+        <FlowEmailDetail
+          node={detailsNode}
+          emailRow={typeof detailsNode.emailIndex === "number" ? emails.find((e) => e.sequence_index === detailsNode.emailIndex) : undefined}
+          campaignMeta={campaignMeta}
+          brandId={brandId}
+          flowType={flowType}
+          onClose={() => setDetailsNode(null)}
+          onGenerate={typeof detailsNode.emailIndex === "number" ? () => onGenerateNode(detailsNode.emailIndex!) : undefined}
+        />
+      ) : detailsNode && (
         <div className="fl-details-backdrop" onMouseDown={() => setDetailsNode(null)}>
           <div className="fl-details" onMouseDown={(e) => e.stopPropagation()}>
             <div className="fl-details-head">
@@ -1253,7 +1263,7 @@ function NodeView({
   onOpenDetails: () => void;
   onOpenPreview?: () => void;
   onRequestDelete: () => void;
-  onStartDrag: (e: React.MouseEvent) => void;
+  onStartDrag: (e: React.MouseEvent, clickAction?: () => void) => void;
   onDoubleClickTitle: () => void;
   onGenerate?: () => void;
   onExpand?: () => void;
