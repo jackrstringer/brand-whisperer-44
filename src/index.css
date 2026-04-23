@@ -625,8 +625,7 @@
   border-radius: 14px;
   box-shadow: 0 12px 40px rgba(10,10,10,0.06), 0 2px 8px rgba(10,10,10,0.04);
   overflow: hidden; width: 520px; z-index: 4;
-  display: flex; flex-direction: column-reverse;
-  transition: transform 220ms cubic-bezier(0.2,0.8,0.2,1), box-shadow 180ms;
+  transition: box-shadow 90ms ease;
 }
 .fl-brief.open { box-shadow: 0 22px 70px rgba(10,10,10,0.12), 0 2px 8px rgba(10,10,10,0.05); }
 .fl-brief-head {
@@ -644,9 +643,9 @@
 .fl-brief-badge svg { width: 14px; height: 14px; }
 .fl-brief-kicker { font-family: var(--fl-mono); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fl-ink-4); }
 .fl-brief-title { font-size: 14px; font-weight: 600; color: var(--fl-ink); margin-top: 2px; }
-.fl-brief-body { padding: 16px 16px 10px; border-bottom: 1px solid var(--fl-line); display: grid; grid-template-columns: 1fr 1fr; gap: 14px 22px; }
+.fl-brief-body { padding: 10px 16px 16px; border-top: 1px solid var(--fl-line); display: grid; grid-template-columns: 1fr 1fr; gap: 14px 22px; }
 .fl-brief-label { font-family: var(--fl-mono); font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--fl-ink-4); margin: 0 0 6px; }
 .fl-brief-text  { font-size: 12.5px; line-height: 1.5; color: var(--fl-ink-2); margin: 0; }
 
 @keyframes flFadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-.fl-node, .fl-sticky { animation: flFadeIn 220ms cubic-bezier(0.2,0.8,0.2,1); }
+.fl-sticky { animation: flFadeIn 140ms ease-out; }
