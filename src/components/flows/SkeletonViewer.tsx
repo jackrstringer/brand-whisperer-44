@@ -593,6 +593,12 @@ export function SkeletonViewer({
     });
   };
 
+  const cleanUpLayout = () => {
+    const cleaned = layoutFlowGraph(layoutNodes, graphEdges);
+    setLayoutNodes(cleaned);
+    requestAnimationFrame(fitToView);
+  };
+
   /* -------- Drag sticky -------- */
   const startStickyDrag = (e: React.MouseEvent, s: Sticky) => {
     if (e.button !== 0 || spaceHeld) return;
@@ -937,6 +943,9 @@ export function SkeletonViewer({
           <div className="fl-sep" />
           <button onClick={fitToView} title="Fit to view">
             <Maximize2 className="w-4 h-4" />
+          </button>
+          <button onClick={cleanUpLayout} title="Clean up layout">
+            <RefreshCw className="w-4 h-4" />
           </button>
         </div>
 
