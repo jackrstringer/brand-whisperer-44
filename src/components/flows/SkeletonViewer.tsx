@@ -724,6 +724,66 @@ export function SkeletonViewer({
     setSelected(id);
   };
 
+  const relayoutGraph = (nodes: BoardNode[], edges: BoardEdge[]) => {
+    setGraphEdges(edges);
+    setLayoutNodes(resolveNodeCollisions(layoutFlowGraph(nodes, edges)));
+  };
+
+  const deleteSticky = (id: string) => {
+    setStickies((arr) => arr.filter((s) => s.id !== id));
+    if (selectedSticky === id) setSelectedSticky(null);
+    setDeleteTarget(null);
+  };
+
+  const deleteLinearNode = (nodeId: string) => {
+    const incoming = graphEdges.filter((e) => e.to === nodeId);
+    const outgoing = graphEdges.filter((e) => e.from === nodeId);
+    const rewired: BoardEdge[] = [];
+    if (incoming.length === 1 && outgoing.length === 1) {
+      rewired.push({
+        id: `e-${incoming[0].from}-${outgoing[0].to}-${Date.now()}`,
+        from: incoming[0].from,
+        to: outgoing[0].to,
+        branch: incoming[0].branch ?? outgoing[0].branch ?? null,
+      });
+    }
+    const nextNodes = layoutNodes.filter((n) => n.id !== nodeId);
+    const nextEdges = graphEdges.filter((e) => e.from !== nodeId && e.to !== nodeId).concat(rewired);
+    relayoutGraph(nextNodes, nextEdges);
+    setSelected(null);
+    setDetailsNode(null);
+    setDeleteTarget(null);
+  };
+
+  const collectBranchNodeIds = (splitId: string, branch: "yes" | "no") => {
+    const startEdges = graphEdges.filter((e) => e.from === splitId && e.branch === branch);
+    const ids = new Set<string>();
+    const visit = (id: string) => {
+      if (ids.has(id)) return;
+      ids.add(id);
+      graphEdges.filter((e) => e.from === id).forEach((e) => visit(e.to));
+    };
+    startEdges.forEach((e) => visit(e.to));
+    return ids;
+  };
+
+  const deleteSplitPath = (splitId: string, mode: "yes" | "no" | "both") => {
+    const ids = new Set<string>();
+    if (mode === "yes" || mode === "both") collectBranchNodeIds(splitId, "yes").forEach((id) => ids.add(id));
+    if (mode === "no" || mode === "both") collectBranchNodeIds(splitId, "no").forEach((id) => ids.add(id));
+    if (mode === "both") ids.add(splitId);
+    const nextNodes = layoutNodes.filter((n) => !ids.has(n.id));
+    const nextEdges = graphEdges.filter((e) => !ids.has(e.from) && !ids.has(e.to));
+    relayoutGraph(nextNodes, nextEdges);
+    setSelected(null);
+    setDetailsNode(null);
+    setDeleteTarget(null);
+  };
+
+  const isStickyTarget = (target: BoardNode | Sticky | null): target is Sticky => {
+    return !!target && "text" in target;
+  };
+
   const startPaletteDrag = (kind: NodeKind, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
