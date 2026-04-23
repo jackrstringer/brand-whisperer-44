@@ -44,10 +44,7 @@ export default function FlowBuilderPage() {
 
   if (loading || !flow) {
     return (
-      <div
-        className="absolute inset-0 flex items-center justify-center text-foreground/55"
-        style={{ background: "hsl(var(--flow-canvas))" }}
-      >
+      <div className="absolute inset-0 flex items-center justify-center text-muted-foreground bg-background">
         <Loader2 className="w-4 h-4 animate-spin mr-2" />
         Loading flow…
       </div>
@@ -60,7 +57,7 @@ export default function FlowBuilderPage() {
     triggerNode?.data.trigger_metric_name || triggerNode?.data.label || "(no trigger)";
 
   return (
-    <div className="absolute inset-0" style={{ background: "hsl(var(--flow-canvas))" }}>
+    <div className="absolute inset-0 bg-background">
       <TopBar
         brandId={brandId!}
         flowName={flow.name}
