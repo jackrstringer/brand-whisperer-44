@@ -23,6 +23,7 @@ import {
   Loader2,
   Minus as MinusIcon,
   Maximize2,
+  RefreshCw,
   X as XIcon,
 } from "lucide-react";
 import {
@@ -112,7 +113,7 @@ function getNodeSize(kind: NodeKind) {
   if (kind === "split") return { w: 260, h: 118 };
   if (kind === "trigger_split") return { w: 280, h: 120 };
   if (kind === "filters") return { w: 260, h: 100 };
-  if (kind === "exit") return { w: 260, h: 82 };
+  if (kind === "exit") return { w: 46, h: 46 };
   if (kind === "trigger") return { w: 240, h: 96 };
   return { w: 280, h: 110 }; // email / sms
 }
@@ -592,6 +593,12 @@ export function SkeletonViewer({
     });
   };
 
+  const cleanUpLayout = () => {
+    const cleaned = layoutFlowGraph(layoutNodes, graphEdges);
+    setLayoutNodes(cleaned);
+    requestAnimationFrame(fitToView);
+  };
+
   /* -------- Drag sticky -------- */
   const startStickyDrag = (e: React.MouseEvent, s: Sticky) => {
     if (e.button !== 0 || spaceHeld) return;
@@ -937,6 +944,9 @@ export function SkeletonViewer({
           <button onClick={fitToView} title="Fit to view">
             <Maximize2 className="w-4 h-4" />
           </button>
+          <button onClick={cleanUpLayout} title="Clean up layout">
+            <RefreshCw className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Bottom-left minimap */}
@@ -1090,6 +1100,23 @@ function NodeView({
   const km = KIND_META[node.kind];
   const I = km.Icon;
 
+  if (node.kind === "exit") {
+    return (
+      <div
+        className={`fl-node fl-exit-chip kind-${node.kind} ${selected ? "sel" : ""}`}
+        style={{ transform: `translate(${node.x}px, ${node.y}px)`, width: sz.w, height: sz.h }}
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          onSelect();
+          onStartDrag(e);
+        }}
+        title={node.meta?.items?.[0] || "Exit the flow"}
+      >
+        <I className="w-4 h-4" />
+      </div>
+    );
+  }
+
   return (
     <div
       className={`fl-node kind-${node.kind} ${selected ? "sel" : ""} ${
@@ -1198,16 +1225,6 @@ function NodeView({
               +{node.meta!.items.length - 3} more
             </div>
           )}
-        </div>
-      )}
-
-      {node.kind === "exit" && (
-        <div className="fl-body">
-          {(node.meta?.items || []).slice(0, 3).map((it: string, i: number) => (
-            <div key={i} className="fl-row" style={{ borderTop: i ? "1px dashed var(--fl-line)" : "none", paddingTop: i ? 6 : 0 }}>
-              <span className="v" style={{ textAlign: "left", fontSize: 11, color: "var(--fl-ink-2)" }}>{it}</span>
-            </div>
-          ))}
         </div>
       )}
 
@@ -1364,15 +1381,7 @@ function FlowSummaryCard({
   const filterCount = meta.filters?.length || 0;
   const exitCount = meta.exit?.length || 0;
   return (
-    <div className={`fl-brief ${open ? "open" : ""}`} style={{ transform: `translate(${trigger.x - 140}px, ${trigger.y - 72}px)` }}>
-      {open && (
-        <div className="fl-brief-body">
-          <div><p className="fl-brief-label">Trigger</p><p className="fl-brief-text">{trigger.label}</p></div>
-          <div><p className="fl-brief-label">Logic</p><p className="fl-brief-text">{filterCount} entry filters · {exitCount} exits</p></div>
-          <div><p className="fl-brief-label">Entry filters</p><p className="fl-brief-text">{meta.filters?.join(" • ") || "None specified"}</p></div>
-          <div><p className="fl-brief-label">Exit rules</p><p className="fl-brief-text">{meta.exit?.join(" • ") || "Default flow completion"}</p></div>
-        </div>
-      )}
+    <div className={`fl-brief ${open ? "open" : ""}`} style={{ transform: `translate(${trigger.x - 140}px, ${trigger.y - 72}px) translateY(-100%)` }}>
       <button className="fl-brief-head" onClick={onToggle} onMouseDown={(e) => e.stopPropagation()}>
         <div className="fl-brief-badge"><Wand2 className="w-3.5 h-3.5" /></div>
         <div className="fl-brief-main">
@@ -1381,6 +1390,14 @@ function FlowSummaryCard({
         </div>
         <div className="fl-brief-pill">{open ? "Collapse" : "Expand"}</div>
       </button>
+      {open && (
+        <div className="fl-brief-body">
+          <div><p className="fl-brief-label">Trigger</p><p className="fl-brief-text">{trigger.label}</p></div>
+          <div><p className="fl-brief-label">Logic</p><p className="fl-brief-text">{filterCount} entry filters · {exitCount} exits</p></div>
+          <div><p className="fl-brief-label">Entry filters</p><p className="fl-brief-text">{meta.filters?.join(" • ") || "None specified"}</p></div>
+          <div><p className="fl-brief-label">Exit rules</p><p className="fl-brief-text">{meta.exit?.join(" • ") || "Default flow completion"}</p></div>
+        </div>
+      )}
     </div>
   );
 }
