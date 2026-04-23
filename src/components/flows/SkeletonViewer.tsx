@@ -1160,6 +1160,8 @@ function NodeView({
   onLabelDraft,
   onLabelCommit,
   onSelect,
+  onOpenDetails,
+  onRequestDelete,
   onStartDrag,
   onDoubleClickTitle,
   onGenerate,
@@ -1175,6 +1177,8 @@ function NodeView({
   onLabelDraft: (v: string) => void;
   onLabelCommit: () => void;
   onSelect: () => void;
+  onOpenDetails: () => void;
+  onRequestDelete: () => void;
   onStartDrag: (e: React.MouseEvent) => void;
   onDoubleClickTitle: () => void;
   onGenerate?: () => void;
@@ -1197,9 +1201,18 @@ function NodeView({
           onSelect();
           onStartDrag(e);
         }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          onOpenDetails();
+        }}
         title={node.meta?.items?.[0] || "Exit the flow"}
       >
         <I className="w-4 h-4" />
+        {selected && (
+          <button className="fl-node-delete" onMouseDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onRequestDelete(); }} title="Delete">
+            <Trash2 className="w-3 h-3" />
+          </button>
+        )}
       </div>
     );
   }
@@ -1217,6 +1230,10 @@ function NodeView({
         e.stopPropagation();
         onSelect();
         onStartDrag(e);
+      }}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        onOpenDetails();
       }}
     >
       <div className="fl-node-head">
@@ -1287,6 +1304,19 @@ function NodeView({
             ) : (
               <Sparkles className="w-3 h-3" />
             )}
+          </button>
+        )}
+        {selected && (
+          <button
+            className="fl-node-delete"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRequestDelete();
+            }}
+            title="Delete"
+          >
+            <Trash2 className="w-3 h-3" />
           </button>
         )}
       </div>
