@@ -977,6 +977,7 @@ function NodeView({
   onLabelDraft,
   onLabelCommit,
   onSelect,
+  onStartDrag,
   onDoubleClickTitle,
   onGenerate,
   onExpand,
@@ -991,6 +992,7 @@ function NodeView({
   onLabelDraft: (v: string) => void;
   onLabelCommit: () => void;
   onSelect: () => void;
+  onStartDrag: (e: React.MouseEvent) => void;
   onDoubleClickTitle: () => void;
   onGenerate?: () => void;
   onExpand?: () => void;
@@ -1014,6 +1016,7 @@ function NodeView({
       onMouseDown={(e) => {
         e.stopPropagation();
         onSelect();
+        onStartDrag(e);
       }}
     >
       <div className="fl-node-head">
