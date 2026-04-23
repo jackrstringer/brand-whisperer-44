@@ -964,6 +964,8 @@ export function SkeletonViewer({
                 setSelected(n.id);
                 setSelectedSticky(null);
               }}
+              onOpenDetails={() => setDetailsNode(n)}
+              onRequestDelete={() => setDeleteTarget(n)}
               onStartDrag={(e) => startNodeDrag(e, n)}
               onDoubleClickTitle={() => {
                 setLabelDraft(n.label);
