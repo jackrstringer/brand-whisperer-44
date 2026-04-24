@@ -224,7 +224,6 @@ function buildBoard(
           : kind === "split"
           ? {
               condition: p.notes || p.label || "",
-              branches: p.branches || [],
             }
           : kind === "email" || kind === "sms"
           ? {
@@ -251,10 +250,10 @@ function buildBoard(
       const noExitId = `${id}-no-exit`;
       const isTerminalSplit = i === parsed.length - 1;
       if (isTerminalSplit) {
-        out.push({ id: yesExitId, kind: "exit", label: "Exit the flow", x: COL - BRANCH_X, y: y + splitSize.h + BRANCH_Y, branch: "yes", meta: { items: ["No additional YES path configured"] } });
+        out.push({ id: yesExitId, kind: "exit", label: "Exit the flow", x: COL - BRANCH_X, y: y + splitSize.h + BRANCH_Y, branch: "yes", meta: {} });
         edges.push({ id: `e-${id}-yes-exit`, from: id, to: yesExitId, branch: "yes" });
       }
-      out.push({ id: noExitId, kind: "exit", label: "Exit the flow", x: COL + BRANCH_X, y: y + splitSize.h + BRANCH_Y, branch: "no", meta: { items: ["No additional NO path configured"] } });
+      out.push({ id: noExitId, kind: "exit", label: "Exit the flow", x: COL + BRANCH_X, y: y + splitSize.h + BRANCH_Y, branch: "no", meta: {} });
       edges.push({ id: `e-${id}-no-exit`, from: id, to: noExitId, branch: "no" });
       prev = id;
       y += splitSize.h + VGAP + 30;
@@ -731,7 +730,7 @@ export function SkeletonViewer({
       x: target.x - size.w / 2,
       y: target.y - size.h / 2,
       branch: target.edge.branch ?? null,
-      meta: kind === "split" || kind === "trigger_split" ? { condition: "New split", branches: [{ label: "YES" }, { label: "NO" }] } : {},
+      meta: kind === "split" || kind === "trigger_split" ? { condition: "New split" } : {},
     };
     setGraphEdges((edges) => {
       const nextEdges = [
