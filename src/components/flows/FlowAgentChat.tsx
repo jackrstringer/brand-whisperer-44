@@ -11,6 +11,8 @@ import {
   ChevronDown,
   ChevronUp,
   MessageSquare,
+  CheckCircle2,
+  PencilLine,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
@@ -35,7 +37,10 @@ interface Props {
 
 interface FlowQuestion {
   question: string;
-  options?: string[];
+  helper?: string;
+  input_label?: string;
+  input_placeholder?: string;
+  options?: Array<string | { label: string; description?: string; value?: string }>;
   allow_other?: boolean;
 }
 
@@ -48,6 +53,7 @@ interface FlowSynth {
 const QUESTION_FENCE = /```flow-question\s*([\s\S]*?)```/;
 const SYNTH_FENCE = /```flow-synth\s*([\s\S]*?)```/;
 const SKELETON_FENCE = /```flow-skeleton[\s\S]*?```/;
+const CONTROL_FENCE_START = /```flow-(question|synth|skeleton|setup)/;
 
 function shouldAutoRestart(messages: Msg[], currentSkeleton: string | null): boolean {
   if (currentSkeleton || messages.length !== 1) return false;
@@ -80,11 +86,14 @@ function extractSynth(content: string): FlowSynth | null {
 }
 
 function stripFences(content: string): string {
-  return content
+  const withoutCompleteFences = content
     .replace(QUESTION_FENCE, "")
     .replace(SYNTH_FENCE, "")
     .replace(SKELETON_FENCE, "")
-    .trim();
+    .replace(/```flow-setup\s*[\s\S]*?```/g, "");
+
+  const partialStart = withoutCompleteFences.search(CONTROL_FENCE_START);
+  return (partialStart >= 0 ? withoutCompleteFences.slice(0, partialStart) : withoutCompleteFences).trim();
 }
 
 const STAGE_META: Record<string, { label: string }> = {
@@ -294,8 +303,8 @@ export function FlowAgentChat({
   if (centered) {
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
-        <div className="w-full max-w-xl flex flex-col gap-4">
-          <div ref={scrollRef} className="max-h-[55vh] overflow-y-auto space-y-3 pr-1">
+        <div className="w-full max-w-2xl flex flex-col gap-4">
+          <div ref={scrollRef} className="max-h-[68vh] overflow-y-auto space-y-3 pr-1">
             {visibleMessages.map((m, i) => {
               const isLastAssistant = i === lastAssistantIdx;
               const question = m.role === "assistant" ? extractQuestion(m.content) : null;
@@ -578,24 +587,24 @@ function InlineShimmer({ label }: { label: string }) {
 
 function SynthCard({ synth }: { synth: FlowSynth }) {
   return (
-    <div className="rounded-2xl border border-foreground/15 bg-card p-4 space-y-3 animate-fade-in">
+    <div className="rounded-2xl border border-foreground/15 bg-card p-5 space-y-4 animate-fade-in shadow-sm">
       {synth.headline && (
         <div className="flex items-start gap-2">
           <Sparkles className="w-3.5 h-3.5 text-foreground/60 mt-0.5 flex-shrink-0" />
-          <p className="text-[13.5px] font-medium text-foreground leading-snug">
+          <p className="text-[15px] font-semibold text-foreground leading-snug">
             {synth.headline}
           </p>
         </div>
       )}
       {synth.facts && synth.facts.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {synth.facts.map((f, i) => (
             <div
               key={i}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted text-[12px]"
+              className="rounded-xl bg-muted px-3 py-2 text-[12.5px]"
             >
-              <span className="text-foreground/55">{f.label}:</span>
-              <span className="font-medium text-foreground">{f.value}</span>
+              <span className="block text-foreground/55">{f.label}</span>
+              <span className="block font-semibold text-foreground mt-0.5 leading-snug">{f.value}</span>
             </div>
           ))}
         </div>
@@ -658,7 +667,10 @@ function MessageBubble({
           <div className="flex justify-start">
             <div className="max-w-[88%] rounded-2xl px-4 py-2.5 text-[13.5px] bg-muted text-foreground">
               {question ? (
-                <div className="font-medium text-foreground mb-2">{question.question}</div>
+                <div className="mb-2">
+                  <div className="font-semibold text-foreground">{question.question}</div>
+                  {question.helper && <div className="mt-1 text-[12.5px] leading-relaxed text-foreground/60">{question.helper}</div>}
+                </div>
               ) : null}
               {cleanContent && (
                 <div className="prose prose-sm dark:prose-invert max-w-none [&>*]:my-1.5">
@@ -693,7 +705,10 @@ function MessageBubble({
         }`}
       >
         {question ? (
-          <div className="font-medium text-foreground mb-2">{question.question}</div>
+          <div className="mb-2">
+            <div className="font-semibold text-foreground">{question.question}</div>
+            {question.helper && <div className="mt-1 text-[12.5px] leading-relaxed text-foreground/60">{question.helper}</div>}
+          </div>
         ) : cleanContent ? (
           <div className="prose prose-sm dark:prose-invert max-w-none [&>*]:my-1.5">
             <ReactMarkdown>{cleanContent}</ReactMarkdown>
@@ -729,7 +744,7 @@ function QuestionChips({
   onAnswer,
   disabled,
 }: {
-  options: string[];
+  options: Array<string | { label: string; description?: string; value?: string }>;
   allowOther: boolean;
   onAnswer: (answer: string) => void;
   disabled?: boolean;
@@ -739,24 +754,37 @@ function QuestionChips({
 
   return (
     <div className="mt-3 space-y-2">
-      <div className="flex flex-wrap gap-1.5">
-        {options.map((opt) => (
+      <div className="grid gap-1.5">
+        {options.map((opt) => {
+          const option = typeof opt === "string" ? { label: opt, value: opt } : opt;
+          return (
           <button
-            key={opt}
+            key={`${option.label}:${option.value || option.label}`}
             disabled={disabled}
-            onClick={() => onAnswer(opt)}
-            className="px-3 py-1.5 text-[12px] font-medium rounded-full bg-card border border-foreground/15 hover:bg-muted hover:border-foreground/35 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-foreground"
+            onClick={() => onAnswer(option.value || option.label)}
+            className="group text-left px-3 py-2.5 text-[12.5px] font-medium rounded-xl bg-card border border-foreground/15 hover:bg-muted hover:border-foreground/35 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-foreground"
           >
-            {opt}
+            <span className="flex items-start gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 text-foreground/35 group-hover:text-foreground/70 flex-shrink-0" />
+              <span className="min-w-0">
+                <span className="block leading-snug">{option.label}</span>
+                {option.description && (
+                  <span className="block mt-1 text-[11.5px] leading-relaxed text-foreground/55 font-normal">
+                    {option.description}
+                  </span>
+                )}
+              </span>
+            </span>
           </button>
-        ))}
+          );
+        })}
         {allowOther && !showOther && (
           <button
             disabled={disabled}
             onClick={() => setShowOther(true)}
-            className="px-3 py-1.5 text-[12px] font-medium rounded-full bg-card border border-dashed border-foreground/20 hover:border-foreground/40 transition-colors disabled:opacity-50 text-foreground/60"
+            className="text-left px-3 py-2.5 text-[12.5px] font-medium rounded-xl bg-card border border-dashed border-foreground/20 hover:border-foreground/40 transition-colors disabled:opacity-50 text-foreground/70"
           >
-            Something else?
+            <span className="flex items-center gap-2"><PencilLine className="w-3.5 h-3.5" /> Enter different details</span>
           </button>
         )}
       </div>
@@ -774,8 +802,8 @@ function QuestionChips({
               }
             }}
             disabled={disabled}
-            placeholder="Type your answer…"
-            className="flex-1 px-3 py-1.5 text-[12px] rounded-full bg-card border border-foreground/15 focus:outline-none focus:border-foreground/45 text-foreground"
+            placeholder={"Type your answer…"}
+            className="flex-1 px-3 py-2 text-[12.5px] rounded-xl bg-card border border-foreground/15 focus:outline-none focus:border-foreground/45 text-foreground"
           />
           <Button
             size="sm"

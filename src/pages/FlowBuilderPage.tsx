@@ -26,6 +26,8 @@ interface FlowRow {
   flow_type: string;
   name: string;
   status: string;
+  setup_status?: string;
+  setup_data?: any;
   skeleton_markdown: string | null;
   messages: any;
 }
@@ -188,9 +190,18 @@ export default function FlowBuilderPage() {
       const prevNode = emailNodes[emailIndex - 1];
       const nextNode = emailNodes[emailIndex + 1];
 
+      const setupContext = flow.setup_data ? JSON.stringify(flow.setup_data, null, 2) : "{}";
       const brief = `FLOW CONTEXT: This is email ${emailIndex + 1} in a ${flow.flow_type} flow.
 Previous email: ${prevNode?.label || "none"}
 Next email: ${nextNode?.label || "none"}
+
+CONFIRMED FLOW SETUP:
+${setupContext}
+
+SETUP RULES:
+- If confirmed_mode is static_code, use the confirmed static code exactly.
+- If confirmed_mode is dynamic_coupon, use the confirmed Klaviyo coupon pool/name with correct dynamic coupon Liquid syntax; never hardcode it as plain text.
+- Reflect confirmed primary products and product scope in product emphasis and feed choices.
 
 EMAIL SPEC:
 Job: ${node.job || "(unspecified)"}

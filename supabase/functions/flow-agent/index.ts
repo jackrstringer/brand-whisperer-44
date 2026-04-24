@@ -48,6 +48,62 @@ function readSkill(filename: string): string {
 
 const INTEL_SELECT = "compiled_context, klaviyo_compiled, ai_research, research_status";
 
+function compact(value: unknown, max = 6000) {
+  const text = typeof value === "string" ? value : JSON.stringify(value || {}, null, 2);
+  return text.length > max ? `${text.slice(0, max)}\n...[truncated]` : text;
+}
+
+function deriveSetupCandidates(intel: any, klaviyoConn: any) {
+  const source = `${compact(intel?.ai_research, 5000)}\n\n${intel?.compiled_context || ""}`;
+  const offerLines = source
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => /\b(offer|discount|coupon|code|% off|free shipping|welcome|subscribe|save)\b/i.test(line))
+    .slice(0, 6);
+  const productLines = source
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => /\b(hero product|primary product|best seller|bestseller|product|collection|catalog)\b/i.test(line))
+    .slice(0, 6);
+  return {
+    offer: { detected_candidates: offerLines },
+    products: { detected_hero_products: productLines },
+    merchandising: { klaviyo_stats_available: !!klaviyoConn?.cached_stats },
+    confirmations: {},
+  };
+}
+
+function mergeSetupData(base: any, incoming: any) {
+  const next = { ...(base || {}) };
+  for (const [key, value] of Object.entries(incoming || {})) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      next[key] = { ...(next[key] || {}), ...(value as Record<string, unknown>) };
+    } else {
+      next[key] = value;
+    }
+  }
+  return next;
+}
+
+function extractSetupDataFromResponse(text: string) {
+  const match = text.match(/```flow-setup\s*([\s\S]*?)```/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1].trim());
+  } catch {
+    return null;
+  }
+}
+
+function setupLooksConfirmed(setup: any) {
+  return !!(
+    setup?.confirmations?.offer_confirmed &&
+    setup?.confirmations?.product_priority_confirmed &&
+    setup?.offer?.confirmed_mode &&
+    setup?.products?.scope
+  );
+}
+
 async function invokeInternalFunction(name: string, payload: Record<string, unknown>) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -71,7 +127,7 @@ async function invokeInternalFunction(name: string, payload: Record<string, unkn
 }
 
 async function pollBrandIntelligence(
-  sb: ReturnType<typeof createClient>,
+  sb: any,
   brandId: string,
   predicate: (intel: any) => boolean,
   timeoutMs = 120000
@@ -87,7 +143,7 @@ async function pollBrandIntelligence(
       .maybeSingle();
 
     if (error) throw error;
-    lastStatus = data?.research_status || "unknown";
+    lastStatus = (data as any)?.research_status || "unknown";
 
     if (lastStatus === "failed") {
       throw new Error("Brand research failed. Re-run brand intelligence, then try Flow Mode again.");
@@ -107,7 +163,7 @@ async function ensureCompiledContext({
   domain,
   existingIntel,
 }: {
-  sb: ReturnType<typeof createClient>;
+  sb: any;
   brandId: string;
   brandName: string;
   domain: string | null | undefined;
@@ -199,7 +255,7 @@ Deno.serve(async (req) => {
           .eq("brand_id", brand_id)
           .maybeSingle(),
         sb.from("brands").select("name, industry, website_url").eq("id", brand_id).maybeSingle(),
-        sb.from("flows").select("messages, skeleton_markdown").eq("id", flow_id).maybeSingle(),
+        sb.from("flows").select("messages, skeleton_markdown, setup_status, setup_data").eq("id", flow_id).maybeSingle(),
       ]);
 
     const isInit = message === "__FLOW_INIT__";
@@ -220,6 +276,10 @@ Deno.serve(async (req) => {
           existingIntel: brandIntel,
         })
       : brandIntel;
+
+    const researchedSetup = deriveSetupCandidates(preparedIntel, klaviyoConn);
+    const existingSetupData = mergeSetupData(researchedSetup, flowRow?.setup_data || {});
+    const setupConfirmed = setupLooksConfirmed(existingSetupData);
 
     // Per-flow audience constraints — prevents content drift (e.g. post-purchase
     // content like "your order has arrived" appearing in a welcome flow).
@@ -275,6 +335,9 @@ ${preparedIntel?.compiled_context || "(no compiled brand intelligence yet)"}
 KLAVIYO PERFORMANCE DATA:
 ${preparedIntel?.klaviyo_compiled || "(no klaviyo data)"}
 
+CURRENT STRUCTURED FLOW SETUP DATA:
+${JSON.stringify(existingSetupData, null, 2)}
+
 ============================================================
 FLOW TYPE: ${flow_type.toUpperCase().replace(/_/g, " ")}
 TRIGGER: ${triggerLabel}
@@ -283,21 +346,32 @@ ${audienceRules}
 
 The audience definition above is HARD. Every email you spec MUST be appropriate for that audience. If you catch yourself writing a "your gum has arrived" email inside a welcome flow, you have failed the assignment. Re-read the audience rule before writing each email.
 
-CORE PRINCIPLE — RESEARCH FIRST, ASK LAST:
+CORE PRINCIPLE — RESEARCH, PROPOSE, CONFIRM, THEN BUILD:
 The brand intelligence above is the result of deep research. Before you ask ANY question, you MUST:
 1. Read the brand intelligence end-to-end.
 2. Extract every fact relevant to this flow type (hero products, offers, codes, proof points, objections, send times, voice).
-3. Make every strategic decision yourself (email count, timing, cadence, hooks, sequencing, channel).
-4. Only ask the user about things that are GENUINELY missing or AMBIGUOUS in the research AND that only the user can answer.
+3. Propose researched defaults for operator-controlled choices.
+4. Confirm the setup with structured interaction before skeleton generation.
 
-If the hero product, primary offer, social proof, and core value props are already in the research, you have enough — generate the skeleton immediately. Do NOT ask "which product should we feature?" if the research names a clear hero product. Do NOT ask about discount strength if known welcome codes are listed. Do NOT ask about positioning if the brand voice and objections are documented.
+HARD SETUP GATE:
+NEVER generate a flow skeleton until these are confirmed in CURRENT STRUCTURED FLOW SETUP DATA or in this turn via a flow-setup block:
+- offer_confirmed = true
+- product_priority_confirmed = true
+- offer.confirmed_mode is one of: none, static_code, dynamic_coupon
+- products.scope is one of: hero, category, catalog
+- if offer.confirmed_mode = dynamic_coupon, offer.dynamic_coupon_pool must be present
+
+Do NOT ask blank generic questions like "what is the offer?". Use the research above to say what you found and ask the user to confirm, edit, or choose none.
+
+DYNAMIC COUPON RULE:
+If the user chooses a Klaviyo dynamic coupon, store the coupon pool/name in setup_data and instruct downstream generation to use Klaviyo dynamic coupon Liquid syntax with that coupon name. Never hardcode a dynamic coupon as plain text.
 
 CONVERSATION RULES (CRITICAL):
 - YOU are the email marketing expert. Never ask the user to make strategic decisions.
-- ONE question at a time, only when truly blocking.
+- ONE setup confirmation at a time until setup is complete.
 - Be terse. No preamble, no recap of brand intelligence in prose, no "great question" filler.
 - NEVER ask whether they have an existing flow — assume net new.
-- NEVER ask about facts that already appear in the brand intelligence above. Re-read before asking.
+- NEVER skip setup confirmation just because research found likely answers.
 
 RESPONSE FORMAT — BRAND SYNTHESIS BLOCK (use on the FIRST turn or when re-orienting):
 Before any question or skeleton, output a tight synthesis block in this exact shape (a fenced \`flow-synth\` JSON block):
@@ -322,7 +396,28 @@ Before any question or skeleton, output a tight synthesis block in this exact sh
 
 QUESTION FORMAT (use only when truly necessary):
 \`\`\`flow-question
-{ "question": "Short, specific question.", "options": ["Option 1","Option 2"], "allow_other": true }
+{ "question": "Short, specific question.", "helper": "Optional one-line context from research.", "options": [{"label":"Option 1","description":"Why this is likely","value":"Option 1"}], "allow_other": true }
+\`\`\`
+
+SETUP DATA FORMAT:
+Whenever the user confirms or edits setup, include a hidden fenced setup block in the same response. The UI will not show it, but the backend will persist it.
+\`\`\`flow-setup
+{
+  "offer": {
+    "detected_candidates": [],
+    "confirmed_mode": "none | static_code | dynamic_coupon",
+    "description": "",
+    "static_code": "",
+    "dynamic_coupon_pool": ""
+  },
+  "products": {
+    "detected_hero_products": [],
+    "confirmed_primary_products": [],
+    "scope": "hero | category | catalog"
+  },
+  "merchandising": { "selected_feed_preset": "", "notes": "" },
+  "confirmations": { "offer_confirmed": false, "product_priority_confirmed": false }
+}
 \`\`\`
 
 SKELETON GENERATION — STRICT BRACKET FORMAT (CRITICAL):
@@ -405,10 +500,10 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
     if (bootingFreshFlow && conversation.length === 0) {
       messages.push({
         role: "user",
-        content: `Begin building a ${flow_type.replace(/_/g, " ")} flow for this brand. First, synthesize the actual researched brand context you were given. If there is enough information, generate the full custom skeleton immediately in a single response. Only ask one clarifying question if a missing brand-specific fact truly blocks you. Do not ask a generic template question before doing the research-based synthesis. No greetings. No recap. No placeholder defaults.`,
+        content: `Begin setup for a ${flow_type.replace(/_/g, " ")} flow. First, synthesize researched context with a flow-synth block. Then ask the first required setup confirmation with a flow-question block. Do not generate a skeleton yet unless the hard setup gate is already satisfied. No greetings. No raw JSON outside fenced control blocks.`,
       });
     } else if (!isInit && !isRestart) {
-      messages.push({ role: "user", content: message });
+      messages.push({ role: "user", content: `${message}\n\nUpdate flow-setup if this confirms or edits setup. If setup is now complete, generate the full skeleton. Otherwise ask the next setup confirmation.` });
     }
 
     const stream = new ReadableStream({
@@ -541,13 +636,19 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
           ];
 
           const skeletonMatch = fullText.match(/```flow-skeleton\s*([\s\S]*?)```/);
+          const setupPatch = extractSetupDataFromResponse(fullText);
+          const nextSetupData = setupPatch ? mergeSetupData(existingSetupData, setupPatch) : existingSetupData;
+          const nextSetupConfirmed = setupLooksConfirmed(nextSetupData);
           const updates: Record<string, unknown> = {
             messages: newConversation,
             updated_at: new Date().toISOString(),
+            setup_data: nextSetupData,
+            setup_status: nextSetupConfirmed ? "ready_for_skeleton" : "needs_confirmation",
           };
           if (skeletonMatch) {
             updates.skeleton_markdown = skeletonMatch[1].trim();
             updates.status = "skeleton_ready";
+            updates.setup_status = "skeleton_ready";
           }
 
           await sb.from("flows").update(updates).eq("id", flow_id);
