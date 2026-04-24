@@ -48,6 +48,62 @@ function readSkill(filename: string): string {
 
 const INTEL_SELECT = "compiled_context, klaviyo_compiled, ai_research, research_status";
 
+function compact(value: unknown, max = 6000) {
+  const text = typeof value === "string" ? value : JSON.stringify(value || {}, null, 2);
+  return text.length > max ? `${text.slice(0, max)}\n...[truncated]` : text;
+}
+
+function deriveSetupCandidates(intel: any, klaviyoConn: any) {
+  const source = `${compact(intel?.ai_research, 5000)}\n\n${intel?.compiled_context || ""}`;
+  const offerLines = source
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => /\b(offer|discount|coupon|code|% off|free shipping|welcome|subscribe|save)\b/i.test(line))
+    .slice(0, 6);
+  const productLines = source
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter((line) => /\b(hero product|primary product|best seller|bestseller|product|collection|catalog)\b/i.test(line))
+    .slice(0, 6);
+  return {
+    offer: { detected_candidates: offerLines },
+    products: { detected_hero_products: productLines },
+    merchandising: { klaviyo_stats_available: !!klaviyoConn?.cached_stats },
+    confirmations: {},
+  };
+}
+
+function mergeSetupData(base: any, incoming: any) {
+  const next = { ...(base || {}) };
+  for (const [key, value] of Object.entries(incoming || {})) {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      next[key] = { ...(next[key] || {}), ...(value as Record<string, unknown>) };
+    } else {
+      next[key] = value;
+    }
+  }
+  return next;
+}
+
+function extractSetupDataFromResponse(text: string) {
+  const match = text.match(/```flow-setup\s*([\s\S]*?)```/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1].trim());
+  } catch {
+    return null;
+  }
+}
+
+function setupLooksConfirmed(setup: any) {
+  return !!(
+    setup?.confirmations?.offer_confirmed &&
+    setup?.confirmations?.product_priority_confirmed &&
+    setup?.offer?.confirmed_mode &&
+    setup?.products?.scope
+  );
+}
+
 async function invokeInternalFunction(name: string, payload: Record<string, unknown>) {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
