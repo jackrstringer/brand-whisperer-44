@@ -720,7 +720,7 @@ export function SkeletonViewer({
     setZoom(z);
     setPan({
       x: (r.width - (maxX - minX) * z) / 2 - minX * z,
-      y: 80 - minY * z,
+      y: effectiveOrientation === "horizontal" ? (r.height - (maxY - minY) * z) / 2 - minY * z : 80 - minY * z,
     });
   };
 
@@ -1192,6 +1192,25 @@ export function SkeletonViewer({
 
         {/* Bottom-left minimap */}
         {mode === "detail" && <Minimap board={displayBoard} pan={pan} zoom={zoom} stageRef={stageRef} />}
+
+        {mode === "review" && (
+          <div className="fl-orientation" onMouseDown={(e) => e.stopPropagation()}>
+            <button
+              className={orientation === "horizontal" ? "on" : ""}
+              onClick={() => setOrientation("horizontal")}
+              title="Left-to-right layout"
+            >
+              Left → Right
+            </button>
+            <button
+              className={orientation === "vertical" ? "on" : ""}
+              onClick={() => setOrientation("vertical")}
+              title="Top-to-bottom layout"
+            >
+              Top ↓ Bottom
+            </button>
+          </div>
+        )}
 
         {/* Bottom-right zoom control */}
         <div className="fl-zoom" onMouseDown={(e) => e.stopPropagation()}>
