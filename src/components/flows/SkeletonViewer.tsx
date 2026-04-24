@@ -1683,7 +1683,7 @@ function ReviewNodeView({
   return (
     <div
       className={`fl-review-node fl-review-${node.kind} ${expanded && isMessage ? "expanded" : "collapsed"} ${locked ? "locked" : ""} ${selected ? "sel" : ""}`}
-      style={{ transform: `translate(${node.x}px, ${node.y}px)`, width: sz.w, minHeight: sz.h }}
+      style={{ transform: `translate(${node.x}px, ${node.y}px)`, width: sz.w, height: sz.h }}
       onPointerEnter={() => isMessage && onHover?.(node.id)}
       onPointerLeave={() => isMessage && onHover?.(null)}
       onMouseDown={(e) => { e.stopPropagation(); onSelect(); onStartDrag(e); }}
