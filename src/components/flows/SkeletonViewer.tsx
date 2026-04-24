@@ -126,16 +126,59 @@ const LINEAR_Y_GAP = 64;
 const SPLIT_Y_GAP = 104;
 const SIBLING_X_GAP = 96;
 const SPLIT_BRANCH_GAP = 112;
-function getNodeSize(kind: NodeKind, mode: "review" | "detail" = "detail", expanded = false) {
+const REVIEW_MESSAGE_WIDTH = 560;
+const REVIEW_MESSAGE_COLLAPSED_HEIGHT = 108;
+const REVIEW_MESSAGE_EXPANDED_MIN_HEIGHT = 388;
+
+function estimateReviewTextLines(text: string, charsPerLine: number) {
+  const value = text.trim();
+  if (!value) return 0;
+  return Math.max(1, Math.ceil(value.length / charsPerLine));
+}
+
+function getReviewExpandedMessageHeight(node?: BoardNode) {
+  if (!node) return REVIEW_MESSAGE_EXPANDED_MIN_HEIGHT;
+
+  const title = `${node.label || ""}`;
+  const purpose = `${node.meta?.job || node.meta?.condition || node.meta?.duration || ""}`;
+  const subject = `${node.meta?.subject_direction || node.meta?.subject || "Subject angle TBD"}`;
+  const preview = `${node.meta?.preview_text || node.meta?.preview || "Preview direction TBD"}`;
+  const chips = condenseSectionLabels(node.meta?.sections).slice(0, 6);
+
+  const titleLines = estimateReviewTextLines(title, 22);
+  const purposeLines = purpose ? Math.min(3, estimateReviewTextLines(purpose, 44)) : 0;
+  const subjectLines = estimateReviewTextLines(subject, 46);
+  const previewLines = estimateReviewTextLines(preview, 46);
+  const chipRows = chips.length ? Math.max(1, Math.ceil(chips.length / 3)) : 0;
+
+  return Math.max(
+    REVIEW_MESSAGE_EXPANDED_MIN_HEIGHT,
+    188 +
+      titleLines * 30 +
+      purposeLines * 22 +
+      subjectLines * 20 +
+      previewLines * 18 +
+      (chipRows ? 20 + chipRows * 42 : 0)
+  );
+}
+
+function getNodeSize(
+  kind: NodeKind,
+  mode: "review" | "detail" = "detail",
+  expanded = false,
+  node?: BoardNode
+) {
   if (mode === "review") {
-    if (expanded && (kind === "email" || kind === "sms")) return { w: 560, h: 340 };
+    if (expanded && (kind === "email" || kind === "sms")) {
+      return { w: REVIEW_MESSAGE_WIDTH, h: getReviewExpandedMessageHeight(node) };
+    }
     if (kind === "delay") return { w: 126, h: 54 };
     if (kind === "split") return { w: 420, h: 76 };
     if (kind === "trigger_split") return { w: 420, h: 76 };
     if (kind === "filters") return { w: 520, h: 170 };
-    if (kind === "exit") return { w: 58, h: 28 };
+    if (kind === "exit") return { w: 118, h: 54 };
     if (kind === "trigger") return { w: 520, h: 150 };
-    return { w: 560, h: 108 };
+    return { w: REVIEW_MESSAGE_WIDTH, h: REVIEW_MESSAGE_COLLAPSED_HEIGHT };
   }
   if (kind === "delay") return { w: 154, h: 52 };
   if (kind === "split") return { w: 214, h: 68 };
@@ -376,7 +419,7 @@ function layoutFlowGraph(
       const node = byId[id];
       if (!node || seen.has(id)) return 0;
       if (heightCache[id]) return heightCache[id];
-      const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
+      const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id), node);
       const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
       if (!children.length) return (heightCache[id] = size.h);
       const nextSeen = new Set(seen).add(id);
@@ -390,7 +433,7 @@ function layoutFlowGraph(
     const placeH = (id: string, x: number, centerY: number, seen = new Set<string>()) => {
       const node = byId[id];
       if (!node || seen.has(id)) return;
-      const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
+      const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id), node);
       positioned[id] = { ...node, x, y: centerY - size.h / 2 };
       const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
       if (!children.length) return;
@@ -417,7 +460,7 @@ function layoutFlowGraph(
     let orphanX = 80;
     return nodes.map((node) => {
       if (positioned[node.id]) return positioned[node.id];
-      const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
+      const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id), node);
       const fallback = { ...node, x: orphanX, y: -size.h / 2 };
       orphanX += size.w + lineGap;
       return fallback;
@@ -429,7 +472,7 @@ function layoutFlowGraph(
     const node = byId[id];
     if (!node || seen.has(id)) return 0;
     if (widthCache[id]) return widthCache[id];
-    const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
+    const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id), node);
     const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
     if (!children.length) return (widthCache[id] = size.w);
     const nextSeen = new Set(seen).add(id);
@@ -443,7 +486,7 @@ function layoutFlowGraph(
   const place = (id: string, centerX: number, y: number, seen = new Set<string>()) => {
     const node = byId[id];
     if (!node || seen.has(id)) return;
-    const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
+    const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id), node);
     positioned[id] = { ...node, x: centerX - size.w / 2, y };
 
     const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
@@ -475,7 +518,7 @@ function layoutFlowGraph(
   let orphanY = 80;
   return nodes.map((node) => {
     if (positioned[node.id]) return positioned[node.id];
-    const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
+    const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id), node);
     const fallback = { ...node, x: -size.w / 2, y: orphanY };
     orphanY += size.h + lineGap;
     return fallback;
@@ -602,7 +645,7 @@ export function SkeletonViewer({
       maxX = -Infinity,
       maxY = -Infinity;
     for (const n of displayBoard.nodes) {
-      const sz = getNodeSize(n.kind, mode, expandedReviewNodeIds.has(n.id));
+      const sz = getNodeSize(n.kind, mode, expandedReviewNodeIds.has(n.id), n);
       minX = Math.min(minX, n.x);
       minY = Math.min(minY, n.y);
       maxX = Math.max(maxX, n.x + sz.w);
@@ -728,7 +771,7 @@ export function SkeletonViewer({
       maxX = -Infinity,
       maxY = -Infinity;
     for (const n of displayBoard.nodes) {
-      const sz = getNodeSize(n.kind, mode, expandedReviewNodeIds.has(n.id));
+      const sz = getNodeSize(n.kind, mode, expandedReviewNodeIds.has(n.id), n);
       minX = Math.min(minX, n.x);
       minY = Math.min(minY, n.y);
       maxX = Math.max(maxX, n.x + sz.w);
@@ -816,8 +859,8 @@ export function SkeletonViewer({
       const a = nodeById[edge.from];
       const b = nodeById[edge.to];
       if (!a || !b) return null;
-      const sa = getNodeSize(a.kind, mode, expandedReviewNodeIds.has(a.id));
-      const sb = getNodeSize(b.kind, mode, expandedReviewNodeIds.has(b.id));
+      const sa = getNodeSize(a.kind, mode, expandedReviewNodeIds.has(a.id), a);
+      const sb = getNodeSize(b.kind, mode, expandedReviewNodeIds.has(b.id), b);
       let from = { x: a.x + sa.w / 2, y: a.y + sa.h };
       // For split nodes, bias outgoing port to YES (left) or NO (right)
       if (a.kind === "split") {
@@ -1389,7 +1432,7 @@ function NodeView({
   onReviewHover?: (id: string | null) => void;
   onReviewLockToggle?: (id: string) => void;
 }) {
-  const sz = getNodeSize(node.kind, mode, reviewExpanded);
+  const sz = getNodeSize(node.kind, mode, reviewExpanded, node);
   const km = KIND_META[node.kind];
   const I = km.Icon;
 
@@ -1628,7 +1671,7 @@ function ReviewNodeView({
   onHover?: (id: string | null) => void;
   onStartDrag: (e: React.MouseEvent) => void;
 }) {
-  const sz = getNodeSize(node.kind, "review", expanded);
+  const sz = getNodeSize(node.kind, "review", expanded, node);
   const { Icon, label } = KIND_META[node.kind];
   const step = typeof node.emailIndex === "number" ? String(node.emailIndex + 1).padStart(2, "0") : null;
   const purpose = node.meta?.job || node.meta?.condition || node.meta?.duration || "";
