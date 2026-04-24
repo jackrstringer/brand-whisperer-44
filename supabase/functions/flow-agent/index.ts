@@ -255,7 +255,7 @@ Deno.serve(async (req) => {
           .eq("brand_id", brand_id)
           .maybeSingle(),
         sb.from("brands").select("name, industry, website_url").eq("id", brand_id).maybeSingle(),
-        sb.from("flows").select("messages, skeleton_markdown").eq("id", flow_id).maybeSingle(),
+        sb.from("flows").select("messages, skeleton_markdown, setup_status, setup_data").eq("id", flow_id).maybeSingle(),
       ]);
 
     const isInit = message === "__FLOW_INIT__";
@@ -276,6 +276,10 @@ Deno.serve(async (req) => {
           existingIntel: brandIntel,
         })
       : brandIntel;
+
+    const researchedSetup = deriveSetupCandidates(preparedIntel, klaviyoConn);
+    const existingSetupData = mergeSetupData(researchedSetup, flowRow?.setup_data || {});
+    const setupConfirmed = setupLooksConfirmed(existingSetupData);
 
     // Per-flow audience constraints — prevents content drift (e.g. post-purchase
     // content like "your order has arrived" appearing in a welcome flow).
