@@ -550,8 +550,9 @@ export function SkeletonViewer({
       });
     }
     if (lockedReviewNodeId) ids.add(lockedReviewNodeId);
+    if (hoveredReviewNodeId) ids.add(hoveredReviewNodeId);
     return ids;
-  }, [board.nodes, lockedReviewNodeId, mode, reviewDetailMode]);
+  }, [board.nodes, hoveredReviewNodeId, lockedReviewNodeId, mode, reviewDetailMode]);
   const [layoutNodes, setLayoutNodes] = useState<BoardNode[]>(board.nodes);
   const [graphEdges, setGraphEdges] = useState<BoardEdge[]>(board.edges);
   const hoveredDropTargetRef = useRef<string | null>(null);
