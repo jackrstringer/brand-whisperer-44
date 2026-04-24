@@ -128,7 +128,7 @@ const SIBLING_X_GAP = 96;
 const SPLIT_BRANCH_GAP = 112;
 const REVIEW_MESSAGE_WIDTH = 560;
 const REVIEW_MESSAGE_COLLAPSED_HEIGHT = 108;
-const REVIEW_MESSAGE_EXPANDED_MIN_HEIGHT = 388;
+const REVIEW_MESSAGE_EXPANDED_MIN_HEIGHT = 468;
 
 function estimateReviewTextLines(text: string, charsPerLine: number) {
   const value = text.trim();
@@ -153,12 +153,12 @@ function getReviewExpandedMessageHeight(node?: BoardNode) {
 
   return Math.max(
     REVIEW_MESSAGE_EXPANDED_MIN_HEIGHT,
-    188 +
-      titleLines * 30 +
-      purposeLines * 22 +
-      subjectLines * 20 +
-      previewLines * 18 +
-      (chipRows ? 20 + chipRows * 42 : 0)
+    220 +
+      titleLines * 38 +
+      purposeLines * 28 +
+      subjectLines * 27 +
+      previewLines * 25 +
+      (chipRows ? 24 + chipRows * 50 : 0)
   );
 }
 
