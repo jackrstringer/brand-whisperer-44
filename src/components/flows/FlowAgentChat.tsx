@@ -631,17 +631,27 @@ function QuestionChips({
 }) {
   const [showOther, setShowOther] = useState(false);
   const [otherText, setOtherText] = useState("");
+  const [selectedOption, setSelectedOption] = useState<{ label: string; value: string } | null>(null);
+  const [contextText, setContextText] = useState("");
+
+  const submitSelected = () => {
+    if (!selectedOption) return;
+    const extra = contextText.trim();
+    onAnswer(extra ? `${selectedOption.value}\n\nAdditional context: ${extra}` : selectedOption.value);
+    setSelectedOption(null);
+    setContextText("");
+  };
 
   return (
     <div className="mt-3 space-y-2">
-      <div className="grid gap-1.5">
+      {!selectedOption && <div className="grid gap-1.5">
         {options.map((opt) => {
           const option = typeof opt === "string" ? { label: opt, value: opt } : opt;
           return (
           <button
             key={`${option.label}:${option.value || option.label}`}
             disabled={disabled}
-            onClick={() => onAnswer(option.value || option.label)}
+            onClick={() => setSelectedOption({ label: option.label, value: option.value || option.label })}
             className="group text-left px-3 py-2.5 text-[12.5px] font-medium rounded-xl bg-card border border-foreground/15 hover:bg-muted hover:border-foreground/35 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-foreground"
           >
             <span className="flex items-start gap-2">
@@ -667,7 +677,49 @@ function QuestionChips({
             <span className="flex items-center gap-2"><PencilLine className="w-3.5 h-3.5" /> Enter different details</span>
           </button>
         )}
-      </div>
+      </div>}
+      {selectedOption && (
+        <div className="rounded-xl bg-card border border-foreground/15 p-2.5 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[12.5px] font-medium text-foreground truncate">{selectedOption.label}</div>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedOption(null);
+                setContextText("");
+              }}
+              disabled={disabled}
+              className="text-[11.5px] text-foreground/50 hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              Change
+            </button>
+          </div>
+          <textarea
+            value={contextText}
+            onChange={(e) => setContextText(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                e.preventDefault();
+                submitSelected();
+              }
+            }}
+            disabled={disabled}
+            placeholder="Add optional context…"
+            rows={2}
+            className="w-full resize-none px-3 py-2 text-[12.5px] rounded-lg bg-muted border border-foreground/10 focus:outline-none focus:border-foreground/35 text-foreground placeholder:text-foreground/35"
+          />
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              disabled={disabled}
+              onClick={submitSelected}
+              className="h-7 px-3 text-[12px] rounded-full"
+            >
+              Send
+            </Button>
+          </div>
+        </div>
+      )}
       {showOther && (
         <div className="flex gap-1.5">
           <input
