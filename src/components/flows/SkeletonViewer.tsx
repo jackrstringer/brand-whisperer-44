@@ -592,7 +592,7 @@ export function SkeletonViewer({
       maxX = -Infinity,
       maxY = -Infinity;
     for (const n of displayBoard.nodes) {
-      const sz = getNodeSize(n.kind, mode, expandedReviewLayoutNodeIds.has(n.id));
+      const sz = getNodeSize(n.kind, mode, expandedReviewNodeIds.has(n.id));
       minX = Math.min(minX, n.x);
       minY = Math.min(minY, n.y);
       maxX = Math.max(maxX, n.x + sz.w);
@@ -718,7 +718,7 @@ export function SkeletonViewer({
       maxX = -Infinity,
       maxY = -Infinity;
     for (const n of displayBoard.nodes) {
-      const sz = getNodeSize(n.kind, mode, expandedReviewLayoutNodeIds.has(n.id));
+      const sz = getNodeSize(n.kind, mode, expandedReviewNodeIds.has(n.id));
       minX = Math.min(minX, n.x);
       minY = Math.min(minY, n.y);
       maxX = Math.max(maxX, n.x + sz.w);
@@ -744,7 +744,7 @@ export function SkeletonViewer({
   };
 
   const cleanUpLayout = () => {
-    const cleaned = layoutFlowGraph(layoutNodes, graphEdges, mode, effectiveOrientation, expandedReviewLayoutNodeIds);
+    const cleaned = layoutFlowGraph(layoutNodes, graphEdges, mode, effectiveOrientation, expandedReviewNodeIds);
     setLayoutNodes(cleaned);
     requestAnimationFrame(fitToView);
   };
@@ -806,8 +806,8 @@ export function SkeletonViewer({
       const a = nodeById[edge.from];
       const b = nodeById[edge.to];
       if (!a || !b) return null;
-      const sa = getNodeSize(a.kind, mode, expandedReviewLayoutNodeIds.has(a.id));
-      const sb = getNodeSize(b.kind, mode, expandedReviewLayoutNodeIds.has(b.id));
+      const sa = getNodeSize(a.kind, mode, expandedReviewNodeIds.has(a.id));
+      const sb = getNodeSize(b.kind, mode, expandedReviewNodeIds.has(b.id));
       let from = { x: a.x + sa.w / 2, y: a.y + sa.h };
       // For split nodes, bias outgoing port to YES (left) or NO (right)
       if (a.kind === "split") {
@@ -857,7 +857,7 @@ export function SkeletonViewer({
         { id: `e-${target.edge.from}-${id}`, from: target.edge.from, to: id, branch: target.edge.branch ?? null },
         { id: `e-${id}-${target.edge.to}`, from: id, to: target.edge.to, branch: target.edge.branch ?? null },
       ];
-      setLayoutNodes((arr) => layoutFlowGraph([...arr, node], nextEdges, mode, effectiveOrientation, expandedReviewLayoutNodeIds));
+      setLayoutNodes((arr) => layoutFlowGraph([...arr, node], nextEdges, mode, effectiveOrientation, expandedReviewNodeIds));
       return nextEdges;
     });
     setSelected(id);
@@ -865,7 +865,7 @@ export function SkeletonViewer({
 
   const relayoutGraph = (nodes: BoardNode[], edges: BoardEdge[]) => {
     setGraphEdges(edges);
-    setLayoutNodes(resolveNodeCollisions(layoutFlowGraph(nodes, edges, mode, effectiveOrientation, expandedReviewLayoutNodeIds), mode));
+    setLayoutNodes(resolveNodeCollisions(layoutFlowGraph(nodes, edges, mode, effectiveOrientation, expandedReviewNodeIds), mode));
   };
 
   const deleteSticky = (id: string) => {
