@@ -667,7 +667,10 @@ function MessageBubble({
           <div className="flex justify-start">
             <div className="max-w-[88%] rounded-2xl px-4 py-2.5 text-[13.5px] bg-muted text-foreground">
               {question ? (
-                <div className="font-medium text-foreground mb-2">{question.question}</div>
+                <div className="mb-2">
+                  <div className="font-semibold text-foreground">{question.question}</div>
+                  {question.helper && <div className="mt-1 text-[12.5px] leading-relaxed text-foreground/60">{question.helper}</div>}
+                </div>
               ) : null}
               {cleanContent && (
                 <div className="prose prose-sm dark:prose-invert max-w-none [&>*]:my-1.5">
@@ -702,7 +705,10 @@ function MessageBubble({
         }`}
       >
         {question ? (
-          <div className="font-medium text-foreground mb-2">{question.question}</div>
+          <div className="mb-2">
+            <div className="font-semibold text-foreground">{question.question}</div>
+            {question.helper && <div className="mt-1 text-[12.5px] leading-relaxed text-foreground/60">{question.helper}</div>}
+          </div>
         ) : cleanContent ? (
           <div className="prose prose-sm dark:prose-invert max-w-none [&>*]:my-1.5">
             <ReactMarkdown>{cleanContent}</ReactMarkdown>
@@ -796,7 +802,7 @@ function QuestionChips({
               }
             }}
             disabled={disabled}
-            placeholder="Type your answer…"
+            placeholder={"Type your answer…"}
             className="flex-1 px-3 py-2 text-[12.5px] rounded-xl bg-card border border-foreground/15 focus:outline-none focus:border-foreground/45 text-foreground"
           />
           <Button
