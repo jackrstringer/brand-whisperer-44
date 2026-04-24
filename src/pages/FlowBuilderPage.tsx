@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Loader2, Download, Sparkles } from "lucide-react";
+import { ArrowLeft, Loader2, Download, Sparkles, MessageCircle, X } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   parseSkeleton,
@@ -42,6 +42,7 @@ export default function FlowBuilderPage() {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [nameDraft, setNameDraft] = useState("");
   const [editingName, setEditingName] = useState(false);
+  const [refineOpen, setRefineOpen] = useState(false);
 
   const loadAll = async () => {
     if (!flowId) return;
@@ -276,11 +277,13 @@ Notes: ${node.notes || "none"}`;
     if (!flow) return;
     setBulkGenerating(true);
     try {
+      setFlow((prev) => (prev ? { ...prev, status: "generating" } : prev));
       await supabase.from("flows").update({ status: "generating" }).eq("id", flow.id);
       // Generate sequentially to avoid hammering the AI gateway
       for (let i = 0; i < emailNodes.length; i++) {
         await generateSingleEmail(i);
       }
+      setFlow((prev) => (prev ? { ...prev, status: "complete" } : prev));
       await supabase.from("flows").update({ status: "complete" }).eq("id", flow.id);
       toast({ title: "All emails generated" });
     } catch (err: any) {
@@ -355,6 +358,7 @@ Notes: ${node.notes || "none"}`;
   const hasAnyHtml = emails.some((e) => e.html);
   const meta = FLOW_TYPE_META[flow.flow_type];
   const hasSkeleton = !!flow.skeleton_markdown;
+  const isReviewMode = flow.status === "skeleton_ready" && hasSkeleton;
 
   return (
     <div className="absolute inset-0 bg-[hsl(var(--canvas))]">
@@ -370,6 +374,46 @@ Notes: ${node.notes || "none"}`;
           onSkeletonUpdated={handleSkeletonUpdated}
           centered
         />
+      ) : isReviewMode ? (
+        <>
+          <SkeletonViewer
+            key={`${flow.id}:review`}
+            nodes={parsedNodes}
+            meta={parsedMeta}
+            flowType={flow.flow_type}
+            brandId={flow.brand_id}
+            emails={emails}
+            campaignMeta={campaignMeta}
+            expandedIndex={null}
+            onToggleExpand={() => undefined}
+            onGenerateNode={generateSingleEmail}
+            onSaveNodeEdit={saveNodeEdit}
+            generatingIndex={generatingIndex}
+            drafting={false}
+            mode="review"
+          />
+          {refineOpen && (
+            <div className="absolute top-20 right-5 bottom-5 z-40 w-[420px] rounded-xl overflow-hidden border border-foreground/15 bg-card shadow-sm">
+              <button
+                onClick={() => setRefineOpen(false)}
+                className="absolute top-3 right-3 z-50 w-8 h-8 rounded-full flex items-center justify-center bg-muted text-foreground/60 hover:text-foreground transition-colors"
+                aria-label="Close refine panel"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <FlowAgentChat
+                key={`${flow.id}:review-chat`}
+                flowId={flow.id}
+                brandId={flow.brand_id}
+                flowType={flow.flow_type}
+                initialMessages={Array.isArray(flow.messages) ? (flow.messages as any) : []}
+                currentSkeleton={flow.skeleton_markdown}
+                onSkeletonUpdated={handleSkeletonUpdated}
+                panel
+              />
+            </div>
+          )}
+        </>
       ) : (
         <>
           <SplitPane
@@ -447,7 +491,28 @@ Notes: ${node.notes || "none"}`;
 
       {/* Floating top-right: actions */}
       <div className="absolute top-5 right-5 z-30 flex items-center gap-2 pointer-events-none">
-        {hasAnyHtml && (
+        {isReviewMode ? (
+          <div className="pointer-events-auto flex items-center gap-3 pl-4 pr-2 py-2 rounded-full bg-card/95 backdrop-blur-xl border border-foreground/15 shadow-sm">
+            <div className="min-w-0 pr-1">
+              <div className="text-[13px] font-semibold text-foreground leading-tight">Review flow skeleton</div>
+              <div className="text-[11px] text-foreground/55 leading-tight mt-0.5">Approve the structure before generating messages.</div>
+            </div>
+            <button
+              onClick={() => setRefineOpen((v) => !v)}
+              className="h-9 px-3 rounded-full bg-muted text-foreground/70 hover:text-foreground transition-colors flex items-center gap-1.5 text-[12.5px] font-medium"
+            >
+              <MessageCircle className="w-3.5 h-3.5" /> Refine
+            </button>
+            <button
+              onClick={generateAllEmails}
+              disabled={bulkGenerating || emailNodes.length === 0}
+              className="h-9 px-4 rounded-full bg-foreground text-background flex items-center gap-1.5 text-[12.5px] font-medium hover:opacity-90 transition-opacity disabled:opacity-60"
+            >
+              {bulkGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              Approve & Generate
+            </button>
+          </div>
+        ) : hasAnyHtml && (
           <button
             onClick={exportAll}
             className="pointer-events-auto px-3.5 h-9 rounded-full bg-card/90 backdrop-blur-xl border border-foreground/15 shadow-sm flex items-center gap-1.5 text-[12.5px] font-medium text-foreground/75 hover:text-foreground hover:border-foreground/35 transition-colors"
@@ -455,7 +520,7 @@ Notes: ${node.notes || "none"}`;
             <Download className="w-3.5 h-3.5" /> Export all
           </button>
         )}
-        {flow.status === "skeleton_ready" && emailNodes.length > 0 && (
+        {!isReviewMode && flow.status === "skeleton_ready" && emailNodes.length > 0 && (
           <button
             onClick={generateAllEmails}
             disabled={bulkGenerating}
