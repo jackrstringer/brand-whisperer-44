@@ -90,7 +90,8 @@ function extractSetupDataFromResponse(text: string) {
   if (!match) return null;
   try {
     return JSON.parse(match[1].trim());
-  } catch {
+  } catch (err) {
+    console.error("[flow-agent] Malformed flow-setup JSON", err, match[1].slice(0, 500));
     return null;
   }
 }
@@ -370,29 +371,13 @@ CONVERSATION RULES (CRITICAL):
 - YOU are the email marketing expert. Never ask the user to make strategic decisions.
 - ONE setup confirmation at a time until setup is complete.
 - Be terse. No preamble, no recap of brand intelligence in prose, no "great question" filler.
+- NEVER output a flow-synth block unless explicitly asked by an admin/debug instruction.
+- NEVER show research dumps, full plans, numbered analyses, or multi-section summaries during setup.
+- Each setup response should be one short sentence of visible prose plus one flow-question block.
+- Question text must be short and actionable. Helper text is optional and must be one line max.
+- Options must be 2–4 short labels. Descriptions must be short fragments, not paragraphs.
 - NEVER ask whether they have an existing flow — assume net new.
 - NEVER skip setup confirmation just because research found likely answers.
-
-RESPONSE FORMAT — BRAND SYNTHESIS BLOCK (use on the FIRST turn or when re-orienting):
-Before any question or skeleton, output a tight synthesis block in this exact shape (a fenced \`flow-synth\` JSON block):
-
-\`\`\`flow-synth
-{
-  "headline": "One-line strategic angle for this flow.",
-  "facts": [
-    {"label": "Hero product", "value": "Larineco Remineralizing Gum — $29.99"},
-    {"label": "Welcome offer", "value": "25% off (code: WELCOME25)"},
-    {"label": "Top objection", "value": "Subscription anxiety"},
-    {"label": "Best send window", "value": "4:30–8pm Tue/Sun/Sat"}
-  ],
-  "plan": [
-    "E1 (immediate) — Welcome + offer reveal, hero product, dentist proof.",
-    "E2 (24h) — Address subscription anxiety, transparency, easy-cancel guarantee.",
-    "E3 (48h) — Founder/origin story + Andrew Habib endorsement.",
-    "E4 (72h) — Last-call urgency, social proof carousel."
-  ]
-}
-\`\`\`
 
 QUESTION FORMAT (use only when truly necessary):
 \`\`\`flow-question
@@ -500,10 +485,10 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
     if (bootingFreshFlow && conversation.length === 0) {
       messages.push({
         role: "user",
-        content: `Begin setup for a ${flow_type.replace(/_/g, " ")} flow. First, synthesize researched context with a flow-synth block. Then ask the first required setup confirmation with a flow-question block. Do not generate a skeleton yet unless the hard setup gate is already satisfied. No greetings. No raw JSON outside fenced control blocks.`,
+        content: `Begin setup for a ${flow_type.replace(/_/g, " ")} flow. Ask only the first required confirmation with one concise flow-question block. Do not output flow-synth. Do not generate a skeleton yet unless the hard setup gate is already satisfied. No greetings. No raw JSON outside fenced control blocks.`,
       });
     } else if (!isInit && !isRestart) {
-      messages.push({ role: "user", content: `${message}\n\nUpdate flow-setup if this confirms or edits setup. If setup is now complete, generate the full skeleton. Otherwise ask the next setup confirmation.` });
+      messages.push({ role: "user", content: `${message}\n\nUpdate flow-setup if this confirms or edits setup. If setup is now complete, generate the full skeleton immediately. Otherwise ask only the next setup confirmation with one concise flow-question block. Do not output flow-synth or a research summary.` });
     }
 
     const stream = new ReadableStream({
@@ -518,11 +503,11 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
 
         try {
           if (bootingFreshFlow) {
-            send({ type: "progress", stage: "reading", label: "Reading brand research" });
+            send({ type: "progress", stage: "reading", label: "Checking brand research" });
             await new Promise((r) => setTimeout(r, 150));
-            send({ type: "progress", stage: "analyzing", label: "Analyzing performance data" });
+            send({ type: "progress", stage: "analyzing", label: "Thinking" });
             await new Promise((r) => setTimeout(r, 150));
-            send({ type: "progress", stage: "strategizing", label: "Designing flow strategy" });
+            send({ type: "progress", stage: "strategizing", label: "Thinking" });
           }
 
           const res = await fetch("https://api.anthropic.com/v1/messages", {

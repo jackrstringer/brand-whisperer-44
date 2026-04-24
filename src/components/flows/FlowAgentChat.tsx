@@ -4,10 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Send,
-  Sparkles,
-  BookOpen,
-  BarChart3,
-  Wand2,
   ChevronDown,
   ChevronUp,
   MessageSquare,
@@ -44,12 +40,6 @@ interface FlowQuestion {
   allow_other?: boolean;
 }
 
-interface FlowSynth {
-  headline?: string;
-  facts?: { label: string; value: string }[];
-  plan?: string[];
-}
-
 const QUESTION_FENCE = /```flow-question\s*([\s\S]*?)```/;
 const SYNTH_FENCE = /```flow-synth\s*([\s\S]*?)```/;
 const SKELETON_FENCE = /```flow-skeleton[\s\S]*?```/;
@@ -58,7 +48,7 @@ const CONTROL_FENCE_START = /```flow-(question|synth|skeleton|setup)/;
 function shouldAutoRestart(messages: Msg[], currentSkeleton: string | null): boolean {
   if (currentSkeleton || messages.length !== 1) return false;
   const [first] = messages;
-  return first.role === "assistant" && QUESTION_FENCE.test(first.content);
+  return first.role === "assistant" && CONTROL_FENCE_START.test(first.content) && !extractQuestion(first.content);
 }
 
 function extractQuestion(content: string): FlowQuestion | null {
@@ -67,18 +57,6 @@ function extractQuestion(content: string): FlowQuestion | null {
   try {
     const parsed = JSON.parse(m[1].trim());
     if (parsed && typeof parsed.question === "string") return parsed as FlowQuestion;
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
-function extractSynth(content: string): FlowSynth | null {
-  const m = content.match(SYNTH_FENCE);
-  if (!m) return null;
-  try {
-    const parsed = JSON.parse(m[1].trim());
-    if (parsed && typeof parsed === "object") return parsed as FlowSynth;
   } catch {
     /* ignore */
   }
@@ -97,9 +75,9 @@ function stripFences(content: string): string {
 }
 
 const STAGE_META: Record<string, { label: string }> = {
-  reading: { label: "Reading brand research" },
-  analyzing: { label: "Analyzing performance data" },
-  strategizing: { label: "Designing flow strategy" },
+  reading: { label: "Checking brand research" },
+  analyzing: { label: "Thinking" },
+  strategizing: { label: "Thinking" },
   drafting: { label: "Drafting your skeleton" },
 };
 
@@ -131,7 +109,9 @@ export function FlowAgentChat({
     setStages([]);
     setStreaming(false);
     initFired.current = false;
-  }, [flowId, initialMessages]);
+    // Keep in-progress and just-finished local chat stable; realtime refreshes can lag.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flowId]);
 
   useEffect(() => {
     if (initFired.current) return;
@@ -222,12 +202,6 @@ export function FlowAgentChat({
             } else if (evt.type === "text") {
               if (!firstTextReceived) {
                 firstTextReceived = true;
-                setStages((prev) => {
-                  const next: { key: string; status: "active" | "done" }[] =
-                    prev.map((s) => ({ key: s.key, status: "done" }));
-                  next.push({ key: "drafting", status: "active" });
-                  return next;
-                });
               }
               full += evt.content;
               setStreamBuf(full);
@@ -297,7 +271,7 @@ export function FlowAgentChat({
 
   const currentStageLabel = skeletonStreaming
     ? "Drafting your skeleton"
-    : STAGE_META[stages[stages.length - 1]?.key ?? "reading"]?.label ?? "Thinking";
+    : STAGE_META[stages[stages.length - 1]?.key ?? "analyzing"]?.label ?? "Thinking";
 
   // ---------- Pre-skeleton: centered hero conversation ----------
   if (centered) {
@@ -308,14 +282,12 @@ export function FlowAgentChat({
             {visibleMessages.map((m, i) => {
               const isLastAssistant = i === lastAssistantIdx;
               const question = m.role === "assistant" ? extractQuestion(m.content) : null;
-              const synth = m.role === "assistant" ? extractSynth(m.content) : null;
               return (
                 <MessageBubble
                   key={i}
                   role={m.role}
                   content={m.content}
                   question={question}
-                  synth={synth}
                   showQuestionChips={isLastAssistant && !streaming}
                   onAnswer={(answer) => sendMessage(answer)}
                   disabled={streaming}
@@ -330,7 +302,6 @@ export function FlowAgentChat({
                     content={streamBuf}
                     streaming
                     question={extractQuestion(streamBuf)}
-                    synth={extractSynth(streamBuf)}
                     showQuestionChips={false}
                     disabled
                   />
@@ -375,7 +346,6 @@ export function FlowAgentChat({
                 role={m.role}
                 content={m.content}
                 question={null}
-                synth={null}
                 showQuestionChips={isLastAssistant && !streaming && !!question}
                 onAnswer={(answer) => sendMessage(answer)}
                 disabled={streaming}
@@ -389,7 +359,6 @@ export function FlowAgentChat({
                 content={streamBuf}
                 streaming
                 question={null}
-                synth={null}
                 showQuestionChips={false}
                 disabled
               />
@@ -444,7 +413,6 @@ export function FlowAgentChat({
                     role={m.role}
                     content={m.content}
                     question={null}
-                    synth={null}
                     showQuestionChips={isLastAssistant && !streaming && !!question}
                     onAnswer={(answer) => sendMessage(answer)}
                     disabled={streaming}
@@ -459,7 +427,6 @@ export function FlowAgentChat({
                       content={streamBuf}
                       streaming
                       question={null}
-                      synth={null}
                       showQuestionChips={false}
                       disabled
                     />
@@ -585,55 +552,11 @@ function InlineShimmer({ label }: { label: string }) {
   );
 }
 
-function SynthCard({ synth }: { synth: FlowSynth }) {
-  return (
-    <div className="rounded-2xl border border-foreground/15 bg-card p-5 space-y-4 animate-fade-in shadow-sm">
-      {synth.headline && (
-        <div className="flex items-start gap-2">
-          <Sparkles className="w-3.5 h-3.5 text-foreground/60 mt-0.5 flex-shrink-0" />
-          <p className="text-[15px] font-semibold text-foreground leading-snug">
-            {synth.headline}
-          </p>
-        </div>
-      )}
-      {synth.facts && synth.facts.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {synth.facts.map((f, i) => (
-            <div
-              key={i}
-              className="rounded-xl bg-muted px-3 py-2 text-[12.5px]"
-            >
-              <span className="block text-foreground/55">{f.label}</span>
-              <span className="block font-semibold text-foreground mt-0.5 leading-snug">{f.value}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      {synth.plan && synth.plan.length > 0 && (
-        <div className="pt-1">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-foreground/45 mb-1.5">
-            Plan
-          </div>
-          <ol className="space-y-1">
-            {synth.plan.map((step, i) => (
-              <li key={i} className="flex gap-2 text-[12.5px] text-foreground">
-                <span className="text-foreground/45 flex-shrink-0">{i + 1}.</span>
-                <span className="leading-relaxed">{step}</span>
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function MessageBubble({
   role,
   content,
   streaming,
   question,
-  synth,
   showQuestionChips,
   onAnswer,
   disabled,
@@ -642,7 +565,6 @@ function MessageBubble({
   content: string;
   streaming?: boolean;
   question: FlowQuestion | null;
-  synth: FlowSynth | null;
   showQuestionChips: boolean;
   onAnswer?: (answer: string) => void;
   disabled?: boolean;
@@ -658,42 +580,6 @@ function MessageBubble({
   }
 
   const cleanContent = stripFences(content);
-
-  if (!isUser && synth) {
-    return (
-      <div className="space-y-3">
-        <SynthCard synth={synth} />
-        {(question || cleanContent) && (
-          <div className="flex justify-start">
-            <div className="max-w-[88%] rounded-2xl px-4 py-2.5 text-[13.5px] bg-muted text-foreground">
-              {question ? (
-                <div className="mb-2">
-                  <div className="font-semibold text-foreground">{question.question}</div>
-                  {question.helper && <div className="mt-1 text-[12.5px] leading-relaxed text-foreground/60">{question.helper}</div>}
-                </div>
-              ) : null}
-              {cleanContent && (
-                <div className="prose prose-sm dark:prose-invert max-w-none [&>*]:my-1.5">
-                  <ReactMarkdown>{cleanContent}</ReactMarkdown>
-                </div>
-              )}
-              {question && showQuestionChips && onAnswer && (
-                <QuestionChips
-                  options={question.options || []}
-                  allowOther={question.allow_other !== false}
-                  onAnswer={onAnswer}
-                  disabled={disabled}
-                />
-              )}
-              {streaming && (
-                <span className="inline-block w-1.5 h-3 bg-current ml-0.5 animate-pulse" />
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -714,12 +600,6 @@ function MessageBubble({
             <ReactMarkdown>{cleanContent}</ReactMarkdown>
           </div>
         ) : null}
-
-        {question && cleanContent && (
-          <div className="prose prose-sm dark:prose-invert max-w-none [&>*]:my-1.5 mt-2 text-foreground/70">
-            <ReactMarkdown>{cleanContent}</ReactMarkdown>
-          </div>
-        )}
 
         {question && showQuestionChips && onAnswer && (
           <QuestionChips
