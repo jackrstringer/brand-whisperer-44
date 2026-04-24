@@ -128,7 +128,7 @@ const SIBLING_X_GAP = 96;
 const SPLIT_BRANCH_GAP = 112;
 const REVIEW_MESSAGE_WIDTH = 560;
 const REVIEW_MESSAGE_COLLAPSED_HEIGHT = 108;
-const REVIEW_MESSAGE_EXPANDED_MIN_HEIGHT = 468;
+const REVIEW_MESSAGE_EXPANDED_MIN_HEIGHT = 404;
 
 function estimateReviewTextLines(text: string, charsPerLine: number) {
   const value = text.trim();
@@ -145,20 +145,20 @@ function getReviewExpandedMessageHeight(node?: BoardNode) {
   const preview = `${node.meta?.preview_text || node.meta?.preview || "Preview direction TBD"}`;
   const chips = condenseSectionLabels(node.meta?.sections).slice(0, 6);
 
-  const titleLines = estimateReviewTextLines(title, 22);
-  const purposeLines = purpose ? Math.min(3, estimateReviewTextLines(purpose, 44)) : 0;
-  const subjectLines = estimateReviewTextLines(subject, 46);
-  const previewLines = estimateReviewTextLines(preview, 46);
+  const titleLines = estimateReviewTextLines(title, 34);
+  const purposeLines = purpose ? Math.min(3, estimateReviewTextLines(purpose, 52)) : 0;
+  const subjectLines = estimateReviewTextLines(subject, 58);
+  const previewLines = estimateReviewTextLines(preview, 58);
   const chipRows = chips.length ? Math.max(1, Math.ceil(chips.length / 3)) : 0;
 
   return Math.max(
     REVIEW_MESSAGE_EXPANDED_MIN_HEIGHT,
-    220 +
+    132 +
       titleLines * 38 +
       purposeLines * 28 +
       subjectLines * 27 +
       previewLines * 25 +
-      (chipRows ? 24 + chipRows * 50 : 0)
+      (chipRows ? chipRows * 50 : 0)
   );
 }
 
