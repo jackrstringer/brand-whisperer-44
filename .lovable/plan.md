@@ -1,113 +1,82 @@
 
-Goal: replace the current “jump straight to skeleton” flow with a research-backed, interactive setup conversation that confirms the few operator-controlled inputs before a skeleton is generated, while also fixing the broken/raw JSON formatting in the setup chat.
+Goal: make the flow setup feel like Claude/Lovable’s normal chat confirmations: one concise question at a time, stable in the chat, no disappearing cards, no long research dumps, and no fake “drafting skeleton” status before the user has confirmed setup.
 
-1. Fix the pre-skeleton chat rendering so setup never shows broken JSON
-- Update `FlowAgentChat.tsx` so partial `flow-synth` / `flow-question` control blocks are buffered and rendered only through dedicated UI components, never as raw markdown text mid-stream.
-- Prevent clipped fenced payloads during streaming by keeping control-block parsing state separate from visible assistant prose.
-- Tighten the centered hero layout so the setup panel expands naturally with content instead of truncating/cropping long synth blocks.
+1. Stop questions from disappearing during streaming/realtime updates
+- Update `FlowAgentChat.tsx` so active streamed assistant content is treated as the visible source of truth until the response finishes.
+- Prevent realtime `flows.messages` refreshes from overwriting the in-progress assistant/question message while the stream is active.
+- After the stream finishes, reconcile from the saved backend message once, instead of repeatedly replacing the visible chat state.
+- Keep the last assistant question visible until the user answers it, even if background `setup_data` or `setup_status` updates arrive.
 
-2. Add structured flow-setup state to persist discovered + confirmed inputs
-- Add fields to `public.flows` for structured setup data and setup phase, e.g.:
-  - `setup_status` (`draft`, `research_ready`, `needs_confirmation`, `ready_for_skeleton`, `skeleton_ready`, etc.)
-  - `setup_data jsonb`
-- Store both:
-  - researched candidates: detected site offers, likely hero products, subscription model, promo patterns
-  - confirmed operator choices: offer type, coupon configuration, hero product priority, product-feed priority, notes
-- Keep this on the existing `flows` table so RLS stays simple and the flow record remains the single source of truth.
+2. Simplify the setup UI to one Claude-style confirmation at a time
+- Remove the large `SynthCard` / research-summary card from the main chat experience.
+- Replace it with a short assistant message plus one compact question card:
+  - 1 sentence context max
+  - 2–4 answer buttons max
+  - optional “Something else” text input
+- Example target behavior:
+  - “I found WELCOME25 as the likely welcome offer. Should this flow use it?”
+  - Buttons: `Use WELCOME25`, `No offer`, `Use dynamic Klaviyo coupon`, `Something else`
+- Avoid showing long lists of facts, plans, performance data, or multi-section cards during setup.
 
-3. Change the flow-agent behavior from “research first, ask last” to “research, propose, confirm, then build”
-- Update `supabase/functions/flow-agent/index.ts` so the first pass always:
-  - reads compiled brand context + raw research
-  - extracts candidate offers, hero products, subscription model, and likely product priorities
-  - determines which items are operator-controlled and must be confirmed before skeleton generation
-- Replace the current prompt rule that often allows immediate skeleton generation with a stricter setup rule:
-  - never generate the skeleton until critical flow-configuration facts are confirmed
-  - propose researched defaults instead of asking blank questions
-  - ask in a structured sequence, not generic chat
-- The setup sequence should explicitly cover:
-  - Offer status: no offer / evergreen offer / campaign-specific offer
-  - Discount type: static site code / static flow-only code / dynamic Klaviyo coupon
-  - If dynamic coupon: require coupon pool/name and instruct downstream generation to use the correct Klaviyo Liquid syntax
-  - Hero product / catalog priority: confirm the main product(s) or whether it should stay category-wide
-  - Feed/product priority: what products should be emphasized if product blocks are used
-- Use brand research to populate candidate options first, e.g. “I found these likely offers on the site — is it one of these or something else?”
+3. Fix misleading progress/status states
+- Remove the automatic “Drafting your skeleton” status when the agent is only asking setup questions.
+- Only show skeleton/drafting progress after the setup gate is complete and the agent actually emits a `flow-skeleton`.
+- For setup turns, use a simple Claude/Lovable-style thinking indicator like:
+  - `Thinking…`
+  - `Checking brand research…`
+- Do not show the four-step progress rail during every setup question.
 
-4. Introduce richer interactive setup cards in the chat UI
-- Extend `FlowAgentChat.tsx` beyond simple chips into structured assistant cards:
-  - researched summary card
-  - confirmation cards
-  - selectable option pills/cards
-  - inline edit forms
-  - “use this / edit / none of these” actions
-- Build a more polished conversational setup pattern:
-  - assistant proposes researched assumptions
-  - user can confirm quickly or edit inline
-  - assistant proceeds to next required setup item
-- Keep the interaction visually chat-native rather than opening a separate boring form.
+4. Tighten the backend agent prompt so it stops overwhelming the user
+- Update `supabase/functions/flow-agent/index.ts` prompt rules:
+  - no synthesis block by default
+  - no full plan before confirmation
+  - one confirmation question per response
+  - question text must be short and actionable
+  - helper text must be one line max
+  - options must be short labels, not paragraphs
+- Keep the research logic, but use it internally to propose defaults instead of dumping it into the UI.
 
-5. Feed confirmed setup data into skeleton generation and downstream email generation
-- When setup is complete, pass `setup_data` into the skeleton prompt so the generated flow reflects:
-  - the confirmed offer type
-  - correct coupon mechanics
-  - confirmed hero product emphasis
-  - confirmed product prioritization
-- Update downstream flow email generation (`FlowBuilderPage.tsx` and related generation brief assembly) to include the confirmed setup metadata, so message generation uses:
-  - correct dynamic coupon syntax vs static code handling
-  - correct product emphasis
-  - correct offer framing
-- This also avoids bad field usage like stuffing non-subject content into subject/preview-oriented slots.
+5. Make setup deterministic instead of relying on verbose LLM control blocks
+- Add stricter parsing for `flow-question` / `flow-setup` blocks:
+  - strip markdown fences safely
+  - ignore incomplete control blocks during streaming
+  - only render complete, valid questions
+  - fail loudly in the console/backend logs if the control JSON is malformed
+- If the agent returns too much prose, show only the concise question portion and suppress hidden setup/control JSON from the user.
+- Do not add smooth fake fallback success states.
 
-6. Improve the create-flow experience so the user always lands in setup first
-- On first open of a new flow, show the guided setup conversation as the required first stage.
-- Only transition into skeleton review mode once:
-  - required setup items are confirmed
-  - the skeleton has been generated from those confirmed values
-- Preserve the refine panel afterward, but treat it as post-setup editing rather than the main place where critical requirements are gathered.
+6. Persist setup progress without re-triggering endless setup loops
+- Ensure `setup_status` transitions are stable:
+  - `draft` → `needs_confirmation`
+  - `needs_confirmation` remains until user answers required items
+  - `ready_for_skeleton` only after required setup data is confirmed
+  - `skeleton_ready` only after skeleton is actually saved
+- Avoid auto-restarting the flow setup when there is already a valid unanswered question in `messages`.
+- Keep the user’s answer and the agent’s question visible in the conversation history.
 
-7. QA the full path end-to-end
-- Verify these flow-creation scenarios:
-  - brand with a clearly visible evergreen site offer
-  - brand with no visible offer
-  - brand with subscription language but ambiguous discount mechanics
-  - dynamic coupon flow requiring coupon pool confirmation
-  - single hero-product brand vs multi-product brand
-- Confirm that:
-  - no raw JSON/fenced control blocks ever appear in the UI
-  - setup cards never clip or truncate
-  - skeleton generation is blocked until required confirmations are complete
-  - confirmed offer/product data is reflected in the skeleton and later generation prompts
+7. Fix React ref warnings in the chat components
+- Update `MessageBubble` and/or `QuestionChips` usage so no function component receives a `ref` unless it uses `forwardRef`.
+- This will remove the current console warnings and reduce render instability while debugging the chat flow.
 
-Technical details
-- Files likely touched:
-  - `src/components/flows/FlowAgentChat.tsx`
-  - `src/pages/FlowBuilderPage.tsx`
-  - `supabase/functions/flow-agent/index.ts`
-  - `supabase/migrations/...sql`
-- Recommended `setup_data` shape:
-```text
-{
-  offer: {
-    detected_candidates: [...],
-    confirmed_mode: "none" | "static_code" | "dynamic_coupon",
-    description: "",
-    static_code: "",
-    dynamic_coupon_pool: ""
-  },
-  products: {
-    detected_hero_products: [...],
-    confirmed_primary_products: [...],
-    scope: "hero" | "category" | "catalog"
-  },
-  merchandising: {
-    selected_feed_preset: "",
-    notes: ""
-  },
-  confirmations: {
-    offer_confirmed: true,
-    product_priority_confirmed: true
-  }
-}
-```
-- Dynamic coupon rule:
-  - static code: use the explicit code the operator confirmed
-  - dynamic Klaviyo coupon: store the coupon pool/name in setup and instruct downstream content/generation to use the proper dynamic coupon Liquid, not a hardcoded code
+8. Keep skeleton generation gated but unobtrusive
+- Preserve the hard requirement that offer and product priority are confirmed before skeleton generation.
+- Make that requirement invisible to the user as a natural chat sequence:
+  1. Confirm offer/coupon mechanics
+  2. Confirm hero product/product scope
+  3. Generate skeleton
+- Once both answers are confirmed, the agent should immediately generate the skeleton without asking another meta question.
+
+Files to update:
+- `src/components/flows/FlowAgentChat.tsx`
+- `supabase/functions/flow-agent/index.ts`
+- possibly `src/pages/FlowBuilderPage.tsx` if setup/realtime gating needs a small adjustment
+
+Validation:
+- Create a new welcome flow and confirm:
+  - only one concise question appears
+  - it does not disappear after a few seconds
+  - no raw JSON or fenced blocks appear
+  - no long research summary overwhelms the chat
+  - no “Drafting your skeleton” message appears before setup is complete
+  - answering offer then product priority leads to skeleton generation
+  - console no longer shows the function-component ref warning
