@@ -64,6 +64,7 @@ export interface FlowEmailMeta {
 
 type NodeKind = "trigger" | "filters" | "email" | "delay" | "split" | "trigger_split" | "sms" | "push" | "webhook" | "exit";
 type FlowOrientation = "vertical" | "horizontal";
+type ReviewDetailMode = "compact" | "full";
 
 export interface BoardNode {
   id: string;
@@ -125,15 +126,16 @@ const LINEAR_Y_GAP = 64;
 const SPLIT_Y_GAP = 104;
 const SIBLING_X_GAP = 96;
 const SPLIT_BRANCH_GAP = 112;
-function getNodeSize(kind: NodeKind, mode: "review" | "detail" = "detail") {
+function getNodeSize(kind: NodeKind, mode: "review" | "detail" = "detail", expanded = false) {
   if (mode === "review") {
-    if (kind === "delay") return { w: 104, h: 38 };
-    if (kind === "split") return { w: 176, h: 58 };
-    if (kind === "trigger_split") return { w: 176, h: 58 };
-    if (kind === "filters") return { w: 220, h: 64 };
-    if (kind === "exit") return { w: 66, h: 32 };
-    if (kind === "trigger") return { w: 220, h: 66 };
-    return { w: 260, h: 86 };
+    if (expanded && (kind === "email" || kind === "sms")) return { w: 372, h: 250 };
+    if (kind === "delay") return { w: 82, h: 32 };
+    if (kind === "split") return { w: 292, h: 44 };
+    if (kind === "trigger_split") return { w: 292, h: 44 };
+    if (kind === "filters") return { w: 272, h: 42 };
+    if (kind === "exit") return { w: 58, h: 28 };
+    if (kind === "trigger") return { w: 292, h: 42 };
+    return { w: 304, h: 52 };
   }
   if (kind === "delay") return { w: 154, h: 52 };
   if (kind === "split") return { w: 214, h: 68 };
@@ -347,7 +349,8 @@ function layoutFlowGraph(
   nodes: BoardNode[],
   edges: BoardEdge[],
   mode: "review" | "detail" = "detail",
-  orientation: FlowOrientation = "vertical"
+  orientation: FlowOrientation = "vertical",
+  expandedReviewNodeIds: Set<string> = new Set()
 ): BoardNode[] {
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
   const childrenById: Record<string, BoardEdge[]> = {};
@@ -372,7 +375,7 @@ function layoutFlowGraph(
       const node = byId[id];
       if (!node || seen.has(id)) return 0;
       if (heightCache[id]) return heightCache[id];
-      const size = getNodeSize(node.kind, mode);
+      const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
       const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
       if (!children.length) return (heightCache[id] = size.h);
       const nextSeen = new Set(seen).add(id);
@@ -386,7 +389,7 @@ function layoutFlowGraph(
     const placeH = (id: string, x: number, centerY: number, seen = new Set<string>()) => {
       const node = byId[id];
       if (!node || seen.has(id)) return;
-      const size = getNodeSize(node.kind, mode);
+      const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
       positioned[id] = { ...node, x, y: centerY - size.h / 2 };
       const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
       if (!children.length) return;
@@ -413,7 +416,7 @@ function layoutFlowGraph(
     let orphanX = 80;
     return nodes.map((node) => {
       if (positioned[node.id]) return positioned[node.id];
-      const size = getNodeSize(node.kind, mode);
+      const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
       const fallback = { ...node, x: orphanX, y: -size.h / 2 };
       orphanX += size.w + lineGap;
       return fallback;
@@ -425,7 +428,7 @@ function layoutFlowGraph(
     const node = byId[id];
     if (!node || seen.has(id)) return 0;
     if (widthCache[id]) return widthCache[id];
-    const size = getNodeSize(node.kind, mode);
+    const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
     const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
     if (!children.length) return (widthCache[id] = size.w);
     const nextSeen = new Set(seen).add(id);
@@ -439,7 +442,7 @@ function layoutFlowGraph(
   const place = (id: string, centerX: number, y: number, seen = new Set<string>()) => {
     const node = byId[id];
     if (!node || seen.has(id)) return;
-    const size = getNodeSize(node.kind, mode);
+    const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
     positioned[id] = { ...node, x: centerX - size.w / 2, y };
 
     const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
@@ -471,7 +474,7 @@ function layoutFlowGraph(
   let orphanY = 80;
   return nodes.map((node) => {
     if (positioned[node.id]) return positioned[node.id];
-    const size = getNodeSize(node.kind, mode);
+    const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
     const fallback = { ...node, x: -size.w / 2, y: orphanY };
     orphanY += size.h + lineGap;
     return fallback;
