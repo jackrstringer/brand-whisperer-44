@@ -1,275 +1,208 @@
 
-Build a two-step Flow Mode experience that separates “understand the business logic” from “inspect/edit generated emails.”
+Implement the skeleton review UI to match the provided layouts: bare-bones by default, expandable message nodes on hover/click, and AI-generated short block labels.
 
-## Goal
+## What will change
 
-The first screen should be a very minimal flow skeleton review:
+### 1. Replace current review nodes with the provided “pill skeleton” visual system
+
+The default skeleton review will become extremely minimal:
+
+- Trigger: dark rounded pill with icon + `Trigger | Subscribed to Email Marketing`
+- Message nodes: long white rounded pills with only:
+  - message number/day marker
+  - separator
+  - message title
+- Delay nodes: small dark capsules like `24H`, `2D`
+- Conditional split: dark rounded pill with icon + `Conditional Split | New Customers vs Repeat Customers`
+- Branches: clean black connector lines with simple YES/NO route labels only
+- Exit nodes: small terminal/exit chips if needed
+
+Default message nodes will not show purpose, subject direction, sections, preview text, thumbnails, status rows, metadata, or generated previews.
+
+### 2. Add hover expansion for message nodes
+
+Message nodes in review mode will smoothly expand into the richer state from the second reference image.
+
+Collapsed state:
 
 ```text
-Trigger
-  ↓
-Message: Welcome + offer
-  ↓
-Delay: 24h
-  ↓
-Message: Education / objection handling
-  ↓
-Split: Purchased?
-     YES → Exit
-     NO  → Message: Last chance
+2 | Welcome to our Brand
 ```
 
-No campaign thumbnails, no subject lines, no preview text, no section lists, no dense metadata, no generated email preview panels. The point is instant skimmability.
+Expanded state:
 
-After the user approves the skeleton, the app moves into the existing detailed workspace where generation, previews, message details, chat, and campaign HTML inspection belong.
+```text
+2
+Day 2
 
-## Implementation plan
+Welcome to our Brand
+Brief purpose/goal sentence.
 
-### 1. Add an explicit “Skeleton Review” mode
+SL Subject direction / subject line
+PT Preview text / preview direction
 
-Update `FlowBuilderPage.tsx` so flow pages choose between two modes:
+[Welcome Hero] [Dynamic Discount] [Categories Highlight]
+[Social Proof] [Categories Highlight]
+```
 
-- `skeleton_review`
-  - Used when `flow.status === "skeleton_ready"`.
-  - Shows only the clean, minimal skeleton canvas.
-  - Shows a prominent approve action.
-- `detail_workspace`
-  - Used after approval/generation starts or when the flow is already `generating` / `complete`.
-  - Shows the current split-pane workspace with chat, detailed nodes, previews, generation controls, etc.
+Expansion behavior:
+
+- Hovering a message node expands it.
+- The expansion uses a smooth “blobby”/spring-like transition:
+  - rounded pill grows into a large rounded card
+  - opacity fade-in for details
+  - slight scale/shape easing
+- The expansion stays fast and responsive.
+- Details collapse when hover leaves unless the node has been locked open.
+
+### 3. Add click-to-lock behavior
+
+For review-mode message nodes:
+
+- Click once: lock expanded.
+- Click again: unlock it.
+- If unlocked, it returns to hover-only behavior.
+- Only one node should be locked open at a time unless there is a strong existing reason to allow multiple.
+- Drag/pan behavior will be protected so click-to-lock does not conflict with canvas panning.
+
+### 4. Add a “show full detail” toggle
+
+Add a compact review control near the orientation toggle:
+
+- `Compact`
+- `Full detail`
 
 Behavior:
 
-- Newly drafted skeletons open in review mode.
-- Existing generated/complete flows open in detailed mode.
-- Approving the skeleton starts generation and transitions into detailed mode.
-- No database schema changes are required; this can use the existing `flows.status` lifecycle.
+- `Compact`: default; nodes are bare-bones unless hovered/locked.
+- `Full detail`: all message nodes render in the expanded card style so the user can inspect the skeleton without hovering node-by-node.
+- This toggle applies only to skeleton review mode, not the detailed generation workspace.
 
-### 2. Create a minimal skeleton canvas variant
+### 5. Match the provided layouts closely
 
-Update `SkeletonViewer.tsx` to support a presentation mode prop, for example:
+Review mode styling will be rewritten around the uploaded references:
 
-```ts
-mode?: "review" | "detail"
+- White/cream canvas.
+- Thin black connector lines.
+- Large rounded message pills.
+- Dark trigger/split/delay capsules.
+- High-contrast monochrome hierarchy.
+- Minimal borders and no dashboard-card styling.
+- Efficient spacing so more layers fit on screen.
+- Vertical and horizontal orientation both remain available, but both use the same minimal visual language.
+
+For horizontal mode, the same components will lay left-to-right while preserving dense spacing and readable branching.
+
+### 6. Condense structure block labels
+
+The expanded node must show short block chips like:
+
+```text
+Welcome Hero
+Dynamic Discount
+Categories Highlight
+Social Proof
 ```
 
-In `review` mode:
+Instead of long section descriptions.
 
-- Render the same flow graph and edge layout.
-- Use simplified node components.
-- Disable or hide:
-  - campaign thumbnails
-  - bottom-half campaign preview behavior
-  - subject line / preview text display
-  - generation buttons on individual nodes
-  - delete buttons
-  - sticky notes
-  - node palette
-  - minimap
-  - detailed flyouts
-  - complex message metadata
-- Keep:
-  - pan / zoom
-  - fit-to-view
-  - basic YES / NO path labels
-  - compact flow structure
+Implementation:
 
-This keeps the visual model consistent while removing the information overload.
+- Add a section-label condensing helper in the frontend that turns verbose section bullets into short chip labels.
+- Examples:
+  - `Hero block — introduce the offer and product benefit` → `Hero`
+  - `Proof element — dentist endorsement/social proof` → `Proof`
+  - `CTA — destination to collection/product page` → `CTA`
+  - `Product education block — explain key benefits` → `Education`
+- Preserve the original detailed section text in the underlying skeleton data; only the review display becomes condensed.
 
-### 3. Redesign review-mode nodes around hierarchy
+### 7. Tighten the AI skeleton prompt so future skeletons produce short display-ready blocks
 
-In review mode, each node should show only one primary idea.
+Update the flow-agent prompt rules so generated skeletons include compact section names.
 
-#### Trigger node
+Prompt requirements to add:
 
-Show:
+- Email labels: 2–5 words.
+- Job/purpose: one short sentence.
+- Subject direction: short angle, not copy.
+- Section bullets must begin with a 1–3 word block label, followed by optional short explanation.
+- Preferred section-label examples:
+  - `Welcome Hero`
+  - `Offer Reveal`
+  - `Product Proof`
+  - `Social Proof`
+  - `Founder Note`
+  - `Dynamic Discount`
+  - `Categories Highlight`
+  - `Objection Handle`
+  - `Last Chance CTA`
+- No long marketing-copy-style section names.
 
-- small label: `TRIGGER`
-- trigger name, e.g. `Added to List`
+### 8. Update review layout geometry for visual efficiency
 
-Do not show “Source” rows or metadata tables.
+In `SkeletonViewer.tsx`, review-mode node sizing/layout will be adjusted:
 
-#### Message node
+- Collapsed message pills become wide and short.
+- Expanded nodes use the large rounded-card dimensions from the mockup.
+- Delay nodes become small connector capsules.
+- Split nodes become compact dark capsules.
+- Branch gaps are reduced while still preventing overlap.
+- Fit-to-view accounts for expanded locked/full-detail nodes so open cards do not overlap or get clipped.
 
-Show:
+### 9. Preserve the detailed workspace
 
-- step number, e.g. `01`
-- message title, e.g. `Welcome + offer delivery`
-- optional one-line purpose, derived from `job`, e.g. `Deliver offer and introduce hero product`
+The detailed workspace after approval stays separate.
 
-Do not show:
+Review mode:
 
-- thumbnail
-- subject direction
-- preview text
-- status pill unless generating has already started
-- sections
-- notes
-- action icons
+- process skeleton
+- hover/click expanded skeleton cards
+- no campaign thumbnails/previews
+- no generated email iframe panel
+- no dense metadata
 
-#### Delay node
+Detail mode:
 
-Show only:
-
-- clock icon or tiny label
-- delay value, e.g. `24h`, `2 days`
-
-No card body, no “wait” label unless it is visually tiny and secondary.
-
-#### Split node
-
-Show only:
-
-- label: `SPLIT`
-- condition, e.g. `Purchased?`
-
-Do not show:
-
-- YES/NO descriptions inside the node
-- branch breakdown text
-- “Branches not specified”
-- long notes
-
-YES/NO should remain on the connecting paths only.
-
-#### Exit node
-
-Show as a small terminal chip:
-
-- `Exit`
-
-### 4. Make the skeleton look like a map, not a dashboard
-
-Update `src/index.css` with review-mode-specific classes, for example:
-
-```css
-.flowline-root.review-mode ...
-```
-
-Visual direction:
-
-- fewer borders
-- lighter surfaces
-- more whitespace between nodes
-- stronger typographic hierarchy
-- smaller utility labels
-- nodes sized for readability, not metadata storage
-- muted secondary text
-- no heavy hover shadows
-- no thumbnail blocks
-- no dense rows
-
-The review canvas should feel closer to a process diagram / subway map than a CRM card UI.
-
-### 5. Tighten the layout for skimmability
-
-Adjust layout constants when in review mode:
-
-- message nodes can be wider but shorter
-- delay nodes should be very small
-- split nodes should be compact
-- vertical spacing should make the sequence readable
-- branch spacing should make YES/NO paths immediately understandable
-
-The review-mode graph should fit comfortably in the available canvas at the user’s current viewport size.
-
-### 6. Add a review screen header / approval bar
-
-In `FlowBuilderPage.tsx`, when in review mode, replace the current dense top-right actions with a focused approval bar:
-
-- title: `Review flow skeleton`
-- helper text: `Approve this structure before generating the full messages.`
-- primary button: `Approve & Generate`
-- secondary affordance: `Edit with Lucy` or `Refine skeleton` if the existing `FlowAgentChat` should remain reachable
-
-Keep this header minimal and floating, matching the existing pill-style top bar.
-
-### 7. Keep editing/refinement available without overwhelming the canvas
-
-In review mode, avoid showing the full right-side chat by default.
-
-Instead:
-
-- either hide the split pane entirely and use a full-width skeleton review canvas
-- or expose a small `Refine` / `Edit with Lucy` button that opens the existing `FlowAgentChat` as a side panel only when needed
-
-This keeps the default review screen focused on flow comprehension.
-
-### 8. Preserve the detailed workspace for after approval
-
-The existing complex view should not be deleted. It should become the second step.
-
-In detail mode, keep the current capabilities:
-
-- generated message previews
-- campaign thumbnail / iframe preview behavior
-- detail flyouts
-- chat panel
-- individual regenerate controls
-- export all
-- full metadata inspection
-
-But these should not appear on the initial approval screen.
-
-### 9. Update generation transition behavior
-
-Change the approve button flow:
-
-1. User reviews minimal skeleton.
-2. User clicks `Approve & Generate`.
-3. App sets flow status to `generating`.
-4. App transitions to detailed workspace.
-5. Existing `generateAllEmails()` runs sequentially.
-6. When complete, status becomes `complete`.
-
-This uses the existing generation logic but moves it behind a cleaner approval step.
-
-### 10. Improve skeleton prompt output to support skimmability
-
-Update the `flow-agent` skeleton prompt so generated skeleton labels are intentionally short:
-
-- Email labels: 2–5 words
-- Jobs: one short purpose sentence
-- Delay labels: compact values like `24h`, `2 days`
-- Split labels: question format like `Purchased?`, `VIP customer?`
-- Avoid long labels in bracket headers
-
-This prevents the minimal canvas from becoming overloaded at the source.
+- generation controls
+- generated campaign previews
+- subject line/preview text from generated campaigns
+- full message inspection
+- chat/refinement tooling
 
 ## Files to update
 
-### `src/pages/FlowBuilderPage.tsx`
-
-- Add view-mode selection.
-- Render review mode for `skeleton_ready`.
-- Render detail workspace after approval/generation.
-- Move approve/generate action into a focused review header.
-- Keep existing detailed workspace for generated flows.
-
 ### `src/components/flows/SkeletonViewer.tsx`
 
-- Add `mode="review" | "detail"`.
-- Add simplified review node renderer.
-- Hide thumbnails, previews, detail flyouts, palette, minimap, sticky tools, and node action controls in review mode.
-- Use review-specific sizing/layout constants.
-- Keep YES/NO path labels.
+- Add review-mode hover/locked expansion state.
+- Add full-detail toggle state.
+- Replace `ReviewNodeView` with collapsed/expanded variants matching the provided layouts.
+- Add condensed section-chip display.
+- Adjust review geometry to support collapsed and expanded dimensions.
+- Keep vertical/horizontal orientation toggle.
+- Ensure connector routing still works with compact pills and expanded cards.
 
 ### `src/index.css`
 
-- Add review-mode flow canvas styling.
-- Reduce visual weight and density.
-- Create compact node styles for trigger, message, delay, split, and exit nodes.
-- Preserve existing detailed styles for the full workspace.
+- Rewrite review-mode node styling:
+  - dark trigger/split/delay pills
+  - white message pills
+  - expanded rounded cards
+  - smooth spring-like expansion transitions
+  - condensed chip styling
+  - efficient connector styling
+- Add styling for the full-detail toggle.
 
 ### `supabase/functions/flow-agent/index.ts`
 
-- Tighten the skeleton generation prompt so labels and purposes are short enough for a diagram-first UI.
+- Tighten prompt instructions for short section/block labels.
+- Make future skeletons output display-ready condensed block names while preserving strategic usefulness.
 
 ## Expected result
 
-- The initial flow screen becomes instantly skimmable.
-- The user sees the business process first, not email rendering details.
-- Message nodes show only title/purpose.
-- Delay and split nodes are compact and obvious.
-- YES/NO branching is visible only on paths.
-- The detailed, information-heavy workspace still exists, but only after approval.
-- The screen finally communicates “what is the structure of this flow?” before asking the user to deal with generated campaign complexity.
+- The skeleton review looks like the uploaded bare-bones process map.
+- Default view is instantly skimmable: titles, delays, routes, splits only.
+- Hovering a message smoothly expands it into the richer mockup-style card.
+- Clicking locks a message open; clicking again unlocks it.
+- A toggle lets the user show every message in full-detail mode.
+- Structure block chips are short and readable.
+- The user can understand the whole flow at a glance before approving generation.
