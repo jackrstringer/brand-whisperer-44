@@ -532,20 +532,34 @@ export function SkeletonViewer({
   const [deleteTarget, setDeleteTarget] = useState<BoardNode | Sticky | null>(null);
   const [detailsNode, setDetailsNode] = useState<BoardNode | null>(null);
   const [orientation, setOrientation] = useState<FlowOrientation>("horizontal");
+  const [hoveredReviewNodeId, setHoveredReviewNodeId] = useState<string | null>(null);
+  const [lockedReviewNodeId, setLockedReviewNodeId] = useState<string | null>(null);
+  const [reviewDetailMode, setReviewDetailMode] = useState<ReviewDetailMode>("compact");
   const effectiveOrientation = mode === "review" ? orientation : "vertical";
 
   const board = useMemo(
     () => buildBoard(parsedNodes, meta, flowType, mode),
     [parsedNodes, meta, flowType, mode]
   );
+  const expandedReviewLayoutNodeIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (mode !== "review") return ids;
+    if (reviewDetailMode === "full") {
+      board.nodes.forEach((node) => {
+        if (node.kind === "email" || node.kind === "sms") ids.add(node.id);
+      });
+    }
+    if (lockedReviewNodeId) ids.add(lockedReviewNodeId);
+    return ids;
+  }, [board.nodes, lockedReviewNodeId, mode, reviewDetailMode]);
   const [layoutNodes, setLayoutNodes] = useState<BoardNode[]>(board.nodes);
   const [graphEdges, setGraphEdges] = useState<BoardEdge[]>(board.edges);
   const hoveredDropTargetRef = useRef<string | null>(null);
 
   useEffect(() => {
     setGraphEdges(board.edges);
-    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges, mode, effectiveOrientation));
-  }, [board.nodes, board.edges, mode, effectiveOrientation]);
+    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges, mode, effectiveOrientation, expandedReviewLayoutNodeIds));
+  }, [board.nodes, board.edges, mode, effectiveOrientation, expandedReviewLayoutNodeIds]);
 
   const displayBoard = useMemo(() => ({ ...board, nodes: layoutNodes, edges: graphEdges }), [board, layoutNodes, graphEdges]);
 
