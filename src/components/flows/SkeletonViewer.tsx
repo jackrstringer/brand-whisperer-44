@@ -63,6 +63,7 @@ export interface FlowEmailMeta {
 }
 
 type NodeKind = "trigger" | "filters" | "email" | "delay" | "split" | "trigger_split" | "sms" | "push" | "webhook" | "exit";
+type FlowOrientation = "vertical" | "horizontal";
 
 export interface BoardNode {
   id: string;
@@ -126,13 +127,13 @@ const SIBLING_X_GAP = 96;
 const SPLIT_BRANCH_GAP = 112;
 function getNodeSize(kind: NodeKind, mode: "review" | "detail" = "detail") {
   if (mode === "review") {
-    if (kind === "delay") return { w: 124, h: 42 };
-    if (kind === "split") return { w: 210, h: 62 };
-    if (kind === "trigger_split") return { w: 210, h: 62 };
-    if (kind === "filters") return { w: 260, h: 70 };
-    if (kind === "exit") return { w: 72, h: 34 };
-    if (kind === "trigger") return { w: 260, h: 74 };
-    return { w: 320, h: 92 };
+    if (kind === "delay") return { w: 104, h: 38 };
+    if (kind === "split") return { w: 176, h: 58 };
+    if (kind === "trigger_split") return { w: 176, h: 58 };
+    if (kind === "filters") return { w: 220, h: 64 };
+    if (kind === "exit") return { w: 66, h: 32 };
+    if (kind === "trigger") return { w: 220, h: 66 };
+    return { w: 260, h: 86 };
   }
   if (kind === "delay") return { w: 154, h: 52 };
   if (kind === "split") return { w: 214, h: 68 };
@@ -157,10 +158,25 @@ function injectHiddenScrollbarStyles(html: string | null | undefined) {
 function orthPath(
   from: { x: number; y: number },
   to: { x: number; y: number },
+  orientation: FlowOrientation = "vertical",
   radius = 12
 ): string {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
+  if (orientation === "horizontal") {
+    if (Math.abs(dy) < 1) return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
+    const midX = from.x + dx / 2;
+    const r = Math.min(radius, Math.abs(dx) / 2 - 1, Math.abs(dy) / 2);
+    const sy = Math.sign(dy);
+    return [
+      `M ${from.x} ${from.y}`,
+      `L ${midX - r * Math.sign(dx)} ${from.y}`,
+      `Q ${midX} ${from.y} ${midX} ${from.y + sy * r}`,
+      `L ${midX} ${to.y - sy * r}`,
+      `Q ${midX} ${to.y} ${midX + r * Math.sign(dx)} ${to.y}`,
+      `L ${to.x} ${to.y}`,
+    ].join(" ");
+  }
   if (Math.abs(dx) < 1) return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
   const midY = from.y + dy / 2;
   const r = Math.min(radius, Math.abs(dy) / 2 - 1, Math.abs(dx) / 2);
@@ -327,9 +343,18 @@ function resolveNodeCollisions(nodes: BoardNode[], mode: "review" | "detail" = "
   return resolved;
 }
 
-function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[], mode: "review" | "detail" = "detail"): BoardNode[] {
+function layoutFlowGraph(
+  nodes: BoardNode[],
+  edges: BoardEdge[],
+  mode: "review" | "detail" = "detail",
+  orientation: FlowOrientation = "vertical"
+): BoardNode[] {
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
   const childrenById: Record<string, BoardEdge[]> = {};
+  const lineGap = mode === "review" ? 42 : LINEAR_Y_GAP;
+  const splitGap = mode === "review" ? 56 : SPLIT_Y_GAP;
+  const siblingGapBase = mode === "review" ? 58 : SIBLING_X_GAP;
+  const splitBranchGap = mode === "review" ? 72 : SPLIT_BRANCH_GAP;
   for (const edge of edges) {
     if (!byId[edge.from] || !byId[edge.to]) continue;
     (childrenById[edge.from] ||= []).push(edge);
@@ -341,6 +366,60 @@ function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[], mode: "review" 
       return rank(a.branch) - rank(b.branch) || a.to.localeCompare(b.to);
     });
 
+  if (orientation === "horizontal") {
+    const heightCache: Record<string, number> = {};
+    const measureH = (id: string, seen = new Set<string>()): number => {
+      const node = byId[id];
+      if (!node || seen.has(id)) return 0;
+      if (heightCache[id]) return heightCache[id];
+      const size = getNodeSize(node.kind, mode);
+      const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
+      if (!children.length) return (heightCache[id] = size.h);
+      const nextSeen = new Set(seen).add(id);
+      const childHeight = children.reduce((sum, edge, index) => {
+        return sum + measureH(edge.to, nextSeen) + (index > 0 ? splitBranchGap : 0);
+      }, 0);
+      return (heightCache[id] = Math.max(size.h, childHeight));
+    };
+
+    const positioned: Record<string, BoardNode> = {};
+    const placeH = (id: string, x: number, centerY: number, seen = new Set<string>()) => {
+      const node = byId[id];
+      if (!node || seen.has(id)) return;
+      const size = getNodeSize(node.kind, mode);
+      positioned[id] = { ...node, x, y: centerY - size.h / 2 };
+      const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
+      if (!children.length) return;
+      const childX = x + size.w + (children.length > 1 || node.kind === "split" ? splitGap : lineGap);
+      const nextSeen = new Set(seen).add(id);
+      if (children.length === 1 && node.kind !== "split") {
+        placeH(children[0].to, childX, centerY, nextSeen);
+        return;
+      }
+      const heights = children.map((edge) => {
+        const child = byId[edge.to];
+        return node.kind === "split" ? getNodeSize(child.kind, mode).h : measureH(edge.to, nextSeen);
+      });
+      const totalHeight = heights.reduce((sum, height) => sum + height, 0) + splitBranchGap * Math.max(0, heights.length - 1);
+      let cursor = centerY - totalHeight / 2;
+      children.forEach((edge, index) => {
+        placeH(edge.to, childX, cursor + heights[index] / 2, nextSeen);
+        cursor += heights[index] + splitBranchGap;
+      });
+    };
+
+    const rootId = byId.trigger ? "trigger" : nodes[0]?.id;
+    if (rootId) placeH(rootId, 80, 0);
+    let orphanX = 80;
+    return nodes.map((node) => {
+      if (positioned[node.id]) return positioned[node.id];
+      const size = getNodeSize(node.kind, mode);
+      const fallback = { ...node, x: orphanX, y: -size.h / 2 };
+      orphanX += size.w + lineGap;
+      return fallback;
+    });
+  }
+
   const widthCache: Record<string, number> = {};
   const measure = (id: string, seen = new Set<string>()): number => {
     const node = byId[id];
@@ -351,7 +430,7 @@ function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[], mode: "review" 
     if (!children.length) return (widthCache[id] = size.w);
     const nextSeen = new Set(seen).add(id);
     const childWidth = children.reduce((sum, edge, index) => {
-      return sum + measure(edge.to, nextSeen) + (index > 0 ? SIBLING_X_GAP : 0);
+      return sum + measure(edge.to, nextSeen) + (index > 0 ? siblingGapBase : 0);
     }, 0);
     return (widthCache[id] = Math.max(size.w, childWidth));
   };
@@ -366,7 +445,7 @@ function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[], mode: "review" 
     const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
     if (!children.length) return;
 
-    const childY = y + size.h + (children.length > 1 || node.kind === "split" ? SPLIT_Y_GAP : LINEAR_Y_GAP);
+    const childY = y + size.h + (children.length > 1 || node.kind === "split" ? splitGap : lineGap);
     const nextSeen = new Set(seen).add(id);
     if (children.length === 1 && node.kind !== "split") {
       place(children[0].to, centerX, childY, nextSeen);
@@ -377,7 +456,7 @@ function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[], mode: "review" 
       const child = byId[edge.to];
       return node.kind === "split" ? getNodeSize(child.kind, mode).w : measure(edge.to, nextSeen);
     });
-    const siblingGap = node.kind === "split" ? SPLIT_BRANCH_GAP : SIBLING_X_GAP;
+    const siblingGap = node.kind === "split" ? splitBranchGap : siblingGapBase;
     const totalWidth = widths.reduce((sum, width) => sum + width, 0) + siblingGap * Math.max(0, widths.length - 1);
     let cursor = centerX - totalWidth / 2;
     children.forEach((edge, index) => {
@@ -394,7 +473,7 @@ function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[], mode: "review" 
     if (positioned[node.id]) return positioned[node.id];
     const size = getNodeSize(node.kind, mode);
     const fallback = { ...node, x: -size.w / 2, y: orphanY };
-    orphanY += size.h + LINEAR_Y_GAP;
+    orphanY += size.h + lineGap;
     return fallback;
   });
 }
@@ -449,6 +528,8 @@ export function SkeletonViewer({
   const [hoveredDropTarget, setHoveredDropTarget] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BoardNode | Sticky | null>(null);
   const [detailsNode, setDetailsNode] = useState<BoardNode | null>(null);
+  const [orientation, setOrientation] = useState<FlowOrientation>("horizontal");
+  const effectiveOrientation = mode === "review" ? orientation : "vertical";
 
   const board = useMemo(
     () => buildBoard(parsedNodes, meta, flowType, mode),
@@ -460,8 +541,8 @@ export function SkeletonViewer({
 
   useEffect(() => {
     setGraphEdges(board.edges);
-    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges, mode));
-  }, [board.nodes, board.edges, mode]);
+    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges, mode, effectiveOrientation));
+  }, [board.nodes, board.edges, mode, effectiveOrientation]);
 
   const displayBoard = useMemo(() => ({ ...board, nodes: layoutNodes, edges: graphEdges }), [board, layoutNodes, graphEdges]);
 
@@ -506,10 +587,10 @@ export function SkeletonViewer({
     setZoom(z);
     setPan({
       x: (r.width - (maxX - minX) * z) / 2 - minX * z,
-      y: 80 - minY * z,
+      y: effectiveOrientation === "horizontal" ? (r.height - (maxY - minY) * z) / 2 - minY * z : 80 - minY * z,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayBoard.nodes.length]);
+  }, [displayBoard.nodes.length, effectiveOrientation]);
 
   /* -------- Wheel: pinch zoom or two-finger pan, NEVER scroll page -------- */
   useEffect(() => {
@@ -639,12 +720,12 @@ export function SkeletonViewer({
     setZoom(z);
     setPan({
       x: (r.width - (maxX - minX) * z) / 2 - minX * z,
-      y: 80 - minY * z,
+      y: effectiveOrientation === "horizontal" ? (r.height - (maxY - minY) * z) / 2 - minY * z : 80 - minY * z,
     });
   };
 
   const cleanUpLayout = () => {
-    const cleaned = layoutFlowGraph(layoutNodes, graphEdges, mode);
+    const cleaned = layoutFlowGraph(layoutNodes, graphEdges, mode, effectiveOrientation);
     setLayoutNodes(cleaned);
     requestAnimationFrame(fitToView);
   };
@@ -713,8 +794,15 @@ export function SkeletonViewer({
       if (a.kind === "split") {
         from.x = edge.branch === "no" ? a.x + sa.w * 0.78 : a.x + sa.w * 0.22;
       }
-      const to = { x: b.x + sb.w / 2, y: b.y };
-      return { edge, from, to, path: orthPath(from, to) };
+      let to = { x: b.x + sb.w / 2, y: b.y };
+      if (effectiveOrientation === "horizontal") {
+        from = { x: a.x + sa.w, y: a.y + sa.h / 2 };
+        if (a.kind === "split") {
+          from.y = edge.branch === "no" ? a.y + sa.h * 0.72 : a.y + sa.h * 0.28;
+        }
+        to = { x: b.x, y: b.y + sb.h / 2 };
+      }
+      return { edge, from, to, path: orthPath(from, to, effectiveOrientation) };
     })
     .filter(Boolean) as { edge: BoardEdge; from: any; to: any; path: string }[];
 
@@ -758,7 +846,7 @@ export function SkeletonViewer({
 
   const relayoutGraph = (nodes: BoardNode[], edges: BoardEdge[]) => {
     setGraphEdges(edges);
-    setLayoutNodes(resolveNodeCollisions(layoutFlowGraph(nodes, edges, mode), mode));
+    setLayoutNodes(resolveNodeCollisions(layoutFlowGraph(nodes, edges, mode, effectiveOrientation), mode));
   };
 
   const deleteSticky = (id: string) => {
@@ -1104,6 +1192,25 @@ export function SkeletonViewer({
 
         {/* Bottom-left minimap */}
         {mode === "detail" && <Minimap board={displayBoard} pan={pan} zoom={zoom} stageRef={stageRef} />}
+
+        {mode === "review" && (
+          <div className="fl-orientation" onMouseDown={(e) => e.stopPropagation()}>
+            <button
+              className={orientation === "horizontal" ? "on" : ""}
+              onClick={() => setOrientation("horizontal")}
+              title="Left-to-right layout"
+            >
+              Left → Right
+            </button>
+            <button
+              className={orientation === "vertical" ? "on" : ""}
+              onClick={() => setOrientation("vertical")}
+              title="Top-to-bottom layout"
+            >
+              Top ↓ Bottom
+            </button>
+          </div>
+        )}
 
         {/* Bottom-right zoom control */}
         <div className="fl-zoom" onMouseDown={(e) => e.stopPropagation()}>
