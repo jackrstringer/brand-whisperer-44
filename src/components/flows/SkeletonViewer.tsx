@@ -129,11 +129,38 @@ const SPLIT_BRANCH_GAP = 112;
 const REVIEW_MESSAGE_WIDTH = 560;
 const REVIEW_MESSAGE_COLLAPSED_HEIGHT = 108;
 const REVIEW_MESSAGE_EXPANDED_MIN_HEIGHT = 404;
+const REVIEW_MESSAGE_INNER_WIDTH = REVIEW_MESSAGE_WIDTH - 48;
+const REVIEW_MESSAGE_CHIP_GAP = 8;
+const REVIEW_MESSAGE_CHIP_MIN_HEIGHT = 42;
 
 function estimateReviewTextLines(text: string, charsPerLine: number) {
   const value = text.trim();
   if (!value) return 0;
   return Math.max(1, Math.ceil(value.length / charsPerLine));
+}
+
+function estimateReviewChipRows(chips: string[]) {
+  if (!chips.length) return 0;
+
+  let rows = 1;
+  let rowWidth = 0;
+
+  for (const chip of chips) {
+    const estimatedChipWidth = Math.min(
+      REVIEW_MESSAGE_INNER_WIDTH,
+      Math.max(112, chip.trim().length * 9.25 + 34)
+    );
+    const nextWidth = rowWidth === 0 ? estimatedChipWidth : rowWidth + REVIEW_MESSAGE_CHIP_GAP + estimatedChipWidth;
+
+    if (rowWidth > 0 && nextWidth > REVIEW_MESSAGE_INNER_WIDTH) {
+      rows += 1;
+      rowWidth = estimatedChipWidth;
+    } else {
+      rowWidth = nextWidth;
+    }
+  }
+
+  return rows;
 }
 
 function getReviewExpandedMessageHeight(node?: BoardNode) {
@@ -149,16 +176,28 @@ function getReviewExpandedMessageHeight(node?: BoardNode) {
   const purposeLines = purpose ? Math.min(3, estimateReviewTextLines(purpose, 52)) : 0;
   const subjectLines = estimateReviewTextLines(subject, 58);
   const previewLines = estimateReviewTextLines(preview, 58);
-  const chipRows = chips.length ? Math.max(1, Math.ceil(chips.length / 2)) : 0;
+  const chipRows = estimateReviewChipRows(chips);
+
+  const bodyBlocks = [
+    22,
+    purposeLines ? purposeLines * 27 : 0,
+    subjectLines * 27 + previewLines * 27 + 12,
+    chipRows
+      ? chipRows * REVIEW_MESSAGE_CHIP_MIN_HEIGHT +
+        Math.max(0, chipRows - 1) * REVIEW_MESSAGE_CHIP_GAP +
+        2
+      : 0,
+  ].filter((value) => value > 0);
+
+  const bodyHeight = bodyBlocks.reduce((total, value) => total + value, 0) + Math.max(0, bodyBlocks.length - 1) * 18;
 
   return Math.max(
     REVIEW_MESSAGE_EXPANDED_MIN_HEIGHT,
-    132 +
-      titleLines * 38 +
-      purposeLines * 28 +
-      subjectLines * 27 +
-      previewLines * 25 +
-      (chipRows ? chipRows * 50 : 0)
+    44 +
+      44 +
+      20 +
+      titleLines * 37 +
+      bodyHeight
   );
 }
 
