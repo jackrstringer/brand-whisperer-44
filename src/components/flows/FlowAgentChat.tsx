@@ -11,6 +11,8 @@ import {
   ChevronDown,
   ChevronUp,
   MessageSquare,
+  CheckCircle2,
+  PencilLine,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
@@ -35,7 +37,10 @@ interface Props {
 
 interface FlowQuestion {
   question: string;
-  options?: string[];
+  helper?: string;
+  input_label?: string;
+  input_placeholder?: string;
+  options?: Array<string | { label: string; description?: string; value?: string }>;
   allow_other?: boolean;
 }
 
@@ -48,6 +53,7 @@ interface FlowSynth {
 const QUESTION_FENCE = /```flow-question\s*([\s\S]*?)```/;
 const SYNTH_FENCE = /```flow-synth\s*([\s\S]*?)```/;
 const SKELETON_FENCE = /```flow-skeleton[\s\S]*?```/;
+const CONTROL_FENCE_START = /```flow-(question|synth|skeleton|setup)/;
 
 function shouldAutoRestart(messages: Msg[], currentSkeleton: string | null): boolean {
   if (currentSkeleton || messages.length !== 1) return false;
@@ -80,11 +86,14 @@ function extractSynth(content: string): FlowSynth | null {
 }
 
 function stripFences(content: string): string {
-  return content
+  const withoutCompleteFences = content
     .replace(QUESTION_FENCE, "")
     .replace(SYNTH_FENCE, "")
     .replace(SKELETON_FENCE, "")
-    .trim();
+    .replace(/```flow-setup\s*[\s\S]*?```/g, "");
+
+  const partialStart = withoutCompleteFences.search(CONTROL_FENCE_START);
+  return (partialStart >= 0 ? withoutCompleteFences.slice(0, partialStart) : withoutCompleteFences).trim();
 }
 
 const STAGE_META: Record<string, { label: string }> = {
