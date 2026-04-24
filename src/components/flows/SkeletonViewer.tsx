@@ -143,13 +143,13 @@ function getReviewExpandedMessageHeight(node?: BoardNode) {
   const purpose = `${node.meta?.job || node.meta?.condition || node.meta?.duration || ""}`;
   const subject = `${node.meta?.subject_direction || node.meta?.subject || "Subject angle TBD"}`;
   const preview = `${node.meta?.preview_text || node.meta?.preview || "Preview direction TBD"}`;
-  const chips = condenseSectionLabels(node.meta?.sections).slice(0, 6);
+  const chips = condenseSectionLabels(node.meta?.sections);
 
   const titleLines = estimateReviewTextLines(title, 34);
   const purposeLines = purpose ? Math.min(3, estimateReviewTextLines(purpose, 52)) : 0;
   const subjectLines = estimateReviewTextLines(subject, 58);
   const previewLines = estimateReviewTextLines(preview, 58);
-  const chipRows = chips.length ? Math.max(1, Math.ceil(chips.length / 3)) : 0;
+  const chipRows = chips.length ? Math.max(1, Math.ceil(chips.length / 2)) : 0;
 
   return Math.max(
     REVIEW_MESSAGE_EXPANDED_MIN_HEIGHT,
@@ -1677,7 +1677,7 @@ function ReviewNodeView({
   const purpose = node.meta?.job || node.meta?.condition || node.meta?.duration || "";
   const subject = node.meta?.subject_direction || node.meta?.subject || "Subject angle TBD";
   const preview = node.meta?.preview_text || node.meta?.preview || "Preview direction TBD";
-  const chips = condenseSectionLabels(node.meta?.sections).slice(0, 6);
+  const chips = condenseSectionLabels(node.meta?.sections);
   const isMessage = node.kind === "email" || node.kind === "sms";
 
   if (node.kind === "exit") {
