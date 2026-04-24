@@ -128,7 +128,7 @@ const SIBLING_X_GAP = 96;
 const SPLIT_BRANCH_GAP = 112;
 function getNodeSize(kind: NodeKind, mode: "review" | "detail" = "detail", expanded = false) {
   if (mode === "review") {
-    if (expanded && (kind === "email" || kind === "sms")) return { w: 430, h: 270 };
+    if (expanded && (kind === "email" || kind === "sms")) return { w: 560, h: 340 };
     if (kind === "delay") return { w: 126, h: 54 };
     if (kind === "split") return { w: 420, h: 76 };
     if (kind === "trigger_split") return { w: 420, h: 76 };
