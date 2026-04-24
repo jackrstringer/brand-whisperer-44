@@ -636,13 +636,19 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
           ];
 
           const skeletonMatch = fullText.match(/```flow-skeleton\s*([\s\S]*?)```/);
+          const setupPatch = extractSetupDataFromResponse(fullText);
+          const nextSetupData = setupPatch ? mergeSetupData(existingSetupData, setupPatch) : existingSetupData;
+          const nextSetupConfirmed = setupLooksConfirmed(nextSetupData);
           const updates: Record<string, unknown> = {
             messages: newConversation,
             updated_at: new Date().toISOString(),
+            setup_data: nextSetupData,
+            setup_status: nextSetupConfirmed ? "ready_for_skeleton" : "needs_confirmation",
           };
           if (skeletonMatch) {
             updates.skeleton_markdown = skeletonMatch[1].trim();
             updates.status = "skeleton_ready";
+            updates.setup_status = "skeleton_ready";
           }
 
           await sb.from("flows").update(updates).eq("id", flow_id);
