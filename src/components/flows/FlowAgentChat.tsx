@@ -4,10 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Send,
-  Sparkles,
-  BookOpen,
-  BarChart3,
-  Wand2,
   ChevronDown,
   ChevronUp,
   MessageSquare,
@@ -44,12 +40,6 @@ interface FlowQuestion {
   allow_other?: boolean;
 }
 
-interface FlowSynth {
-  headline?: string;
-  facts?: { label: string; value: string }[];
-  plan?: string[];
-}
-
 const QUESTION_FENCE = /```flow-question\s*([\s\S]*?)```/;
 const SYNTH_FENCE = /```flow-synth\s*([\s\S]*?)```/;
 const SKELETON_FENCE = /```flow-skeleton[\s\S]*?```/;
@@ -58,7 +48,7 @@ const CONTROL_FENCE_START = /```flow-(question|synth|skeleton|setup)/;
 function shouldAutoRestart(messages: Msg[], currentSkeleton: string | null): boolean {
   if (currentSkeleton || messages.length !== 1) return false;
   const [first] = messages;
-  return first.role === "assistant" && QUESTION_FENCE.test(first.content);
+  return first.role === "assistant" && CONTROL_FENCE_START.test(first.content) && !extractQuestion(first.content);
 }
 
 function extractQuestion(content: string): FlowQuestion | null {
@@ -67,18 +57,6 @@ function extractQuestion(content: string): FlowQuestion | null {
   try {
     const parsed = JSON.parse(m[1].trim());
     if (parsed && typeof parsed.question === "string") return parsed as FlowQuestion;
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
-function extractSynth(content: string): FlowSynth | null {
-  const m = content.match(SYNTH_FENCE);
-  if (!m) return null;
-  try {
-    const parsed = JSON.parse(m[1].trim());
-    if (parsed && typeof parsed === "object") return parsed as FlowSynth;
   } catch {
     /* ignore */
   }
@@ -97,9 +75,9 @@ function stripFences(content: string): string {
 }
 
 const STAGE_META: Record<string, { label: string }> = {
-  reading: { label: "Reading brand research" },
-  analyzing: { label: "Analyzing performance data" },
-  strategizing: { label: "Designing flow strategy" },
+  reading: { label: "Checking brand research" },
+  analyzing: { label: "Thinking" },
+  strategizing: { label: "Thinking" },
   drafting: { label: "Drafting your skeleton" },
 };
 
