@@ -639,6 +639,10 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
             setup_data: nextSetupData,
             setup_status: nextSetupConfirmed ? "ready_for_skeleton" : "needs_confirmation",
           };
+          if (bootingFreshFlow && !skeletonMatch) {
+            updates.skeleton_markdown = null;
+            updates.status = "draft";
+          }
           if (skeletonMatch) {
             updates.skeleton_markdown = skeletonMatch[1].trim();
             updates.status = "skeleton_ready";
