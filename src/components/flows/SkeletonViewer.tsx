@@ -111,6 +111,7 @@ interface Props {
   generatingIndex: number | null;
   drafting?: boolean;
   parsedNodesRaw?: ParsedFlowNode[];
+  mode?: "review" | "detail";
 }
 
 /* ---------- Geometry ---------- */
@@ -123,7 +124,16 @@ const LINEAR_Y_GAP = 64;
 const SPLIT_Y_GAP = 104;
 const SIBLING_X_GAP = 96;
 const SPLIT_BRANCH_GAP = 112;
-function getNodeSize(kind: NodeKind) {
+function getNodeSize(kind: NodeKind, mode: "review" | "detail" = "detail") {
+  if (mode === "review") {
+    if (kind === "delay") return { w: 124, h: 42 };
+    if (kind === "split") return { w: 210, h: 62 };
+    if (kind === "trigger_split") return { w: 210, h: 62 };
+    if (kind === "filters") return { w: 260, h: 70 };
+    if (kind === "exit") return { w: 72, h: 34 };
+    if (kind === "trigger") return { w: 260, h: 74 };
+    return { w: 320, h: 92 };
+  }
   if (kind === "delay") return { w: 154, h: 52 };
   if (kind === "split") return { w: 214, h: 68 };
   if (kind === "trigger_split") return { w: 280, h: 120 };
@@ -170,10 +180,11 @@ function orthPath(
 function buildBoard(
   parsed: ParsedFlowNode[],
   meta: ParsedFlowMeta,
-  flowType: string
+  flowType: string,
+  mode: "review" | "detail" = "detail"
 ): { nodes: BoardNode[]; edges: BoardEdge[] } {
   const COL = 0;
-  const VGAP = 60;
+  const VGAP = mode === "review" ? 46 : 60;
   let y = 80;
   const out: BoardNode[] = [];
   const edges: BoardEdge[] = [];
@@ -190,7 +201,7 @@ function buildBoard(
     y,
     meta: { audience: meta.trigger || "—" },
   });
-  y += getNodeSize("trigger").h + VGAP;
+  y += getNodeSize("trigger", mode).h + VGAP;
 
   // Filters (optional)
   let prev = "trigger";
@@ -199,7 +210,7 @@ function buildBoard(
     out.push({ id, kind: "filters", label: "Entry Filters", x: COL, y, meta: { items: meta.filters } });
     edges.push({ id: "e-trig-filters", from: prev, to: id });
     prev = id;
-    y += getNodeSize("filters").h + VGAP;
+    y += getNodeSize("filters", mode).h + VGAP;
   }
 
   // Walk parsed nodes; emails get an emailIndex assigned in parsed order.
@@ -245,7 +256,7 @@ function buildBoard(
     edges.push({ id: `e-${prev}-${id}`, from: prev, to: id, branch: nodeByIdBranch(prev, kind) });
 
     if (kind === "split") {
-      const splitSize = getNodeSize("split");
+      const splitSize = getNodeSize("split", mode);
       const yesExitId = `${id}-yes-exit`;
       const noExitId = `${id}-no-exit`;
       const isTerminalSplit = i === parsed.length - 1;
@@ -261,7 +272,7 @@ function buildBoard(
     }
 
     prev = id;
-    y += getNodeSize(kind).h + VGAP;
+    y += getNodeSize(kind, mode).h + VGAP;
   }
 
   // Exit
@@ -285,9 +296,9 @@ function nodeByIdBranch(prevId: string, nextKind: NodeKind): "yes" | "no" | null
   return prevId.includes("-split") && nextKind !== "exit" ? "yes" : null;
 }
 
-function overlaps(a: BoardNode, b: BoardNode): boolean {
-  const as = getNodeSize(a.kind);
-  const bs = getNodeSize(b.kind);
+function overlaps(a: BoardNode, b: BoardNode, mode: "review" | "detail" = "detail"): boolean {
+  const as = getNodeSize(a.kind, mode);
+  const bs = getNodeSize(b.kind, mode);
   return !(
     a.x + as.w + NODE_MARGIN <= b.x ||
     b.x + bs.w + NODE_MARGIN <= a.x ||
@@ -296,14 +307,14 @@ function overlaps(a: BoardNode, b: BoardNode): boolean {
   );
 }
 
-function resolveNodeCollisions(nodes: BoardNode[]): BoardNode[] {
+function resolveNodeCollisions(nodes: BoardNode[], mode: "review" | "detail" = "detail"): BoardNode[] {
   const resolved = nodes.map((n) => ({ ...n }));
   for (let pass = 0; pass < 12; pass++) {
     let changed = false;
     for (let i = 0; i < resolved.length; i++) {
       for (let j = i + 1; j < resolved.length; j++) {
-        if (!overlaps(resolved[i], resolved[j])) continue;
-        const aSize = getNodeSize(resolved[i].kind);
+        if (!overlaps(resolved[i], resolved[j], mode)) continue;
+        const aSize = getNodeSize(resolved[i].kind, mode);
         const targetY = resolved[i].y + aSize.h + NODE_MARGIN;
         if (resolved[j].y < targetY) {
           resolved[j].y = targetY;
@@ -316,7 +327,7 @@ function resolveNodeCollisions(nodes: BoardNode[]): BoardNode[] {
   return resolved;
 }
 
-function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[]): BoardNode[] {
+function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[], mode: "review" | "detail" = "detail"): BoardNode[] {
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
   const childrenById: Record<string, BoardEdge[]> = {};
   for (const edge of edges) {
@@ -335,7 +346,7 @@ function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[]): BoardNode[] {
     const node = byId[id];
     if (!node || seen.has(id)) return 0;
     if (widthCache[id]) return widthCache[id];
-    const size = getNodeSize(node.kind);
+    const size = getNodeSize(node.kind, mode);
     const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
     if (!children.length) return (widthCache[id] = size.w);
     const nextSeen = new Set(seen).add(id);
@@ -349,7 +360,7 @@ function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[]): BoardNode[] {
   const place = (id: string, centerX: number, y: number, seen = new Set<string>()) => {
     const node = byId[id];
     if (!node || seen.has(id)) return;
-    const size = getNodeSize(node.kind);
+    const size = getNodeSize(node.kind, mode);
     positioned[id] = { ...node, x: centerX - size.w / 2, y };
 
     const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
@@ -364,7 +375,7 @@ function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[]): BoardNode[] {
 
     const widths = children.map((edge) => {
       const child = byId[edge.to];
-      return node.kind === "split" ? getNodeSize(child.kind).w : measure(edge.to, nextSeen);
+      return node.kind === "split" ? getNodeSize(child.kind, mode).w : measure(edge.to, nextSeen);
     });
     const siblingGap = node.kind === "split" ? SPLIT_BRANCH_GAP : SIBLING_X_GAP;
     const totalWidth = widths.reduce((sum, width) => sum + width, 0) + siblingGap * Math.max(0, widths.length - 1);
@@ -381,7 +392,7 @@ function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[]): BoardNode[] {
   let orphanY = 80;
   return nodes.map((node) => {
     if (positioned[node.id]) return positioned[node.id];
-    const size = getNodeSize(node.kind);
+    const size = getNodeSize(node.kind, mode);
     const fallback = { ...node, x: -size.w / 2, y: orphanY };
     orphanY += size.h + LINEAR_Y_GAP;
     return fallback;
@@ -418,6 +429,7 @@ export function SkeletonViewer({
   onSaveNodeEdit,
   generatingIndex,
   drafting,
+  mode = "detail",
 }: Props) {
   const navigate = useNavigate();
   const stageRef = useRef<HTMLDivElement>(null);
@@ -439,8 +451,8 @@ export function SkeletonViewer({
   const [detailsNode, setDetailsNode] = useState<BoardNode | null>(null);
 
   const board = useMemo(
-    () => buildBoard(parsedNodes, meta, flowType),
-    [parsedNodes, meta, flowType]
+    () => buildBoard(parsedNodes, meta, flowType, mode),
+    [parsedNodes, meta, flowType, mode]
   );
   const [layoutNodes, setLayoutNodes] = useState<BoardNode[]>(board.nodes);
   const [graphEdges, setGraphEdges] = useState<BoardEdge[]>(board.edges);
@@ -448,8 +460,8 @@ export function SkeletonViewer({
 
   useEffect(() => {
     setGraphEdges(board.edges);
-    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges));
-  }, [board.nodes, board.edges]);
+    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges, mode));
+  }, [board.nodes, board.edges, mode]);
 
   const displayBoard = useMemo(() => ({ ...board, nodes: layoutNodes, edges: graphEdges }), [board, layoutNodes, graphEdges]);
 
@@ -480,7 +492,7 @@ export function SkeletonViewer({
       maxX = -Infinity,
       maxY = -Infinity;
     for (const n of displayBoard.nodes) {
-      const sz = getNodeSize(n.kind);
+      const sz = getNodeSize(n.kind, mode);
       minX = Math.min(minX, n.x);
       minY = Math.min(minY, n.y);
       maxX = Math.max(maxX, n.x + sz.w);
@@ -606,7 +618,7 @@ export function SkeletonViewer({
       maxX = -Infinity,
       maxY = -Infinity;
     for (const n of displayBoard.nodes) {
-      const sz = getNodeSize(n.kind);
+      const sz = getNodeSize(n.kind, mode);
       minX = Math.min(minX, n.x);
       minY = Math.min(minY, n.y);
       maxX = Math.max(maxX, n.x + sz.w);
@@ -632,7 +644,7 @@ export function SkeletonViewer({
   };
 
   const cleanUpLayout = () => {
-    const cleaned = layoutFlowGraph(layoutNodes, graphEdges);
+    const cleaned = layoutFlowGraph(layoutNodes, graphEdges, mode);
     setLayoutNodes(cleaned);
     requestAnimationFrame(fitToView);
   };
@@ -694,8 +706,8 @@ export function SkeletonViewer({
       const a = nodeById[edge.from];
       const b = nodeById[edge.to];
       if (!a || !b) return null;
-      const sa = getNodeSize(a.kind);
-      const sb = getNodeSize(b.kind);
+      const sa = getNodeSize(a.kind, mode);
+      const sb = getNodeSize(b.kind, mode);
       let from = { x: a.x + sa.w / 2, y: a.y + sa.h };
       // For split nodes, bias outgoing port to YES (left) or NO (right)
       if (a.kind === "split") {
@@ -722,7 +734,7 @@ export function SkeletonViewer({
     const target = dropTargets.find((t) => t.id === targetId);
     if (!target) return;
     const id = `manual-${kind}-${Date.now()}`;
-    const size = getNodeSize(kind);
+    const size = getNodeSize(kind, mode);
     const node: BoardNode = {
       id,
       kind,
@@ -738,7 +750,7 @@ export function SkeletonViewer({
         { id: `e-${target.edge.from}-${id}`, from: target.edge.from, to: id, branch: target.edge.branch ?? null },
         { id: `e-${id}-${target.edge.to}`, from: id, to: target.edge.to, branch: target.edge.branch ?? null },
       ];
-      setLayoutNodes((arr) => layoutFlowGraph([...arr, node], nextEdges));
+      setLayoutNodes((arr) => layoutFlowGraph([...arr, node], nextEdges, mode));
       return nextEdges;
     });
     setSelected(id);
@@ -746,7 +758,7 @@ export function SkeletonViewer({
 
   const relayoutGraph = (nodes: BoardNode[], edges: BoardEdge[]) => {
     setGraphEdges(edges);
-    setLayoutNodes(resolveNodeCollisions(layoutFlowGraph(nodes, edges)));
+    setLayoutNodes(resolveNodeCollisions(layoutFlowGraph(nodes, edges, mode), mode));
   };
 
   const deleteSticky = (id: string) => {
@@ -801,7 +813,7 @@ export function SkeletonViewer({
   };
 
   const getCanvasPreviewPosition = (node: BoardNode) => {
-    const nodeSize = getNodeSize(node.kind);
+    const nodeSize = getNodeSize(node.kind, mode);
     const panelWidth = Math.round(nodeSize.w * 1.25);
     return {
       x: node.x + nodeSize.w + 24,
@@ -853,7 +865,7 @@ export function SkeletonViewer({
 
   /* -------- Render -------- */
   return (
-    <div className="flowline-root absolute inset-0">
+    <div className={`flowline-root ${mode === "review" ? "review-mode" : "detail-mode"} absolute inset-0`}>
       <div
         ref={stageRef}
         className={`fl-stage ${panning ? "fl-panning" : ""} ${
@@ -868,7 +880,7 @@ export function SkeletonViewer({
           className="fl-viewport"
           style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
         >
-          {triggerNode && (
+          {mode === "detail" && triggerNode && (
             <FlowSummaryCard
               trigger={triggerNode}
               flowType={flowType}
@@ -914,7 +926,7 @@ export function SkeletonViewer({
           </svg>
 
           {/* Path insertion targets — only active while dragging from the rail */}
-          {activeDragKind && dropTargets.map((target) => (
+          {mode === "detail" && activeDragKind && dropTargets.map((target) => (
             <div
               key={target.id}
               className={`fl-drop-target ${hoveredDropTarget === target.id ? "over" : ""}`}
@@ -926,7 +938,7 @@ export function SkeletonViewer({
           ))}
 
           {/* Stickies (under nodes) */}
-          {stickies.map((s) => (
+          {mode === "detail" && stickies.map((s) => (
             <div
               key={s.id}
               className={`fl-sticky ${selectedSticky === s.id ? "sel" : ""}`}
@@ -1023,10 +1035,11 @@ export function SkeletonViewer({
               isGenerating={
                 typeof n.emailIndex === "number" && generatingIndex === n.emailIndex
               }
+              mode={mode}
             />
           ))}
 
-          {expandedIndex !== null && (() => {
+          {mode === "detail" && expandedIndex !== null && (() => {
             const previewNode = displayBoard.nodes.find((n) => n.emailIndex === expandedIndex);
             const row = emails.find((e) => e.sequence_index === expandedIndex);
             if (!previewNode || !row?.html) return null;
@@ -1071,7 +1084,7 @@ export function SkeletonViewer({
         </div>
 
         {/* Permanent left node rail */}
-        <div className="fl-tool" onMouseDown={(e) => e.stopPropagation()}>
+        {mode === "detail" && <div className="fl-tool" onMouseDown={(e) => e.stopPropagation()}>
           <NodePalette onStartDrag={startPaletteDrag} />
           <button
             className={stickyArmed ? "on" : ""}
@@ -1087,10 +1100,10 @@ export function SkeletonViewer({
           <button onClick={cleanUpLayout} title="Clean up layout">
             <RefreshCw className="w-4 h-4" />
           </button>
-        </div>
+        </div>}
 
         {/* Bottom-left minimap */}
-        <Minimap board={displayBoard} pan={pan} zoom={zoom} stageRef={stageRef} />
+        {mode === "detail" && <Minimap board={displayBoard} pan={pan} zoom={zoom} stageRef={stageRef} />}
 
         {/* Bottom-right zoom control */}
         <div className="fl-zoom" onMouseDown={(e) => e.stopPropagation()}>
@@ -1134,7 +1147,7 @@ export function SkeletonViewer({
         </div>
       </div>
 
-      {detailsNode && (detailsNode.kind === "email" || detailsNode.kind === "sms") ? (
+      {mode === "detail" && detailsNode && (detailsNode.kind === "email" || detailsNode.kind === "sms") ? (
         <FlowEmailDetail
           node={detailsNode}
           emailRow={typeof detailsNode.emailIndex === "number" ? emails.find((e) => e.sequence_index === detailsNode.emailIndex) : undefined}
@@ -1167,7 +1180,7 @@ export function SkeletonViewer({
         </div>
       )}
 
-      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+      <AlertDialog open={mode === "detail" && !!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
@@ -1228,6 +1241,7 @@ function NodeView({
   emailRow,
   campaignMeta,
   isGenerating,
+  mode,
 }: {
   node: BoardNode;
   selected: boolean;
@@ -1246,8 +1260,9 @@ function NodeView({
   emailRow?: FlowEmailRow;
   campaignMeta: Record<string, FlowEmailMeta>;
   isGenerating: boolean;
+  mode: "review" | "detail";
 }) {
-  const sz = getNodeSize(node.kind);
+  const sz = getNodeSize(node.kind, mode);
   const km = KIND_META[node.kind];
   const I = km.Icon;
 
@@ -1270,6 +1285,17 @@ function NodeView({
           </button>
         )}
       </div>
+    );
+  }
+
+  if (mode === "review") {
+    return (
+      <ReviewNodeView
+        node={node}
+        selected={selected}
+        onSelect={onSelect}
+        onStartDrag={(e) => onStartDrag(e)}
+      />
     );
   }
 
@@ -1423,6 +1449,73 @@ function NodeView({
           onStartPreviewDrag={(e) => onStartDrag(e, emailRow?.html ? (onOpenPreview || onExpand) : undefined)}
           onSelect={onSelect}
         />
+      )}
+    </div>
+  );
+}
+
+
+function ReviewNodeView({
+  node,
+  selected,
+  onSelect,
+  onStartDrag,
+}: {
+  node: BoardNode;
+  selected: boolean;
+  onSelect: () => void;
+  onStartDrag: (e: React.MouseEvent) => void;
+}) {
+  const sz = getNodeSize(node.kind, "review");
+  const { Icon, label } = KIND_META[node.kind];
+  const step = typeof node.emailIndex === "number" ? String(node.emailIndex + 1).padStart(2, "0") : null;
+  const purpose = node.meta?.job || node.meta?.preview || node.meta?.condition || node.meta?.duration || "";
+
+  if (node.kind === "exit") {
+    return (
+      <div
+        className={`fl-review-node fl-review-exit ${selected ? "sel" : ""}`}
+        style={{ transform: `translate(${node.x}px, ${node.y}px)`, width: sz.w, height: sz.h }}
+        onMouseDown={(e) => { e.stopPropagation(); onSelect(); onStartDrag(e); }}
+      >
+        Exit
+      </div>
+    );
+  }
+
+  if (node.kind === "delay") {
+    return (
+      <div
+        className={`fl-review-node fl-review-delay ${selected ? "sel" : ""}`}
+        style={{ transform: `translate(${node.x}px, ${node.y}px)`, width: sz.w, height: sz.h }}
+        onMouseDown={(e) => { e.stopPropagation(); onSelect(); onStartDrag(e); }}
+      >
+        <Clock className="w-3.5 h-3.5" />
+        <span>{node.meta?.duration || node.label}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`fl-review-node fl-review-${node.kind} ${selected ? "sel" : ""}`}
+      style={{ transform: `translate(${node.x}px, ${node.y}px)`, width: sz.w, minHeight: sz.h }}
+      onMouseDown={(e) => { e.stopPropagation(); onSelect(); onStartDrag(e); }}
+    >
+      <div className="fl-review-head">
+        <div className="fl-review-kicker">
+          {step ? <span className="fl-review-step">{step}</span> : <Icon className="w-3.5 h-3.5" />}
+          <span>{node.kind === "split" ? "SPLIT" : node.kind === "trigger" ? "TRIGGER" : node.kind === "filters" ? "FILTERS" : label}</span>
+        </div>
+      </div>
+      <div className="fl-review-title">
+        {node.kind === "split" ? node.meta?.condition || node.label : node.label}
+      </div>
+      {(node.kind === "email" || node.kind === "sms") && purpose && (
+        <div className="fl-review-purpose">{purpose}</div>
+      )}
+      {node.kind === "filters" && (
+        <div className="fl-review-purpose">{(node.meta?.items || []).slice(0, 1).join("")}</div>
       )}
     </div>
   );
@@ -1625,7 +1718,7 @@ function Minimap({
     maxX = -Infinity,
     maxY = -Infinity;
   for (const n of board.nodes) {
-    const sz = getNodeSize(n.kind);
+    const sz = getNodeSize(n.kind, mode);
     minX = Math.min(minX, n.x);
     minY = Math.min(minY, n.y);
     maxX = Math.max(maxX, n.x + sz.w);
@@ -1648,7 +1741,7 @@ function Minimap({
     <div className="fl-mini">
       <svg viewBox={`${minX} ${minY} ${w} ${h}`} preserveAspectRatio="xMidYMid meet">
         {board.nodes.map((n) => {
-          const sz = getNodeSize(n.kind);
+          const sz = getNodeSize(n.kind, mode);
           return (
             <rect
               key={n.id}
