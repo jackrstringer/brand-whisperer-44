@@ -1606,15 +1606,21 @@ function NodeView({
 function ReviewNodeView({
   node,
   selected,
+  expanded,
+  locked,
   onSelect,
+  onHover,
   onStartDrag,
 }: {
   node: BoardNode;
   selected: boolean;
+  expanded: boolean;
+  locked: boolean;
   onSelect: () => void;
+  onHover?: (id: string | null) => void;
   onStartDrag: (e: React.MouseEvent) => void;
 }) {
-  const sz = getNodeSize(node.kind, "review");
+  const sz = getNodeSize(node.kind, "review", expanded);
   const { Icon, label } = KIND_META[node.kind];
   const step = typeof node.emailIndex === "number" ? String(node.emailIndex + 1).padStart(2, "0") : null;
   const purpose = node.meta?.job || node.meta?.preview || node.meta?.condition || node.meta?.duration || "";
