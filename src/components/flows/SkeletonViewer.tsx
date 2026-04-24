@@ -115,7 +115,7 @@ interface Props {
 
 /* ---------- Geometry ---------- */
 
-const NODE_W = 300;
+const NODE_W = 324;
 const NODE_MARGIN = 44;
 const BRANCH_X = 210;
 const BRANCH_Y = 92;
@@ -124,13 +124,24 @@ const SPLIT_Y_GAP = 104;
 const SIBLING_X_GAP = 96;
 const SPLIT_BRANCH_GAP = 112;
 function getNodeSize(kind: NodeKind) {
-  if (kind === "delay") return { w: 190, h: 64 };
-  if (kind === "split") return { w: 240, h: 84 };
+  if (kind === "delay") return { w: 154, h: 52 };
+  if (kind === "split") return { w: 214, h: 68 };
   if (kind === "trigger_split") return { w: 280, h: 120 };
   if (kind === "filters") return { w: 260, h: 100 };
   if (kind === "exit") return { w: 46, h: 46 };
   if (kind === "trigger") return { w: 240, h: 96 };
-  return { w: 320, h: 122 }; // email / sms
+  return { w: 344, h: 148 }; // email / sms
+}
+
+function injectHiddenScrollbarStyles(html: string | null | undefined) {
+  if (!html) return "";
+  if (html.includes("flow-preview-scrollbars")) return html;
+
+  const style = `<style id="flow-preview-scrollbars">html,body{scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none!important;width:0!important;height:0!important;}body{overflow-y:auto;}</style>`;
+
+  if (html.includes("</head>")) return html.replace("</head>", `${style}</head>`);
+  if (/<body[^>]*>/i.test(html)) return html.replace(/<body([^>]*)>/i, `<body$1>${style}`);
+  return `${style}${html}`;
 }
 
 function orthPath(
