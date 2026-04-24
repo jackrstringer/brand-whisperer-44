@@ -202,12 +202,6 @@ export function FlowAgentChat({
             } else if (evt.type === "text") {
               if (!firstTextReceived) {
                 firstTextReceived = true;
-                setStages((prev) => {
-                  const next: { key: string; status: "active" | "done" }[] =
-                    prev.map((s) => ({ key: s.key, status: "done" }));
-                  next.push({ key: "drafting", status: "active" });
-                  return next;
-                });
               }
               full += evt.content;
               setStreamBuf(full);
@@ -277,7 +271,7 @@ export function FlowAgentChat({
 
   const currentStageLabel = skeletonStreaming
     ? "Drafting your skeleton"
-    : STAGE_META[stages[stages.length - 1]?.key ?? "reading"]?.label ?? "Thinking";
+    : STAGE_META[stages[stages.length - 1]?.key ?? "analyzing"]?.label ?? "Thinking";
 
   // ---------- Pre-skeleton: centered hero conversation ----------
   if (centered) {
