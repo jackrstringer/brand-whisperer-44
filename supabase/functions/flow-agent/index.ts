@@ -90,7 +90,8 @@ function extractSetupDataFromResponse(text: string) {
   if (!match) return null;
   try {
     return JSON.parse(match[1].trim());
-  } catch {
+  } catch (err) {
+    console.error("[flow-agent] Malformed flow-setup JSON", err, match[1].slice(0, 500));
     return null;
   }
 }
@@ -370,29 +371,13 @@ CONVERSATION RULES (CRITICAL):
 - YOU are the email marketing expert. Never ask the user to make strategic decisions.
 - ONE setup confirmation at a time until setup is complete.
 - Be terse. No preamble, no recap of brand intelligence in prose, no "great question" filler.
+- NEVER output a flow-synth block unless explicitly asked by an admin/debug instruction.
+- NEVER show research dumps, full plans, numbered analyses, or multi-section summaries during setup.
+- Each setup response should be one short sentence of visible prose plus one flow-question block.
+- Question text must be short and actionable. Helper text is optional and must be one line max.
+- Options must be 2–4 short labels. Descriptions must be short fragments, not paragraphs.
 - NEVER ask whether they have an existing flow — assume net new.
 - NEVER skip setup confirmation just because research found likely answers.
-
-RESPONSE FORMAT — BRAND SYNTHESIS BLOCK (use on the FIRST turn or when re-orienting):
-Before any question or skeleton, output a tight synthesis block in this exact shape (a fenced \`flow-synth\` JSON block):
-
-\`\`\`flow-synth
-{
-  "headline": "One-line strategic angle for this flow.",
-  "facts": [
-    {"label": "Hero product", "value": "Larineco Remineralizing Gum — $29.99"},
-    {"label": "Welcome offer", "value": "25% off (code: WELCOME25)"},
-    {"label": "Top objection", "value": "Subscription anxiety"},
-    {"label": "Best send window", "value": "4:30–8pm Tue/Sun/Sat"}
-  ],
-  "plan": [
-    "E1 (immediate) — Welcome + offer reveal, hero product, dentist proof.",
-    "E2 (24h) — Address subscription anxiety, transparency, easy-cancel guarantee.",
-    "E3 (48h) — Founder/origin story + Andrew Habib endorsement.",
-    "E4 (72h) — Last-call urgency, social proof carousel."
-  ]
-}
-\`\`\`
 
 QUESTION FORMAT (use only when truly necessary):
 \`\`\`flow-question
