@@ -132,6 +132,7 @@ const REVIEW_MESSAGE_EXPANDED_MIN_HEIGHT = 404;
 const REVIEW_MESSAGE_INNER_WIDTH = REVIEW_MESSAGE_WIDTH - 48;
 const REVIEW_MESSAGE_CHIP_GAP = 8;
 const REVIEW_MESSAGE_CHIP_MIN_HEIGHT = 42;
+const REVIEW_MESSAGE_BOTTOM_SAFE_SPACE = 24;
 
 function estimateReviewTextLines(text: string, charsPerLine: number) {
   const value = text.trim();
@@ -197,7 +198,8 @@ function getReviewExpandedMessageHeight(node?: BoardNode) {
       44 +
       20 +
       titleLines * 37 +
-      bodyHeight
+      bodyHeight +
+      REVIEW_MESSAGE_BOTTOM_SAFE_SPACE
   );
 }
 
