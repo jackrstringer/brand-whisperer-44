@@ -513,7 +513,8 @@ function buildBoard(
             }
           : kind === "split"
           ? {
-              condition: p.notes || p.label || "",
+              condition: p.condition || p.label || "",
+              notes: p.notes,
               branches: p.branches || null,
             }
           : kind === "email" || kind === "sms"
@@ -597,29 +598,6 @@ function buildBoard(
       const state = branchState[key];
       if (!state.touched) continue; // empty branch — leave as nothing
       const exitId = `${activeSplitId}-${key}-exit`;
-      const branchTag: "yes" | "no" | null = key === "yes" || key === "no" ? (key as "yes" | "no") : null;
-      out.push({
-        id: exitId,
-        kind: "exit",
-        label: "Exit the flow",
-        x: COL,
-        y: 0,
-        branch: branchTag,
-        meta: {},
-      });
-      edges.push({
-        id: `e-${state.prev}-${exitId}`,
-        from: state.prev,
-        to: exitId,
-        branch: branchTag,
-      });
-    }
-    // Empty branches (declared but never used) get an Exit too, anchored to the
-    // split itself, so the user can SEE that path is intentionally empty.
-    for (const key of Object.keys(branchState)) {
-      const state = branchState[key];
-      if (state.touched) continue;
-      const exitId = `${activeSplitId}-${key}-empty-exit`;
       const branchTag: "yes" | "no" | null = key === "yes" || key === "no" ? (key as "yes" | "no") : null;
       out.push({
         id: exitId,
