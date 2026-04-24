@@ -528,6 +528,8 @@ export function SkeletonViewer({
   const [hoveredDropTarget, setHoveredDropTarget] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BoardNode | Sticky | null>(null);
   const [detailsNode, setDetailsNode] = useState<BoardNode | null>(null);
+  const [orientation, setOrientation] = useState<FlowOrientation>("horizontal");
+  const effectiveOrientation = mode === "review" ? orientation : "vertical";
 
   const board = useMemo(
     () => buildBoard(parsedNodes, meta, flowType, mode),
@@ -539,8 +541,8 @@ export function SkeletonViewer({
 
   useEffect(() => {
     setGraphEdges(board.edges);
-    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges, mode));
-  }, [board.nodes, board.edges, mode]);
+    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges, mode, effectiveOrientation));
+  }, [board.nodes, board.edges, mode, effectiveOrientation]);
 
   const displayBoard = useMemo(() => ({ ...board, nodes: layoutNodes, edges: graphEdges }), [board, layoutNodes, graphEdges]);
 
@@ -585,10 +587,10 @@ export function SkeletonViewer({
     setZoom(z);
     setPan({
       x: (r.width - (maxX - minX) * z) / 2 - minX * z,
-      y: 80 - minY * z,
+      y: effectiveOrientation === "horizontal" ? (r.height - (maxY - minY) * z) / 2 - minY * z : 80 - minY * z,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayBoard.nodes.length]);
+  }, [displayBoard.nodes.length, effectiveOrientation]);
 
   /* -------- Wheel: pinch zoom or two-finger pan, NEVER scroll page -------- */
   useEffect(() => {
@@ -723,7 +725,7 @@ export function SkeletonViewer({
   };
 
   const cleanUpLayout = () => {
-    const cleaned = layoutFlowGraph(layoutNodes, graphEdges, mode);
+    const cleaned = layoutFlowGraph(layoutNodes, graphEdges, mode, effectiveOrientation);
     setLayoutNodes(cleaned);
     requestAnimationFrame(fitToView);
   };
