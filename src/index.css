@@ -831,7 +831,7 @@
   padding: 9px 16px;
   gap: 7px;
 }
-.fl-review-node.expanded { border-radius: 28px; padding: 22px 24px 22px; z-index: 1; justify-content: flex-start; overflow: visible; }
+.fl-review-node.expanded { border-radius: 28px; padding: 22px 24px 24px; z-index: 1; justify-content: flex-start; overflow: visible; }
 .fl-review-node.locked { outline: 2px solid hsl(0 0% 8% / 0.18); outline-offset: 3px; }
 .fl-review-head {
   display: flex;
@@ -952,7 +952,7 @@
   align-content: flex-start;
   gap: 8px;
   padding-top: 2px;
-  padding-bottom: 2px;
+  padding-bottom: 8px;
   max-width: 100%;
   overflow: visible;
 }
