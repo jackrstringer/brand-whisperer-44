@@ -127,7 +127,7 @@ async function invokeInternalFunction(name: string, payload: Record<string, unkn
 }
 
 async function pollBrandIntelligence(
-  sb: ReturnType<typeof createClient>,
+  sb: any,
   brandId: string,
   predicate: (intel: any) => boolean,
   timeoutMs = 120000
@@ -143,7 +143,7 @@ async function pollBrandIntelligence(
       .maybeSingle();
 
     if (error) throw error;
-    lastStatus = data?.research_status || "unknown";
+    lastStatus = (data as any)?.research_status || "unknown";
 
     if (lastStatus === "failed") {
       throw new Error("Brand research failed. Re-run brand intelligence, then try Flow Mode again.");
@@ -163,7 +163,7 @@ async function ensureCompiledContext({
   domain,
   existingIntel,
 }: {
-  sb: ReturnType<typeof createClient>;
+  sb: any;
   brandId: string;
   brandName: string;
   domain: string | null | undefined;
