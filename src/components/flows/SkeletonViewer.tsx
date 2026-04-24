@@ -1141,6 +1141,15 @@ export function SkeletonViewer({
                 typeof n.emailIndex === "number" && generatingIndex === n.emailIndex
               }
               mode={mode}
+              reviewExpanded={
+                mode === "review" &&
+                (reviewDetailMode === "full" || lockedReviewNodeId === n.id || hoveredReviewNodeId === n.id)
+              }
+              reviewLocked={lockedReviewNodeId === n.id}
+              onReviewHover={setHoveredReviewNodeId}
+              onReviewLockToggle={(nodeId) => {
+                setLockedReviewNodeId((current) => (current === nodeId ? null : nodeId));
+              }}
             />
           ))}
 
@@ -1211,21 +1220,23 @@ export function SkeletonViewer({
         {mode === "detail" && <Minimap board={displayBoard} pan={pan} zoom={zoom} stageRef={stageRef} />}
 
         {mode === "review" && (
-          <div className="fl-orientation" onMouseDown={(e) => e.stopPropagation()}>
-            <button
-              className={orientation === "horizontal" ? "on" : ""}
-              onClick={() => setOrientation("horizontal")}
-              title="Left-to-right layout"
-            >
-              Left → Right
-            </button>
-            <button
-              className={orientation === "vertical" ? "on" : ""}
-              onClick={() => setOrientation("vertical")}
-              title="Top-to-bottom layout"
-            >
-              Top ↓ Bottom
-            </button>
+          <div className="fl-review-controls" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="fl-orientation">
+              <button className={orientation === "horizontal" ? "on" : ""} onClick={() => setOrientation("horizontal")} title="Left-to-right layout">
+                Left → Right
+              </button>
+              <button className={orientation === "vertical" ? "on" : ""} onClick={() => setOrientation("vertical")} title="Top-to-bottom layout">
+                Top ↓ Bottom
+              </button>
+            </div>
+            <div className="fl-orientation">
+              <button className={reviewDetailMode === "compact" ? "on" : ""} onClick={() => setReviewDetailMode("compact")} title="Show compact nodes">
+                Compact
+              </button>
+              <button className={reviewDetailMode === "full" ? "on" : ""} onClick={() => setReviewDetailMode("full")} title="Show expanded message detail">
+                Full detail
+              </button>
+            </div>
           </div>
         )}
 
