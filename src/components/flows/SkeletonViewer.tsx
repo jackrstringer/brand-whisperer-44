@@ -1474,7 +1474,7 @@ function MessagePreview({
         {emailRow?.html ? (
           <iframe
             title={`thumb-${node.id}`}
-            srcDoc={emailRow.html}
+            srcDoc={injectHiddenScrollbarStyles(emailRow.html)}
             style={{
               width: 360,
               height: 460,
@@ -1545,7 +1545,7 @@ function CanvasCampaignPreview({
         <div className="fl-canvas-preview-line"><span>PT</span><p>{previewText}</p></div>
       </div>
       <div className="fl-canvas-preview-frame">
-        <iframe title={`canvas-preview-${row.id}`} srcDoc={row.html || ""} sandbox="allow-same-origin" />
+        <iframe title={`canvas-preview-${row.id}`} srcDoc={injectHiddenScrollbarStyles(row.html || "")} sandbox="allow-same-origin" />
       </div>
     </div>
   );
