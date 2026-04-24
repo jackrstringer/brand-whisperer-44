@@ -257,11 +257,12 @@ function buildBoard(
           : kind === "email" || kind === "sms"
           ? {
               subject: p.subject_direction || "",
-              preview: p.notes || p.job || "",
+              preview: p.preview_text || "",
               sections: p.sections || [],
               timing: p.timing,
               job: p.job,
               subject_direction: p.subject_direction,
+              preview_text: p.preview_text,
               notes: p.notes,
             }
           : {},
@@ -541,7 +542,7 @@ export function SkeletonViewer({
     () => buildBoard(parsedNodes, meta, flowType, mode),
     [parsedNodes, meta, flowType, mode]
   );
-  const expandedReviewLayoutNodeIds = useMemo(() => {
+  const expandedReviewNodeIds = useMemo(() => {
     const ids = new Set<string>();
     if (mode !== "review") return ids;
     if (reviewDetailMode === "full") {
@@ -550,16 +551,17 @@ export function SkeletonViewer({
       });
     }
     if (lockedReviewNodeId) ids.add(lockedReviewNodeId);
+    if (hoveredReviewNodeId) ids.add(hoveredReviewNodeId);
     return ids;
-  }, [board.nodes, lockedReviewNodeId, mode, reviewDetailMode]);
+  }, [board.nodes, hoveredReviewNodeId, lockedReviewNodeId, mode, reviewDetailMode]);
   const [layoutNodes, setLayoutNodes] = useState<BoardNode[]>(board.nodes);
   const [graphEdges, setGraphEdges] = useState<BoardEdge[]>(board.edges);
   const hoveredDropTargetRef = useRef<string | null>(null);
 
   useEffect(() => {
     setGraphEdges(board.edges);
-    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges, mode, effectiveOrientation, expandedReviewLayoutNodeIds));
-  }, [board.nodes, board.edges, mode, effectiveOrientation, expandedReviewLayoutNodeIds]);
+    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges, mode, effectiveOrientation, expandedReviewNodeIds));
+  }, [board.nodes, board.edges, mode, effectiveOrientation, expandedReviewNodeIds]);
 
   const displayBoard = useMemo(() => ({ ...board, nodes: layoutNodes, edges: graphEdges }), [board, layoutNodes, graphEdges]);
 
