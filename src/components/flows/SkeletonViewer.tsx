@@ -590,7 +590,7 @@ export function SkeletonViewer({
       maxX = -Infinity,
       maxY = -Infinity;
     for (const n of displayBoard.nodes) {
-      const sz = getNodeSize(n.kind, mode);
+      const sz = getNodeSize(n.kind, mode, expandedReviewLayoutNodeIds.has(n.id));
       minX = Math.min(minX, n.x);
       minY = Math.min(minY, n.y);
       maxX = Math.max(maxX, n.x + sz.w);
@@ -716,7 +716,7 @@ export function SkeletonViewer({
       maxX = -Infinity,
       maxY = -Infinity;
     for (const n of displayBoard.nodes) {
-      const sz = getNodeSize(n.kind, mode);
+      const sz = getNodeSize(n.kind, mode, expandedReviewLayoutNodeIds.has(n.id));
       minX = Math.min(minX, n.x);
       minY = Math.min(minY, n.y);
       maxX = Math.max(maxX, n.x + sz.w);
@@ -742,7 +742,7 @@ export function SkeletonViewer({
   };
 
   const cleanUpLayout = () => {
-    const cleaned = layoutFlowGraph(layoutNodes, graphEdges, mode, effectiveOrientation);
+    const cleaned = layoutFlowGraph(layoutNodes, graphEdges, mode, effectiveOrientation, expandedReviewLayoutNodeIds);
     setLayoutNodes(cleaned);
     requestAnimationFrame(fitToView);
   };
