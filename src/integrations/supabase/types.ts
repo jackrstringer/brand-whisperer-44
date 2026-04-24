@@ -835,6 +835,8 @@ export type Database = {
           id: string
           messages: Json
           name: string
+          setup_data: Json
+          setup_status: string
           skeleton_markdown: string | null
           status: string
           trigger_config: Json | null
@@ -848,6 +850,8 @@ export type Database = {
           id?: string
           messages?: Json
           name: string
+          setup_data?: Json
+          setup_status?: string
           skeleton_markdown?: string | null
           status?: string
           trigger_config?: Json | null
@@ -861,6 +865,8 @@ export type Database = {
           id?: string
           messages?: Json
           name?: string
+          setup_data?: Json
+          setup_status?: string
           skeleton_markdown?: string | null
           status?: string
           trigger_config?: Json | null
