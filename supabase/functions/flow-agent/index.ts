@@ -484,6 +484,98 @@ FILTERS-FIRST STRATEGY (CRITICAL — DO NOT VIOLATE):
     - YES: <what flows down this branch>
     - NO: <what flows down this branch>
 
+CONDITIONAL SPLIT EXECUTION FORMAT (CRITICAL — DO NOT VIOLATE):
+When you emit a [CONDITIONAL SPLIT], the parser/UI needs to know which downstream
+messages live on which branch. Use this exact protocol:
+
+1) Inside the split block include the Branches: section above.
+2) Every node that lives on a branch MUST declare it with a \`Branch:\` field on
+   its own line (case-insensitive, lowercase value). Example:
+
+   [EMAIL 2A — Proof + first-time offer]
+   Branch: yes
+   Timing: 26h after trigger
+   Job: ...
+   Subject line: ...
+   Preview text: ...
+   Subject direction: ...
+   Sections:
+   - ...
+
+   [EMAIL 2B — Proof only]
+   Branch: no
+   Timing: 26h after trigger
+   ...
+
+3) Branches MUST be fully populated. If a split has YES and NO, BOTH paths must
+   contain at least one [EMAIL] (or an explicit [END BRANCH] terminator — see #5).
+   Never leave a declared branch empty. Never let one branch swallow content that
+   belongs to the other.
+4) [DELAY] inside a branch must also carry \`Branch: yes\` (or \`no\`) so timing
+   tracks per-path. Cumulative timing on a branch email = trunk cumulative at the
+   split + all branch-local delays.
+5) To explicitly end a branch (e.g. immediate Exit on YES), emit:
+      [END BRANCH] — yes
+   (or \`no\`). The renderer turns this into a real "Exit the flow" node on that
+   path. Only use this when the strategy genuinely exits one side.
+6) If any node AFTER a split has NO \`Branch:\` field, it is treated as a MERGE
+   point: every open branch reconnects into it and the trunk resumes from there.
+   Only emit a merge when the strategy truly converges (e.g. a final shared
+   "Last chance" email after both branches).
+7) NEVER mix branch and trunk content silently. If you intend Email 2A to be on
+   YES and Email 2B to be on NO, you MUST tag both with Branch: explicitly.
+
+EXAMPLE — browse abandonment with first-time-buyer split (this is the canonical
+pattern; replicate this exact structure when discount eligibility differs):
+
+\`\`\`
+[EMAIL 1 — Product re-surface]
+Timing: 2h after trigger
+...
+
+---
+
+[DELAY] — 24h
+
+---
+
+[CONDITIONAL SPLIT — First-time buyer?]
+Condition: Has Placed Order zero times (lifetime profile filter)
+Branches:
+- YES: Email 2A — proof + first-time discount
+- NO: Email 2B — proof only, no discount
+
+---
+
+[EMAIL 2A — Proof + first-time offer]
+Branch: yes
+Timing: 26h after trigger
+Job: Close hesitant first-time buyers with proof + discount.
+Subject line: ...
+Preview text: ...
+Subject direction: ...
+Sections:
+- Compact Product Card — viewed product reminder
+- Review Cards — 3 reviews
+- Promo Code Highlight — Welcome25
+- Single CTA — back to product
+
+---
+
+[EMAIL 2B — Proof only]
+Branch: no
+Timing: 26h after trigger
+Job: Close returning browsers with proof + guarantee, no discount.
+Subject line: ...
+Preview text: ...
+Subject direction: ...
+Sections:
+- Compact Product Card
+- Review Cards
+- Guarantee Seal
+- Single CTA
+\`\`\`
+
 CURRENT SKELETON:
 ${current_skeleton || "(none yet — build from scratch when ready)"}`;
 

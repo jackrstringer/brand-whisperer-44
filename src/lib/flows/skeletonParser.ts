@@ -3,7 +3,7 @@
 //   [TRIGGER ...] [FILTERS ...] [EXIT ...]
 //   [EMAIL ...]   [DELAY ...]   [CONDITIONAL SPLIT ...]   [SMS ...]
 
-export type FlowNodeType = "email" | "delay" | "split" | "sms";
+export type FlowNodeType = "email" | "delay" | "split" | "sms" | "branch_end";
 
 export interface SplitBranch {
   /** Short label, e.g. "YES" / "NO" / "Subscribed" */
@@ -25,6 +25,18 @@ export interface ParsedFlowNode {
   notes?: string;
   /** For splits only: explicit branch metadata if the agent provided it. */
   branches?: SplitBranch[];
+  /**
+   * Optional branch assignment for non-split nodes that live on a path
+   * of the most recent split (e.g. "yes", "no", or a custom branch label).
+   * Normalized to lowercase. When absent the node sits on the trunk.
+   */
+  branch?: string;
+  /**
+   * Optional explicit terminator for a branch. When the agent writes
+   * `[END BRANCH]` or `[EXIT BRANCH]` we emit a synthetic node so the
+   * builder can close that path with a real exit instead of guessing.
+   */
+  end_branch?: boolean;
   raw: string;
 }
 
@@ -40,6 +52,12 @@ function detectType(line: string): FlowNodeType | null {
   if (upper.startsWith("[DELAY")) return "delay";
   if (upper.startsWith("[CONDITIONAL SPLIT") || upper.startsWith("[SPLIT")) return "split";
   if (upper.startsWith("[SMS")) return "sms";
+  if (
+    upper.startsWith("[END BRANCH") ||
+    upper.startsWith("[EXIT BRANCH") ||
+    upper.startsWith("[BRANCH END") ||
+    upper.startsWith("[MERGE")
+  ) return "branch_end";
   const headerMatch = upper.match(/^#+\s*(EMAIL|DELAY|SPLIT|CONDITIONAL\s+SPLIT|SMS)\b/);
   if (headerMatch) {
     const kind = headerMatch[1];
@@ -112,7 +130,7 @@ function splitIntoBlocks(markdown: string): string[] {
   const blocks: string[] = [];
   let current: string[] = [];
   const isHeader = (l: string) =>
-    /^\s*\[(TRIGGER|FILTERS?|ENTRY FILTERS|EXIT|EMAIL|DELAY|CONDITIONAL\s+SPLIT|SPLIT|SMS)/i.test(l) ||
+    /^\s*\[(TRIGGER|FILTERS?|ENTRY FILTERS|EXIT|EMAIL|DELAY|CONDITIONAL\s+SPLIT|SPLIT|SMS|END\s+BRANCH|EXIT\s+BRANCH|BRANCH\s+END|MERGE)/i.test(l) ||
     /^\s*#+\s*(EMAIL|DELAY|SPLIT|CONDITIONAL\s+SPLIT|SMS)\b/i.test(l);
   for (const line of lines) {
     if (isHeader(line) && current.length > 0) {
@@ -166,7 +184,13 @@ export function parseSkeleton(markdown: string | null | undefined): ParsedFlowNo
         firstLine.match(/\[DELAY[^\]]*\]\s*[—–-]?\s*(.+)/i)?.[1]?.trim() ||
         extractField(block, "Wait", "Duration", "Timing") ||
         label;
-      nodes.push({ node_type: "delay", label: dur || "Delay", raw: block });
+      const branchTag = extractField(block, "Branch");
+      nodes.push({
+        node_type: "delay",
+        label: dur || "Delay",
+        branch: branchTag ? branchTag.trim().toLowerCase() : undefined,
+        raw: block,
+      });
       continue;
     }
 
@@ -200,13 +224,43 @@ export function parseSkeleton(markdown: string | null | undefined): ParsedFlowNo
     }
 
     if (type === "sms") {
+      const branchTag = extractField(block, "Branch");
       nodes.push({
         node_type: "sms",
         label: label || "SMS",
         notes: extractField(block, "Body", "Message") ?? lines.slice(1).join("\n").trim(),
+        branch: branchTag ? branchTag.trim().toLowerCase() : undefined,
         raw: block,
       });
       continue;
+    }
+
+    if (type === "branch_end") {
+      const branchToken =
+        firstLine.match(/\[(?:END\s+BRANCH|EXIT\s+BRANCH|BRANCH\s+END|MERGE)[^\]]*\]\s*[—–-]?\s*([A-Za-z]+)?/i)?.[1] ||
+        extractField(block, "Branch");
+      nodes.push({
+        node_type: "branch_end",
+        label: "End branch",
+        end_branch: true,
+        branch: branchToken ? branchToken.trim().toLowerCase() : undefined,
+        raw: block,
+      });
+      continue;
+    }
+
+    // Email — auto-detect branch from explicit `Branch:` field, or from
+    // the agent's labeling convention `EMAIL 2A` (A→yes, B→no, C/D→extra).
+    const explicitBranch = extractField(block, "Branch");
+    let emailBranchTag: string | undefined = explicitBranch ? explicitBranch.trim().toLowerCase() : undefined;
+    if (!emailBranchTag) {
+      const suffixMatch = firstLine.match(/\[EMAIL\s*\d+\s*([A-Z])\b/i);
+      if (suffixMatch) {
+        const letter = suffixMatch[1].toUpperCase();
+        if (letter === "A") emailBranchTag = "yes";
+        else if (letter === "B") emailBranchTag = "no";
+        else emailBranchTag = `branch_${letter.toLowerCase()}`;
+      }
     }
 
     nodes.push({
@@ -220,6 +274,7 @@ export function parseSkeleton(markdown: string | null | undefined): ParsedFlowNo
       preview_direction: extractField(block, "Preview direction", "Preheader direction"),
       sections: extractSections(block),
       notes: extractField(block, "Notes", "Dynamic content"),
+      branch: emailBranchTag,
       raw: block,
     });
   }
