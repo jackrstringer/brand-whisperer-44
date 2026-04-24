@@ -1603,6 +1603,30 @@ function NodeView({
 }
 
 
+function condenseSectionLabels(sections: unknown): string[] {
+  const items = Array.isArray(sections) ? sections : [];
+  return items.map((item) => {
+    const raw = typeof item === "string" ? item : item && typeof item === "object" ? JSON.stringify(item) : "";
+    const first = raw.split(/—|-|:|\./)[0]?.trim() || raw.trim();
+    const cleaned = first.replace(/^\d+[.)]\s*/, "").replace(/\b(block|section|element|module|content|copy|email)\b/gi, "").replace(/\s+/g, " ").trim();
+    const lower = cleaned.toLowerCase();
+    if (lower.includes("hero")) return "Welcome Hero";
+    if (lower.includes("discount") || lower.includes("offer")) return "Offer Reveal";
+    if (lower.includes("proof") || lower.includes("review") || lower.includes("testimonial")) return "Social Proof";
+    if (lower.includes("category") || lower.includes("collection")) return "Categories Highlight";
+    if (lower.includes("founder") || lower.includes("story")) return "Founder Note";
+    if (lower.includes("objection") || lower.includes("faq") || lower.includes("concern")) return "Objection Handle";
+    if (lower.includes("cta") || lower.includes("last chance")) return "Last Chance CTA";
+    if (lower.includes("education") || lower.includes("benefit")) return "Education";
+    return titleCase(cleaned.split(/\s+/).slice(0, 3).join(" ")) || "Structure Block";
+  }).filter(Boolean);
+}
+
+function titleCase(value: string) {
+  return value.replace(/\w\S*/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+}
+
+
 function ReviewNodeView({
   node,
   selected,
