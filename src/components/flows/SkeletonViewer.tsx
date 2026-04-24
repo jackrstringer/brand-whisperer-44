@@ -115,7 +115,7 @@ interface Props {
 
 /* ---------- Geometry ---------- */
 
-const NODE_W = 300;
+const NODE_W = 324;
 const NODE_MARGIN = 44;
 const BRANCH_X = 210;
 const BRANCH_Y = 92;
@@ -124,13 +124,24 @@ const SPLIT_Y_GAP = 104;
 const SIBLING_X_GAP = 96;
 const SPLIT_BRANCH_GAP = 112;
 function getNodeSize(kind: NodeKind) {
-  if (kind === "delay") return { w: 190, h: 64 };
-  if (kind === "split") return { w: 240, h: 84 };
+  if (kind === "delay") return { w: 154, h: 52 };
+  if (kind === "split") return { w: 214, h: 68 };
   if (kind === "trigger_split") return { w: 280, h: 120 };
   if (kind === "filters") return { w: 260, h: 100 };
   if (kind === "exit") return { w: 46, h: 46 };
   if (kind === "trigger") return { w: 240, h: 96 };
-  return { w: 320, h: 122 }; // email / sms
+  return { w: 344, h: 148 }; // email / sms
+}
+
+function injectHiddenScrollbarStyles(html: string | null | undefined) {
+  if (!html) return "";
+  if (html.includes("flow-preview-scrollbars")) return html;
+
+  const style = `<style id="flow-preview-scrollbars">html,body{scrollbar-width:none;-ms-overflow-style:none;}html::-webkit-scrollbar,body::-webkit-scrollbar{display:none!important;width:0!important;height:0!important;}body{overflow-y:auto;}</style>`;
+
+  if (html.includes("</head>")) return html.replace("</head>", `${style}</head>`);
+  if (/<body[^>]*>/i.test(html)) return html.replace(/<body([^>]*)>/i, `<body$1>${style}`);
+  return `${style}${html}`;
 }
 
 function orthPath(
@@ -213,7 +224,6 @@ function buildBoard(
           : kind === "split"
           ? {
               condition: p.notes || p.label || "",
-              branches: p.branches || [],
             }
           : kind === "email" || kind === "sms"
           ? {
@@ -240,10 +250,10 @@ function buildBoard(
       const noExitId = `${id}-no-exit`;
       const isTerminalSplit = i === parsed.length - 1;
       if (isTerminalSplit) {
-        out.push({ id: yesExitId, kind: "exit", label: "Exit the flow", x: COL - BRANCH_X, y: y + splitSize.h + BRANCH_Y, branch: "yes", meta: { items: ["No additional YES path configured"] } });
+        out.push({ id: yesExitId, kind: "exit", label: "Exit the flow", x: COL - BRANCH_X, y: y + splitSize.h + BRANCH_Y, branch: "yes", meta: {} });
         edges.push({ id: `e-${id}-yes-exit`, from: id, to: yesExitId, branch: "yes" });
       }
-      out.push({ id: noExitId, kind: "exit", label: "Exit the flow", x: COL + BRANCH_X, y: y + splitSize.h + BRANCH_Y, branch: "no", meta: { items: ["No additional NO path configured"] } });
+      out.push({ id: noExitId, kind: "exit", label: "Exit the flow", x: COL + BRANCH_X, y: y + splitSize.h + BRANCH_Y, branch: "no", meta: {} });
       edges.push({ id: `e-${id}-no-exit`, from: id, to: noExitId, branch: "no" });
       prev = id;
       y += splitSize.h + VGAP + 30;
@@ -720,7 +730,7 @@ export function SkeletonViewer({
       x: target.x - size.w / 2,
       y: target.y - size.h / 2,
       branch: target.edge.branch ?? null,
-      meta: kind === "split" || kind === "trigger_split" ? { condition: "New split", branches: [{ label: "YES" }, { label: "NO" }] } : {},
+      meta: kind === "split" || kind === "trigger_split" ? { condition: "New split" } : {},
     };
     setGraphEdges((edges) => {
       const nextEdges = [
@@ -791,26 +801,14 @@ export function SkeletonViewer({
   };
 
   const getCanvasPreviewPosition = (node: BoardNode) => {
-    const stage = stageRef.current?.getBoundingClientRect();
     const nodeSize = getNodeSize(node.kind);
     const panelWidth = Math.round(nodeSize.w * 1.25);
-    const margin = 16;
-    const gap = 18;
-    const stageWidth = stage?.width || window.innerWidth;
-    const stageHeight = stage?.height || window.innerHeight;
-    const panelMaxHeight = Math.min(680, Math.max(420, stageHeight - margin * 2));
-    const nodeLeft = node.x * zoom + pan.x;
-    const nodeTop = node.y * zoom + pan.y;
-    const nodeRight = nodeLeft + nodeSize.w * zoom;
-    const rightX = nodeRight + gap;
-    const leftX = nodeLeft - panelWidth - gap;
-    const unclampedX = rightX + panelWidth <= stageWidth - margin ? rightX : leftX;
-    const x = Math.min(Math.max(margin, unclampedX), Math.max(margin, stageWidth - panelWidth - margin));
-    const y = Math.min(
-      Math.max(margin, nodeTop - 12),
-      Math.max(margin, stageHeight - panelMaxHeight - margin)
-    );
-    return { x, y, width: panelWidth, maxHeight: panelMaxHeight };
+    return {
+      x: node.x + nodeSize.w + 24,
+      y: node.y - 4,
+      width: panelWidth,
+      maxHeight: 620,
+    };
   };
 
   const isStickyTarget = (target: BoardNode | Sticky | null): target is Sticky => {
@@ -1028,6 +1026,26 @@ export function SkeletonViewer({
             />
           ))}
 
+          {expandedIndex !== null && (() => {
+            const previewNode = displayBoard.nodes.find((n) => n.emailIndex === expandedIndex);
+            const row = emails.find((e) => e.sequence_index === expandedIndex);
+            if (!previewNode || !row?.html) return null;
+            const cm = row.campaign_id ? campaignMeta[row.campaign_id] : null;
+            const previewPosition = getCanvasPreviewPosition(previewNode);
+            return (
+              <CanvasCampaignPreview
+                node={previewNode}
+                position={previewPosition}
+                row={row}
+                meta={cm}
+                generating={generatingIndex === previewNode.emailIndex}
+                onClose={() => onToggleExpand(null)}
+                onGenerate={() => onGenerateNode(previewNode.emailIndex!)}
+                onOpenEditor={() => row.campaign_id && navigate(`/brands/${brandId}/campaigns/${row.campaign_id}`)}
+              />
+            );
+          })()}
+
           {/* Drafting ghost */}
           {drafting && parsedNodes.length === 0 && (
             <div
@@ -1051,26 +1069,6 @@ export function SkeletonViewer({
             </div>
           )}
         </div>
-
-        {expandedIndex !== null && (() => {
-          const previewNode = displayBoard.nodes.find((n) => n.emailIndex === expandedIndex);
-          const row = emails.find((e) => e.sequence_index === expandedIndex);
-          if (!previewNode || !row?.html) return null;
-          const cm = row.campaign_id ? campaignMeta[row.campaign_id] : null;
-          const previewPosition = getCanvasPreviewPosition(previewNode);
-          return (
-            <CanvasCampaignPreview
-              node={previewNode}
-              position={previewPosition}
-              row={row}
-              meta={cm}
-              generating={generatingIndex === previewNode.emailIndex}
-              onClose={() => onToggleExpand(null)}
-              onGenerate={() => onGenerateNode(previewNode.emailIndex!)}
-              onOpenEditor={() => row.campaign_id && navigate(`/brands/${brandId}/campaigns/${row.campaign_id}`)}
-            />
-          );
-        })()}
 
         {/* Permanent left node rail */}
         <div className="fl-tool" onMouseDown={(e) => e.stopPropagation()}>
@@ -1476,7 +1474,7 @@ function MessagePreview({
         {emailRow?.html ? (
           <iframe
             title={`thumb-${node.id}`}
-            srcDoc={emailRow.html}
+            srcDoc={injectHiddenScrollbarStyles(emailRow.html)}
             style={{
               width: 360,
               height: 460,
@@ -1547,7 +1545,7 @@ function CanvasCampaignPreview({
         <div className="fl-canvas-preview-line"><span>PT</span><p>{previewText}</p></div>
       </div>
       <div className="fl-canvas-preview-frame">
-        <iframe title={`canvas-preview-${row.id}`} srcDoc={row.html || ""} sandbox="allow-same-origin" />
+        <iframe title={`canvas-preview-${row.id}`} srcDoc={injectHiddenScrollbarStyles(row.html || "")} sandbox="allow-same-origin" />
       </div>
     </div>
   );
