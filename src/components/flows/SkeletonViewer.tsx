@@ -63,6 +63,7 @@ export interface FlowEmailMeta {
 }
 
 type NodeKind = "trigger" | "filters" | "email" | "delay" | "split" | "trigger_split" | "sms" | "push" | "webhook" | "exit";
+type FlowOrientation = "vertical" | "horizontal";
 
 export interface BoardNode {
   id: string;
@@ -126,13 +127,13 @@ const SIBLING_X_GAP = 96;
 const SPLIT_BRANCH_GAP = 112;
 function getNodeSize(kind: NodeKind, mode: "review" | "detail" = "detail") {
   if (mode === "review") {
-    if (kind === "delay") return { w: 124, h: 42 };
-    if (kind === "split") return { w: 210, h: 62 };
-    if (kind === "trigger_split") return { w: 210, h: 62 };
-    if (kind === "filters") return { w: 260, h: 70 };
-    if (kind === "exit") return { w: 72, h: 34 };
-    if (kind === "trigger") return { w: 260, h: 74 };
-    return { w: 320, h: 92 };
+    if (kind === "delay") return { w: 104, h: 38 };
+    if (kind === "split") return { w: 176, h: 58 };
+    if (kind === "trigger_split") return { w: 176, h: 58 };
+    if (kind === "filters") return { w: 220, h: 64 };
+    if (kind === "exit") return { w: 66, h: 32 };
+    if (kind === "trigger") return { w: 220, h: 66 };
+    return { w: 260, h: 86 };
   }
   if (kind === "delay") return { w: 154, h: 52 };
   if (kind === "split") return { w: 214, h: 68 };
@@ -157,10 +158,25 @@ function injectHiddenScrollbarStyles(html: string | null | undefined) {
 function orthPath(
   from: { x: number; y: number },
   to: { x: number; y: number },
+  orientation: FlowOrientation = "vertical",
   radius = 12
 ): string {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
+  if (orientation === "horizontal") {
+    if (Math.abs(dy) < 1) return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
+    const midX = from.x + dx / 2;
+    const r = Math.min(radius, Math.abs(dx) / 2 - 1, Math.abs(dy) / 2);
+    const sy = Math.sign(dy);
+    return [
+      `M ${from.x} ${from.y}`,
+      `L ${midX - r * Math.sign(dx)} ${from.y}`,
+      `Q ${midX} ${from.y} ${midX} ${from.y + sy * r}`,
+      `L ${midX} ${to.y - sy * r}`,
+      `Q ${midX} ${to.y} ${midX + r * Math.sign(dx)} ${to.y}`,
+      `L ${to.x} ${to.y}`,
+    ].join(" ");
+  }
   if (Math.abs(dx) < 1) return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
   const midY = from.y + dy / 2;
   const r = Math.min(radius, Math.abs(dy) / 2 - 1, Math.abs(dx) / 2);
