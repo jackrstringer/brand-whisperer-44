@@ -1,208 +1,113 @@
 
-Implement the skeleton review UI to match the provided layouts: bare-bones by default, expandable message nodes on hover/click, and AI-generated short block labels.
+Goal: replace the current “jump straight to skeleton” flow with a research-backed, interactive setup conversation that confirms the few operator-controlled inputs before a skeleton is generated, while also fixing the broken/raw JSON formatting in the setup chat.
 
-## What will change
+1. Fix the pre-skeleton chat rendering so setup never shows broken JSON
+- Update `FlowAgentChat.tsx` so partial `flow-synth` / `flow-question` control blocks are buffered and rendered only through dedicated UI components, never as raw markdown text mid-stream.
+- Prevent clipped fenced payloads during streaming by keeping control-block parsing state separate from visible assistant prose.
+- Tighten the centered hero layout so the setup panel expands naturally with content instead of truncating/cropping long synth blocks.
 
-### 1. Replace current review nodes with the provided “pill skeleton” visual system
+2. Add structured flow-setup state to persist discovered + confirmed inputs
+- Add fields to `public.flows` for structured setup data and setup phase, e.g.:
+  - `setup_status` (`draft`, `research_ready`, `needs_confirmation`, `ready_for_skeleton`, `skeleton_ready`, etc.)
+  - `setup_data jsonb`
+- Store both:
+  - researched candidates: detected site offers, likely hero products, subscription model, promo patterns
+  - confirmed operator choices: offer type, coupon configuration, hero product priority, product-feed priority, notes
+- Keep this on the existing `flows` table so RLS stays simple and the flow record remains the single source of truth.
 
-The default skeleton review will become extremely minimal:
+3. Change the flow-agent behavior from “research first, ask last” to “research, propose, confirm, then build”
+- Update `supabase/functions/flow-agent/index.ts` so the first pass always:
+  - reads compiled brand context + raw research
+  - extracts candidate offers, hero products, subscription model, and likely product priorities
+  - determines which items are operator-controlled and must be confirmed before skeleton generation
+- Replace the current prompt rule that often allows immediate skeleton generation with a stricter setup rule:
+  - never generate the skeleton until critical flow-configuration facts are confirmed
+  - propose researched defaults instead of asking blank questions
+  - ask in a structured sequence, not generic chat
+- The setup sequence should explicitly cover:
+  - Offer status: no offer / evergreen offer / campaign-specific offer
+  - Discount type: static site code / static flow-only code / dynamic Klaviyo coupon
+  - If dynamic coupon: require coupon pool/name and instruct downstream generation to use the correct Klaviyo Liquid syntax
+  - Hero product / catalog priority: confirm the main product(s) or whether it should stay category-wide
+  - Feed/product priority: what products should be emphasized if product blocks are used
+- Use brand research to populate candidate options first, e.g. “I found these likely offers on the site — is it one of these or something else?”
 
-- Trigger: dark rounded pill with icon + `Trigger | Subscribed to Email Marketing`
-- Message nodes: long white rounded pills with only:
-  - message number/day marker
-  - separator
-  - message title
-- Delay nodes: small dark capsules like `24H`, `2D`
-- Conditional split: dark rounded pill with icon + `Conditional Split | New Customers vs Repeat Customers`
-- Branches: clean black connector lines with simple YES/NO route labels only
-- Exit nodes: small terminal/exit chips if needed
+4. Introduce richer interactive setup cards in the chat UI
+- Extend `FlowAgentChat.tsx` beyond simple chips into structured assistant cards:
+  - researched summary card
+  - confirmation cards
+  - selectable option pills/cards
+  - inline edit forms
+  - “use this / edit / none of these” actions
+- Build a more polished conversational setup pattern:
+  - assistant proposes researched assumptions
+  - user can confirm quickly or edit inline
+  - assistant proceeds to next required setup item
+- Keep the interaction visually chat-native rather than opening a separate boring form.
 
-Default message nodes will not show purpose, subject direction, sections, preview text, thumbnails, status rows, metadata, or generated previews.
+5. Feed confirmed setup data into skeleton generation and downstream email generation
+- When setup is complete, pass `setup_data` into the skeleton prompt so the generated flow reflects:
+  - the confirmed offer type
+  - correct coupon mechanics
+  - confirmed hero product emphasis
+  - confirmed product prioritization
+- Update downstream flow email generation (`FlowBuilderPage.tsx` and related generation brief assembly) to include the confirmed setup metadata, so message generation uses:
+  - correct dynamic coupon syntax vs static code handling
+  - correct product emphasis
+  - correct offer framing
+- This also avoids bad field usage like stuffing non-subject content into subject/preview-oriented slots.
 
-### 2. Add hover expansion for message nodes
+6. Improve the create-flow experience so the user always lands in setup first
+- On first open of a new flow, show the guided setup conversation as the required first stage.
+- Only transition into skeleton review mode once:
+  - required setup items are confirmed
+  - the skeleton has been generated from those confirmed values
+- Preserve the refine panel afterward, but treat it as post-setup editing rather than the main place where critical requirements are gathered.
 
-Message nodes in review mode will smoothly expand into the richer state from the second reference image.
+7. QA the full path end-to-end
+- Verify these flow-creation scenarios:
+  - brand with a clearly visible evergreen site offer
+  - brand with no visible offer
+  - brand with subscription language but ambiguous discount mechanics
+  - dynamic coupon flow requiring coupon pool confirmation
+  - single hero-product brand vs multi-product brand
+- Confirm that:
+  - no raw JSON/fenced control blocks ever appear in the UI
+  - setup cards never clip or truncate
+  - skeleton generation is blocked until required confirmations are complete
+  - confirmed offer/product data is reflected in the skeleton and later generation prompts
 
-Collapsed state:
-
+Technical details
+- Files likely touched:
+  - `src/components/flows/FlowAgentChat.tsx`
+  - `src/pages/FlowBuilderPage.tsx`
+  - `supabase/functions/flow-agent/index.ts`
+  - `supabase/migrations/...sql`
+- Recommended `setup_data` shape:
 ```text
-2 | Welcome to our Brand
+{
+  offer: {
+    detected_candidates: [...],
+    confirmed_mode: "none" | "static_code" | "dynamic_coupon",
+    description: "",
+    static_code: "",
+    dynamic_coupon_pool: ""
+  },
+  products: {
+    detected_hero_products: [...],
+    confirmed_primary_products: [...],
+    scope: "hero" | "category" | "catalog"
+  },
+  merchandising: {
+    selected_feed_preset: "",
+    notes: ""
+  },
+  confirmations: {
+    offer_confirmed: true,
+    product_priority_confirmed: true
+  }
+}
 ```
-
-Expanded state:
-
-```text
-2
-Day 2
-
-Welcome to our Brand
-Brief purpose/goal sentence.
-
-SL Subject direction / subject line
-PT Preview text / preview direction
-
-[Welcome Hero] [Dynamic Discount] [Categories Highlight]
-[Social Proof] [Categories Highlight]
-```
-
-Expansion behavior:
-
-- Hovering a message node expands it.
-- The expansion uses a smooth “blobby”/spring-like transition:
-  - rounded pill grows into a large rounded card
-  - opacity fade-in for details
-  - slight scale/shape easing
-- The expansion stays fast and responsive.
-- Details collapse when hover leaves unless the node has been locked open.
-
-### 3. Add click-to-lock behavior
-
-For review-mode message nodes:
-
-- Click once: lock expanded.
-- Click again: unlock it.
-- If unlocked, it returns to hover-only behavior.
-- Only one node should be locked open at a time unless there is a strong existing reason to allow multiple.
-- Drag/pan behavior will be protected so click-to-lock does not conflict with canvas panning.
-
-### 4. Add a “show full detail” toggle
-
-Add a compact review control near the orientation toggle:
-
-- `Compact`
-- `Full detail`
-
-Behavior:
-
-- `Compact`: default; nodes are bare-bones unless hovered/locked.
-- `Full detail`: all message nodes render in the expanded card style so the user can inspect the skeleton without hovering node-by-node.
-- This toggle applies only to skeleton review mode, not the detailed generation workspace.
-
-### 5. Match the provided layouts closely
-
-Review mode styling will be rewritten around the uploaded references:
-
-- White/cream canvas.
-- Thin black connector lines.
-- Large rounded message pills.
-- Dark trigger/split/delay capsules.
-- High-contrast monochrome hierarchy.
-- Minimal borders and no dashboard-card styling.
-- Efficient spacing so more layers fit on screen.
-- Vertical and horizontal orientation both remain available, but both use the same minimal visual language.
-
-For horizontal mode, the same components will lay left-to-right while preserving dense spacing and readable branching.
-
-### 6. Condense structure block labels
-
-The expanded node must show short block chips like:
-
-```text
-Welcome Hero
-Dynamic Discount
-Categories Highlight
-Social Proof
-```
-
-Instead of long section descriptions.
-
-Implementation:
-
-- Add a section-label condensing helper in the frontend that turns verbose section bullets into short chip labels.
-- Examples:
-  - `Hero block — introduce the offer and product benefit` → `Hero`
-  - `Proof element — dentist endorsement/social proof` → `Proof`
-  - `CTA — destination to collection/product page` → `CTA`
-  - `Product education block — explain key benefits` → `Education`
-- Preserve the original detailed section text in the underlying skeleton data; only the review display becomes condensed.
-
-### 7. Tighten the AI skeleton prompt so future skeletons produce short display-ready blocks
-
-Update the flow-agent prompt rules so generated skeletons include compact section names.
-
-Prompt requirements to add:
-
-- Email labels: 2–5 words.
-- Job/purpose: one short sentence.
-- Subject direction: short angle, not copy.
-- Section bullets must begin with a 1–3 word block label, followed by optional short explanation.
-- Preferred section-label examples:
-  - `Welcome Hero`
-  - `Offer Reveal`
-  - `Product Proof`
-  - `Social Proof`
-  - `Founder Note`
-  - `Dynamic Discount`
-  - `Categories Highlight`
-  - `Objection Handle`
-  - `Last Chance CTA`
-- No long marketing-copy-style section names.
-
-### 8. Update review layout geometry for visual efficiency
-
-In `SkeletonViewer.tsx`, review-mode node sizing/layout will be adjusted:
-
-- Collapsed message pills become wide and short.
-- Expanded nodes use the large rounded-card dimensions from the mockup.
-- Delay nodes become small connector capsules.
-- Split nodes become compact dark capsules.
-- Branch gaps are reduced while still preventing overlap.
-- Fit-to-view accounts for expanded locked/full-detail nodes so open cards do not overlap or get clipped.
-
-### 9. Preserve the detailed workspace
-
-The detailed workspace after approval stays separate.
-
-Review mode:
-
-- process skeleton
-- hover/click expanded skeleton cards
-- no campaign thumbnails/previews
-- no generated email iframe panel
-- no dense metadata
-
-Detail mode:
-
-- generation controls
-- generated campaign previews
-- subject line/preview text from generated campaigns
-- full message inspection
-- chat/refinement tooling
-
-## Files to update
-
-### `src/components/flows/SkeletonViewer.tsx`
-
-- Add review-mode hover/locked expansion state.
-- Add full-detail toggle state.
-- Replace `ReviewNodeView` with collapsed/expanded variants matching the provided layouts.
-- Add condensed section-chip display.
-- Adjust review geometry to support collapsed and expanded dimensions.
-- Keep vertical/horizontal orientation toggle.
-- Ensure connector routing still works with compact pills and expanded cards.
-
-### `src/index.css`
-
-- Rewrite review-mode node styling:
-  - dark trigger/split/delay pills
-  - white message pills
-  - expanded rounded cards
-  - smooth spring-like expansion transitions
-  - condensed chip styling
-  - efficient connector styling
-- Add styling for the full-detail toggle.
-
-### `supabase/functions/flow-agent/index.ts`
-
-- Tighten prompt instructions for short section/block labels.
-- Make future skeletons output display-ready condensed block names while preserving strategic usefulness.
-
-## Expected result
-
-- The skeleton review looks like the uploaded bare-bones process map.
-- Default view is instantly skimmable: titles, delays, routes, splits only.
-- Hovering a message smoothly expands it into the richer mockup-style card.
-- Clicking locks a message open; clicking again unlocks it.
-- A toggle lets the user show every message in full-detail mode.
-- Structure block chips are short and readable.
-- The user can understand the whole flow at a glance before approving generation.
+- Dynamic coupon rule:
+  - static code: use the explicit code the operator confirmed
+  - dynamic Klaviyo coupon: store the coupon pool/name in setup and instruct downstream content/generation to use the proper dynamic coupon Liquid, not a hardcoded code
