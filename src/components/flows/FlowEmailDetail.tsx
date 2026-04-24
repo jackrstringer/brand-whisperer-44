@@ -19,6 +19,14 @@ import {
 } from "lucide-react";
 import type { BoardNode, FlowEmailMeta, FlowEmailRow } from "@/components/flows/SkeletonViewer";
 
+function getDetailSubject(node: BoardNode, meta: FlowEmailMeta | null) {
+  return meta?.subject_line || node.meta?.subject_line || "";
+}
+
+function getDetailPreview(node: BoardNode, meta: FlowEmailMeta | null) {
+  return meta?.preview_text || node.meta?.preview_text || "";
+}
+
 type PeekMode = "side" | "center";
 
 const STORAGE_KEY = "flow-email-peek-mode";
@@ -115,8 +123,8 @@ export function FlowEmailDetail({
   const meta = emailRow?.campaign_id ? campaignMeta[emailRow.campaign_id] : null;
   const status = emailRow?.generation_status || "draft";
   const sections = useMemo(() => (Array.isArray(node.meta?.sections) ? node.meta.sections : []), [node.meta?.sections]);
-  const subject = meta?.subject_line || node.meta?.subject_direction || node.meta?.subject || "";
-  const previewText = meta?.preview_text || node.meta?.preview || "";
+  const subject = getDetailSubject(node, meta);
+  const previewText = getDetailPreview(node, meta);
 
   const sideClasses = effectiveMode === "side"
     ? `fixed top-0 right-0 bottom-0 border-l border-border flex flex-col bg-card z-50 transition-transform duration-200 ease-out ${visible ? "translate-x-0" : "translate-x-full"}`

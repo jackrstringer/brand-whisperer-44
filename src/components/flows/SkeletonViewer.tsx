@@ -163,15 +163,15 @@ function parseDurationToMinutes(value: string | null | undefined): number | null
 
   const normalized = input.replace(/[–—]/g, "-");
   const match = normalized.match(
-    /(\d+(?:\.\d+)?)\s*(minutes?|mins?|min|hours?|hrs?|hr|days?|day|weeks?|wks?|wk|week)\b/
+    /(\d+(?:\.\d+)?)\s*(minutes?|mins?|min|m|hours?|hrs?|hr|h|days?|day|d|weeks?|wks?|wk|week|w)\b/
   );
   if (!match) return null;
 
   const amount = Number(match[1]);
   const unit = match[2];
-  if (unit.startsWith("week") || unit.startsWith("wk")) return amount * MINUTES_PER_WEEK;
-  if (unit.startsWith("day")) return amount * MINUTES_PER_DAY;
-  if (unit.startsWith("hour") || unit.startsWith("hr")) return amount * MINUTES_PER_HOUR;
+  if (unit === "w" || unit.startsWith("week") || unit.startsWith("wk")) return amount * MINUTES_PER_WEEK;
+  if (unit === "d" || unit.startsWith("day")) return amount * MINUTES_PER_DAY;
+  if (unit === "h" || unit.startsWith("hour") || unit.startsWith("hr")) return amount * MINUTES_PER_HOUR;
   return amount;
 }
 
@@ -197,10 +197,12 @@ function getMessageCopy(
   return {
     subjectLine:
       campaign?.subject_line?.trim() ||
-      extractRawField(raw, ["Subject line", "Subject"]) ||
+      node.meta?.subject_line ||
+      extractRawField(raw, ["Subject line"]) ||
       null,
     previewText:
       campaign?.preview_text?.trim() ||
+      node.meta?.preview_text ||
       extractRawField(raw, ["Preview text", "Preheader"]) ||
       null,
     subjectDirection:
@@ -439,8 +441,10 @@ function buildBoard(
               sections: p.sections || [],
               timing: p.timing,
               job: p.job,
+              subject_line: p.subject_line,
               subject_direction: p.subject_direction,
               preview_text: p.preview_text,
+              preview_direction: p.preview_direction,
               raw: p.raw,
               cumulative_minutes: cumulativeDelayMinutes,
               notes: p.notes,

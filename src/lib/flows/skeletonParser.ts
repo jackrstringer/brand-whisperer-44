@@ -17,8 +17,10 @@ export interface ParsedFlowNode {
   label?: string;
   timing?: string;
   job?: string;
+  subject_line?: string;
   subject_direction?: string;
   preview_text?: string;
+  preview_direction?: string;
   sections?: string[];
   notes?: string;
   /** For splits only: explicit branch metadata if the agent provided it. */
@@ -212,8 +214,10 @@ export function parseSkeleton(markdown: string | null | undefined): ParsedFlowNo
       label: label || "Email",
       timing: extractField(block, "Timing", "Send time", "When"),
       job: extractField(block, "Job", "Goal", "Purpose"),
+      subject_line: extractField(block, "Subject line"),
       subject_direction: extractField(block, "Subject direction", "Subject", "Subject line"),
-      preview_text: extractField(block, "Preview text", "Preview direction", "Preheader", "Preheader direction"),
+      preview_text: extractField(block, "Preview text", "Preheader"),
+      preview_direction: extractField(block, "Preview direction", "Preheader direction"),
       sections: extractSections(block),
       notes: extractField(block, "Notes", "Dynamic content"),
       raw: block,
