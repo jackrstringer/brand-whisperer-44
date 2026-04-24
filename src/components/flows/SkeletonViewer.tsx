@@ -214,6 +214,15 @@ function getMessageCopy(
   };
 }
 
+function getScheduledSendLabel(node: BoardNode): string {
+  const cumulativeMinutes =
+    typeof node.meta?.cumulative_minutes === "number" ? node.meta.cumulative_minutes : null;
+
+  if (cumulativeMinutes !== null) return formatCumulativeTiming(cumulativeMinutes);
+  if (typeof node.meta?.timing === "string" && node.meta.timing.trim()) return node.meta.timing.trim();
+  return "Timing TBD";
+}
+
 function estimateReviewTextLines(text: string, charsPerLine: number) {
   const value = text.trim();
   if (!value) return 0;
@@ -388,6 +397,7 @@ function buildBoard(
 
   // Filters (optional)
   let prev = "trigger";
+  let cumulativeDelayMinutes = 0;
   if (meta.filters && meta.filters.length) {
     const id = "filters";
     out.push({ id, kind: "filters", label: "Entry Filters", x: COL, y, meta: { items: meta.filters } });
@@ -414,7 +424,10 @@ function buildBoard(
       y,
       meta:
         kind === "delay"
-          ? { duration: p.label || p.timing || "wait" }
+          ? {
+              duration: p.label || p.timing || "wait",
+              raw: p.raw,
+            }
           : kind === "split"
           ? {
               condition: p.notes || p.label || "",
@@ -428,6 +441,8 @@ function buildBoard(
               job: p.job,
               subject_direction: p.subject_direction,
               preview_text: p.preview_text,
+              raw: p.raw,
+              cumulative_minutes: cumulativeDelayMinutes,
               notes: p.notes,
             }
           : {},
@@ -438,6 +453,17 @@ function buildBoard(
     }
     out.push(node);
     edges.push({ id: `e-${prev}-${id}`, from: prev, to: id, branch: nodeByIdBranch(prev, kind) });
+
+    if (kind === "delay") {
+      const delayMinutes =
+        parseDurationToMinutes(p.label) ??
+        parseDurationToMinutes(p.timing) ??
+        parseDurationToMinutes(node.meta?.duration);
+      if (delayMinutes !== null) {
+        cumulativeDelayMinutes += delayMinutes;
+        node.meta.cumulative_minutes = cumulativeDelayMinutes;
+      }
+    }
 
     if (kind === "split") {
       const splitSize = getNodeSize("split", mode);
@@ -1797,8 +1823,9 @@ function ReviewNodeView({
   const { Icon, label } = KIND_META[node.kind];
   const step = typeof node.emailIndex === "number" ? String(node.emailIndex + 1).padStart(2, "0") : null;
   const purpose = node.meta?.job || node.meta?.condition || node.meta?.duration || "";
-  const subject = node.meta?.subject_direction || node.meta?.subject || "Subject angle TBD";
-  const preview = node.meta?.preview_text || node.meta?.preview || "Preview direction TBD";
+  const { subjectLine, previewText } = getMessageCopy(node);
+  const subject = subjectLine || "Subject line TBD";
+  const preview = previewText || "Preview text TBD";
   const chips = condenseSectionLabels(node.meta?.sections);
   const isMessage = node.kind === "email" || node.kind === "sms";
 
@@ -1846,7 +1873,7 @@ function ReviewNodeView({
       </div>
       {isMessage && expanded && (
         <div className="fl-review-expanded-body">
-          <div className="fl-review-day">Day {node.emailIndex === 0 ? 1 : (node.emailIndex || 0) + 1}</div>
+          <div className="fl-review-day">{getScheduledSendLabel(node)}</div>
           {purpose && <div className="fl-review-purpose">{purpose}</div>}
           <div className="fl-review-lines">
             <div><span>SL</span><p>{subject}</p></div>
@@ -1881,10 +1908,9 @@ function MessagePreview({
   onStartPreviewDrag: (e: React.MouseEvent) => void;
   onSelect: () => void;
 }) {
-  const cm = emailRow?.campaign_id ? campaignMeta[emailRow.campaign_id] : null;
-  const subject =
-    cm?.subject_line || node.meta?.subject || node.label || "Subject…";
-  const preview = cm?.preview_text || node.meta?.preview || "—";
+  const { subjectLine, previewText } = getMessageCopy(node, emailRow, campaignMeta);
+  const subject = subjectLine || node.label || "Subject…";
+  const preview = previewText || "—";
   const hasHtml = !!emailRow?.html;
 
   let statusEl: React.ReactNode = null;
@@ -1954,8 +1980,12 @@ function CanvasCampaignPreview({
   onGenerate: () => void;
   onOpenEditor: () => void;
 }) {
-  const subject = meta?.subject_line || node.meta?.subject || row.label || node.label;
-  const previewText = meta?.preview_text || node.meta?.preview || "—";
+  const { subjectLine, previewText } = getMessageCopy(
+    node,
+    row,
+    row.campaign_id && meta ? { [row.campaign_id]: meta } : undefined
+  );
+  const subject = subjectLine || row.label || node.label;
   return (
     <div
       className="fl-canvas-preview"
