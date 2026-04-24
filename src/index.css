@@ -813,20 +813,20 @@
   border-radius: 999px;
   color: var(--fl-ink);
   cursor: grab;
-  padding: 0 18px;
+  padding: 0 30px;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   overflow: hidden;
   transform-origin: center;
-  transition: width 260ms cubic-bezier(.2,.8,.2,1), min-height 260ms cubic-bezier(.2,.8,.2,1), border-radius 260ms cubic-bezier(.2,.8,.2,1), background 160ms ease, border-color 160ms ease;
+  transition: transform 220ms cubic-bezier(.2,.9,.2,1), width 220ms cubic-bezier(.2,.9,.2,1), height 220ms cubic-bezier(.2,.9,.2,1), border-radius 220ms cubic-bezier(.2,.9,.2,1), background 120ms ease, border-color 120ms ease;
 }
 .fl-review-node:hover,
 .fl-review-node.sel {
   border-color: hsl(0 0% 8% / 0.32);
 }
-.fl-review-node.expanded { border-radius: 24px; padding: 18px 20px; z-index: 8; }
+.fl-review-node.expanded { border-radius: 26px; padding: 18px 22px; z-index: 1; justify-content: flex-start; }
 .fl-review-node.locked { outline: 2px solid hsl(0 0% 8% / 0.18); outline-offset: 3px; }
 .fl-review-head {
   display: flex;
@@ -838,27 +838,27 @@
   align-items: center;
   gap: 7px;
   font-family: var(--fl-mono);
-  font-size: 11px;
+  font-size: 18px;
   line-height: 1;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.13em;
   color: var(--fl-ink-4);
   text-transform: uppercase;
   min-width: 0;
 }
 .fl-review-step {
-  width: 24px;
-  height: 24px;
+  width: 38px;
+  height: 38px;
   border-radius: 999px;
   display: grid;
   place-items: center;
   background: var(--fl-ink);
   color: var(--fl-surface);
-  font-size: 12px;
+  font-size: 17px;
   letter-spacing: 0;
 }
 .fl-review-title {
-  font-size: 17px;
-  font-weight: 700;
+  font-size: 26px;
+  font-weight: 800;
   line-height: 1.18;
   color: var(--fl-ink);
   overflow-wrap: anywhere;
@@ -892,13 +892,13 @@
 }
 .fl-review-split {
   border-radius: 999px;
-  min-height: 44px !important;
+  min-height: 58px !important;
   align-items: center;
   text-align: center;
   padding: 8px 16px;
 }
 .fl-review-split .fl-review-title {
-  font-size: 14px;
+  font-size: 16px;
 }
 .fl-review-delay,
 .fl-review-exit {
@@ -908,7 +908,7 @@
   gap: 7px;
   padding: 0 12px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--fl-ink-2);
   background: hsl(0 0% 8%);

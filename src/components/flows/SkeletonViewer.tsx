@@ -128,14 +128,14 @@ const SIBLING_X_GAP = 96;
 const SPLIT_BRANCH_GAP = 112;
 function getNodeSize(kind: NodeKind, mode: "review" | "detail" = "detail", expanded = false) {
   if (mode === "review") {
-    if (expanded && (kind === "email" || kind === "sms")) return { w: 372, h: 250 };
-    if (kind === "delay") return { w: 82, h: 32 };
-    if (kind === "split") return { w: 292, h: 44 };
-    if (kind === "trigger_split") return { w: 292, h: 44 };
-    if (kind === "filters") return { w: 272, h: 42 };
+    if (expanded && (kind === "email" || kind === "sms")) return { w: 388, h: 232 };
+    if (kind === "delay") return { w: 98, h: 38 };
+    if (kind === "split") return { w: 360, h: 58 };
+    if (kind === "trigger_split") return { w: 360, h: 58 };
+    if (kind === "filters") return { w: 430, h: 112 };
     if (kind === "exit") return { w: 58, h: 28 };
-    if (kind === "trigger") return { w: 292, h: 42 };
-    return { w: 304, h: 52 };
+    if (kind === "trigger") return { w: 430, h: 108 };
+    return { w: 448, h: 72 };
   }
   if (kind === "delay") return { w: 154, h: 52 };
   if (kind === "split") return { w: 214, h: 68 };
@@ -257,11 +257,12 @@ function buildBoard(
           : kind === "email" || kind === "sms"
           ? {
               subject: p.subject_direction || "",
-              preview: p.notes || p.job || "",
+              preview: p.preview_text || "",
               sections: p.sections || [],
               timing: p.timing,
               job: p.job,
               subject_direction: p.subject_direction,
+              preview_text: p.preview_text,
               notes: p.notes,
             }
           : {},
@@ -541,7 +542,7 @@ export function SkeletonViewer({
     () => buildBoard(parsedNodes, meta, flowType, mode),
     [parsedNodes, meta, flowType, mode]
   );
-  const expandedReviewLayoutNodeIds = useMemo(() => {
+  const expandedReviewNodeIds = useMemo(() => {
     const ids = new Set<string>();
     if (mode !== "review") return ids;
     if (reviewDetailMode === "full") {
@@ -550,16 +551,17 @@ export function SkeletonViewer({
       });
     }
     if (lockedReviewNodeId) ids.add(lockedReviewNodeId);
+    if (hoveredReviewNodeId) ids.add(hoveredReviewNodeId);
     return ids;
-  }, [board.nodes, lockedReviewNodeId, mode, reviewDetailMode]);
+  }, [board.nodes, hoveredReviewNodeId, lockedReviewNodeId, mode, reviewDetailMode]);
   const [layoutNodes, setLayoutNodes] = useState<BoardNode[]>(board.nodes);
   const [graphEdges, setGraphEdges] = useState<BoardEdge[]>(board.edges);
   const hoveredDropTargetRef = useRef<string | null>(null);
 
   useEffect(() => {
     setGraphEdges(board.edges);
-    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges, mode, effectiveOrientation, expandedReviewLayoutNodeIds));
-  }, [board.nodes, board.edges, mode, effectiveOrientation, expandedReviewLayoutNodeIds]);
+    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges, mode, effectiveOrientation, expandedReviewNodeIds));
+  }, [board.nodes, board.edges, mode, effectiveOrientation, expandedReviewNodeIds]);
 
   const displayBoard = useMemo(() => ({ ...board, nodes: layoutNodes, edges: graphEdges }), [board, layoutNodes, graphEdges]);
 
@@ -590,7 +592,7 @@ export function SkeletonViewer({
       maxX = -Infinity,
       maxY = -Infinity;
     for (const n of displayBoard.nodes) {
-      const sz = getNodeSize(n.kind, mode, expandedReviewLayoutNodeIds.has(n.id));
+      const sz = getNodeSize(n.kind, mode, expandedReviewNodeIds.has(n.id));
       minX = Math.min(minX, n.x);
       minY = Math.min(minY, n.y);
       maxX = Math.max(maxX, n.x + sz.w);
@@ -716,7 +718,7 @@ export function SkeletonViewer({
       maxX = -Infinity,
       maxY = -Infinity;
     for (const n of displayBoard.nodes) {
-      const sz = getNodeSize(n.kind, mode, expandedReviewLayoutNodeIds.has(n.id));
+      const sz = getNodeSize(n.kind, mode, expandedReviewNodeIds.has(n.id));
       minX = Math.min(minX, n.x);
       minY = Math.min(minY, n.y);
       maxX = Math.max(maxX, n.x + sz.w);
@@ -742,7 +744,7 @@ export function SkeletonViewer({
   };
 
   const cleanUpLayout = () => {
-    const cleaned = layoutFlowGraph(layoutNodes, graphEdges, mode, effectiveOrientation, expandedReviewLayoutNodeIds);
+    const cleaned = layoutFlowGraph(layoutNodes, graphEdges, mode, effectiveOrientation, expandedReviewNodeIds);
     setLayoutNodes(cleaned);
     requestAnimationFrame(fitToView);
   };
@@ -804,8 +806,8 @@ export function SkeletonViewer({
       const a = nodeById[edge.from];
       const b = nodeById[edge.to];
       if (!a || !b) return null;
-      const sa = getNodeSize(a.kind, mode, expandedReviewLayoutNodeIds.has(a.id));
-      const sb = getNodeSize(b.kind, mode, expandedReviewLayoutNodeIds.has(b.id));
+      const sa = getNodeSize(a.kind, mode, expandedReviewNodeIds.has(a.id));
+      const sb = getNodeSize(b.kind, mode, expandedReviewNodeIds.has(b.id));
       let from = { x: a.x + sa.w / 2, y: a.y + sa.h };
       // For split nodes, bias outgoing port to YES (left) or NO (right)
       if (a.kind === "split") {
@@ -855,7 +857,7 @@ export function SkeletonViewer({
         { id: `e-${target.edge.from}-${id}`, from: target.edge.from, to: id, branch: target.edge.branch ?? null },
         { id: `e-${id}-${target.edge.to}`, from: id, to: target.edge.to, branch: target.edge.branch ?? null },
       ];
-      setLayoutNodes((arr) => layoutFlowGraph([...arr, node], nextEdges, mode, effectiveOrientation, expandedReviewLayoutNodeIds));
+      setLayoutNodes((arr) => layoutFlowGraph([...arr, node], nextEdges, mode, effectiveOrientation, expandedReviewNodeIds));
       return nextEdges;
     });
     setSelected(id);
@@ -863,7 +865,7 @@ export function SkeletonViewer({
 
   const relayoutGraph = (nodes: BoardNode[], edges: BoardEdge[]) => {
     setGraphEdges(edges);
-    setLayoutNodes(resolveNodeCollisions(layoutFlowGraph(nodes, edges, mode, effectiveOrientation, expandedReviewLayoutNodeIds), mode));
+    setLayoutNodes(resolveNodeCollisions(layoutFlowGraph(nodes, edges, mode, effectiveOrientation, expandedReviewNodeIds), mode));
   };
 
   const deleteSticky = (id: string) => {
@@ -1143,7 +1145,7 @@ export function SkeletonViewer({
               mode={mode}
               reviewExpanded={
                 mode === "review" &&
-                (reviewDetailMode === "full" || lockedReviewNodeId === n.id || hoveredReviewNodeId === n.id)
+                expandedReviewNodeIds.has(n.id)
               }
               reviewLocked={lockedReviewNodeId === n.id}
               onReviewHover={setHoveredReviewNodeId}
@@ -1647,9 +1649,9 @@ function ReviewNodeView({
   const sz = getNodeSize(node.kind, "review", expanded);
   const { Icon, label } = KIND_META[node.kind];
   const step = typeof node.emailIndex === "number" ? String(node.emailIndex + 1).padStart(2, "0") : null;
-  const purpose = node.meta?.job || node.meta?.preview || node.meta?.condition || node.meta?.duration || "";
+  const purpose = node.meta?.job || node.meta?.condition || node.meta?.duration || "";
   const subject = node.meta?.subject_direction || node.meta?.subject || "Subject angle TBD";
-  const preview = node.meta?.notes || node.meta?.preview || "Preview direction TBD";
+  const preview = node.meta?.preview_text || node.meta?.preview || "Preview direction TBD";
   const chips = condenseSectionLabels(node.meta?.sections).slice(0, 6);
   const isMessage = node.kind === "email" || node.kind === "sms";
 
@@ -1681,9 +1683,9 @@ function ReviewNodeView({
   return (
     <div
       className={`fl-review-node fl-review-${node.kind} ${expanded && isMessage ? "expanded" : "collapsed"} ${locked ? "locked" : ""} ${selected ? "sel" : ""}`}
-      style={{ transform: `translate(${node.x}px, ${node.y}px)`, width: sz.w, minHeight: sz.h }}
-      onMouseEnter={() => isMessage && onHover?.(node.id)}
-      onMouseLeave={() => isMessage && onHover?.(null)}
+      style={{ transform: `translate(${node.x}px, ${node.y}px)`, width: sz.w, height: sz.h }}
+      onPointerEnter={() => isMessage && onHover?.(node.id)}
+      onPointerLeave={() => isMessage && onHover?.(null)}
       onMouseDown={(e) => { e.stopPropagation(); onSelect(); onStartDrag(e); }}
     >
       <div className="fl-review-head">
