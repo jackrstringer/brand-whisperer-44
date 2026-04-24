@@ -619,20 +619,6 @@ function buildBoard(
     for (const key of Object.keys(branchState)) delete branchState[key];
   }
 
-  // Exit
-  if (meta.exit && meta.exit.length) {
-    const id = "exit";
-    out.push({
-      id,
-      kind: "exit",
-      label: "Exit Conditions",
-      x: COL,
-      y,
-      meta: { items: meta.exit },
-    });
-    edges.push({ id: `e-${prev}-exit`, from: prev, to: id });
-  }
-
   return { nodes: out, edges };
 }
 
