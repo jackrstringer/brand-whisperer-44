@@ -601,12 +601,6 @@ function MessageBubble({
           </div>
         ) : null}
 
-        {question && cleanContent && (
-          <div className="prose prose-sm dark:prose-invert max-w-none [&>*]:my-1.5 mt-2 text-foreground/70">
-            <ReactMarkdown>{cleanContent}</ReactMarkdown>
-          </div>
-        )}
-
         {question && showQuestionChips && onAnswer && (
           <QuestionChips
             options={question.options || []}
