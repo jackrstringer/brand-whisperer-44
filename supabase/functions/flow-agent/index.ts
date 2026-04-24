@@ -372,6 +372,12 @@ ABSOLUTE RULES FOR THE SKELETON:
 - Separate every node with a line containing only \`---\`.
 - DO NOT write actual subject lines. DO NOT write preview text. DO NOT write any body copy, hero copy, headlines, CTAs copy, or PS lines.
 - Every email's Job + Sections MUST be appropriate for the flow audience defined above. A welcome flow CANNOT contain "your order arrived" or shipping content.
+- SKIMMABILITY RULE: this skeleton is first shown as a process map. Every visible label must be short enough to scan instantly.
+- Email header labels must be 2–5 words, e.g. "Welcome + offer", "Objection handling", "Last chance".
+- Email Job must be one short sentence under 14 words.
+- Delay labels must be compact values like "24h", "2 days", or "4h".
+- Conditional split headers must be short questions like "Purchased?" or "VIP customer?".
+- Avoid long bracket headers, compound clauses, and marketing copy in labels.
 - Sections are 3–5 short BULLETS describing what each block IS, not what it SAYS.
 - Total skeleton ≤90 lines.
 - When updating an existing skeleton, return the FULL updated skeleton in the same bracket format (including TRIGGER/FILTERS/EXIT).
