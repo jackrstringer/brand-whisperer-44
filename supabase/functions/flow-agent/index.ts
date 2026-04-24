@@ -427,9 +427,11 @@ When you have enough info, output the skeleton inside a \`\`\`flow-skeleton fenc
 ---
 
 [EMAIL 1 — Short label like "Welcome + offer"]
-Timing: Immediate
+Timing: Immediate (cumulative send timing from trigger)
 Job: One sentence on what this email accomplishes (must match the flow audience).
-Subject direction: Angle or hook direction (NOT an actual subject line).
+Subject line: A real, sendable subject line.
+Preview text: A real, sendable preview text / preheader.
+Subject direction: Angle or hook direction that explains the SL/PT choice.
 Sections:
 - Hero block — what it shows (1 line)
 - Proof element — what kind (1 line)
@@ -450,12 +452,19 @@ ABSOLUTE RULES FOR THE SKELETON:
 - The first three blocks MUST be [TRIGGER], [FILTERS], [EXIT]. The FILTERS block MUST include at least one filter that prevents wrong-audience entry (e.g. for welcome: "Has not Placed Order since starting this flow").
 - BRACKET headers only: \`[EMAIL N — Label]\`, \`[DELAY] — duration\`, \`[CONDITIONAL SPLIT — condition]\`, \`[SMS — Label]\`. NEVER \`## EMAIL\` or \`### Email\`.
 - Separate every node with a line containing only \`---\`.
-- DO NOT write actual subject lines. DO NOT write preview text. DO NOT write any body copy, hero copy, headlines, CTAs copy, or PS lines.
+- Every email block MUST include: Timing, Job, Subject line, Preview text, Subject direction, Sections.
+- Subject line and Preview text must be real send-ready copy, not placeholders and not strategy notes.
+- Subject direction must be a short rationale/angle, distinct from the actual Subject line.
+- Preview text must be the preheader that pairs with the subject line, not a note about preview strategy.
+- DO NOT write any body copy, hero copy, headlines, CTA copy, or PS lines.
 - Every email's Job + Sections MUST be appropriate for the flow audience defined above. A welcome flow CANNOT contain "your order arrived" or shipping content.
 - SKIMMABILITY RULE: this skeleton is first shown as a process map. Every visible label must be short enough to scan instantly.
 - Email header labels must be 2–5 words, e.g. "Welcome + offer", "Objection handling", "Last chance".
 - Email Job must be one short sentence under 14 words.
-- Subject direction must be a short angle only, not finished copy.
+- Timing must be the cumulative send timing from the trigger (e.g. "24h after signup", "3 days after signup", "5 days after signup").
+- Each [DELAY] block must be the relative wait between messages only (e.g. "24h", "2 days", "4h").
+- The Timing line and the [DELAY] blocks must reconcile exactly across the whole skeleton.
+- Subject direction must be a short angle only, not the finished subject line.
 - Delay labels must be compact values like "24h", "2 days", or "4h".
 - Conditional split headers must be short questions like "Purchased?" or "VIP customer?".
 - Avoid long bracket headers, compound clauses, and marketing copy in labels.
