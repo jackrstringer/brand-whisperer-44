@@ -1624,6 +1624,10 @@ function ReviewNodeView({
   const { Icon, label } = KIND_META[node.kind];
   const step = typeof node.emailIndex === "number" ? String(node.emailIndex + 1).padStart(2, "0") : null;
   const purpose = node.meta?.job || node.meta?.preview || node.meta?.condition || node.meta?.duration || "";
+  const subject = node.meta?.subject_direction || node.meta?.subject || "Subject angle TBD";
+  const preview = node.meta?.notes || node.meta?.preview || "Preview direction TBD";
+  const chips = condenseSectionLabels(node.meta?.sections).slice(0, 6);
+  const isMessage = node.kind === "email" || node.kind === "sms";
 
   if (node.kind === "exit") {
     return (
@@ -1652,8 +1656,10 @@ function ReviewNodeView({
 
   return (
     <div
-      className={`fl-review-node fl-review-${node.kind} ${selected ? "sel" : ""}`}
+      className={`fl-review-node fl-review-${node.kind} ${expanded && isMessage ? "expanded" : "collapsed"} ${locked ? "locked" : ""} ${selected ? "sel" : ""}`}
       style={{ transform: `translate(${node.x}px, ${node.y}px)`, width: sz.w, minHeight: sz.h }}
+      onMouseEnter={() => isMessage && onHover?.(node.id)}
+      onMouseLeave={() => isMessage && onHover?.(null)}
       onMouseDown={(e) => { e.stopPropagation(); onSelect(); onStartDrag(e); }}
     >
       <div className="fl-review-head">
@@ -1665,8 +1671,20 @@ function ReviewNodeView({
       <div className="fl-review-title">
         {node.kind === "split" ? node.meta?.condition || node.label : node.label}
       </div>
-      {(node.kind === "email" || node.kind === "sms") && purpose && (
-        <div className="fl-review-purpose">{purpose}</div>
+      {isMessage && expanded && (
+        <div className="fl-review-expanded-body">
+          <div className="fl-review-day">Day {node.emailIndex === 0 ? 1 : (node.emailIndex || 0) + 1}</div>
+          {purpose && <div className="fl-review-purpose">{purpose}</div>}
+          <div className="fl-review-lines">
+            <div><span>SL</span><p>{subject}</p></div>
+            <div><span>PT</span><p>{preview}</p></div>
+          </div>
+          {chips.length > 0 && (
+            <div className="fl-review-chips">
+              {chips.map((chip, i) => <span key={`${chip}-${i}`}>{chip}</span>)}
+            </div>
+          )}
+        </div>
       )}
       {node.kind === "filters" && (
         <div className="fl-review-purpose">{(node.meta?.items || []).slice(0, 1).join("")}</div>
