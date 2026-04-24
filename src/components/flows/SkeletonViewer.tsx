@@ -399,7 +399,6 @@ function buildBoard(
 
   // Filters (optional)
   let prev = "trigger";
-  let cumulativeDelayMinutes = 0;
   if (meta.filters && meta.filters.length) {
     const id = "filters";
     out.push({ id, kind: "filters", label: "Entry Filters", x: COL, y, meta: { items: meta.filters } });
@@ -408,31 +407,114 @@ function buildBoard(
     y += getNodeSize("filters", mode).h + VGAP;
   }
 
-  // Walk parsed nodes; emails get an emailIndex assigned in parsed order.
-  // Conditional splits always render as real Klaviyo-style YES/NO branches.
-  // Until explicit branch paths exist in the skeleton, the continuing path is
-  // YES and the empty branch is a real "Exit flow" node instead of a fake line.
+  // Branch-aware walk:
+  //   - Trunk path uses `prev` as anchor.
+  //   - When we hit a split, subsequent nodes that carry `branch: "yes" | "no" | …`
+  //     are routed under that branch (each branch keeps its own `prev` and its own
+  //     `cumulativeMinutes`).
+  //   - A node WITHOUT a branch tag after a split is treated as a merge back to
+  //     the trunk: every still-open branch attaches to it.
+  //   - `[END BRANCH]` terminates a branch with a real "Exit the flow" node.
+  //   - At the end, any open branch with no terminator gets a synthetic exit so
+  //     the canvas never silently drops content.
   let emailIndex = 0;
+  let trunkCumulativeMinutes = 0;
+
+  // Per-branch state for the most recent split.
+  let activeSplitId: string | null = null;
+  type BranchState = { prev: string; cumulativeMinutes: number; touched: boolean };
+  const branchState: Record<string, BranchState> = {};
+
+  const ensureBranch = (key: string): BranchState => {
+    if (!activeSplitId) return { prev, cumulativeMinutes: trunkCumulativeMinutes, touched: false };
+    if (!branchState[key]) {
+      branchState[key] = { prev: activeSplitId, cumulativeMinutes: trunkCumulativeMinutes, touched: false };
+    }
+    return branchState[key];
+  };
+
+  const closeOpenBranchesInto = (targetId: string) => {
+    if (!activeSplitId) return;
+    const branchKeys = Object.keys(branchState);
+    // If the split exists but no branch was ever populated (defensive), still
+    // attach both default sides so the merge edge isn't missing.
+    const sides = branchKeys.length ? branchKeys : ["yes", "no"];
+    for (const key of sides) {
+      const state = branchState[key] || { prev: activeSplitId, cumulativeMinutes: trunkCumulativeMinutes, touched: false };
+      edges.push({
+        id: `e-${state.prev}-${targetId}-${key}`,
+        from: state.prev,
+        to: targetId,
+        branch: key === "yes" || key === "no" ? key : null,
+      });
+    }
+    activeSplitId = null;
+    for (const key of Object.keys(branchState)) delete branchState[key];
+  };
+
   for (let i = 0; i < parsed.length; i++) {
     const p = parsed[i];
     const id = `n-${i}-${p.node_type}`;
-    const kind: NodeKind = p.node_type as NodeKind;
+    const kind: NodeKind = (p.node_type === "branch_end" ? "exit" : p.node_type) as NodeKind;
+
+    // Resolve which path this node belongs to (trunk vs a branch under the active split).
+    const onBranch = !!activeSplitId && !!p.branch;
+    const branchKey = onBranch ? p.branch! : null;
+    const state = branchKey ? ensureBranch(branchKey) : null;
+    const branchTag: "yes" | "no" | null = branchKey === "yes" || branchKey === "no" ? branchKey : null;
+
+    // Branch-end terminator: emit an Exit node and close that branch.
+    if (p.node_type === "branch_end") {
+      if (!activeSplitId) continue; // ignore stray END BRANCH on trunk
+      const targetKey = branchKey || "yes";
+      const bState = ensureBranch(targetKey);
+      const exitId = `${id}-exit`;
+      out.push({
+        id: exitId,
+        kind: "exit",
+        label: "Exit the flow",
+        x: COL,
+        y: 0,
+        branch: targetKey === "yes" || targetKey === "no" ? (targetKey as "yes" | "no") : null,
+        meta: {},
+      });
+      edges.push({
+        id: `e-${bState.prev}-${exitId}`,
+        from: bState.prev,
+        to: exitId,
+        branch: targetKey === "yes" || targetKey === "no" ? (targetKey as "yes" | "no") : null,
+      });
+      delete branchState[targetKey];
+      // If all branches now ended, close the split.
+      if (Object.keys(branchState).length === 0) activeSplitId = null;
+      continue;
+    }
+
+    // A trunk-level node arriving after an open split = merge.
+    if (!onBranch && activeSplitId) {
+      // Falls through to merge handling once we create the node below.
+    }
+
+    const cumulativeMinutesAtNode = state ? state.cumulativeMinutes : trunkCumulativeMinutes;
 
     const node: BoardNode = {
       id,
       kind,
       label: p.label || (kind === "email" ? `Email ${emailIndex + 1}` : kind),
       x: COL,
-      y,
+      y: 0,
+      branch: branchTag,
       meta:
         kind === "delay"
           ? {
               duration: p.label || p.timing || "wait",
               raw: p.raw,
+              branch: branchKey || null,
             }
           : kind === "split"
           ? {
               condition: p.notes || p.label || "",
+              branches: p.branches || null,
             }
           : kind === "email" || kind === "sms"
           ? {
@@ -446,8 +528,9 @@ function buildBoard(
               preview_text: p.preview_text,
               preview_direction: p.preview_direction,
               raw: p.raw,
-              cumulative_minutes: cumulativeDelayMinutes,
+              cumulative_minutes: cumulativeMinutesAtNode,
               notes: p.notes,
+              branch: branchKey || null,
             }
           : {},
     };
@@ -456,37 +539,106 @@ function buildBoard(
       emailIndex += 1;
     }
     out.push(node);
-    edges.push({ id: `e-${prev}-${id}`, from: prev, to: id, branch: nodeByIdBranch(prev, kind) });
 
+    // Wire incoming edge(s).
+    if (!onBranch && activeSplitId) {
+      // MERGE point — close all open branches into this node and resume trunk.
+      closeOpenBranchesInto(id);
+      prev = id;
+    } else if (onBranch) {
+      const bState = state!;
+      edges.push({
+        id: `e-${bState.prev}-${id}`,
+        from: bState.prev,
+        to: id,
+        branch: branchTag,
+      });
+      bState.prev = id;
+      bState.touched = true;
+    } else {
+      edges.push({ id: `e-${prev}-${id}`, from: prev, to: id });
+      prev = id;
+    }
+
+    // Update cumulative timing on the appropriate path.
     if (kind === "delay") {
       const delayMinutes =
         parseDurationToMinutes(p.label) ??
         parseDurationToMinutes(p.timing) ??
         parseDurationToMinutes(node.meta?.duration);
       if (delayMinutes !== null) {
-        cumulativeDelayMinutes += delayMinutes;
-        node.meta.cumulative_minutes = cumulativeDelayMinutes;
+        if (state) {
+          state.cumulativeMinutes += delayMinutes;
+          node.meta.cumulative_minutes = state.cumulativeMinutes;
+        } else {
+          trunkCumulativeMinutes += delayMinutes;
+          node.meta.cumulative_minutes = trunkCumulativeMinutes;
+        }
       }
     }
 
+    // Opening a new split: prime branch state for the declared branches.
     if (kind === "split") {
-      const splitSize = getNodeSize("split", mode);
-      const yesExitId = `${id}-yes-exit`;
-      const noExitId = `${id}-no-exit`;
-      const isTerminalSplit = i === parsed.length - 1;
-      if (isTerminalSplit) {
-        out.push({ id: yesExitId, kind: "exit", label: "Exit the flow", x: COL - BRANCH_X, y: y + splitSize.h + BRANCH_Y, branch: "yes", meta: {} });
-        edges.push({ id: `e-${id}-yes-exit`, from: id, to: yesExitId, branch: "yes" });
+      activeSplitId = id;
+      // Reset branch container.
+      for (const key of Object.keys(branchState)) delete branchState[key];
+      const declared = (p.branches || []).map((b) => b.label?.toLowerCase()).filter(Boolean) as string[];
+      const seeds = declared.length ? declared : ["yes", "no"];
+      for (const key of seeds) {
+        branchState[key] = { prev: id, cumulativeMinutes: trunkCumulativeMinutes, touched: false };
       }
-      out.push({ id: noExitId, kind: "exit", label: "Exit the flow", x: COL + BRANCH_X, y: y + splitSize.h + BRANCH_Y, branch: "no", meta: {} });
-      edges.push({ id: `e-${id}-no-exit`, from: id, to: noExitId, branch: "no" });
-      prev = id;
-      y += splitSize.h + VGAP + 30;
-      continue;
     }
+  }
 
-    prev = id;
-    y += getNodeSize(kind, mode).h + VGAP;
+  // After walking: any branch left open with content but no terminator gets a
+  // real Exit node so the path doesn't visually dead-end.
+  if (activeSplitId) {
+    for (const key of Object.keys(branchState)) {
+      const state = branchState[key];
+      if (!state.touched) continue; // empty branch — leave as nothing
+      const exitId = `${activeSplitId}-${key}-exit`;
+      const branchTag: "yes" | "no" | null = key === "yes" || key === "no" ? (key as "yes" | "no") : null;
+      out.push({
+        id: exitId,
+        kind: "exit",
+        label: "Exit the flow",
+        x: COL,
+        y: 0,
+        branch: branchTag,
+        meta: {},
+      });
+      edges.push({
+        id: `e-${state.prev}-${exitId}`,
+        from: state.prev,
+        to: exitId,
+        branch: branchTag,
+      });
+    }
+    // Empty branches (declared but never used) get an Exit too, anchored to the
+    // split itself, so the user can SEE that path is intentionally empty.
+    for (const key of Object.keys(branchState)) {
+      const state = branchState[key];
+      if (state.touched) continue;
+      const exitId = `${activeSplitId}-${key}-empty-exit`;
+      const branchTag: "yes" | "no" | null = key === "yes" || key === "no" ? (key as "yes" | "no") : null;
+      out.push({
+        id: exitId,
+        kind: "exit",
+        label: "Exit the flow",
+        x: COL,
+        y: 0,
+        branch: branchTag,
+        meta: {},
+      });
+      edges.push({
+        id: `e-${state.prev}-${exitId}`,
+        from: state.prev,
+        to: exitId,
+        branch: branchTag,
+      });
+    }
+    activeSplitId = null;
+    for (const key of Object.keys(branchState)) delete branchState[key];
   }
 
   // Exit
@@ -504,10 +656,6 @@ function buildBoard(
   }
 
   return { nodes: out, edges };
-}
-
-function nodeByIdBranch(prevId: string, nextKind: NodeKind): "yes" | "no" | null {
-  return prevId.includes("-split") && nextKind !== "exit" ? "yes" : null;
 }
 
 function overlaps(a: BoardNode, b: BoardNode, mode: "review" | "detail" = "detail"): boolean {
