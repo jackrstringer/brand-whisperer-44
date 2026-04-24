@@ -360,6 +360,12 @@ function layoutFlowGraph(
     (childrenById[edge.from] ||= []).push(edge);
   }
 
+  const sortEdges = (items: BoardEdge[]) =>
+    [...items].sort((a, b) => {
+      const rank = (branch?: "yes" | "no" | null) => (branch === "yes" ? 0 : branch === "no" ? 1 : 2);
+      return rank(a.branch) - rank(b.branch) || a.to.localeCompare(b.to);
+    });
+
   if (orientation === "horizontal") {
     const heightCache: Record<string, number> = {};
     const measureH = (id: string, seen = new Set<string>()): number => {
@@ -413,12 +419,6 @@ function layoutFlowGraph(
       return fallback;
     });
   }
-
-  const sortEdges = (items: BoardEdge[]) =>
-    [...items].sort((a, b) => {
-      const rank = (branch?: "yes" | "no" | null) => (branch === "yes" ? 0 : branch === "no" ? 1 : 2);
-      return rank(a.branch) - rank(b.branch) || a.to.localeCompare(b.to);
-    });
 
   const widthCache: Record<string, number> = {};
   const measure = (id: string, seen = new Set<string>()): number => {
