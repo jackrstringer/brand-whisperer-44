@@ -485,10 +485,10 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
     if (bootingFreshFlow && conversation.length === 0) {
       messages.push({
         role: "user",
-        content: `Begin setup for a ${flow_type.replace(/_/g, " ")} flow. First, synthesize researched context with a flow-synth block. Then ask the first required setup confirmation with a flow-question block. Do not generate a skeleton yet unless the hard setup gate is already satisfied. No greetings. No raw JSON outside fenced control blocks.`,
+        content: `Begin setup for a ${flow_type.replace(/_/g, " ")} flow. Ask only the first required confirmation with one concise flow-question block. Do not output flow-synth. Do not generate a skeleton yet unless the hard setup gate is already satisfied. No greetings. No raw JSON outside fenced control blocks.`,
       });
     } else if (!isInit && !isRestart) {
-      messages.push({ role: "user", content: `${message}\n\nUpdate flow-setup if this confirms or edits setup. If setup is now complete, generate the full skeleton. Otherwise ask the next setup confirmation.` });
+      messages.push({ role: "user", content: `${message}\n\nUpdate flow-setup if this confirms or edits setup. If setup is now complete, generate the full skeleton immediately. Otherwise ask only the next setup confirmation with one concise flow-question block. Do not output flow-synth or a research summary.` });
     }
 
     const stream = new ReadableStream({
@@ -503,11 +503,11 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
 
         try {
           if (bootingFreshFlow) {
-            send({ type: "progress", stage: "reading", label: "Reading brand research" });
+            send({ type: "progress", stage: "reading", label: "Checking brand research" });
             await new Promise((r) => setTimeout(r, 150));
-            send({ type: "progress", stage: "analyzing", label: "Analyzing performance data" });
+            send({ type: "progress", stage: "analyzing", label: "Thinking" });
             await new Promise((r) => setTimeout(r, 150));
-            send({ type: "progress", stage: "strategizing", label: "Designing flow strategy" });
+            send({ type: "progress", stage: "strategizing", label: "Thinking" });
           }
 
           const res = await fetch("https://api.anthropic.com/v1/messages", {
