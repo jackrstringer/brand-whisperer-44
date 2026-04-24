@@ -343,12 +343,75 @@ function resolveNodeCollisions(nodes: BoardNode[], mode: "review" | "detail" = "
   return resolved;
 }
 
-function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[], mode: "review" | "detail" = "detail"): BoardNode[] {
+function layoutFlowGraph(
+  nodes: BoardNode[],
+  edges: BoardEdge[],
+  mode: "review" | "detail" = "detail",
+  orientation: FlowOrientation = "vertical"
+): BoardNode[] {
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
   const childrenById: Record<string, BoardEdge[]> = {};
+  const lineGap = mode === "review" ? 42 : LINEAR_Y_GAP;
+  const splitGap = mode === "review" ? 56 : SPLIT_Y_GAP;
+  const siblingGapBase = mode === "review" ? 58 : SIBLING_X_GAP;
+  const splitBranchGap = mode === "review" ? 72 : SPLIT_BRANCH_GAP;
   for (const edge of edges) {
     if (!byId[edge.from] || !byId[edge.to]) continue;
     (childrenById[edge.from] ||= []).push(edge);
+  }
+
+  if (orientation === "horizontal") {
+    const heightCache: Record<string, number> = {};
+    const measureH = (id: string, seen = new Set<string>()): number => {
+      const node = byId[id];
+      if (!node || seen.has(id)) return 0;
+      if (heightCache[id]) return heightCache[id];
+      const size = getNodeSize(node.kind, mode);
+      const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
+      if (!children.length) return (heightCache[id] = size.h);
+      const nextSeen = new Set(seen).add(id);
+      const childHeight = children.reduce((sum, edge, index) => {
+        return sum + measureH(edge.to, nextSeen) + (index > 0 ? splitBranchGap : 0);
+      }, 0);
+      return (heightCache[id] = Math.max(size.h, childHeight));
+    };
+
+    const positioned: Record<string, BoardNode> = {};
+    const placeH = (id: string, x: number, centerY: number, seen = new Set<string>()) => {
+      const node = byId[id];
+      if (!node || seen.has(id)) return;
+      const size = getNodeSize(node.kind, mode);
+      positioned[id] = { ...node, x, y: centerY - size.h / 2 };
+      const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
+      if (!children.length) return;
+      const childX = x + size.w + (children.length > 1 || node.kind === "split" ? splitGap : lineGap);
+      const nextSeen = new Set(seen).add(id);
+      if (children.length === 1 && node.kind !== "split") {
+        placeH(children[0].to, childX, centerY, nextSeen);
+        return;
+      }
+      const heights = children.map((edge) => {
+        const child = byId[edge.to];
+        return node.kind === "split" ? getNodeSize(child.kind, mode).h : measureH(edge.to, nextSeen);
+      });
+      const totalHeight = heights.reduce((sum, height) => sum + height, 0) + splitBranchGap * Math.max(0, heights.length - 1);
+      let cursor = centerY - totalHeight / 2;
+      children.forEach((edge, index) => {
+        placeH(edge.to, childX, cursor + heights[index] / 2, nextSeen);
+        cursor += heights[index] + splitBranchGap;
+      });
+    };
+
+    const rootId = byId.trigger ? "trigger" : nodes[0]?.id;
+    if (rootId) placeH(rootId, 80, 0);
+    let orphanX = 80;
+    return nodes.map((node) => {
+      if (positioned[node.id]) return positioned[node.id];
+      const size = getNodeSize(node.kind, mode);
+      const fallback = { ...node, x: orphanX, y: -size.h / 2 };
+      orphanX += size.w + lineGap;
+      return fallback;
+    });
   }
 
   const sortEdges = (items: BoardEdge[]) =>
@@ -367,7 +430,7 @@ function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[], mode: "review" 
     if (!children.length) return (widthCache[id] = size.w);
     const nextSeen = new Set(seen).add(id);
     const childWidth = children.reduce((sum, edge, index) => {
-      return sum + measure(edge.to, nextSeen) + (index > 0 ? SIBLING_X_GAP : 0);
+      return sum + measure(edge.to, nextSeen) + (index > 0 ? siblingGapBase : 0);
     }, 0);
     return (widthCache[id] = Math.max(size.w, childWidth));
   };
@@ -382,7 +445,7 @@ function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[], mode: "review" 
     const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
     if (!children.length) return;
 
-    const childY = y + size.h + (children.length > 1 || node.kind === "split" ? SPLIT_Y_GAP : LINEAR_Y_GAP);
+    const childY = y + size.h + (children.length > 1 || node.kind === "split" ? splitGap : lineGap);
     const nextSeen = new Set(seen).add(id);
     if (children.length === 1 && node.kind !== "split") {
       place(children[0].to, centerX, childY, nextSeen);
@@ -393,7 +456,7 @@ function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[], mode: "review" 
       const child = byId[edge.to];
       return node.kind === "split" ? getNodeSize(child.kind, mode).w : measure(edge.to, nextSeen);
     });
-    const siblingGap = node.kind === "split" ? SPLIT_BRANCH_GAP : SIBLING_X_GAP;
+    const siblingGap = node.kind === "split" ? splitBranchGap : siblingGapBase;
     const totalWidth = widths.reduce((sum, width) => sum + width, 0) + siblingGap * Math.max(0, widths.length - 1);
     let cursor = centerX - totalWidth / 2;
     children.forEach((edge, index) => {
@@ -410,7 +473,7 @@ function layoutFlowGraph(nodes: BoardNode[], edges: BoardEdge[], mode: "review" 
     if (positioned[node.id]) return positioned[node.id];
     const size = getNodeSize(node.kind, mode);
     const fallback = { ...node, x: -size.w / 2, y: orphanY };
-    orphanY += size.h + LINEAR_Y_GAP;
+    orphanY += size.h + lineGap;
     return fallback;
   });
 }
