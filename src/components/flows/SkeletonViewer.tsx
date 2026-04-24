@@ -1266,6 +1266,17 @@ function NodeView({
   const km = KIND_META[node.kind];
   const I = km.Icon;
 
+  if (mode === "review") {
+    return (
+      <ReviewNodeView
+        node={node}
+        selected={selected}
+        onSelect={onSelect}
+        onStartDrag={(e) => onStartDrag(e)}
+      />
+    );
+  }
+
   if (node.kind === "exit") {
     return (
       <div
@@ -1285,17 +1296,6 @@ function NodeView({
           </button>
         )}
       </div>
-    );
-  }
-
-  if (mode === "review") {
-    return (
-      <ReviewNodeView
-        node={node}
-        selected={selected}
-        onSelect={onSelect}
-        onStartDrag={(e) => onStartDrag(e)}
-      />
     );
   }
 
@@ -1718,7 +1718,7 @@ function Minimap({
     maxX = -Infinity,
     maxY = -Infinity;
   for (const n of board.nodes) {
-    const sz = getNodeSize(n.kind, mode);
+    const sz = getNodeSize(n.kind);
     minX = Math.min(minX, n.x);
     minY = Math.min(minY, n.y);
     maxX = Math.max(maxX, n.x + sz.w);
@@ -1741,7 +1741,7 @@ function Minimap({
     <div className="fl-mini">
       <svg viewBox={`${minX} ${minY} ${w} ${h}`} preserveAspectRatio="xMidYMid meet">
         {board.nodes.map((n) => {
-          const sz = getNodeSize(n.kind, mode);
+          const sz = getNodeSize(n.kind);
           return (
             <rect
               key={n.id}
