@@ -1145,7 +1145,7 @@ export function SkeletonViewer({
               mode={mode}
               reviewExpanded={
                 mode === "review" &&
-                (reviewDetailMode === "full" || lockedReviewNodeId === n.id || hoveredReviewNodeId === n.id)
+                expandedReviewNodeIds.has(n.id)
               }
               reviewLocked={lockedReviewNodeId === n.id}
               onReviewHover={setHoveredReviewNodeId}
@@ -1649,9 +1649,9 @@ function ReviewNodeView({
   const sz = getNodeSize(node.kind, "review", expanded);
   const { Icon, label } = KIND_META[node.kind];
   const step = typeof node.emailIndex === "number" ? String(node.emailIndex + 1).padStart(2, "0") : null;
-  const purpose = node.meta?.job || node.meta?.preview || node.meta?.condition || node.meta?.duration || "";
+  const purpose = node.meta?.job || node.meta?.condition || node.meta?.duration || "";
   const subject = node.meta?.subject_direction || node.meta?.subject || "Subject angle TBD";
-  const preview = node.meta?.notes || node.meta?.preview || "Preview direction TBD";
+  const preview = node.meta?.preview_text || node.meta?.preview || "Preview direction TBD";
   const chips = condenseSectionLabels(node.meta?.sections).slice(0, 6);
   const isMessage = node.kind === "email" || node.kind === "sms";
 
@@ -1684,8 +1684,8 @@ function ReviewNodeView({
     <div
       className={`fl-review-node fl-review-${node.kind} ${expanded && isMessage ? "expanded" : "collapsed"} ${locked ? "locked" : ""} ${selected ? "sel" : ""}`}
       style={{ transform: `translate(${node.x}px, ${node.y}px)`, width: sz.w, minHeight: sz.h }}
-      onMouseEnter={() => isMessage && onHover?.(node.id)}
-      onMouseLeave={() => isMessage && onHover?.(null)}
+      onPointerEnter={() => isMessage && onHover?.(node.id)}
+      onPointerLeave={() => isMessage && onHover?.(null)}
       onMouseDown={(e) => { e.stopPropagation(); onSelect(); onStartDrag(e); }}
     >
       <div className="fl-review-head">
