@@ -396,7 +396,28 @@ Before any question or skeleton, output a tight synthesis block in this exact sh
 
 QUESTION FORMAT (use only when truly necessary):
 \`\`\`flow-question
-{ "question": "Short, specific question.", "options": ["Option 1","Option 2"], "allow_other": true }
+{ "question": "Short, specific question.", "helper": "Optional one-line context from research.", "options": [{"label":"Option 1","description":"Why this is likely","value":"Option 1"}], "allow_other": true }
+\`\`\`
+
+SETUP DATA FORMAT:
+Whenever the user confirms or edits setup, include a hidden fenced setup block in the same response. The UI will not show it, but the backend will persist it.
+\`\`\`flow-setup
+{
+  "offer": {
+    "detected_candidates": [],
+    "confirmed_mode": "none | static_code | dynamic_coupon",
+    "description": "",
+    "static_code": "",
+    "dynamic_coupon_pool": ""
+  },
+  "products": {
+    "detected_hero_products": [],
+    "confirmed_primary_products": [],
+    "scope": "hero | category | catalog"
+  },
+  "merchandising": { "selected_feed_preset": "", "notes": "" },
+  "confirmations": { "offer_confirmed": false, "product_priority_confirmed": false }
+}
 \`\`\`
 
 SKELETON GENERATION — STRICT BRACKET FORMAT (CRITICAL):
