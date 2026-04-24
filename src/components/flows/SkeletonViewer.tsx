@@ -1147,7 +1147,7 @@ export function SkeletonViewer({
               }
               reviewLocked={lockedReviewNodeId === n.id}
               onReviewHover={setHoveredReviewNodeId}
-              onReviewLockToggle={(nodeId) => {
+              onReviewLockToggle={(nodeId: string) => {
                 setLockedReviewNodeId((current) => (current === nodeId ? null : nodeId));
               }}
             />
@@ -1377,6 +1377,10 @@ function NodeView({
   campaignMeta,
   isGenerating,
   mode,
+  reviewExpanded = false,
+  reviewLocked = false,
+  onReviewHover,
+  onReviewLockToggle,
 }: {
   node: BoardNode;
   selected: boolean;
@@ -1396,8 +1400,12 @@ function NodeView({
   campaignMeta: Record<string, FlowEmailMeta>;
   isGenerating: boolean;
   mode: "review" | "detail";
+  reviewExpanded?: boolean;
+  reviewLocked?: boolean;
+  onReviewHover?: (id: string | null) => void;
+  onReviewLockToggle?: (id: string) => void;
 }) {
-  const sz = getNodeSize(node.kind, mode);
+  const sz = getNodeSize(node.kind, mode, reviewExpanded);
   const km = KIND_META[node.kind];
   const I = km.Icon;
 
@@ -1406,8 +1414,13 @@ function NodeView({
       <ReviewNodeView
         node={node}
         selected={selected}
+        expanded={reviewExpanded}
+        locked={reviewLocked}
         onSelect={onSelect}
-        onStartDrag={(e) => onStartDrag(e)}
+        onHover={onReviewHover}
+        onStartDrag={(e) => onStartDrag(e, () => {
+          if (node.kind === "email" || node.kind === "sms") onReviewLockToggle?.(node.id);
+        })}
       />
     );
   }
