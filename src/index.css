@@ -777,7 +777,7 @@
   border-radius: 999px;
   background: transparent;
   color: var(--fl-ink-3);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 650;
   cursor: pointer;
 }
@@ -814,7 +814,7 @@
   align-items: center;
   gap: 7px;
   font-family: var(--fl-mono);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1;
   letter-spacing: 0.09em;
   color: var(--fl-ink-4);
@@ -829,11 +829,11 @@
   place-items: center;
   background: var(--fl-ink);
   color: var(--fl-surface);
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0;
 }
 .fl-review-title {
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 700;
   line-height: 1.18;
   color: var(--fl-ink);
@@ -841,8 +841,8 @@
   word-break: break-word;
 }
 .fl-review-purpose {
-  font-size: 10.5px;
-  line-height: 1.25;
+  font-size: 12px;
+  line-height: 1.28;
   color: var(--fl-ink-3);
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -863,7 +863,7 @@
   padding: 8px 16px;
 }
 .fl-review-split .fl-review-title {
-  font-size: 13px;
+  font-size: 14.5px;
 }
 .fl-review-delay,
 .fl-review-exit {
