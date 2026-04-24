@@ -738,7 +738,7 @@ function QuestionChips({
   onAnswer,
   disabled,
 }: {
-  options: string[];
+  options: Array<string | { label: string; description?: string; value?: string }>;
   allowOther: boolean;
   onAnswer: (answer: string) => void;
   disabled?: boolean;
@@ -748,24 +748,37 @@ function QuestionChips({
 
   return (
     <div className="mt-3 space-y-2">
-      <div className="flex flex-wrap gap-1.5">
-        {options.map((opt) => (
+      <div className="grid gap-1.5">
+        {options.map((opt) => {
+          const option = typeof opt === "string" ? { label: opt, value: opt } : opt;
+          return (
           <button
-            key={opt}
+            key={`${option.label}:${option.value || option.label}`}
             disabled={disabled}
-            onClick={() => onAnswer(opt)}
-            className="px-3 py-1.5 text-[12px] font-medium rounded-full bg-card border border-foreground/15 hover:bg-muted hover:border-foreground/35 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-foreground"
+            onClick={() => onAnswer(option.value || option.label)}
+            className="group text-left px-3 py-2.5 text-[12.5px] font-medium rounded-xl bg-card border border-foreground/15 hover:bg-muted hover:border-foreground/35 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-foreground"
           >
-            {opt}
+            <span className="flex items-start gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 text-foreground/35 group-hover:text-foreground/70 flex-shrink-0" />
+              <span className="min-w-0">
+                <span className="block leading-snug">{option.label}</span>
+                {option.description && (
+                  <span className="block mt-1 text-[11.5px] leading-relaxed text-foreground/55 font-normal">
+                    {option.description}
+                  </span>
+                )}
+              </span>
+            </span>
           </button>
-        ))}
+          );
+        })}
         {allowOther && !showOther && (
           <button
             disabled={disabled}
             onClick={() => setShowOther(true)}
-            className="px-3 py-1.5 text-[12px] font-medium rounded-full bg-card border border-dashed border-foreground/20 hover:border-foreground/40 transition-colors disabled:opacity-50 text-foreground/60"
+            className="text-left px-3 py-2.5 text-[12.5px] font-medium rounded-xl bg-card border border-dashed border-foreground/20 hover:border-foreground/40 transition-colors disabled:opacity-50 text-foreground/70"
           >
-            Something else?
+            <span className="flex items-center gap-2"><PencilLine className="w-3.5 h-3.5" /> Enter different details</span>
           </button>
         )}
       </div>
@@ -784,7 +797,7 @@ function QuestionChips({
             }}
             disabled={disabled}
             placeholder="Type your answer…"
-            className="flex-1 px-3 py-1.5 text-[12px] rounded-full bg-card border border-foreground/15 focus:outline-none focus:border-foreground/45 text-foreground"
+            className="flex-1 px-3 py-2 text-[12.5px] rounded-xl bg-card border border-foreground/15 focus:outline-none focus:border-foreground/45 text-foreground"
           />
           <Button
             size="sm"
