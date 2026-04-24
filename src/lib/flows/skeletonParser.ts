@@ -72,8 +72,9 @@ function extractSections(block: string): string[] | undefined {
   const lines = m[1]
     .split("\n")
     .map((l) => l.trim())
-    .filter((l) => /^[-*•]/.test(l))
-    .map((l) => l.replace(/^[-*•]\s*/, "").trim())
+    .filter((l) => /^([-*•]|\d+[.)])\s+/.test(l))
+    .map((l) => l.replace(/^([-*•]|\d+[.)])\s+/, "").trim())
+    .filter((l) => !/^copy spec\s*[:\-]/i.test(l))
     .filter(Boolean);
   return lines.length ? lines : undefined;
 }
