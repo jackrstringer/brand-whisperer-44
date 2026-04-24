@@ -303,8 +303,8 @@ export function FlowAgentChat({
   if (centered) {
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
-        <div className="w-full max-w-xl flex flex-col gap-4">
-          <div ref={scrollRef} className="max-h-[55vh] overflow-y-auto space-y-3 pr-1">
+        <div className="w-full max-w-2xl flex flex-col gap-4">
+          <div ref={scrollRef} className="max-h-[68vh] overflow-y-auto space-y-3 pr-1">
             {visibleMessages.map((m, i) => {
               const isLastAssistant = i === lastAssistantIdx;
               const question = m.role === "assistant" ? extractQuestion(m.content) : null;
@@ -587,24 +587,24 @@ function InlineShimmer({ label }: { label: string }) {
 
 function SynthCard({ synth }: { synth: FlowSynth }) {
   return (
-    <div className="rounded-2xl border border-foreground/15 bg-card p-4 space-y-3 animate-fade-in">
+    <div className="rounded-2xl border border-foreground/15 bg-card p-5 space-y-4 animate-fade-in shadow-sm">
       {synth.headline && (
         <div className="flex items-start gap-2">
           <Sparkles className="w-3.5 h-3.5 text-foreground/60 mt-0.5 flex-shrink-0" />
-          <p className="text-[13.5px] font-medium text-foreground leading-snug">
+          <p className="text-[15px] font-semibold text-foreground leading-snug">
             {synth.headline}
           </p>
         </div>
       )}
       {synth.facts && synth.facts.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {synth.facts.map((f, i) => (
             <div
               key={i}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted text-[12px]"
+              className="rounded-xl bg-muted px-3 py-2 text-[12.5px]"
             >
-              <span className="text-foreground/55">{f.label}:</span>
-              <span className="font-medium text-foreground">{f.value}</span>
+              <span className="block text-foreground/55">{f.label}</span>
+              <span className="block font-semibold text-foreground mt-0.5 leading-snug">{f.value}</span>
             </div>
           ))}
         </div>
