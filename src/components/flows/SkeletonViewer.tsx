@@ -133,6 +133,86 @@ const REVIEW_MESSAGE_INNER_WIDTH = REVIEW_MESSAGE_WIDTH - 48;
 const REVIEW_MESSAGE_CHIP_GAP = 8;
 const REVIEW_MESSAGE_CHIP_MIN_HEIGHT = 42;
 const REVIEW_MESSAGE_BOTTOM_SAFE_SPACE = 24;
+const MINUTES_PER_HOUR = 60;
+const MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR;
+const MINUTES_PER_WEEK = 7 * MINUTES_PER_DAY;
+
+function extractRawField(raw: string | undefined, keys: string[]): string | null {
+  if (!raw?.trim()) return null;
+
+  for (const key of keys) {
+    const escapedKey = key
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/\s+/g, "\\s+");
+    const re = new RegExp(
+      `^\\s*(?:[-*•]\\s*)?\\*{0,2}${escapedKey}\\*{0,2}\\s*[:\\-]\\s*(.+)$`,
+      "im"
+    );
+    const match = raw.match(re);
+    if (match?.[1]) return match[1].trim().replace(/\*+$/, "").trim();
+  }
+
+  return null;
+}
+
+function parseDurationToMinutes(value: string | null | undefined): number | null {
+  const input = value?.trim().toLowerCase();
+  if (!input) return null;
+
+  if (/\b(immediately|instant(?:ly)?|right away)\b/.test(input)) return 0;
+
+  const normalized = input.replace(/[–—]/g, "-");
+  const match = normalized.match(
+    /(\d+(?:\.\d+)?)\s*(minutes?|mins?|min|hours?|hrs?|hr|days?|day|weeks?|wks?|wk|week)\b/
+  );
+  if (!match) return null;
+
+  const amount = Number(match[1]);
+  const unit = match[2];
+  if (unit.startsWith("week") || unit.startsWith("wk")) return amount * MINUTES_PER_WEEK;
+  if (unit.startsWith("day")) return amount * MINUTES_PER_DAY;
+  if (unit.startsWith("hour") || unit.startsWith("hr")) return amount * MINUTES_PER_HOUR;
+  return amount;
+}
+
+function formatCumulativeTiming(totalMinutes: number): string {
+  if (totalMinutes <= 0) return "Immediately";
+  if (totalMinutes % MINUTES_PER_DAY === 0) {
+    return `Day ${Math.round(totalMinutes / MINUTES_PER_DAY)}`;
+  }
+  if (totalMinutes % MINUTES_PER_HOUR === 0) {
+    return `${Math.round(totalMinutes / MINUTES_PER_HOUR)} hr from trigger`;
+  }
+  return `${Math.round(totalMinutes)} min from trigger`;
+}
+
+function getMessageCopy(
+  node: BoardNode,
+  emailRow?: FlowEmailRow,
+  campaignMeta?: Record<string, FlowEmailMeta>
+) {
+  const raw = typeof node.meta?.raw === "string" ? node.meta.raw : undefined;
+  const campaign = emailRow?.campaign_id && campaignMeta ? campaignMeta[emailRow.campaign_id] : null;
+
+  return {
+    subjectLine:
+      campaign?.subject_line?.trim() ||
+      extractRawField(raw, ["Subject line", "Subject"]) ||
+      null,
+    previewText:
+      campaign?.preview_text?.trim() ||
+      extractRawField(raw, ["Preview text", "Preheader"]) ||
+      null,
+    subjectDirection:
+      extractRawField(raw, ["Subject direction"]) ||
+      node.meta?.subject_direction ||
+      null,
+    previewDirection:
+      extractRawField(raw, ["Preview direction", "Preheader direction"]) ||
+      node.meta?.preview_direction ||
+      null,
+  };
+}
 
 function estimateReviewTextLines(text: string, charsPerLine: number) {
   const value = text.trim();
@@ -169,8 +249,9 @@ function getReviewExpandedMessageHeight(node?: BoardNode) {
 
   const title = `${node.label || ""}`;
   const purpose = `${node.meta?.job || node.meta?.condition || node.meta?.duration || ""}`;
-  const subject = `${node.meta?.subject_direction || node.meta?.subject || "Subject angle TBD"}`;
-  const preview = `${node.meta?.preview_text || node.meta?.preview || "Preview direction TBD"}`;
+  const { subjectLine, previewText } = getMessageCopy(node);
+  const subject = subjectLine || "Subject line TBD";
+  const preview = previewText || "Preview text TBD";
   const chips = condenseSectionLabels(node.meta?.sections);
 
   const titleLines = estimateReviewTextLines(title, 34);
