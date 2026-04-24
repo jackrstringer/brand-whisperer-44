@@ -532,11 +532,10 @@ export function SkeletonViewer({
   const [hoveredDropTarget, setHoveredDropTarget] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BoardNode | Sticky | null>(null);
   const [detailsNode, setDetailsNode] = useState<BoardNode | null>(null);
-  const [orientation, setOrientation] = useState<FlowOrientation>("horizontal");
   const [hoveredReviewNodeId, setHoveredReviewNodeId] = useState<string | null>(null);
   const [lockedReviewNodeId, setLockedReviewNodeId] = useState<string | null>(null);
   const [reviewDetailMode, setReviewDetailMode] = useState<ReviewDetailMode>("compact");
-  const effectiveOrientation = mode === "review" ? orientation : "vertical";
+  const effectiveOrientation: FlowOrientation = "vertical";
 
   const board = useMemo(
     () => buildBoard(parsedNodes, meta, flowType, mode),
@@ -1234,14 +1233,6 @@ export function SkeletonViewer({
 
         {mode === "review" && (
           <div className="fl-review-controls" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="fl-orientation">
-              <button className={orientation === "horizontal" ? "on" : ""} onClick={() => setOrientation("horizontal")} title="Left-to-right layout">
-                Left → Right
-              </button>
-              <button className={orientation === "vertical" ? "on" : ""} onClick={() => setOrientation("vertical")} title="Top-to-bottom layout">
-                Top ↓ Bottom
-              </button>
-            </div>
             <div className="fl-orientation">
               <button className={reviewDetailMode === "compact" ? "on" : ""} onClick={() => setReviewDetailMode("compact")} title="Show compact nodes">
                 Compact
