@@ -102,6 +102,7 @@ export function FlowAgentChat({
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (streaming) return;
     setMessages(initialMessages);
     setInput("");
     setStreamBuf("");
@@ -109,7 +110,7 @@ export function FlowAgentChat({
     setStages([]);
     setStreaming(false);
     initFired.current = false;
-  }, [flowId, initialMessages]);
+  }, [flowId, initialMessages, streaming]);
 
   useEffect(() => {
     if (initFired.current) return;
@@ -286,14 +287,12 @@ export function FlowAgentChat({
             {visibleMessages.map((m, i) => {
               const isLastAssistant = i === lastAssistantIdx;
               const question = m.role === "assistant" ? extractQuestion(m.content) : null;
-              const synth = m.role === "assistant" ? extractSynth(m.content) : null;
               return (
                 <MessageBubble
                   key={i}
                   role={m.role}
                   content={m.content}
                   question={question}
-                  synth={synth}
                   showQuestionChips={isLastAssistant && !streaming}
                   onAnswer={(answer) => sendMessage(answer)}
                   disabled={streaming}
@@ -308,7 +307,6 @@ export function FlowAgentChat({
                     content={streamBuf}
                     streaming
                     question={extractQuestion(streamBuf)}
-                    synth={extractSynth(streamBuf)}
                     showQuestionChips={false}
                     disabled
                   />
@@ -353,7 +351,6 @@ export function FlowAgentChat({
                 role={m.role}
                 content={m.content}
                 question={null}
-                synth={null}
                 showQuestionChips={isLastAssistant && !streaming && !!question}
                 onAnswer={(answer) => sendMessage(answer)}
                 disabled={streaming}
@@ -367,7 +364,6 @@ export function FlowAgentChat({
                 content={streamBuf}
                 streaming
                 question={null}
-                synth={null}
                 showQuestionChips={false}
                 disabled
               />
@@ -422,7 +418,6 @@ export function FlowAgentChat({
                     role={m.role}
                     content={m.content}
                     question={null}
-                    synth={null}
                     showQuestionChips={isLastAssistant && !streaming && !!question}
                     onAnswer={(answer) => sendMessage(answer)}
                     disabled={streaming}
@@ -437,7 +432,6 @@ export function FlowAgentChat({
                       content={streamBuf}
                       streaming
                       question={null}
-                      synth={null}
                       showQuestionChips={false}
                       disabled
                     />
