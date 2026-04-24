@@ -1002,22 +1002,9 @@ export function SkeletonViewer({
 
           {/* Edges */}
           <svg className="fl-edges" style={{ overflow: "visible" }}>
-            <defs>
-              <marker
-                id="fl-arrow"
-                viewBox="0 0 10 10"
-                refX="8"
-                refY="5"
-                markerWidth="6"
-                markerHeight="6"
-                orient="auto"
-              >
-                <path d="M0 0 L10 5 L0 10 z" className="fl-edge-arrow" />
-              </marker>
-            </defs>
             {edgePaths.map(({ edge, from, to, path }) => (
               <g key={edge.id}>
-                <path className="fl-edge-path" d={path} markerEnd="url(#fl-arrow)" />
+                <path className="fl-edge-path" d={path} />
                 {edge.branch && (
                   <foreignObject
                     x={(from.x + to.x) / 2 - 22}
