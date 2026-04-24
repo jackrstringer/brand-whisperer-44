@@ -15,6 +15,7 @@ export interface SplitBranch {
 export interface ParsedFlowNode {
   node_type: FlowNodeType;
   label?: string;
+  condition?: string;
   timing?: string;
   job?: string;
   subject_line?: string;
@@ -119,6 +120,21 @@ function extractLabel(firstLine: string): string {
   return stripped.trim() || firstLine.trim();
 }
 
+function normalizeBranchKey(value: string | undefined): string | undefined {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+
+  const normalized = raw.toLowerCase();
+  if (/^(if\s+)?yes\b/.test(normalized) || /\b0\s*orders?\b/.test(normalized) || /first[-\s]*time/.test(normalized)) {
+    return "yes";
+  }
+  if (/^(if\s+)?no\b/.test(normalized) || /\b1\+\s*orders?\b/.test(normalized) || /returning/.test(normalized)) {
+    return "no";
+  }
+
+  return normalized.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || undefined;
+}
+
 function splitIntoBlocks(markdown: string): string[] {
   const dashSplit = markdown
     .split(/\n\s*---+\s*\n/)
@@ -184,11 +200,11 @@ export function parseSkeleton(markdown: string | null | undefined): ParsedFlowNo
         firstLine.match(/\[DELAY[^\]]*\]\s*[—–-]?\s*(.+)/i)?.[1]?.trim() ||
         extractField(block, "Wait", "Duration", "Timing") ||
         label;
-      const branchTag = extractField(block, "Branch");
+      const branchTag = normalizeBranchKey(extractField(block, "Branch"));
       nodes.push({
         node_type: "delay",
         label: dur || "Delay",
-        branch: branchTag ? branchTag.trim().toLowerCase() : undefined,
+        branch: branchTag,
         raw: block,
       });
       continue;
@@ -206,16 +222,17 @@ export function parseSkeleton(markdown: string | null | undefined): ParsedFlowNo
       if (branchSection) {
         for (const line of branchSection[1].split("\n")) {
           const m = line.match(/^\s*[-*•]\s*([^:]+?)\s*[:\-]\s*(.+)$/);
-          if (m) branches.push({ label: m[1].trim(), description: m[2].trim() });
+          if (m) branches.push({ label: normalizeBranchKey(m[1]) || m[1].trim(), description: m[2].trim() });
           else {
             const bare = line.match(/^\s*[-*•]\s*(.+)$/);
-            if (bare) branches.push({ label: bare[1].trim() });
+            if (bare) branches.push({ label: normalizeBranchKey(bare[1]) || bare[1].trim() });
           }
         }
       }
       nodes.push({
         node_type: "split",
         label: label || "Conditional Split",
+        condition: extractField(block, "Condition") || label || "Conditional Split",
         notes: lines.slice(1).join("\n").trim() || undefined,
         branches: branches.length ? branches : undefined,
         raw: block,
@@ -224,12 +241,12 @@ export function parseSkeleton(markdown: string | null | undefined): ParsedFlowNo
     }
 
     if (type === "sms") {
-      const branchTag = extractField(block, "Branch");
+      const branchTag = normalizeBranchKey(extractField(block, "Branch"));
       nodes.push({
         node_type: "sms",
         label: label || "SMS",
         notes: extractField(block, "Body", "Message") ?? lines.slice(1).join("\n").trim(),
-        branch: branchTag ? branchTag.trim().toLowerCase() : undefined,
+        branch: branchTag,
         raw: block,
       });
       continue;
@@ -243,7 +260,7 @@ export function parseSkeleton(markdown: string | null | undefined): ParsedFlowNo
         node_type: "branch_end",
         label: "End branch",
         end_branch: true,
-        branch: branchToken ? branchToken.trim().toLowerCase() : undefined,
+        branch: normalizeBranchKey(branchToken),
         raw: block,
       });
       continue;
@@ -251,8 +268,8 @@ export function parseSkeleton(markdown: string | null | undefined): ParsedFlowNo
 
     // Email — auto-detect branch from explicit `Branch:` field, or from
     // the agent's labeling convention `EMAIL 2A` (A→yes, B→no, C/D→extra).
-    const explicitBranch = extractField(block, "Branch");
-    let emailBranchTag: string | undefined = explicitBranch ? explicitBranch.trim().toLowerCase() : undefined;
+    const explicitBranch = normalizeBranchKey(extractField(block, "Branch"));
+    let emailBranchTag: string | undefined = explicitBranch;
     if (!emailBranchTag) {
       const suffixMatch = firstLine.match(/\[EMAIL\s*\d+\s*([A-Z])\b/i);
       if (suffixMatch) {
