@@ -15,6 +15,7 @@ export interface SplitBranch {
 export interface ParsedFlowNode {
   node_type: FlowNodeType;
   label?: string;
+  condition?: string;
   timing?: string;
   job?: string;
   subject_line?: string;
@@ -117,6 +118,21 @@ function extractLabel(firstLine: string): string {
   }
   const stripped = firstLine.replace(/^#+\s*/, "").replace(/^(EMAIL|DELAY|SPLIT|CONDITIONAL SPLIT|SMS)\s*\d*\s*[:\-—–]?\s*/i, "");
   return stripped.trim() || firstLine.trim();
+}
+
+function normalizeBranchKey(value: string | undefined): string | undefined {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+
+  const normalized = raw.toLowerCase();
+  if (/^(if\s+)?yes\b/.test(normalized) || /\b0\s*orders?\b/.test(normalized) || /first[-\s]*time/.test(normalized)) {
+    return "yes";
+  }
+  if (/^(if\s+)?no\b/.test(normalized) || /\b1\+\s*orders?\b/.test(normalized) || /returning/.test(normalized)) {
+    return "no";
+  }
+
+  return normalized.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || undefined;
 }
 
 function splitIntoBlocks(markdown: string): string[] {
