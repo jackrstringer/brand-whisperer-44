@@ -794,8 +794,15 @@ export function SkeletonViewer({
       if (a.kind === "split") {
         from.x = edge.branch === "no" ? a.x + sa.w * 0.78 : a.x + sa.w * 0.22;
       }
-      const to = { x: b.x + sb.w / 2, y: b.y };
-      return { edge, from, to, path: orthPath(from, to) };
+      let to = { x: b.x + sb.w / 2, y: b.y };
+      if (effectiveOrientation === "horizontal") {
+        from = { x: a.x + sa.w, y: a.y + sa.h / 2 };
+        if (a.kind === "split") {
+          from.y = edge.branch === "no" ? a.y + sa.h * 0.72 : a.y + sa.h * 0.28;
+        }
+        to = { x: b.x, y: b.y + sb.h / 2 };
+      }
+      return { edge, from, to, path: orthPath(from, to, effectiveOrientation) };
     })
     .filter(Boolean) as { edge: BoardEdge; from: any; to: any; path: string }[];
 
@@ -839,7 +846,7 @@ export function SkeletonViewer({
 
   const relayoutGraph = (nodes: BoardNode[], edges: BoardEdge[]) => {
     setGraphEdges(edges);
-    setLayoutNodes(resolveNodeCollisions(layoutFlowGraph(nodes, edges, mode), mode));
+    setLayoutNodes(resolveNodeCollisions(layoutFlowGraph(nodes, edges, mode, effectiveOrientation), mode));
   };
 
   const deleteSticky = (id: string) => {
