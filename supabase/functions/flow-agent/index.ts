@@ -500,10 +500,10 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
     if (bootingFreshFlow && conversation.length === 0) {
       messages.push({
         role: "user",
-        content: `Begin building a ${flow_type.replace(/_/g, " ")} flow for this brand. First, synthesize the actual researched brand context you were given. If there is enough information, generate the full custom skeleton immediately in a single response. Only ask one clarifying question if a missing brand-specific fact truly blocks you. Do not ask a generic template question before doing the research-based synthesis. No greetings. No recap. No placeholder defaults.`,
+        content: `Begin setup for a ${flow_type.replace(/_/g, " ")} flow. First, synthesize researched context with a flow-synth block. Then ask the first required setup confirmation with a flow-question block. Do not generate a skeleton yet unless the hard setup gate is already satisfied. No greetings. No raw JSON outside fenced control blocks.`,
       });
     } else if (!isInit && !isRestart) {
-      messages.push({ role: "user", content: message });
+      messages.push({ role: "user", content: `${message}\n\nUpdate flow-setup if this confirms or edits setup. If setup is now complete, generate the full skeleton. Otherwise ask the next setup confirmation.` });
     }
 
     const stream = new ReadableStream({
