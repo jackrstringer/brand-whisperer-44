@@ -532,11 +532,10 @@ export function SkeletonViewer({
   const [hoveredDropTarget, setHoveredDropTarget] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BoardNode | Sticky | null>(null);
   const [detailsNode, setDetailsNode] = useState<BoardNode | null>(null);
-  const [orientation, setOrientation] = useState<FlowOrientation>("horizontal");
   const [hoveredReviewNodeId, setHoveredReviewNodeId] = useState<string | null>(null);
   const [lockedReviewNodeId, setLockedReviewNodeId] = useState<string | null>(null);
   const [reviewDetailMode, setReviewDetailMode] = useState<ReviewDetailMode>("compact");
-  const effectiveOrientation = mode === "review" ? orientation : "vertical";
+  const effectiveOrientation: FlowOrientation = "vertical";
 
   const board = useMemo(
     () => buildBoard(parsedNodes, meta, flowType, mode),
@@ -617,7 +616,7 @@ export function SkeletonViewer({
     setZoom(z);
     setPan({
       x: (r.width - (maxX - minX) * z) / 2 - minX * z,
-      y: effectiveOrientation === "horizontal" ? (r.height - (maxY - minY) * z) / 2 - minY * z : 80 - minY * z,
+      y: 80 - minY * z,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayBoard.nodes.length, effectiveOrientation]);
@@ -750,7 +749,7 @@ export function SkeletonViewer({
     setZoom(z);
     setPan({
       x: (r.width - (maxX - minX) * z) / 2 - minX * z,
-      y: effectiveOrientation === "horizontal" ? (r.height - (maxY - minY) * z) / 2 - minY * z : 80 - minY * z,
+      y: 80 - minY * z,
     });
   };
 
@@ -825,13 +824,6 @@ export function SkeletonViewer({
         from.x = edge.branch === "no" ? a.x + sa.w * 0.78 : a.x + sa.w * 0.22;
       }
       let to = { x: b.x + sb.w / 2, y: b.y };
-      if (effectiveOrientation === "horizontal") {
-        from = { x: a.x + sa.w, y: a.y + sa.h / 2 };
-        if (a.kind === "split") {
-          from.y = edge.branch === "no" ? a.y + sa.h * 0.72 : a.y + sa.h * 0.28;
-        }
-        to = { x: b.x, y: b.y + sb.h / 2 };
-      }
       return { edge, from, to, path: orthPath(from, to, effectiveOrientation) };
     })
     .filter(Boolean) as { edge: BoardEdge; from: any; to: any; path: string }[];
@@ -1234,14 +1226,6 @@ export function SkeletonViewer({
 
         {mode === "review" && (
           <div className="fl-review-controls" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="fl-orientation">
-              <button className={orientation === "horizontal" ? "on" : ""} onClick={() => setOrientation("horizontal")} title="Left-to-right layout">
-                Left → Right
-              </button>
-              <button className={orientation === "vertical" ? "on" : ""} onClick={() => setOrientation("vertical")} title="Top-to-bottom layout">
-                Top ↓ Bottom
-              </button>
-            </div>
             <div className="fl-orientation">
               <button className={reviewDetailMode === "compact" ? "on" : ""} onClick={() => setReviewDetailMode("compact")} title="Show compact nodes">
                 Compact
