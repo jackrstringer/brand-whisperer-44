@@ -128,14 +128,14 @@ const SIBLING_X_GAP = 96;
 const SPLIT_BRANCH_GAP = 112;
 function getNodeSize(kind: NodeKind, mode: "review" | "detail" = "detail", expanded = false) {
   if (mode === "review") {
-    if (expanded && (kind === "email" || kind === "sms")) return { w: 388, h: 232 };
-    if (kind === "delay") return { w: 98, h: 38 };
-    if (kind === "split") return { w: 360, h: 58 };
-    if (kind === "trigger_split") return { w: 360, h: 58 };
-    if (kind === "filters") return { w: 430, h: 112 };
+    if (expanded && (kind === "email" || kind === "sms")) return { w: 430, h: 270 };
+    if (kind === "delay") return { w: 126, h: 54 };
+    if (kind === "split") return { w: 420, h: 76 };
+    if (kind === "trigger_split") return { w: 420, h: 76 };
+    if (kind === "filters") return { w: 520, h: 170 };
     if (kind === "exit") return { w: 58, h: 28 };
-    if (kind === "trigger") return { w: 430, h: 108 };
-    return { w: 448, h: 72 };
+    if (kind === "trigger") return { w: 520, h: 150 };
+    return { w: 560, h: 108 };
   }
   if (kind === "delay") return { w: 154, h: 52 };
   if (kind === "split") return { w: 214, h: 68 };
