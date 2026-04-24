@@ -64,6 +64,7 @@ export interface FlowEmailMeta {
 
 type NodeKind = "trigger" | "filters" | "email" | "delay" | "split" | "trigger_split" | "sms" | "push" | "webhook" | "exit";
 type FlowOrientation = "vertical" | "horizontal";
+type ReviewDetailMode = "compact" | "full";
 
 export interface BoardNode {
   id: string;
@@ -125,15 +126,16 @@ const LINEAR_Y_GAP = 64;
 const SPLIT_Y_GAP = 104;
 const SIBLING_X_GAP = 96;
 const SPLIT_BRANCH_GAP = 112;
-function getNodeSize(kind: NodeKind, mode: "review" | "detail" = "detail") {
+function getNodeSize(kind: NodeKind, mode: "review" | "detail" = "detail", expanded = false) {
   if (mode === "review") {
-    if (kind === "delay") return { w: 104, h: 38 };
-    if (kind === "split") return { w: 176, h: 58 };
-    if (kind === "trigger_split") return { w: 176, h: 58 };
-    if (kind === "filters") return { w: 220, h: 64 };
-    if (kind === "exit") return { w: 66, h: 32 };
-    if (kind === "trigger") return { w: 220, h: 66 };
-    return { w: 260, h: 86 };
+    if (expanded && (kind === "email" || kind === "sms")) return { w: 372, h: 250 };
+    if (kind === "delay") return { w: 82, h: 32 };
+    if (kind === "split") return { w: 292, h: 44 };
+    if (kind === "trigger_split") return { w: 292, h: 44 };
+    if (kind === "filters") return { w: 272, h: 42 };
+    if (kind === "exit") return { w: 58, h: 28 };
+    if (kind === "trigger") return { w: 292, h: 42 };
+    return { w: 304, h: 52 };
   }
   if (kind === "delay") return { w: 154, h: 52 };
   if (kind === "split") return { w: 214, h: 68 };
@@ -347,7 +349,8 @@ function layoutFlowGraph(
   nodes: BoardNode[],
   edges: BoardEdge[],
   mode: "review" | "detail" = "detail",
-  orientation: FlowOrientation = "vertical"
+  orientation: FlowOrientation = "vertical",
+  expandedReviewNodeIds: Set<string> = new Set()
 ): BoardNode[] {
   const byId = Object.fromEntries(nodes.map((n) => [n.id, n]));
   const childrenById: Record<string, BoardEdge[]> = {};
@@ -372,7 +375,7 @@ function layoutFlowGraph(
       const node = byId[id];
       if (!node || seen.has(id)) return 0;
       if (heightCache[id]) return heightCache[id];
-      const size = getNodeSize(node.kind, mode);
+      const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
       const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
       if (!children.length) return (heightCache[id] = size.h);
       const nextSeen = new Set(seen).add(id);
@@ -386,7 +389,7 @@ function layoutFlowGraph(
     const placeH = (id: string, x: number, centerY: number, seen = new Set<string>()) => {
       const node = byId[id];
       if (!node || seen.has(id)) return;
-      const size = getNodeSize(node.kind, mode);
+      const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
       positioned[id] = { ...node, x, y: centerY - size.h / 2 };
       const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
       if (!children.length) return;
@@ -413,7 +416,7 @@ function layoutFlowGraph(
     let orphanX = 80;
     return nodes.map((node) => {
       if (positioned[node.id]) return positioned[node.id];
-      const size = getNodeSize(node.kind, mode);
+      const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
       const fallback = { ...node, x: orphanX, y: -size.h / 2 };
       orphanX += size.w + lineGap;
       return fallback;
@@ -425,7 +428,7 @@ function layoutFlowGraph(
     const node = byId[id];
     if (!node || seen.has(id)) return 0;
     if (widthCache[id]) return widthCache[id];
-    const size = getNodeSize(node.kind, mode);
+    const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
     const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
     if (!children.length) return (widthCache[id] = size.w);
     const nextSeen = new Set(seen).add(id);
@@ -439,7 +442,7 @@ function layoutFlowGraph(
   const place = (id: string, centerX: number, y: number, seen = new Set<string>()) => {
     const node = byId[id];
     if (!node || seen.has(id)) return;
-    const size = getNodeSize(node.kind, mode);
+    const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
     positioned[id] = { ...node, x: centerX - size.w / 2, y };
 
     const children = sortEdges(childrenById[id] || []).filter((edge) => byId[edge.to]);
@@ -471,7 +474,7 @@ function layoutFlowGraph(
   let orphanY = 80;
   return nodes.map((node) => {
     if (positioned[node.id]) return positioned[node.id];
-    const size = getNodeSize(node.kind, mode);
+    const size = getNodeSize(node.kind, mode, expandedReviewNodeIds.has(node.id));
     const fallback = { ...node, x: -size.w / 2, y: orphanY };
     orphanY += size.h + lineGap;
     return fallback;
@@ -529,20 +532,34 @@ export function SkeletonViewer({
   const [deleteTarget, setDeleteTarget] = useState<BoardNode | Sticky | null>(null);
   const [detailsNode, setDetailsNode] = useState<BoardNode | null>(null);
   const [orientation, setOrientation] = useState<FlowOrientation>("horizontal");
+  const [hoveredReviewNodeId, setHoveredReviewNodeId] = useState<string | null>(null);
+  const [lockedReviewNodeId, setLockedReviewNodeId] = useState<string | null>(null);
+  const [reviewDetailMode, setReviewDetailMode] = useState<ReviewDetailMode>("compact");
   const effectiveOrientation = mode === "review" ? orientation : "vertical";
 
   const board = useMemo(
     () => buildBoard(parsedNodes, meta, flowType, mode),
     [parsedNodes, meta, flowType, mode]
   );
+  const expandedReviewLayoutNodeIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (mode !== "review") return ids;
+    if (reviewDetailMode === "full") {
+      board.nodes.forEach((node) => {
+        if (node.kind === "email" || node.kind === "sms") ids.add(node.id);
+      });
+    }
+    if (lockedReviewNodeId) ids.add(lockedReviewNodeId);
+    return ids;
+  }, [board.nodes, lockedReviewNodeId, mode, reviewDetailMode]);
   const [layoutNodes, setLayoutNodes] = useState<BoardNode[]>(board.nodes);
   const [graphEdges, setGraphEdges] = useState<BoardEdge[]>(board.edges);
   const hoveredDropTargetRef = useRef<string | null>(null);
 
   useEffect(() => {
     setGraphEdges(board.edges);
-    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges, mode, effectiveOrientation));
-  }, [board.nodes, board.edges, mode, effectiveOrientation]);
+    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges, mode, effectiveOrientation, expandedReviewLayoutNodeIds));
+  }, [board.nodes, board.edges, mode, effectiveOrientation, expandedReviewLayoutNodeIds]);
 
   const displayBoard = useMemo(() => ({ ...board, nodes: layoutNodes, edges: graphEdges }), [board, layoutNodes, graphEdges]);
 
@@ -573,7 +590,7 @@ export function SkeletonViewer({
       maxX = -Infinity,
       maxY = -Infinity;
     for (const n of displayBoard.nodes) {
-      const sz = getNodeSize(n.kind, mode);
+      const sz = getNodeSize(n.kind, mode, expandedReviewLayoutNodeIds.has(n.id));
       minX = Math.min(minX, n.x);
       minY = Math.min(minY, n.y);
       maxX = Math.max(maxX, n.x + sz.w);
@@ -699,7 +716,7 @@ export function SkeletonViewer({
       maxX = -Infinity,
       maxY = -Infinity;
     for (const n of displayBoard.nodes) {
-      const sz = getNodeSize(n.kind, mode);
+      const sz = getNodeSize(n.kind, mode, expandedReviewLayoutNodeIds.has(n.id));
       minX = Math.min(minX, n.x);
       minY = Math.min(minY, n.y);
       maxX = Math.max(maxX, n.x + sz.w);
@@ -725,7 +742,7 @@ export function SkeletonViewer({
   };
 
   const cleanUpLayout = () => {
-    const cleaned = layoutFlowGraph(layoutNodes, graphEdges, mode, effectiveOrientation);
+    const cleaned = layoutFlowGraph(layoutNodes, graphEdges, mode, effectiveOrientation, expandedReviewLayoutNodeIds);
     setLayoutNodes(cleaned);
     requestAnimationFrame(fitToView);
   };
@@ -787,8 +804,8 @@ export function SkeletonViewer({
       const a = nodeById[edge.from];
       const b = nodeById[edge.to];
       if (!a || !b) return null;
-      const sa = getNodeSize(a.kind, mode);
-      const sb = getNodeSize(b.kind, mode);
+      const sa = getNodeSize(a.kind, mode, expandedReviewLayoutNodeIds.has(a.id));
+      const sb = getNodeSize(b.kind, mode, expandedReviewLayoutNodeIds.has(b.id));
       let from = { x: a.x + sa.w / 2, y: a.y + sa.h };
       // For split nodes, bias outgoing port to YES (left) or NO (right)
       if (a.kind === "split") {
@@ -838,7 +855,7 @@ export function SkeletonViewer({
         { id: `e-${target.edge.from}-${id}`, from: target.edge.from, to: id, branch: target.edge.branch ?? null },
         { id: `e-${id}-${target.edge.to}`, from: id, to: target.edge.to, branch: target.edge.branch ?? null },
       ];
-      setLayoutNodes((arr) => layoutFlowGraph([...arr, node], nextEdges, mode));
+      setLayoutNodes((arr) => layoutFlowGraph([...arr, node], nextEdges, mode, effectiveOrientation, expandedReviewLayoutNodeIds));
       return nextEdges;
     });
     setSelected(id);
@@ -846,7 +863,7 @@ export function SkeletonViewer({
 
   const relayoutGraph = (nodes: BoardNode[], edges: BoardEdge[]) => {
     setGraphEdges(edges);
-    setLayoutNodes(resolveNodeCollisions(layoutFlowGraph(nodes, edges, mode, effectiveOrientation), mode));
+    setLayoutNodes(resolveNodeCollisions(layoutFlowGraph(nodes, edges, mode, effectiveOrientation, expandedReviewLayoutNodeIds), mode));
   };
 
   const deleteSticky = (id: string) => {
@@ -1124,6 +1141,15 @@ export function SkeletonViewer({
                 typeof n.emailIndex === "number" && generatingIndex === n.emailIndex
               }
               mode={mode}
+              reviewExpanded={
+                mode === "review" &&
+                (reviewDetailMode === "full" || lockedReviewNodeId === n.id || hoveredReviewNodeId === n.id)
+              }
+              reviewLocked={lockedReviewNodeId === n.id}
+              onReviewHover={setHoveredReviewNodeId}
+              onReviewLockToggle={(nodeId: string) => {
+                setLockedReviewNodeId((current) => (current === nodeId ? null : nodeId));
+              }}
             />
           ))}
 
@@ -1194,21 +1220,23 @@ export function SkeletonViewer({
         {mode === "detail" && <Minimap board={displayBoard} pan={pan} zoom={zoom} stageRef={stageRef} />}
 
         {mode === "review" && (
-          <div className="fl-orientation" onMouseDown={(e) => e.stopPropagation()}>
-            <button
-              className={orientation === "horizontal" ? "on" : ""}
-              onClick={() => setOrientation("horizontal")}
-              title="Left-to-right layout"
-            >
-              Left → Right
-            </button>
-            <button
-              className={orientation === "vertical" ? "on" : ""}
-              onClick={() => setOrientation("vertical")}
-              title="Top-to-bottom layout"
-            >
-              Top ↓ Bottom
-            </button>
+          <div className="fl-review-controls" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="fl-orientation">
+              <button className={orientation === "horizontal" ? "on" : ""} onClick={() => setOrientation("horizontal")} title="Left-to-right layout">
+                Left → Right
+              </button>
+              <button className={orientation === "vertical" ? "on" : ""} onClick={() => setOrientation("vertical")} title="Top-to-bottom layout">
+                Top ↓ Bottom
+              </button>
+            </div>
+            <div className="fl-orientation">
+              <button className={reviewDetailMode === "compact" ? "on" : ""} onClick={() => setReviewDetailMode("compact")} title="Show compact nodes">
+                Compact
+              </button>
+              <button className={reviewDetailMode === "full" ? "on" : ""} onClick={() => setReviewDetailMode("full")} title="Show expanded message detail">
+                Full detail
+              </button>
+            </div>
           </div>
         )}
 
@@ -1349,6 +1377,10 @@ function NodeView({
   campaignMeta,
   isGenerating,
   mode,
+  reviewExpanded = false,
+  reviewLocked = false,
+  onReviewHover,
+  onReviewLockToggle,
 }: {
   node: BoardNode;
   selected: boolean;
@@ -1368,8 +1400,12 @@ function NodeView({
   campaignMeta: Record<string, FlowEmailMeta>;
   isGenerating: boolean;
   mode: "review" | "detail";
+  reviewExpanded?: boolean;
+  reviewLocked?: boolean;
+  onReviewHover?: (id: string | null) => void;
+  onReviewLockToggle?: (id: string) => void;
 }) {
-  const sz = getNodeSize(node.kind, mode);
+  const sz = getNodeSize(node.kind, mode, reviewExpanded);
   const km = KIND_META[node.kind];
   const I = km.Icon;
 
@@ -1378,8 +1414,13 @@ function NodeView({
       <ReviewNodeView
         node={node}
         selected={selected}
+        expanded={reviewExpanded}
+        locked={reviewLocked}
         onSelect={onSelect}
-        onStartDrag={(e) => onStartDrag(e)}
+        onHover={onReviewHover}
+        onStartDrag={(e) => onStartDrag(e, () => {
+          if (node.kind === "email" || node.kind === "sms") onReviewLockToggle?.(node.id);
+        })}
       />
     );
   }
@@ -1562,21 +1603,55 @@ function NodeView({
 }
 
 
+function condenseSectionLabels(sections: unknown): string[] {
+  const items = Array.isArray(sections) ? sections : [];
+  return items.map((item) => {
+    const raw = typeof item === "string" ? item : item && typeof item === "object" ? JSON.stringify(item) : "";
+    const first = raw.split(/—|-|:|\./)[0]?.trim() || raw.trim();
+    const cleaned = first.replace(/^\d+[.)]\s*/, "").replace(/\b(block|section|element|module|content|copy|email)\b/gi, "").replace(/\s+/g, " ").trim();
+    const lower = cleaned.toLowerCase();
+    if (lower.includes("hero")) return "Welcome Hero";
+    if (lower.includes("discount") || lower.includes("offer")) return "Offer Reveal";
+    if (lower.includes("proof") || lower.includes("review") || lower.includes("testimonial")) return "Social Proof";
+    if (lower.includes("category") || lower.includes("collection")) return "Categories Highlight";
+    if (lower.includes("founder") || lower.includes("story")) return "Founder Note";
+    if (lower.includes("objection") || lower.includes("faq") || lower.includes("concern")) return "Objection Handle";
+    if (lower.includes("cta") || lower.includes("last chance")) return "Last Chance CTA";
+    if (lower.includes("education") || lower.includes("benefit")) return "Education";
+    return titleCase(cleaned.split(/\s+/).slice(0, 3).join(" ")) || "Structure Block";
+  }).filter(Boolean);
+}
+
+function titleCase(value: string) {
+  return value.replace(/\w\S*/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+}
+
+
 function ReviewNodeView({
   node,
   selected,
+  expanded,
+  locked,
   onSelect,
+  onHover,
   onStartDrag,
 }: {
   node: BoardNode;
   selected: boolean;
+  expanded: boolean;
+  locked: boolean;
   onSelect: () => void;
+  onHover?: (id: string | null) => void;
   onStartDrag: (e: React.MouseEvent) => void;
 }) {
-  const sz = getNodeSize(node.kind, "review");
+  const sz = getNodeSize(node.kind, "review", expanded);
   const { Icon, label } = KIND_META[node.kind];
   const step = typeof node.emailIndex === "number" ? String(node.emailIndex + 1).padStart(2, "0") : null;
   const purpose = node.meta?.job || node.meta?.preview || node.meta?.condition || node.meta?.duration || "";
+  const subject = node.meta?.subject_direction || node.meta?.subject || "Subject angle TBD";
+  const preview = node.meta?.notes || node.meta?.preview || "Preview direction TBD";
+  const chips = condenseSectionLabels(node.meta?.sections).slice(0, 6);
+  const isMessage = node.kind === "email" || node.kind === "sms";
 
   if (node.kind === "exit") {
     return (
@@ -1605,8 +1680,10 @@ function ReviewNodeView({
 
   return (
     <div
-      className={`fl-review-node fl-review-${node.kind} ${selected ? "sel" : ""}`}
+      className={`fl-review-node fl-review-${node.kind} ${expanded && isMessage ? "expanded" : "collapsed"} ${locked ? "locked" : ""} ${selected ? "sel" : ""}`}
       style={{ transform: `translate(${node.x}px, ${node.y}px)`, width: sz.w, minHeight: sz.h }}
+      onMouseEnter={() => isMessage && onHover?.(node.id)}
+      onMouseLeave={() => isMessage && onHover?.(null)}
       onMouseDown={(e) => { e.stopPropagation(); onSelect(); onStartDrag(e); }}
     >
       <div className="fl-review-head">
@@ -1618,8 +1695,20 @@ function ReviewNodeView({
       <div className="fl-review-title">
         {node.kind === "split" ? node.meta?.condition || node.label : node.label}
       </div>
-      {(node.kind === "email" || node.kind === "sms") && purpose && (
-        <div className="fl-review-purpose">{purpose}</div>
+      {isMessage && expanded && (
+        <div className="fl-review-expanded-body">
+          <div className="fl-review-day">Day {node.emailIndex === 0 ? 1 : (node.emailIndex || 0) + 1}</div>
+          {purpose && <div className="fl-review-purpose">{purpose}</div>}
+          <div className="fl-review-lines">
+            <div><span>SL</span><p>{subject}</p></div>
+            <div><span>PT</span><p>{preview}</p></div>
+          </div>
+          {chips.length > 0 && (
+            <div className="fl-review-chips">
+              {chips.map((chip, i) => <span key={`${chip}-${i}`}>{chip}</span>)}
+            </div>
+          )}
+        </div>
       )}
       {node.kind === "filters" && (
         <div className="fl-review-purpose">{(node.meta?.items || []).slice(0, 1).join("")}</div>

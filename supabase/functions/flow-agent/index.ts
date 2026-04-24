@@ -375,10 +375,14 @@ ABSOLUTE RULES FOR THE SKELETON:
 - SKIMMABILITY RULE: this skeleton is first shown as a process map. Every visible label must be short enough to scan instantly.
 - Email header labels must be 2–5 words, e.g. "Welcome + offer", "Objection handling", "Last chance".
 - Email Job must be one short sentence under 14 words.
+- Subject direction must be a short angle only, not finished copy.
 - Delay labels must be compact values like "24h", "2 days", or "4h".
 - Conditional split headers must be short questions like "Purchased?" or "VIP customer?".
 - Avoid long bracket headers, compound clauses, and marketing copy in labels.
 - Sections are 3–5 short BULLETS describing what each block IS, not what it SAYS.
+- Every section bullet MUST begin with a 1–3 word display label, followed by an optional short explanation.
+- Preferred section labels: Welcome Hero, Offer Reveal, Product Proof, Social Proof, Founder Note, Dynamic Discount, Categories Highlight, Objection Handle, Last Chance CTA.
+- No long marketing-copy-style section names; the first words must work as compact UI chips.
 - Total skeleton ≤90 lines.
 - When updating an existing skeleton, return the FULL updated skeleton in the same bracket format (including TRIGGER/FILTERS/EXIT).
 
