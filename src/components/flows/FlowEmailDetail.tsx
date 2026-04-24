@@ -20,11 +20,11 @@ import {
 import type { BoardNode, FlowEmailMeta, FlowEmailRow } from "@/components/flows/SkeletonViewer";
 
 function getDetailSubject(node: BoardNode, meta: FlowEmailMeta | null) {
-  return meta?.subject_line || node.meta?.subject_line || "";
+  return meta?.subject_line?.trim() || node.meta?.subject_line || "";
 }
 
 function getDetailPreview(node: BoardNode, meta: FlowEmailMeta | null) {
-  return meta?.preview_text || node.meta?.preview_text || "";
+  return meta?.preview_text?.trim() || node.meta?.preview_text || "";
 }
 
 type PeekMode = "side" | "center";
