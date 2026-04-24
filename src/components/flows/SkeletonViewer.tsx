@@ -542,7 +542,7 @@ export function SkeletonViewer({
     () => buildBoard(parsedNodes, meta, flowType, mode),
     [parsedNodes, meta, flowType, mode]
   );
-  const expandedReviewNodeIds = useMemo(() => {
+  const expandedReviewLayoutNodeIds = useMemo(() => {
     const ids = new Set<string>();
     if (mode !== "review") return ids;
     if (reviewDetailMode === "full") {
@@ -551,17 +551,28 @@ export function SkeletonViewer({
       });
     }
     if (lockedReviewNodeId) ids.add(lockedReviewNodeId);
-    if (hoveredReviewNodeId) ids.add(hoveredReviewNodeId);
     return ids;
-  }, [board.nodes, hoveredReviewNodeId, lockedReviewNodeId, mode, reviewDetailMode]);
+  }, [board.nodes, lockedReviewNodeId, mode, reviewDetailMode]);
+  const [settledHoveredReviewNodeId, setSettledHoveredReviewNodeId] = useState<string | null>(null);
+  const expandedReviewNodeIds = useMemo(() => {
+    const ids = new Set(expandedReviewLayoutNodeIds);
+    if (settledHoveredReviewNodeId) ids.add(settledHoveredReviewNodeId);
+    return ids;
+  }, [expandedReviewLayoutNodeIds, settledHoveredReviewNodeId]);
   const [layoutNodes, setLayoutNodes] = useState<BoardNode[]>(board.nodes);
   const [graphEdges, setGraphEdges] = useState<BoardEdge[]>(board.edges);
   const hoveredDropTargetRef = useRef<string | null>(null);
 
   useEffect(() => {
     setGraphEdges(board.edges);
-    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges, mode, effectiveOrientation, expandedReviewNodeIds));
-  }, [board.nodes, board.edges, mode, effectiveOrientation, expandedReviewNodeIds]);
+    setLayoutNodes(layoutFlowGraph(board.nodes, board.edges, mode, effectiveOrientation, expandedReviewLayoutNodeIds));
+  }, [board.nodes, board.edges, mode, effectiveOrientation, expandedReviewLayoutNodeIds]);
+
+  useEffect(() => {
+    if (mode !== "review") return;
+    const timer = window.setTimeout(() => setSettledHoveredReviewNodeId(hoveredReviewNodeId), hoveredReviewNodeId ? 90 : 40);
+    return () => window.clearTimeout(timer);
+  }, [hoveredReviewNodeId, mode]);
 
   const displayBoard = useMemo(() => ({ ...board, nodes: layoutNodes, edges: graphEdges }), [board, layoutNodes, graphEdges]);
 
