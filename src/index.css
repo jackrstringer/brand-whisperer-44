@@ -547,7 +547,7 @@
 }
 .fl-badge.trigger { background: var(--fl-trigger-soft); color: var(--fl-ink); }
 .fl-badge svg { width: 14px; height: 14px; }
-.fl-title { font-size: 13px; font-weight: 600; letter-spacing: -0.005em; flex: 1; min-width: 0;
+.fl-title { font-size: 13px; font-weight: 550; letter-spacing: -0.005em; flex: 1; min-width: 0;
   overflow: visible; text-overflow: clip; white-space: normal; line-height: 1.24; overflow-wrap: anywhere; word-break: break-word; }
 .fl-kind { font-family: var(--fl-mono); font-size: 10px; color: var(--fl-ink-4);
   text-transform: uppercase; letter-spacing: 0.06em; }
@@ -863,7 +863,7 @@
 }
 .fl-review-title {
   font-size: 34px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.08;
   color: var(--fl-ink);
   overflow-wrap: anywhere;
