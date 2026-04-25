@@ -100,6 +100,7 @@ function setupLooksConfirmed(setup: any) {
   return !!(
     setup?.confirmations?.offer_confirmed &&
     setup?.confirmations?.product_priority_confirmed &&
+    setup?.confirmations?.complexity_confirmed &&
     setup?.offer?.confirmed_mode &&
     setup?.products?.scope
   );

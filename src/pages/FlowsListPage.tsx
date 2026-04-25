@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { FLOW_TYPE_META } from "@/lib/flows/skeletonParser";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { GitBranch, Plus, Loader2, Trash2 } from "lucide-react";
+import { GitBranch, Plus, Trash2, Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -33,7 +33,6 @@ export default function FlowsListPage() {
   const [flows, setFlows] = useState<FlowRow[]>([]);
   const [brandName, setBrandName] = useState("");
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<FlowRow | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -69,26 +68,9 @@ export default function FlowsListPage() {
     })();
   }, [brandId]);
 
-  const createFlow = async (flowType: string) => {
-    if (!brandId || !user) return;
-    setCreating(flowType);
-    const meta = FLOW_TYPE_META[flowType];
-    const { data, error } = await supabase
-      .from("flows")
-      .insert({
-        brand_id: brandId,
-        flow_type: flowType,
-        name: `${meta.label} — ${brandName || "Brand"}`,
-        status: "draft",
-      })
-      .select("id")
-      .single();
-    setCreating(null);
-    if (error || !data) {
-      toast({ title: "Failed to create flow", description: error?.message, variant: "destructive" });
-      return;
-    }
-    navigate(`/brands/${brandId}/flows/${data.id}`);
+  const startNewFlow = (flowType: string) => {
+    if (!brandId) return;
+    navigate(`/brands/${brandId}/flows/new/${flowType}`);
   };
 
   const showEmpty = !loading && flows.length === 0;
@@ -128,14 +110,12 @@ export default function FlowsListPage() {
             {Object.entries(FLOW_TYPE_META).map(([key, meta]) => (
               <button
                 key={key}
-                disabled={creating !== null}
-                onClick={() => createFlow(key)}
+                onClick={() => startNewFlow(key)}
                 className="text-left p-5 rounded-xl border border-border bg-card hover:border-primary/50 hover:bg-muted/30 transition-all disabled:opacity-50"
               >
                 <div className="flex items-center gap-2 mb-2">
                   <GitBranch className="w-4 h-4 text-primary" />
                   <h3 className="font-semibold text-foreground">{meta.label}</h3>
-                  {creating === key && <Loader2 className="w-3 h-3 animate-spin ml-auto" />}
                 </div>
                 <p className="text-sm text-muted-foreground leading-relaxed">{meta.description}</p>
               </button>
