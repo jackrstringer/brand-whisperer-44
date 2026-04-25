@@ -263,7 +263,7 @@ export default function FlowSetupPage() {
       });
       return;
     }
-    navigate(`/brands/${brandId}/flows/${data.id}?autostart=1`);
+    navigate(`/brands/${brandId}/flows/${data.id}`);
   };
 
   if (!meta) {
