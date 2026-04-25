@@ -154,6 +154,8 @@ export type Database = {
           last_surveyed_at: string | null
           merged_profile: Json | null
           research_status: string
+          site_context: string | null
+          site_context_fetched_at: string | null
           survey_answers: Json | null
           updated_at: string
         }
@@ -176,6 +178,8 @@ export type Database = {
           last_surveyed_at?: string | null
           merged_profile?: Json | null
           research_status?: string
+          site_context?: string | null
+          site_context_fetched_at?: string | null
           survey_answers?: Json | null
           updated_at?: string
         }
@@ -198,6 +202,8 @@ export type Database = {
           last_surveyed_at?: string | null
           merged_profile?: Json | null
           research_status?: string
+          site_context?: string | null
+          site_context_fetched_at?: string | null
           survey_answers?: Json | null
           updated_at?: string
         }
