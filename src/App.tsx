@@ -24,6 +24,7 @@ import AdminLibrary from "./pages/AdminLibrary";
 import IdeatePage from "./pages/IdeatePage";
 import FlowsListPage from "./pages/FlowsListPage";
 import FlowBuilderPage from "./pages/FlowBuilderPage";
+import FlowSetupPage from "./pages/FlowSetupPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -61,6 +62,7 @@ function AppRoutes() {
       <Route path="/brands/:brandId/preferences" element={<ProtectedLayout><BrandPreferences /></ProtectedLayout>} />
       <Route path="/brands/:brandId/ideate" element={<ProtectedLayout><IdeatePage /></ProtectedLayout>} />
       <Route path="/brands/:brandId/flows" element={<ProtectedLayout><FlowsListPage /></ProtectedLayout>} />
+      <Route path="/brands/:brandId/flows/new/:flowType" element={<ProtectedLayout><FlowSetupPage /></ProtectedLayout>} />
       <Route path="/brands/:brandId/flows/:flowId" element={<ProtectedLayout><FlowBuilderPage /></ProtectedLayout>} />
       <Route path="/brands/:brandId/campaigns/:campaignId" element={<ProtectedRoute><CampaignEditor /></ProtectedRoute>} />
       <Route path="/brands/:brandId/campaigns/:campaignId/qa" element={<ProtectedRoute><CampaignQA /></ProtectedRoute>} />
