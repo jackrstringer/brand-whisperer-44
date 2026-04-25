@@ -242,14 +242,16 @@ export default function FlowSetupPage() {
       .maybeSingle();
     const { data, error: insertError } = await supabase
       .from("flows")
-      .insert({
-        brand_id: brandId,
-        flow_type: flowType,
-        name: `${meta.label} — ${brand?.name || "Brand"}`,
-        status: "draft",
-        setup_status: "ready_for_skeleton",
-        setup_data: setupData,
-      })
+      .insert([
+        {
+          brand_id: brandId,
+          flow_type: flowType,
+          name: `${meta.label} — ${brand?.name || "Brand"}`,
+          status: "draft",
+          setup_status: "ready_for_skeleton",
+          setup_data: setupData as any,
+        },
+      ])
       .select("id")
       .single();
     if (insertError || !data) {
