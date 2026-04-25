@@ -585,10 +585,17 @@ ${current_skeleton || "(none yet — build from scratch when ready)"}`;
       ...conversation.map((m) => ({ role: m.role, content: m.content })),
     ];
     if (bootingFreshFlow && conversation.length === 0) {
-      messages.push({
-        role: "user",
-        content: `Begin setup for a ${flow_type.replace(/_/g, " ")} flow. Ask only the first required confirmation with one concise flow-question block. Do not output flow-synth. Do not generate a skeleton yet unless the hard setup gate is already satisfied. No greetings. No raw JSON outside fenced control blocks.`,
-      });
+      if (setupConfirmed) {
+        messages.push({
+          role: "user",
+          content: `Setup is already confirmed for this ${flow_type.replace(/_/g, " ")} flow. The CURRENT STRUCTURED FLOW SETUP DATA above contains the user's confirmed complexity, offer, and product scope from the setup screen. Do NOT ask any questions. Do NOT output flow-question or flow-setup blocks. Generate the complete flow skeleton immediately inside a single \`\`\`flow-skeleton\`\`\` fence using the bracket format. Honor the chosen complexity (single path vs branched paths) exactly. No preamble.`,
+        });
+      } else {
+        messages.push({
+          role: "user",
+          content: `Begin setup for a ${flow_type.replace(/_/g, " ")} flow. Ask only the first required confirmation with one concise flow-question block. Do not output flow-synth. Do not generate a skeleton yet unless the hard setup gate is already satisfied. No greetings. No raw JSON outside fenced control blocks.`,
+        });
+      }
     } else if (!isInit && !isRestart) {
       messages.push({ role: "user", content: `${message}\n\nUpdate flow-setup if this confirms or edits setup. If setup is now complete, generate the full skeleton immediately. Otherwise ask only the next setup confirmation with one concise flow-question block. Do not output flow-synth or a research summary.` });
     }
