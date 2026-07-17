@@ -1508,6 +1508,15 @@ This is a TRANSACTIONAL email — do NOT include {{ organization.unsubscribe_lin
       triggerGuidance = `TRIGGER TYPE: Fulfilled Order (Shipping Confirmation)
 This event contains fulfillment/tracking info. Look for event.extra.fulfillments[] array for tracking numbers and URLs. Also has line items and order metadata.
 This is a TRANSACTIONAL email — do NOT include {{ organization.unsubscribe_link }}.`;
+    } else if (triggerName.includes("subscription") || triggerName.includes("recharge") || triggerName.includes("skio") || triggerName.includes("stay ai")) {
+      triggerGuidance = `TRIGGER TYPE: Subscription Event (Recharge / Skio / Stay AI / native)
+This event contains SUBSCRIPTION-SPECIFIC data. Read the real JSON below carefully to find fields such as:
+- Customer portal / manage-subscription URL (e.g. customer_portal_url, portal_url, manage_url, subscription.portal_url)
+- Subscription ID / number (e.g. subscription_id, id, external_subscription_id)
+- Next charge / next order date, cadence, product(s) in the subscription, price, discount code
+- Cancel / skip / swap URLs if present
+EVERY link in the email that logically maps to one of these URL fields MUST bind to that Liquid variable. Do NOT fall back to the homepage or a hardcoded URL when the event provides a portal/manage/cancel/skip URL.
+This is a TRANSACTIONAL email — do NOT include {{ organization.unsubscribe_link }} or product cross-sells.`;
     } else {
       triggerGuidance = `TRIGGER TYPE: ${flowConfig.trigger_metric_name || "Unknown"}
 Read the real event JSON below carefully. Identify what data fields are available and use them appropriately. Do not assume any specific structure — use only what exists in the JSON.`;
@@ -1520,6 +1529,70 @@ Email type: ${flowConfig.flow_type || "flow"}
 ${triggerGuidance}`;
     if (flowNotes) flowDetails += `\n\n${flowNotes}`;
 
+    // Auto-extract every URL-like and identifier-like leaf from the event schema
+    // so the AI has an explicit inventory of dynamic links/values to bind against
+    // href/src attributes. Prevents hardcoding homepage URLs when a customer
+    // portal URL / tracking URL / product URL is available in the event.
+    const eventFieldInventory: { path: string; sample: string; kind: string }[] = [];
+    const walkEvent = (node: any, path: string) => {
+      if (node === null || node === undefined) return;
+      if (Array.isArray(node)) {
+        // Sample the first array element only; the loop path is what matters
+        if (node.length > 0) walkEvent(node[0], `${path}[0]`);
+        return;
+      }
+      if (typeof node === "object") {
+        for (const [k, v] of Object.entries(node)) {
+          const cleanKey = k.startsWith("$") ? k.slice(1) : k;
+          walkEvent(v, path ? `${path}.${cleanKey}` : cleanKey);
+        }
+        return;
+      }
+      const str = String(node);
+      const lowerKey = path.toLowerCase();
+      const looksUrl = /^https?:\/\//i.test(str) || /(_url|_link|href|portal|tracking|checkout|manage|cancel|skip|swap|redirect|permalink|shop_now)$/i.test(lowerKey);
+      const looksImage = /(image|img|photo|thumbnail|picture|avatar)/i.test(lowerKey) || /\.(png|jpe?g|webp|gif|svg)(\?|$)/i.test(str);
+      const looksId = /(_id$|^id$|number$|code$)/i.test(lowerKey);
+      const looksDate = /(date|_at$|timestamp)/i.test(lowerKey);
+      const looksPrice = /(price|total|amount|subtotal|value|cost)/i.test(lowerKey);
+      let kind = "value";
+      if (looksImage) kind = "image_url";
+      else if (looksUrl) kind = "url";
+      else if (looksPrice) kind = "price";
+      else if (looksDate) kind = "date";
+      else if (looksId) kind = "id";
+      if (kind !== "value") {
+        eventFieldInventory.push({ path, sample: str.slice(0, 120), kind });
+      }
+    };
+    try { walkEvent(eventSchema, "event"); } catch (e) { console.warn("[generateCampaignCore] event walk failed", e); }
+
+    const urlFields = eventFieldInventory.filter((f) => f.kind === "url");
+    const imageFields = eventFieldInventory.filter((f) => f.kind === "image_url");
+    const otherFields = eventFieldInventory.filter((f) => f.kind !== "url" && f.kind !== "image_url");
+
+    const inventoryBlock = eventFieldInventory.length
+      ? `\n\n═══ DYNAMIC FIELD INVENTORY (auto-extracted from event JSON) ═══
+These are the ACTUAL dynamic values available for this trigger. Bind them into the email — do NOT hardcode static equivalents (homepage URLs, placeholder tracking links, dummy order numbers) when a matching field exists here.
+
+URL FIELDS (use inside href="..." attributes):
+${urlFields.length ? urlFields.map(f => `- ${f.path}   →   {{ ${f.path}|default:'#' }}   (sample: ${f.sample})`).join("\n") : "(none detected — only use # if the reference truly has a non-actionable link)"}
+
+IMAGE FIELDS (use inside src="..." attributes):
+${imageFields.length ? imageFields.map(f => `- ${f.path}   →   {{ ${f.path}|default:'' }}   (sample: ${f.sample})`).join("\n") : "(none detected)"}
+
+OTHER DYNAMIC FIELDS (ids, prices, dates, codes — use inside visible text):
+${otherFields.length ? otherFields.slice(0, 40).map(f => `- ${f.path}   [${f.kind}]   →   {{ ${f.path}|default:'—' }}   (sample: ${f.sample})`).join("\n") : "(none detected)"}
+═══ END FIELD INVENTORY ═══
+
+LINK BINDING RULE (HARD, NON-NEGOTIABLE):
+- Every <a href="..."> in the email must be evaluated against the URL FIELDS list above.
+- If ANY URL field semantically matches the link's purpose (e.g. "Manage Subscription" ↔ customer_portal_url, "Track order" ↔ tracking_url, "Return to cart" ↔ checkout_url, product CTA ↔ product/permalink URL), you MUST bind that Liquid variable into the href. Never substitute the brand homepage.
+- If NO URL field matches, use the brand homepage as the fallback — but only then.
+- Same rule for <img src="...">: prefer image fields from the event over static brand images when the reference shows dynamic per-order/per-product imagery.
+- Visible identifiers (order number, subscription ID, tracking number) shown in the reference MUST be rendered from the matching event field, not a hardcoded placeholder.`
+      : "";
+
     flowDetails += `\n\n═══ REAL EVENT DATA — use these exact paths in your Liquid template ═══
 Note: Dollar-sign prefixed keys like $extra have been remapped to clean names (extra, value, event_id).
 ${JSON.stringify(eventSchema, null, 2)}
@@ -1531,8 +1604,9 @@ UNIVERSAL RULES FOR EVENT DATA:
 - Top-level keys: {{ event.KeyName|default:'fallback' }}
 - Nested keys: {{ event.extra.field_name|default:'fallback' }}
 - NO SPACES around pipes or after colons in filters
-- Read the JSON to find the ACTUAL path for items, images, prices — do not guess
-═══ END EVENT DATA ═══${productFeedsBlock}${referenceAnalysisBlock}`;
+- Read the JSON to find the ACTUAL path for items, images, prices, and URLs — do not guess
+- href attributes and src attributes count as dynamic content — bind them to event fields when a matching field exists (see LINK BINDING RULE below)
+═══ END EVENT DATA ═══${inventoryBlock}${productFeedsBlock}${referenceAnalysisBlock}`;
     flowUserContent.push({ type: "text", text: flowDetails });
 
     // Assets
