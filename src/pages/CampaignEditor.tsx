@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo, type CSSProperties } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ProductSelector, { type SelectedShopifyProduct } from "@/components/brand/ProductSelector";
 import SegmentSelector from "@/components/brand/SegmentSelector";
@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, Send, Undo2, Redo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, EyeOff, RotateCcw, Link2, Loader2, Copy, SlidersHorizontal, MessageCircle, Activity } from "lucide-react";
+import { ArrowLeft, Download, Send, Undo2, Redo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, EyeOff, RotateCcw, Link2, Loader2, Copy, SlidersHorizontal, MessageCircle, Activity, Trash2, ExternalLink, Wand2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -61,6 +61,28 @@ import CommentOverlay, { type CommentThread, type CommentAuthor, type CommentEle
 import html2canvas from "html2canvas";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import GenerationTimeline from "@/components/campaign/GenerationTimeline";
+
+interface CampaignSlice {
+  id: string;
+  campaign_id: string;
+  position: number;
+  archetype_slug: string | null;
+  image_url: string | null;
+  headline_copy: string | null;
+  body_copy: string | null;
+  cta_label: string | null;
+  cta_url: string | null;
+  aspect_ratio: string;
+  composition_brief: string | null;
+  generation_status: "pending" | "generating" | "complete" | "failed";
+  last_error: string | null;
+}
+
+function aspectStyle(ratio: string): CSSProperties {
+  const [w, h] = ratio.split(":").map(Number);
+  if (!w || !h) return { aspectRatio: "4 / 5" };
+  return { aspectRatio: `${w} / ${h}` };
+}
 
 async function uploadChatImages(files: File[], brandId: string, campaignId: string): Promise<string[]> {
   const urls: string[] = [];
@@ -155,6 +177,10 @@ export default function CampaignEditor() {
   const [previewText, setPreviewText] = useState("");
   const [starredCampaign, setStarredCampaign] = useState(false);
   const [showReferenceDialog, setShowReferenceDialog] = useState(false);
+  const [generationMode, setGenerationMode] = useState<"html" | "image_slices">("html");
+  const [slices, setSlices] = useState<CampaignSlice[]>([]);
+  const [selectedSliceId, setSelectedSliceId] = useState<string | null>(null);
+  const [pushingKlaviyo, setPushingKlaviyo] = useState(false);
   const refScrollRef = useRef<HTMLDivElement>(null);
   const [syncingScroll, setSyncingScroll] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -211,6 +237,30 @@ export default function CampaignEditor() {
     if (!campaignId || nextVariants === variantHtmls) return;
     void supabase.from("campaigns").update({ variant_htmls: nextVariants } as any).eq("id", campaignId);
   }, [campaignId, variantHtmls]);
+
+  const loadImageSlices = useCallback(async () => {
+    if (!campaignId) return [] as CampaignSlice[];
+    const { data, error } = await supabase
+      .from("campaign_slices")
+      .select("*")
+      .eq("campaign_id", campaignId)
+      .order("position");
+    if (error) {
+      toast.error(error.message);
+      return [] as CampaignSlice[];
+    }
+    const nextSlices = (data || []) as unknown as CampaignSlice[];
+    setSlices(nextSlices);
+    setSelectedSliceId((current) => current && nextSlices.some((slice) => slice.id === current) ? current : nextSlices[0]?.id ?? null);
+    return nextSlices;
+  }, [campaignId]);
+
+  const selectedSlice = useMemo(
+    () => slices.find((slice) => slice.id === selectedSliceId) || null,
+    [slices, selectedSliceId]
+  );
+
+  const completeSliceCount = slices.filter((slice) => slice.generation_status === "complete").length;
 
   // Restore reference panel state from localStorage
   useEffect(() => {
@@ -363,6 +413,7 @@ export default function CampaignEditor() {
         setSendListIds(Array.isArray((campaign as any).send_list_ids) ? (campaign as any).send_list_ids : []);
         setSendSegmentIds(Array.isArray((campaign as any).send_segment_ids) ? (campaign as any).send_segment_ids : []);
         setCampaignMode((campaign as any).campaign_mode === "flow" ? "flow" : "campaign");
+        setGenerationMode((campaign as any).generation_mode === "image_slices" ? "image_slices" : "html");
         if ((campaign as any).flow_config) setFlowConfig((campaign as any).flow_config as FlowConfig);
         if ((campaign as any).campaign_mode === "flow") setFlowDetailTab("flow");
         // If returning to a generating campaign, restore the timer from generation_started_at
@@ -417,6 +468,9 @@ export default function CampaignEditor() {
             preRenderFlowHtml(campaign.html, (campaign as any).flow_config as FlowConfig);
           }
         }
+        if ((campaign as any).generation_mode === "image_slices") {
+          await loadImageSlices();
+        }
       }
       const { data: msgs } = await supabase
         .from("chat_messages")
@@ -459,7 +513,18 @@ export default function CampaignEditor() {
       setLoading(false);
     };
     load();
-  }, [brandId, campaignId, getMatchingVariantIndex]);
+  }, [brandId, campaignId, getMatchingVariantIndex, loadImageSlices, preRenderFlowHtml]);
+
+  useEffect(() => {
+    if (generationMode !== "image_slices") return;
+    const anyActive = campaign?.status === "generating"
+      || slices.some((slice) => slice.generation_status === "pending" || slice.generation_status === "generating");
+    if (!anyActive) return;
+    const interval = window.setInterval(() => {
+      void loadImageSlices();
+    }, 3000);
+    return () => window.clearInterval(interval);
+  }, [campaign?.status, generationMode, slices, loadImageSlices]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1066,7 +1131,7 @@ export default function CampaignEditor() {
       extra_copy: extraCopy || null,
       speed_mode: speedMode,
       product_ids: selectedProductIds.length > 0 ? selectedProductIds : null,
-      pinned_asset_urls: pinnedAssetUrls.length > 0 ? pinnedAssetUrls : null,
+      pinned_asset_urls: allPinned.length > 0 ? allPinned : null,
       subject_line: subjectLine || null,
       preview_text: previewText || null,
       send_list_ids: sendListIds.length > 0 ? sendListIds : null,
@@ -1075,8 +1140,73 @@ export default function CampaignEditor() {
       reference_campaign_type: selectedReferences.length > 0 ? refDesignMode : null,
       reference_strength: selectedReferences.length > 0 ? (refDesignMode === "dupe" ? 10 : 7) : null,
       campaign_mode: campaignMode,
+      generation_mode: campaignMode === "campaign" ? generationMode : "standard",
       flow_config: campaignMode === "flow" ? flowConfig : null,
     } as any).eq("id", campaignId);
+
+    if (campaignMode === "campaign" && generationMode === "image_slices") {
+      try {
+        const { error } = await supabase.functions.invoke("plan-image-email", {
+          body: { campaignId, brief: effectiveBrief },
+        });
+        if (error) throw error;
+      } catch (err: any) {
+        console.error("[image-generate] Error:", err);
+        toast.error("Failed to start image-slice generation", {
+          description: err?.message || "Unknown backend error",
+          duration: 12000,
+        });
+        setGenerating(false);
+        setGenStartTime(null);
+        return;
+      }
+
+      const pollInterval = window.setInterval(async () => {
+        const [{ data }, nextSlices] = await Promise.all([
+          supabase.from("campaigns").select("*").eq("id", campaignId).single(),
+          loadImageSlices(),
+        ]);
+        if (!data) return;
+        if (data.status === "ready") {
+          window.clearInterval(pollInterval);
+          generationCompletedRef.current = true;
+          setCampaign(data as Campaign);
+          setGenerating(false);
+          const elapsed = genStartTime ? Math.floor((Date.now() - genStartTime) / 1000) : 0;
+          setGenStartTime(null);
+          const completeCount = nextSlices.filter((slice) => slice.generation_status === "complete").length;
+          setMessages((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `${completeCount}/${nextSlices.length} image slices generated in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
+          ]);
+        } else if (data.status === "error") {
+          window.clearInterval(pollInterval);
+          setCampaign(data as Campaign);
+          setGenerating(false);
+          setGenStartTime(null);
+          const reason = (data.last_error || "Unknown backend error").slice(0, 1200);
+          toast.error("Image-slice generation failed", {
+            description: reason,
+            duration: 16000,
+          });
+          setMessages((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Generation failed: ${reason}`, created_at: new Date().toISOString() },
+          ]);
+        }
+      }, 4000);
+
+      window.setTimeout(() => {
+        if (!generationCompletedRef.current) {
+          window.clearInterval(pollInterval);
+          setGenerating(false);
+          setGenStartTime(null);
+          setCampaign((c) => c ? { ...c, status: "draft" } : c);
+          toast.error("Generation timed out. Please try again.");
+        }
+      }, 300000);
+      return;
+    }
 
     // Always use generate-campaign-multi for 3 variants
     const genUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-campaign-multi`;
@@ -2754,7 +2884,9 @@ export default function CampaignEditor() {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
   }
 
-  const isDraft = !campaign?.html || campaign?.status === "draft";
+  const isImageSliceMode = campaignMode === "campaign" && generationMode === "image_slices";
+  const hasImageSlices = slices.length > 0;
+  const isDraft = isImageSliceMode ? !hasImageSlices || campaign?.status === "draft" : !campaign?.html || campaign?.status === "draft";
   const isGenerating = campaign?.status === "generating" || generating;
 
   const importFromClickUp = async () => {
@@ -2788,6 +2920,50 @@ export default function CampaignEditor() {
       toast.error(err.message || "Failed to import from ClickUp");
     } finally {
       setClickupLoading(false);
+    }
+  };
+
+  const handleRegenerateSlice = async (sliceId: string) => {
+    if (!campaignId) return;
+    await supabase.from("campaign_slices")
+      .update({ generation_status: "pending", last_error: null })
+      .eq("id", sliceId);
+    setSlices((prev) => prev.map((slice) => slice.id === sliceId ? { ...slice, generation_status: "pending", last_error: null } : slice));
+    const { error } = await supabase.functions.invoke("generate-slice", { body: { sliceId, campaignId } });
+    if (error) toast.error(error.message);
+    void loadImageSlices();
+  };
+
+  const handleUpdateSlice = async (sliceId: string, patch: Partial<CampaignSlice>) => {
+    const { error } = await supabase.from("campaign_slices").update(patch as any).eq("id", sliceId);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setSlices((prev) => prev.map((slice) => slice.id === sliceId ? { ...slice, ...patch } as CampaignSlice : slice));
+  };
+
+  const handleDeleteSlice = async (sliceId: string) => {
+    await supabase.from("campaign_slices").delete().eq("id", sliceId);
+    setSlices((prev) => prev.filter((slice) => slice.id !== sliceId));
+    if (selectedSliceId === sliceId) setSelectedSliceId(null);
+  };
+
+  const handlePushImageEmail = async () => {
+    if (!campaignId) return;
+    setPushingKlaviyo(true);
+    try {
+      const { error } = await supabase.functions.invoke("push-image-email-klaviyo", {
+        body: { campaignId },
+      });
+      if (error) throw error;
+      toast.success("Pushed as a drag-and-drop template");
+      const { data } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
+      if (data) setCampaign(data as Campaign);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to push");
+    } finally {
+      setPushingKlaviyo(false);
     }
   };
 
@@ -4341,7 +4517,30 @@ export default function CampaignEditor() {
             </Button>
           )}
 
-          {campaign?.html && (
+          {isImageSliceMode && completeSliceCount > 0 ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePushImageEmail}
+                disabled={pushingKlaviyo || completeSliceCount < slices.length}
+                className="active:scale-[0.98] transition-all"
+              >
+                {pushingKlaviyo ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Send className="w-3 h-3 mr-1" />}
+                Push Template
+              </Button>
+              {(campaign as any)?.klaviyo_template_id && (
+                <a
+                  href={`https://www.klaviyo.com/template/${(campaign as any).klaviyo_template_id}/edit`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  Open <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </>
+          ) : campaign?.html && (
             <>
               <Button variant="outline" size="sm" onClick={exportHtml} className="active:scale-[0.98] transition-all">
                 <Download className="w-3 h-3 mr-1" /> Export HTML
@@ -4783,6 +4982,21 @@ export default function CampaignEditor() {
                 <Skeleton className="h-32 w-full" />
                 <Skeleton className="h-10 w-1/3" />
               </div>
+            ) : isImageSliceMode && hasImageSlices ? (
+              <div className="flex flex-col items-center py-10 px-6">
+                <div className="w-[600px] max-w-full bg-background shadow-xl rounded overflow-hidden border border-border">
+                  {slices.map((slice) => (
+                    <SlicePreview
+                      key={slice.id}
+                      slice={slice}
+                      selected={slice.id === selectedSliceId}
+                      onSelect={() => setSelectedSliceId(slice.id)}
+                      onRegenerate={() => handleRegenerateSlice(slice.id)}
+                      onDelete={() => handleDeleteSlice(slice.id)}
+                    />
+                  ))}
+                </div>
+              </div>
             ) : campaign?.html ? (
               <div className={`flex flex-col ${showReferenceDialog && selectedReferences.length > 0 ? 'p-1 pl-0.5 pt-4' : 'p-8'}`}>
                 <div className={`flex ${showReferenceDialog && selectedReferences.length > 0 ? 'justify-start' : 'justify-center'}`}>
@@ -4863,7 +5077,7 @@ export default function CampaignEditor() {
                     Campaign
                   </button>
                   <button
-                    onClick={() => setCampaignMode("flow")}
+                    onClick={() => { setCampaignMode("flow"); setGenerationMode("html"); }}
                     className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                       campaignMode === "flow"
                         ? "bg-background text-foreground shadow-sm"
@@ -4880,6 +5094,31 @@ export default function CampaignEditor() {
 
                 {campaignMode === "campaign" ? (
                   <>
+                    <div className="space-y-2">
+                      <label className="text-xs text-muted-foreground">Output format</label>
+                      <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                        <button
+                          onClick={() => setGenerationMode("html")}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            generationMode === "html"
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          HTML
+                        </button>
+                        <button
+                          onClick={() => setGenerationMode("image_slices")}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            generationMode === "image_slices"
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Image Blocks
+                        </button>
+                      </div>
+                    </div>
                     {/* Import from ClickUp */}
                     <div className="space-y-2">
                       <label className="text-xs text-muted-foreground flex items-center gap-1">
@@ -5094,12 +5333,30 @@ export default function CampaignEditor() {
                     disabled={generating}
                     className="w-full bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all"
                   >
-                    {generating ? "Generating 3 Variants..." : campaignMode === "flow" ? "Generate Flow Email" : "Generate Campaign"}
+                    {generating
+                      ? generationMode === "image_slices" ? "Generating Image Blocks..." : "Generating 3 Variants..."
+                      : campaignMode === "flow" ? "Generate Flow Email" : generationMode === "image_slices" ? "Generate Image Blocks" : "Generate Campaign"}
                   </Button>
                 </div>
               </div>
             ) : (
               <div className="flex flex-col flex-1 overflow-hidden">
+                {isImageSliceMode ? (
+                  <div className="flex-1 overflow-y-auto p-5">
+                    {selectedSlice ? (
+                      <SliceInspector
+                        slice={selectedSlice}
+                        onUpdate={(patch) => handleUpdateSlice(selectedSlice.id, patch)}
+                        onRegenerate={() => handleRegenerateSlice(selectedSlice.id)}
+                      />
+                    ) : (
+                      <div className="text-xs text-muted-foreground">
+                        Select an image block in the preview to edit its copy, CTA URL, or composition brief.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                <>
                 {/* Chat / Flow Details tab toggle for flow mode */}
                 {campaignMode === "flow" && (
                   <div className="flex items-center gap-1 p-2 border-b border-border bg-muted/30">
@@ -5429,6 +5686,8 @@ export default function CampaignEditor() {
                 </div>
                 </>
                 )}
+                </>
+                )}
               </div>
             )}
           </div>
@@ -5447,5 +5706,156 @@ export default function CampaignEditor() {
       />
     )}
   </>
+  );
+}
+
+function SlicePreview({
+  slice,
+  selected,
+  onSelect,
+  onRegenerate,
+  onDelete,
+}: {
+  slice: CampaignSlice;
+  selected: boolean;
+  onSelect: () => void;
+  onRegenerate: () => void;
+  onDelete: () => void;
+}) {
+  const blockNumber = Math.max(1, slice.position || 1);
+  return (
+    <div
+      className={`relative group cursor-pointer border-2 transition-all ${selected ? "border-primary" : "border-transparent"}`}
+      onClick={onSelect}
+      style={aspectStyle(slice.aspect_ratio)}
+    >
+      {slice.image_url ? (
+        <img src={slice.image_url} alt={`Email block ${blockNumber}`} className="w-full h-full object-cover block" />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-muted text-muted-foreground gap-2">
+          {slice.generation_status === "failed" ? (
+            <>
+              <X className="w-5 h-5 text-destructive" />
+              <span className="text-xs text-destructive">Generation failed</span>
+            </>
+          ) : (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-xs">{slice.generation_status}</span>
+            </>
+          )}
+        </div>
+      )}
+      <div className="absolute top-2 left-2 rounded bg-background/90 border border-border px-2 py-1 text-[10px] font-medium text-foreground shadow-sm">
+        {blockNumber}
+      </div>
+      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <Button
+          size="icon"
+          variant="secondary"
+          className="w-7 h-7"
+          onClick={(event) => { event.stopPropagation(); onRegenerate(); }}
+        >
+          <Wand2 className="w-3 h-3" />
+        </Button>
+        <Button
+          size="icon"
+          variant="secondary"
+          className="w-7 h-7"
+          onClick={(event) => { event.stopPropagation(); onDelete(); }}
+        >
+          <Trash2 className="w-3 h-3" />
+        </Button>
+      </div>
+      {slice.last_error && (
+        <div className="absolute bottom-2 left-2 right-2 rounded bg-destructive/90 text-destructive-foreground px-2 py-1 text-[10px] line-clamp-2">
+          {slice.last_error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SliceInspector({
+  slice,
+  onUpdate,
+  onRegenerate,
+}: {
+  slice: CampaignSlice;
+  onUpdate: (patch: Partial<CampaignSlice>) => void;
+  onRegenerate: () => void;
+}) {
+  const blockNumber = Math.max(1, slice.position || 1);
+  const [draft, setDraft] = useState({
+    headline_copy: slice.headline_copy || "",
+    body_copy: slice.body_copy || "",
+    cta_label: slice.cta_label || "",
+    cta_url: slice.cta_url || "",
+    composition_brief: slice.composition_brief || "",
+  });
+
+  useEffect(() => {
+    setDraft({
+      headline_copy: slice.headline_copy || "",
+      body_copy: slice.body_copy || "",
+      cta_label: slice.cta_label || "",
+      cta_url: slice.cta_url || "",
+      composition_brief: slice.composition_brief || "",
+    });
+  }, [slice.id, slice.headline_copy, slice.body_copy, slice.cta_label, slice.cta_url, slice.composition_brief]);
+
+  const save = () => onUpdate(draft);
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-medium">Block {blockNumber}</h3>
+          <Badge variant={slice.generation_status === "complete" ? "default" : "secondary"} className="text-[10px]">
+            {slice.generation_status}
+          </Badge>
+        </div>
+        <p className="text-xs text-muted-foreground">{slice.archetype_slug || "custom"} · {slice.aspect_ratio}</p>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs text-muted-foreground">Headline</label>
+        <Input value={draft.headline_copy} onChange={(event) => setDraft((prev) => ({ ...prev, headline_copy: event.target.value }))} />
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs text-muted-foreground">Body copy</label>
+        <Textarea value={draft.body_copy} onChange={(event) => setDraft((prev) => ({ ...prev, body_copy: event.target.value }))} rows={4} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-2">
+          <label className="text-xs text-muted-foreground">CTA</label>
+          <Input value={draft.cta_label} onChange={(event) => setDraft((prev) => ({ ...prev, cta_label: event.target.value }))} />
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs text-muted-foreground">CTA URL</label>
+          <Input value={draft.cta_url} onChange={(event) => setDraft((prev) => ({ ...prev, cta_url: event.target.value }))} />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs text-muted-foreground">Composition brief</label>
+        <Textarea value={draft.composition_brief} onChange={(event) => setDraft((prev) => ({ ...prev, composition_brief: event.target.value }))} rows={6} />
+      </div>
+
+      {slice.last_error && (
+        <div className="rounded border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+          {slice.last_error}
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <Button onClick={save} className="flex-1">Save</Button>
+        <Button variant="outline" onClick={onRegenerate}>
+          <Wand2 className="w-3 h-3 mr-1" /> Regenerate
+        </Button>
+      </div>
+    </div>
   );
 }
