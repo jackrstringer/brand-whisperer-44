@@ -413,6 +413,7 @@ export default function CampaignEditor() {
         setSendListIds(Array.isArray((campaign as any).send_list_ids) ? (campaign as any).send_list_ids : []);
         setSendSegmentIds(Array.isArray((campaign as any).send_segment_ids) ? (campaign as any).send_segment_ids : []);
         setCampaignMode((campaign as any).campaign_mode === "flow" ? "flow" : "campaign");
+        setGenerationMode((campaign as any).generation_mode === "image_slices" ? "image_slices" : "html");
         if ((campaign as any).flow_config) setFlowConfig((campaign as any).flow_config as FlowConfig);
         if ((campaign as any).campaign_mode === "flow") setFlowDetailTab("flow");
         // If returning to a generating campaign, restore the timer from generation_started_at
@@ -467,6 +468,9 @@ export default function CampaignEditor() {
             preRenderFlowHtml(campaign.html, (campaign as any).flow_config as FlowConfig);
           }
         }
+        if ((campaign as any).generation_mode === "image_slices") {
+          await loadImageSlices();
+        }
       }
       const { data: msgs } = await supabase
         .from("chat_messages")
@@ -509,7 +513,18 @@ export default function CampaignEditor() {
       setLoading(false);
     };
     load();
-  }, [brandId, campaignId, getMatchingVariantIndex]);
+  }, [brandId, campaignId, getMatchingVariantIndex, loadImageSlices, preRenderFlowHtml]);
+
+  useEffect(() => {
+    if (generationMode !== "image_slices") return;
+    const anyActive = campaign?.status === "generating"
+      || slices.some((slice) => slice.generation_status === "pending" || slice.generation_status === "generating");
+    if (!anyActive) return;
+    const interval = window.setInterval(() => {
+      void loadImageSlices();
+    }, 3000);
+    return () => window.clearInterval(interval);
+  }, [campaign?.status, generationMode, slices, loadImageSlices]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
