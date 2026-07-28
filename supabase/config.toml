@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.flow-agent]
 verify_jwt = false
+
+[functions.plan-image-email]
+verify_jwt = false
+
+[functions.generate-slice]
+verify_jwt = false
