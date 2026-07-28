@@ -177,6 +177,10 @@ export default function CampaignEditor() {
   const [previewText, setPreviewText] = useState("");
   const [starredCampaign, setStarredCampaign] = useState(false);
   const [showReferenceDialog, setShowReferenceDialog] = useState(false);
+  const [generationMode, setGenerationMode] = useState<"html" | "image_slices">("html");
+  const [slices, setSlices] = useState<CampaignSlice[]>([]);
+  const [selectedSliceId, setSelectedSliceId] = useState<string | null>(null);
+  const [pushingKlaviyo, setPushingKlaviyo] = useState(false);
   const refScrollRef = useRef<HTMLDivElement>(null);
   const [syncingScroll, setSyncingScroll] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -233,6 +237,30 @@ export default function CampaignEditor() {
     if (!campaignId || nextVariants === variantHtmls) return;
     void supabase.from("campaigns").update({ variant_htmls: nextVariants } as any).eq("id", campaignId);
   }, [campaignId, variantHtmls]);
+
+  const loadImageSlices = useCallback(async () => {
+    if (!campaignId) return [] as CampaignSlice[];
+    const { data, error } = await supabase
+      .from("campaign_slices")
+      .select("*")
+      .eq("campaign_id", campaignId)
+      .order("position");
+    if (error) {
+      toast.error(error.message);
+      return [] as CampaignSlice[];
+    }
+    const nextSlices = (data || []) as unknown as CampaignSlice[];
+    setSlices(nextSlices);
+    setSelectedSliceId((current) => current && nextSlices.some((slice) => slice.id === current) ? current : nextSlices[0]?.id ?? null);
+    return nextSlices;
+  }, [campaignId]);
+
+  const selectedSlice = useMemo(
+    () => slices.find((slice) => slice.id === selectedSliceId) || null,
+    [slices, selectedSliceId]
+  );
+
+  const completeSliceCount = slices.filter((slice) => slice.generation_status === "complete").length;
 
   // Restore reference panel state from localStorage
   useEffect(() => {
