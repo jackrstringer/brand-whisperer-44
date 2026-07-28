@@ -1140,8 +1140,73 @@ export default function CampaignEditor() {
       reference_campaign_type: selectedReferences.length > 0 ? refDesignMode : null,
       reference_strength: selectedReferences.length > 0 ? (refDesignMode === "dupe" ? 10 : 7) : null,
       campaign_mode: campaignMode,
+      generation_mode: campaignMode === "campaign" ? generationMode : "standard",
       flow_config: campaignMode === "flow" ? flowConfig : null,
     } as any).eq("id", campaignId);
+
+    if (campaignMode === "campaign" && generationMode === "image_slices") {
+      try {
+        const { error } = await supabase.functions.invoke("plan-image-email", {
+          body: { campaignId, brief: effectiveBrief },
+        });
+        if (error) throw error;
+      } catch (err: any) {
+        console.error("[image-generate] Error:", err);
+        toast.error("Failed to start image-slice generation", {
+          description: err?.message || "Unknown backend error",
+          duration: 12000,
+        });
+        setGenerating(false);
+        setGenStartTime(null);
+        return;
+      }
+
+      const pollInterval = window.setInterval(async () => {
+        const [{ data }, nextSlices] = await Promise.all([
+          supabase.from("campaigns").select("*").eq("id", campaignId).single(),
+          loadImageSlices(),
+        ]);
+        if (!data) return;
+        if (data.status === "ready") {
+          window.clearInterval(pollInterval);
+          generationCompletedRef.current = true;
+          setCampaign(data as Campaign);
+          setGenerating(false);
+          const elapsed = genStartTime ? Math.floor((Date.now() - genStartTime) / 1000) : 0;
+          setGenStartTime(null);
+          const completeCount = nextSlices.filter((slice) => slice.generation_status === "complete").length;
+          setMessages((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `${completeCount}/${nextSlices.length} image slices generated in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
+          ]);
+        } else if (data.status === "error") {
+          window.clearInterval(pollInterval);
+          setCampaign(data as Campaign);
+          setGenerating(false);
+          setGenStartTime(null);
+          const reason = (data.last_error || "Unknown backend error").slice(0, 1200);
+          toast.error("Image-slice generation failed", {
+            description: reason,
+            duration: 16000,
+          });
+          setMessages((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Generation failed: ${reason}`, created_at: new Date().toISOString() },
+          ]);
+        }
+      }, 4000);
+
+      window.setTimeout(() => {
+        if (!generationCompletedRef.current) {
+          window.clearInterval(pollInterval);
+          setGenerating(false);
+          setGenStartTime(null);
+          setCampaign((c) => c ? { ...c, status: "draft" } : c);
+          toast.error("Generation timed out. Please try again.");
+        }
+      }, 300000);
+      return;
+    }
 
     // Always use generate-campaign-multi for 3 variants
     const genUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-campaign-multi`;
