@@ -1131,7 +1131,7 @@ export default function CampaignEditor() {
       extra_copy: extraCopy || null,
       speed_mode: speedMode,
       product_ids: selectedProductIds.length > 0 ? selectedProductIds : null,
-      pinned_asset_urls: pinnedAssetUrls.length > 0 ? pinnedAssetUrls : null,
+      pinned_asset_urls: allPinned.length > 0 ? allPinned : null,
       subject_line: subjectLine || null,
       preview_text: previewText || null,
       send_list_ids: sendListIds.length > 0 ? sendListIds : null,
