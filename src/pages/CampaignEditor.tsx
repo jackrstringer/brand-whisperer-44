@@ -2884,7 +2884,9 @@ export default function CampaignEditor() {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
   }
 
-  const isDraft = !campaign?.html || campaign?.status === "draft";
+  const isImageSliceMode = campaignMode === "campaign" && generationMode === "image_slices";
+  const hasImageSlices = slices.length > 0;
+  const isDraft = isImageSliceMode ? !hasImageSlices || campaign?.status === "draft" : !campaign?.html || campaign?.status === "draft";
   const isGenerating = campaign?.status === "generating" || generating;
 
   const importFromClickUp = async () => {
@@ -4515,7 +4517,30 @@ export default function CampaignEditor() {
             </Button>
           )}
 
-          {campaign?.html && (
+          {isImageSliceMode && completeSliceCount > 0 ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePushImageEmail}
+                disabled={pushingKlaviyo || completeSliceCount < slices.length}
+                className="active:scale-[0.98] transition-all"
+              >
+                {pushingKlaviyo ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Send className="w-3 h-3 mr-1" />}
+                Push Template
+              </Button>
+              {(campaign as any)?.klaviyo_template_id && (
+                <a
+                  href={`https://www.klaviyo.com/template/${(campaign as any).klaviyo_template_id}/edit`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  Open <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
+            </>
+          ) : campaign?.html && (
             <>
               <Button variant="outline" size="sm" onClick={exportHtml} className="active:scale-[0.98] transition-all">
                 <Download className="w-3 h-3 mr-1" /> Export HTML
@@ -4957,6 +4982,21 @@ export default function CampaignEditor() {
                 <Skeleton className="h-32 w-full" />
                 <Skeleton className="h-10 w-1/3" />
               </div>
+            ) : isImageSliceMode && hasImageSlices ? (
+              <div className="flex flex-col items-center py-10 px-6">
+                <div className="w-[600px] max-w-full bg-background shadow-xl rounded overflow-hidden border border-border">
+                  {slices.map((slice) => (
+                    <SlicePreview
+                      key={slice.id}
+                      slice={slice}
+                      selected={slice.id === selectedSliceId}
+                      onSelect={() => setSelectedSliceId(slice.id)}
+                      onRegenerate={() => handleRegenerateSlice(slice.id)}
+                      onDelete={() => handleDeleteSlice(slice.id)}
+                    />
+                  ))}
+                </div>
+              </div>
             ) : campaign?.html ? (
               <div className={`flex flex-col ${showReferenceDialog && selectedReferences.length > 0 ? 'p-1 pl-0.5 pt-4' : 'p-8'}`}>
                 <div className={`flex ${showReferenceDialog && selectedReferences.length > 0 ? 'justify-start' : 'justify-center'}`}>
@@ -5037,7 +5077,7 @@ export default function CampaignEditor() {
                     Campaign
                   </button>
                   <button
-                    onClick={() => setCampaignMode("flow")}
+                    onClick={() => { setCampaignMode("flow"); setGenerationMode("html"); }}
                     className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                       campaignMode === "flow"
                         ? "bg-background text-foreground shadow-sm"
@@ -5054,6 +5094,31 @@ export default function CampaignEditor() {
 
                 {campaignMode === "campaign" ? (
                   <>
+                    <div className="space-y-2">
+                      <label className="text-xs text-muted-foreground">Output format</label>
+                      <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                        <button
+                          onClick={() => setGenerationMode("html")}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            generationMode === "html"
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          HTML
+                        </button>
+                        <button
+                          onClick={() => setGenerationMode("image_slices")}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            generationMode === "image_slices"
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Image Blocks
+                        </button>
+                      </div>
+                    </div>
                     {/* Import from ClickUp */}
                     <div className="space-y-2">
                       <label className="text-xs text-muted-foreground flex items-center gap-1">
@@ -5268,12 +5333,30 @@ export default function CampaignEditor() {
                     disabled={generating}
                     className="w-full bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all"
                   >
-                    {generating ? "Generating 3 Variants..." : campaignMode === "flow" ? "Generate Flow Email" : "Generate Campaign"}
+                    {generating
+                      ? generationMode === "image_slices" ? "Generating Image Blocks..." : "Generating 3 Variants..."
+                      : campaignMode === "flow" ? "Generate Flow Email" : generationMode === "image_slices" ? "Generate Image Blocks" : "Generate Campaign"}
                   </Button>
                 </div>
               </div>
             ) : (
               <div className="flex flex-col flex-1 overflow-hidden">
+                {isImageSliceMode ? (
+                  <div className="flex-1 overflow-y-auto p-5">
+                    {selectedSlice ? (
+                      <SliceInspector
+                        slice={selectedSlice}
+                        onUpdate={(patch) => handleUpdateSlice(selectedSlice.id, patch)}
+                        onRegenerate={() => handleRegenerateSlice(selectedSlice.id)}
+                      />
+                    ) : (
+                      <div className="text-xs text-muted-foreground">
+                        Select an image block in the preview to edit its copy, CTA URL, or composition brief.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                <>
                 {/* Chat / Flow Details tab toggle for flow mode */}
                 {campaignMode === "flow" && (
                   <div className="flex items-center gap-1 p-2 border-b border-border bg-muted/30">
