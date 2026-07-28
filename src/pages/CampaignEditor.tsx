@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ProductSelector, { type SelectedShopifyProduct } from "@/components/brand/ProductSelector";
 import SegmentSelector from "@/components/brand/SegmentSelector";
@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Download, Send, Undo2, Redo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, EyeOff, RotateCcw, Link2, Loader2, Copy, SlidersHorizontal, MessageCircle, Activity } from "lucide-react";
+import { ArrowLeft, Download, Send, Undo2, Redo2, Zap, Paperclip, X, Image as ImageIcon, ClipboardCheck, Star, Eye, EyeOff, RotateCcw, Link2, Loader2, Copy, SlidersHorizontal, MessageCircle, Activity, Trash2, ExternalLink, Wand2 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -61,6 +61,28 @@ import CommentOverlay, { type CommentThread, type CommentAuthor, type CommentEle
 import html2canvas from "html2canvas";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import GenerationTimeline from "@/components/campaign/GenerationTimeline";
+
+interface CampaignSlice {
+  id: string;
+  campaign_id: string;
+  position: number;
+  archetype_slug: string | null;
+  image_url: string | null;
+  headline_copy: string | null;
+  body_copy: string | null;
+  cta_label: string | null;
+  cta_url: string | null;
+  aspect_ratio: string;
+  composition_brief: string | null;
+  generation_status: "pending" | "generating" | "complete" | "failed";
+  last_error: string | null;
+}
+
+function aspectStyle(ratio: string): React.CSSProperties {
+  const [w, h] = ratio.split(":").map(Number);
+  if (!w || !h) return { aspectRatio: "4 / 5" };
+  return { aspectRatio: `${w} / ${h}` };
+}
 
 async function uploadChatImages(files: File[], brandId: string, campaignId: string): Promise<string[]> {
   const urls: string[] = [];
