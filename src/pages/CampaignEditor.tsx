@@ -5686,6 +5686,8 @@ export default function CampaignEditor() {
                 </div>
                 </>
                 )}
+                </>
+                )}
               </div>
             )}
           </div>
