@@ -93,6 +93,7 @@ async function runGenerateSlice(sliceId: string, campaignId: string) {
       cta_label: slice.cta_label || "",
       cta_url: slice.cta_url || "",
       composition_brief: slice.composition_brief || "",
+      reference_asset_urls: Array.isArray(slice.reference_asset_urls) ? slice.reference_asset_urls : [],
     };
 
     const prompt = buildSlicePrompt({
