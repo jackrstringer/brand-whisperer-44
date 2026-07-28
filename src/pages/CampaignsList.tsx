@@ -4,8 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Plus, ArrowRight, Trash2, Copy, Timer, LayoutList, ListOrdered, ImageIcon, ChevronDown } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Plus, ArrowRight, Trash2, Copy, Timer, LayoutList, ListOrdered } from "lucide-react";
 import { toast } from "sonner";
 import type { Brand, Campaign } from "@/lib/types";
 import { useAuth } from "@/hooks/useAuth";
@@ -148,17 +147,6 @@ export default function CampaignsList() {
     navigate(`/brands/${brandId}/campaigns/${(data as Campaign).id}`);
   };
 
-  const createImageCampaign = async () => {
-    if (!brandId || !user) return;
-    const { data, error } = await supabase
-      .from("campaigns")
-      .insert({ brand_id: brandId, name: "Untitled Image Email", status: "draft", campaign_mode: "image" })
-      .select()
-      .single();
-    if (error) { toast.error(error.message); return; }
-    navigate(`/brands/${brandId}/campaigns/${(data as Campaign).id}`);
-  };
-
   const handleDelete = async () => {
     if (!deleteTarget) return;
     await supabase.from("campaigns").delete().eq("id", deleteTarget.id);
@@ -281,29 +269,12 @@ export default function CampaignsList() {
               >
                 <Timer className="w-3.5 h-3.5" />
               </button>
-              <div className="inline-flex rounded-md overflow-hidden">
-                <Button
-                  onClick={createCampaign}
-                  className="bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all rounded-r-none"
-                >
-                  <Plus className="w-4 h-4 mr-1" /> New Campaign
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-l-none border-l border-primary-foreground/20 px-2">
-                      <ChevronDown className="w-4 h-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={createCampaign}>
-                      <LayoutList className="w-4 h-4 mr-2" /> HTML Campaign
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={createImageCampaign}>
-                      <ImageIcon className="w-4 h-4 mr-2" /> Image-slice Email
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+              <Button
+                onClick={createCampaign}
+                className="bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all"
+              >
+                <Plus className="w-4 h-4 mr-1" /> New Campaign
+              </Button>
             </>
           )}
         </div>

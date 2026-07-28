@@ -17,7 +17,7 @@ import BrandIntegrations from "./pages/BrandIntegrations";
 import BrandPreferences from "./pages/BrandPreferences";
 import GlobalSettings from "./pages/GlobalSettings";
 import CampaignsList from "./pages/CampaignsList";
-import CampaignRouter from "./pages/CampaignRouter";
+import CampaignEditor from "./pages/CampaignEditor";
 import CampaignQA from "./pages/CampaignQA";
 import AppLayout from "./components/AppLayout";
 import AdminLibrary from "./pages/AdminLibrary";
@@ -64,7 +64,7 @@ function AppRoutes() {
       <Route path="/brands/:brandId/flows" element={<ProtectedLayout><FlowsListPage /></ProtectedLayout>} />
       <Route path="/brands/:brandId/flows/new/:flowType" element={<ProtectedLayout><FlowSetupPage /></ProtectedLayout>} />
       <Route path="/brands/:brandId/flows/:flowId" element={<ProtectedLayout><FlowBuilderPage /></ProtectedLayout>} />
-      <Route path="/brands/:brandId/campaigns/:campaignId" element={<ProtectedRoute><CampaignRouter /></ProtectedRoute>} />
+      <Route path="/brands/:brandId/campaigns/:campaignId" element={<ProtectedRoute><CampaignEditor /></ProtectedRoute>} />
       <Route path="/brands/:brandId/campaigns/:campaignId/qa" element={<ProtectedRoute><CampaignQA /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedLayout><GlobalSettings /></ProtectedLayout>} />
       <Route path="/admin/library" element={<ProtectedRoute><AdminLibrary /></ProtectedRoute>} />
