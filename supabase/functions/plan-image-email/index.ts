@@ -24,7 +24,7 @@ async function callPlanner(systemPrompt: string, userPrompt: string): Promise<an
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-opus-4-5-20251015",
+      model: "claude-opus-4-7",
       max_tokens: 8000,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
