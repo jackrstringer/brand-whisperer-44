@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo, type CSSProperties } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ProductSelector, { type SelectedShopifyProduct } from "@/components/brand/ProductSelector";
 import SegmentSelector from "@/components/brand/SegmentSelector";
@@ -78,7 +78,7 @@ interface CampaignSlice {
   last_error: string | null;
 }
 
-function aspectStyle(ratio: string): React.CSSProperties {
+function aspectStyle(ratio: string): CSSProperties {
   const [w, h] = ratio.split(":").map(Number);
   if (!w || !h) return { aspectRatio: "4 / 5" };
   return { aspectRatio: `${w} / ${h}` };
