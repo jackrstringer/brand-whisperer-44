@@ -2935,7 +2935,7 @@ export default function CampaignEditor() {
   };
 
   const handleUpdateSlice = async (sliceId: string, patch: Partial<CampaignSlice>) => {
-    const { error } = await supabase.from("campaign_slices").update(patch).eq("id", sliceId);
+    const { error } = await supabase.from("campaign_slices").update(patch as any).eq("id", sliceId);
     if (error) {
       toast.error(error.message);
       return;
