@@ -5722,6 +5722,7 @@ function SlicePreview({
   onRegenerate: () => void;
   onDelete: () => void;
 }) {
+  const blockNumber = Math.max(1, slice.position || 1);
   return (
     <div
       className={`relative group cursor-pointer border-2 transition-all ${selected ? "border-primary" : "border-transparent"}`}
@@ -5729,7 +5730,7 @@ function SlicePreview({
       style={aspectStyle(slice.aspect_ratio)}
     >
       {slice.image_url ? (
-        <img src={slice.image_url} alt={`Email block ${slice.position + 1}`} className="w-full h-full object-cover block" />
+        <img src={slice.image_url} alt={`Email block ${blockNumber}`} className="w-full h-full object-cover block" />
       ) : (
         <div className="w-full h-full flex flex-col items-center justify-center bg-muted text-muted-foreground gap-2">
           {slice.generation_status === "failed" ? (
@@ -5746,7 +5747,7 @@ function SlicePreview({
         </div>
       )}
       <div className="absolute top-2 left-2 rounded bg-background/90 border border-border px-2 py-1 text-[10px] font-medium text-foreground shadow-sm">
-        {slice.position + 1}
+        {blockNumber}
       </div>
       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <Button
@@ -5784,6 +5785,7 @@ function SliceInspector({
   onUpdate: (patch: Partial<CampaignSlice>) => void;
   onRegenerate: () => void;
 }) {
+  const blockNumber = Math.max(1, slice.position || 1);
   const [draft, setDraft] = useState({
     headline_copy: slice.headline_copy || "",
     body_copy: slice.body_copy || "",
@@ -5808,7 +5810,7 @@ function SliceInspector({
     <div className="space-y-4">
       <div className="space-y-1">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-medium">Block {slice.position + 1}</h3>
+          <h3 className="text-sm font-medium">Block {blockNumber}</h3>
           <Badge variant={slice.generation_status === "complete" ? "default" : "secondary"} className="text-[10px]">
             {slice.generation_status}
           </Badge>
