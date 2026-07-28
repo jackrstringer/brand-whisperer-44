@@ -2921,6 +2921,50 @@ export default function CampaignEditor() {
     }
   };
 
+  const handleRegenerateSlice = async (sliceId: string) => {
+    if (!campaignId) return;
+    await supabase.from("campaign_slices")
+      .update({ generation_status: "pending", last_error: null })
+      .eq("id", sliceId);
+    setSlices((prev) => prev.map((slice) => slice.id === sliceId ? { ...slice, generation_status: "pending", last_error: null } : slice));
+    const { error } = await supabase.functions.invoke("generate-slice", { body: { sliceId, campaignId } });
+    if (error) toast.error(error.message);
+    void loadImageSlices();
+  };
+
+  const handleUpdateSlice = async (sliceId: string, patch: Partial<CampaignSlice>) => {
+    const { error } = await supabase.from("campaign_slices").update(patch).eq("id", sliceId);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setSlices((prev) => prev.map((slice) => slice.id === sliceId ? { ...slice, ...patch } as CampaignSlice : slice));
+  };
+
+  const handleDeleteSlice = async (sliceId: string) => {
+    await supabase.from("campaign_slices").delete().eq("id", sliceId);
+    setSlices((prev) => prev.filter((slice) => slice.id !== sliceId));
+    if (selectedSliceId === sliceId) setSelectedSliceId(null);
+  };
+
+  const handlePushImageEmail = async () => {
+    if (!campaignId) return;
+    setPushingKlaviyo(true);
+    try {
+      const { error } = await supabase.functions.invoke("push-image-email-klaviyo", {
+        body: { campaignId },
+      });
+      if (error) throw error;
+      toast.success("Pushed as a drag-and-drop template");
+      const { data } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
+      if (data) setCampaign(data as Campaign);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to push");
+    } finally {
+      setPushingKlaviyo(false);
+    }
+  };
+
   const zoomScale = 1;
   const renderedWidth = renderWidth;
   const renderedHeight = iframeContentHeight;
