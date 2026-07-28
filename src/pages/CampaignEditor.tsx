@@ -5708,3 +5708,152 @@ export default function CampaignEditor() {
   </>
   );
 }
+
+function SlicePreview({
+  slice,
+  selected,
+  onSelect,
+  onRegenerate,
+  onDelete,
+}: {
+  slice: CampaignSlice;
+  selected: boolean;
+  onSelect: () => void;
+  onRegenerate: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      className={`relative group cursor-pointer border-2 transition-all ${selected ? "border-primary" : "border-transparent"}`}
+      onClick={onSelect}
+      style={aspectStyle(slice.aspect_ratio)}
+    >
+      {slice.image_url ? (
+        <img src={slice.image_url} alt={`Email block ${slice.position + 1}`} className="w-full h-full object-cover block" />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-muted text-muted-foreground gap-2">
+          {slice.generation_status === "failed" ? (
+            <>
+              <X className="w-5 h-5 text-destructive" />
+              <span className="text-xs text-destructive">Generation failed</span>
+            </>
+          ) : (
+            <>
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-xs">{slice.generation_status}</span>
+            </>
+          )}
+        </div>
+      )}
+      <div className="absolute top-2 left-2 rounded bg-background/90 border border-border px-2 py-1 text-[10px] font-medium text-foreground shadow-sm">
+        {slice.position + 1}
+      </div>
+      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <Button
+          size="icon"
+          variant="secondary"
+          className="w-7 h-7"
+          onClick={(event) => { event.stopPropagation(); onRegenerate(); }}
+        >
+          <Wand2 className="w-3 h-3" />
+        </Button>
+        <Button
+          size="icon"
+          variant="secondary"
+          className="w-7 h-7"
+          onClick={(event) => { event.stopPropagation(); onDelete(); }}
+        >
+          <Trash2 className="w-3 h-3" />
+        </Button>
+      </div>
+      {slice.last_error && (
+        <div className="absolute bottom-2 left-2 right-2 rounded bg-destructive/90 text-destructive-foreground px-2 py-1 text-[10px] line-clamp-2">
+          {slice.last_error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SliceInspector({
+  slice,
+  onUpdate,
+  onRegenerate,
+}: {
+  slice: CampaignSlice;
+  onUpdate: (patch: Partial<CampaignSlice>) => void;
+  onRegenerate: () => void;
+}) {
+  const [draft, setDraft] = useState({
+    headline_copy: slice.headline_copy || "",
+    body_copy: slice.body_copy || "",
+    cta_label: slice.cta_label || "",
+    cta_url: slice.cta_url || "",
+    composition_brief: slice.composition_brief || "",
+  });
+
+  useEffect(() => {
+    setDraft({
+      headline_copy: slice.headline_copy || "",
+      body_copy: slice.body_copy || "",
+      cta_label: slice.cta_label || "",
+      cta_url: slice.cta_url || "",
+      composition_brief: slice.composition_brief || "",
+    });
+  }, [slice.id, slice.headline_copy, slice.body_copy, slice.cta_label, slice.cta_url, slice.composition_brief]);
+
+  const save = () => onUpdate(draft);
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-medium">Block {slice.position + 1}</h3>
+          <Badge variant={slice.generation_status === "complete" ? "default" : "secondary"} className="text-[10px]">
+            {slice.generation_status}
+          </Badge>
+        </div>
+        <p className="text-xs text-muted-foreground">{slice.archetype_slug || "custom"} · {slice.aspect_ratio}</p>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs text-muted-foreground">Headline</label>
+        <Input value={draft.headline_copy} onChange={(event) => setDraft((prev) => ({ ...prev, headline_copy: event.target.value }))} />
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs text-muted-foreground">Body copy</label>
+        <Textarea value={draft.body_copy} onChange={(event) => setDraft((prev) => ({ ...prev, body_copy: event.target.value }))} rows={4} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-2">
+          <label className="text-xs text-muted-foreground">CTA</label>
+          <Input value={draft.cta_label} onChange={(event) => setDraft((prev) => ({ ...prev, cta_label: event.target.value }))} />
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs text-muted-foreground">CTA URL</label>
+          <Input value={draft.cta_url} onChange={(event) => setDraft((prev) => ({ ...prev, cta_url: event.target.value }))} />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-xs text-muted-foreground">Composition brief</label>
+        <Textarea value={draft.composition_brief} onChange={(event) => setDraft((prev) => ({ ...prev, composition_brief: event.target.value }))} rows={6} />
+      </div>
+
+      {slice.last_error && (
+        <div className="rounded border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+          {slice.last_error}
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <Button onClick={save} className="flex-1">Save</Button>
+        <Button variant="outline" onClick={onRegenerate}>
+          <Wand2 className="w-3 h-3 mr-1" /> Regenerate
+        </Button>
+      </div>
+    </div>
+  );
+}
