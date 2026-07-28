@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import ProductSelector from "@/components/brand/ProductSelector";
+import ReferencePanel, { type SelectedReference } from "@/components/campaign/ReferencePanel";
 import { toast } from "sonner";
 import { ArrowLeft, RotateCcw, Loader2, Send, Trash2, ExternalLink, Wand2 } from "lucide-react";
 
@@ -44,6 +48,11 @@ interface CampaignRow {
   last_error: string | null;
   design_system: DesignSystem | null;
   klaviyo_template_id: string | null;
+  goal: string | null;
+  extra_copy: string | null;
+  product_ids: string[] | null;
+  pinned_asset_urls: string[] | null;
+  reference_campaign_ids: string[] | null;
 }
 
 function aspectStyle(ratio: string): React.CSSProperties {
@@ -63,6 +72,13 @@ export default function ImageCampaignEditor() {
   const [planning, setPlanning] = useState(false);
   const [pushingKlaviyo, setPushingKlaviyo] = useState(false);
   const [selectedSliceId, setSelectedSliceId] = useState<string | null>(null);
+  const [goal, setGoal] = useState("promotional");
+  const [extraCopy, setExtraCopy] = useState("");
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [pinnedAssetUrls, setPinnedAssetUrls] = useState<string[]>([]);
+  const [selectedReferences, setSelectedReferences] = useState<SelectedReference[]>([]);
+  const [refDialogOpen, setRefDialogOpen] = useState(false);
+  const [briefLoaded, setBriefLoaded] = useState(false);
 
   const loadAll = useCallback(async () => {
     if (!campaignId) return;
@@ -71,12 +87,35 @@ export default function ImageCampaignEditor() {
       supabase.from("campaign_slices").select("*").eq("campaign_id", campaignId).order("position"),
     ]);
     if (c) {
-      setCampaign(c as unknown as CampaignRow);
-      if (!briefDraft) setBriefDraft((c as any).brief || "");
+      const row = c as unknown as CampaignRow;
+      setCampaign(row);
+      if (!briefLoaded) {
+        setBriefDraft(row.brief || "");
+        setGoal(row.goal || "promotional");
+        setExtraCopy(row.extra_copy || "");
+        setSelectedProductIds(Array.isArray(row.product_ids) ? row.product_ids : []);
+        setPinnedAssetUrls(Array.isArray(row.pinned_asset_urls) ? row.pinned_asset_urls : []);
+        const refIds = Array.isArray(row.reference_campaign_ids) ? row.reference_campaign_ids : [];
+        if (refIds.length > 0) {
+          const { data: refs } = await supabase.from("reference_campaigns").select("id, title, thumbnail_url, image_urls").in("id", refIds);
+          if (refs) {
+            setSelectedReferences(refs.map((r: any) => ({
+              type: "library" as const,
+              id: r.id,
+              title: r.title,
+              thumbnail_url: r.thumbnail_url,
+              image_urls: r.image_urls || [],
+              strength: 7,
+              mode: "reference" as const,
+            })));
+          }
+        }
+        setBriefLoaded(true);
+      }
     }
     if (s) setSlices(s as unknown as CampaignSlice[]);
     setLoading(false);
-  }, [campaignId, briefDraft]);
+  }, [campaignId, briefLoaded]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -101,6 +140,15 @@ export default function ImageCampaignEditor() {
     }
     setPlanning(true);
     try {
+      await supabase.from("campaigns").update({
+        brief: briefDraft.trim(),
+        goal,
+        extra_copy: extraCopy || null,
+        product_ids: selectedProductIds.length > 0 ? selectedProductIds : null,
+        pinned_asset_urls: pinnedAssetUrls.length > 0 ? pinnedAssetUrls : null,
+        reference_campaign_ids: selectedReferences.length > 0 ? selectedReferences.map(r => r.id) : null,
+      }).eq("id", campaignId);
+
       const { data, error } = await supabase.functions.invoke("plan-image-email", {
         body: { campaignId, brief: briefDraft.trim() },
       });
@@ -192,6 +240,59 @@ export default function ImageCampaignEditor() {
             placeholder="Describe the email you want. Include the offer, product focus, mood, angle, urgency…"
             className="min-h-[140px] text-sm"
           />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-muted-foreground">Campaign type</label>
+          <Select value={goal} onValueChange={setGoal}>
+            <SelectTrigger className="text-sm h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="promotional">Promotional</SelectItem>
+              <SelectItem value="announcement">Announcement / launch</SelectItem>
+              <SelectItem value="educational">Educational</SelectItem>
+              <SelectItem value="story">Brand story</SelectItem>
+              <SelectItem value="social_proof">Social proof</SelectItem>
+              <SelectItem value="newsletter">Newsletter</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-muted-foreground">Specific copy to include (optional)</label>
+          <Textarea
+            value={extraCopy}
+            onChange={(e) => setExtraCopy(e.target.value)}
+            placeholder="Paste specific headlines, taglines, or CTAs you want baked in verbatim…"
+            className="min-h-[70px] text-sm"
+          />
+        </div>
+
+        {brandId && (
+          <ProductSelector
+            brandId={brandId}
+            selectedProductIds={selectedProductIds}
+            pinnedAssetUrls={pinnedAssetUrls}
+            onSelectionChange={(ids, pinned) => { setSelectedProductIds(ids); setPinnedAssetUrls(pinned); }}
+          />
+        )}
+
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-muted-foreground">Reference campaigns</label>
+          <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => setRefDialogOpen(true)}>
+            {selectedReferences.length > 0 ? `${selectedReferences.length} reference${selectedReferences.length > 1 ? "s" : ""} selected` : "Pick references…"}
+          </Button>
+          {selectedReferences.length > 0 && (
+            <div className="flex gap-1.5 flex-wrap">
+              {selectedReferences.map(r => (
+                <div key={r.id} className="relative w-14 h-14 rounded overflow-hidden border border-border">
+                  <img src={r.thumbnail_url} alt={r.title} className="w-full h-full object-cover" />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
           <Button
             onClick={handlePlan}
             disabled={planning || !briefDraft.trim() || campaign.status === "generating"}
@@ -206,7 +307,7 @@ export default function ImageCampaignEditor() {
             )}
           </Button>
           {campaign.status === "error" && campaign.last_error && (
-            <p className="text-xs text-destructive break-words">{campaign.last_error}</p>
+            <p className="text-xs text-destructive break-words mt-2">{campaign.last_error}</p>
           )}
         </div>
 
@@ -296,6 +397,25 @@ export default function ImageCampaignEditor() {
           </div>
         )}
       </aside>
+
+      <Dialog open={refDialogOpen} onOpenChange={setRefDialogOpen}>
+        <DialogContent className="max-w-5xl h-[80vh] overflow-hidden flex flex-col p-0">
+          <DialogHeader className="p-4 border-b border-border">
+            <DialogTitle>Pick reference campaigns</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden">
+            {brandId && campaignId && (
+              <ReferencePanel
+                brandId={brandId}
+                campaignId={campaignId}
+                selectedReferences={selectedReferences}
+                onSelectReferences={setSelectedReferences}
+                campaignMode="campaign"
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

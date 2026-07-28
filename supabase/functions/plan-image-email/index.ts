@@ -87,6 +87,77 @@ async function runPlanAndGenerate(campaignId: string, brief: string) {
       .map((a: any) => `- ${a.slug} [${a.category}${a.role_hint ? `/${a.role_hint}` : ""}${a.usually_has_cta ? ", cta" : ""}] ${a.label}: ${a.description || ""} (default ${a.default_aspect_ratio})`)
       .join("\n");
 
+    // ── Brand asset library ───────────────────────────────────────────────
+    const { data: brandAssets } = await supabase
+      .from("brand_assets")
+      .select("url, category, description, ai_category, dominant_colors")
+      .eq("brand_id", campaign.brand_id);
+
+    const logoAssets = (brandAssets || []).filter((a: any) => a.category === "logo");
+    const heroAssets = (brandAssets || []).filter((a: any) => a.category === "hero_shots");
+    const productLibraryAssets = (brandAssets || []).filter((a: any) => a.category === "product_imagery");
+    const lifestyleAssets = (brandAssets || []).filter((a: any) => a.category === "lifestyle");
+
+    const formatAssetList = (list: any[], label: string) =>
+      list.length === 0 ? "" : `${label}:\n${list.map((a: any, i: number) =>
+        `  ${i + 1}. ${a.url} — ${a.description || a.ai_category || "(no description)"}${a.dominant_colors?.length ? ` [colors: ${a.dominant_colors.slice(0,3).join(", ")}]` : ""}`
+      ).join("\n")}`;
+
+    const brandAssetLibrary = [
+      formatAssetList(logoAssets, "LOGO ASSETS (MUST be used in slice 1 header)"),
+      formatAssetList(heroAssets, "HERO / KEY VISUAL ASSETS"),
+      formatAssetList(productLibraryAssets, "PRODUCT IMAGERY (packaging shots)"),
+      formatAssetList(lifestyleAssets, "LIFESTYLE IMAGERY"),
+    ].filter(Boolean).join("\n\n") || "(no brand assets uploaded)";
+
+    // ── Selected products + their assets ──────────────────────────────────
+    const productIds: string[] = Array.isArray(campaign.product_ids) ? campaign.product_ids : [];
+    let productBlock = "";
+    if (productIds.length > 0) {
+      const { data: products } = await supabase
+        .from("products")
+        .select("id, name, description, url")
+        .in("id", productIds);
+      const { data: productAssets } = await supabase
+        .from("product_assets")
+        .select("product_id, url, description, ai_category, dominant_colors")
+        .in("product_id", productIds);
+      productBlock = "SELECTED PRODUCTS FOR THIS CAMPAIGN (feature these; do NOT invent packaging):\n" +
+        (products || []).map((p: any) => {
+          const assets = (productAssets || []).filter((a: any) => a.product_id === p.id);
+          const assetLines = assets.map((a: any, i: number) =>
+            `      ${i + 1}. ${a.url} — ${a.description || a.ai_category || "product shot"}`
+          ).join("\n");
+          return `  • ${p.name}${p.description ? ` — ${p.description}` : ""}${p.url ? ` (${p.url})` : ""}\n${assetLines || "      (no product shots uploaded)"}`;
+        }).join("\n");
+    }
+
+    // ── Reference campaigns ───────────────────────────────────────────────
+    const refIds: string[] = Array.isArray(campaign.reference_campaign_ids) ? campaign.reference_campaign_ids : [];
+    let referenceBlock = "";
+    if (refIds.length > 0) {
+      const { data: refs } = await supabase
+        .from("reference_campaigns")
+        .select("title, brand_name, category, tags, thumbnail_url, image_urls, extracted_copy, ai_metadata")
+        .in("id", refIds);
+      referenceBlock = "REFERENCE CAMPAIGNS (use these as structural + stylistic inspiration for palette, shape language, and slice sequencing — do NOT copy their copy or brand marks):\n" +
+        (refs || []).map((r: any, i: number) => {
+          const imgs = [r.thumbnail_url, ...(r.image_urls || [])].filter(Boolean).slice(0, 4);
+          return `  Reference ${i + 1}: "${r.title}"${r.brand_name ? ` by ${r.brand_name}` : ""}${r.category ? ` [${r.category}]` : ""}\n` +
+            `    Images: ${imgs.join(", ")}` +
+            (r.extracted_copy ? `\n    Copy sample: ${String(r.extracted_copy).slice(0, 400)}` : "");
+        }).join("\n\n");
+    }
+
+    // ── Pinned assets (user-locked images for this campaign) ──────────────
+    const pinnedUrls: string[] = Array.isArray(campaign.pinned_asset_urls) ? campaign.pinned_asset_urls : [];
+    const pinnedBlock = pinnedUrls.length > 0
+      ? `PINNED ASSETS (user has explicitly pinned these — you SHOULD use them):\n${pinnedUrls.map((u, i) => `  ${i + 1}. ${u}`).join("\n")}`
+      : "";
+
+    const extraCopy = campaign.extra_copy ? `SPECIFIC COPY THE USER WANTS INCLUDED (use verbatim where it fits):\n${campaign.extra_copy}` : "";
+    const goalLine = campaign.goal ? `CAMPAIGN GOAL / TYPE: ${campaign.goal}` : "";
+
     const brandContext = [
       `Brand: ${brand?.name}`,
       brand?.industry ? `Industry: ${brand.industry}` : "",
@@ -96,14 +167,31 @@ async function runPlanAndGenerate(campaignId: string, brief: string) {
       brandProfile?.audit_findings ? `Brand audit findings:\n${JSON.stringify(brandProfile.audit_findings).slice(0, 3000)}` : "",
     ].filter(Boolean).join("\n\n");
 
-    const systemPrompt = `You are a senior email art director. You plan pure image-based email campaigns where every slice of the email is one fully-rendered PNG (no HTML text, no live buttons — everything is baked into the image). You output a locked visual design system that all slices share, plus an ordered slice sequence.
+    const systemPrompt = `You are a senior email art director. You plan pure image-based email campaigns where every slice is one fully-rendered PNG that will stack vertically to form ONE cohesive designed email at 390px mobile width.
 
-Your work must feel like a top-tier brand studio: distinctive, cohesive, magazine-quality, never generic. Every slice in the sequence shares the same palette, type treatment, product handling, mood, and shape language. Slices are siblings, not strangers.`;
+Think of the final email as a single long designed page — like an editorial spread — cut into segments. Slices are NOT independent posters; they are chapters of one continuous composition. Great email designs (like the reference campaigns in this brief) use inset blocks living within shared negative-space margins, not full-bleed horizontal bands that hard-divide the email.
+
+You MUST ground every product depiction in the brand's actual asset library. Never invent packaging, models, or products. If the brand's real logo, product shots, or lifestyle imagery is provided, reference those exact URLs in each slice's reference_asset_urls so the image generator reproduces them faithfully.
+
+Your work must feel like a top-tier brand studio: distinctive, cohesive, magazine-quality, mobile-optimized, never generic.`;
 
     const userPrompt = `${brandContext}
 
+${goalLine}
+
 CAMPAIGN BRIEF:
 ${brief}
+
+${extraCopy}
+
+──────────────── BRAND ASSET LIBRARY ────────────────
+${brandAssetLibrary}
+
+${productBlock}
+
+${pinnedBlock}
+
+${referenceBlock}
 
 AVAILABLE SLICE ARCHETYPES (pick from these):
 ${archetypeCatalog}
@@ -136,6 +224,7 @@ ${PLANNER_OUTPUT_INSTRUCTIONS}`;
       cta_url: s.cta_url || null,
       aspect_ratio: s.aspect_ratio || "4:5",
       composition_brief: s.composition_brief || null,
+      reference_asset_urls: Array.isArray(s.reference_asset_urls) ? s.reference_asset_urls.filter((u: any) => typeof u === "string" && u.startsWith("http")) : [],
       generation_status: "pending",
     }));
     const { data: inserted, error: insErr } = await supabase

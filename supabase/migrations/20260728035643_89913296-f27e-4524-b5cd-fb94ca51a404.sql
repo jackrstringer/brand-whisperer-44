@@ -1,0 +1,1 @@
+ALTER TABLE public.campaign_slices ADD COLUMN IF NOT EXISTS reference_asset_urls text[] DEFAULT '{}'::text[];
