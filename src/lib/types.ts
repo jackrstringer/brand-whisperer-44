@@ -44,9 +44,11 @@ export interface Campaign {
   product_ids?: string[] | null;
   pinned_asset_urls?: string[] | null;
   speed_mode?: "normal" | "fast" | null;
-  campaign_mode?: "campaign" | "flow";
+  campaign_mode?: "campaign" | "flow" | "image";
   generation_mode?: string;
   flow_config?: FlowConfig | null;
+  design_system?: any;
+  slice_plan?: any;
   subject_line?: string | null;
   preview_text?: string | null;
   send_list_ids?: string[] | null;

@@ -400,6 +400,71 @@ export type Database = {
           },
         ]
       }
+      campaign_slices: {
+        Row: {
+          archetype_slug: string | null
+          aspect_ratio: string
+          body_copy: string | null
+          campaign_id: string
+          composition_brief: string | null
+          created_at: string
+          cta_label: string | null
+          cta_url: string | null
+          generation_status: string
+          headline_copy: string | null
+          id: string
+          image_url: string | null
+          last_error: string | null
+          position: number
+          prompt_used: string | null
+          updated_at: string
+        }
+        Insert: {
+          archetype_slug?: string | null
+          aspect_ratio?: string
+          body_copy?: string | null
+          campaign_id: string
+          composition_brief?: string | null
+          created_at?: string
+          cta_label?: string | null
+          cta_url?: string | null
+          generation_status?: string
+          headline_copy?: string | null
+          id?: string
+          image_url?: string | null
+          last_error?: string | null
+          position: number
+          prompt_used?: string | null
+          updated_at?: string
+        }
+        Update: {
+          archetype_slug?: string | null
+          aspect_ratio?: string
+          body_copy?: string | null
+          campaign_id?: string
+          composition_brief?: string | null
+          created_at?: string
+          cta_label?: string | null
+          cta_url?: string | null
+          generation_status?: string
+          headline_copy?: string | null
+          id?: string
+          image_url?: string | null
+          last_error?: string | null
+          position?: number
+          prompt_used?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_slices_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaigns: {
         Row: {
           brand_id: string
@@ -407,6 +472,7 @@ export type Database = {
           cached_flow_preview: Json | null
           campaign_mode: string
           created_at: string
+          design_system: Json | null
           exclude_list_ids: string[] | null
           exclude_segment_ids: string[] | null
           extra_copy: string | null
@@ -431,6 +497,7 @@ export type Database = {
           reference_strength: number | null
           send_list_ids: string[] | null
           send_segment_ids: string[] | null
+          slice_plan: Json | null
           speed_mode: string | null
           status: string
           subject_line: string | null
@@ -445,6 +512,7 @@ export type Database = {
           cached_flow_preview?: Json | null
           campaign_mode?: string
           created_at?: string
+          design_system?: Json | null
           exclude_list_ids?: string[] | null
           exclude_segment_ids?: string[] | null
           extra_copy?: string | null
@@ -469,6 +537,7 @@ export type Database = {
           reference_strength?: number | null
           send_list_ids?: string[] | null
           send_segment_ids?: string[] | null
+          slice_plan?: Json | null
           speed_mode?: string | null
           status?: string
           subject_line?: string | null
@@ -483,6 +552,7 @@ export type Database = {
           cached_flow_preview?: Json | null
           campaign_mode?: string
           created_at?: string
+          design_system?: Json | null
           exclude_list_ids?: string[] | null
           exclude_segment_ids?: string[] | null
           extra_copy?: string | null
@@ -507,6 +577,7 @@ export type Database = {
           reference_strength?: number | null
           send_list_ids?: string[] | null
           send_segment_ids?: string[] | null
+          slice_plan?: Json | null
           speed_mode?: string | null
           status?: string
           subject_line?: string | null
@@ -686,6 +757,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      email_slice_archetypes: {
+        Row: {
+          category: string
+          composition_template: string
+          created_at: string
+          default_aspect_ratio: string
+          description: string | null
+          id: string
+          label: string
+          role_hint: string | null
+          slug: string
+          sort_order: number
+          usually_has_cta: boolean
+        }
+        Insert: {
+          category: string
+          composition_template: string
+          created_at?: string
+          default_aspect_ratio?: string
+          description?: string | null
+          id?: string
+          label: string
+          role_hint?: string | null
+          slug: string
+          sort_order?: number
+          usually_has_cta?: boolean
+        }
+        Update: {
+          category?: string
+          composition_template?: string
+          created_at?: string
+          default_aspect_ratio?: string
+          description?: string | null
+          id?: string
+          label?: string
+          role_hint?: string | null
+          slug?: string
+          sort_order?: number
+          usually_has_cta?: boolean
+        }
+        Relationships: []
       }
       flow_edges: {
         Row: {
