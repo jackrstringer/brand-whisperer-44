@@ -417,6 +417,7 @@ export type Database = {
           last_error: string | null
           position: number
           prompt_used: string | null
+          reference_asset_urls: string[] | null
           updated_at: string
         }
         Insert: {
@@ -435,6 +436,7 @@ export type Database = {
           last_error?: string | null
           position: number
           prompt_used?: string | null
+          reference_asset_urls?: string[] | null
           updated_at?: string
         }
         Update: {
@@ -453,6 +455,7 @@ export type Database = {
           last_error?: string | null
           position?: number
           prompt_used?: string | null
+          reference_asset_urls?: string[] | null
           updated_at?: string
         }
         Relationships: [
