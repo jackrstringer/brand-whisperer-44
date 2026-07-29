@@ -1222,6 +1222,45 @@ RULES:
   // === FLOW MODE: Override system prompt and user content ===
   let systemPrompt = referenceMode ? REFERENCE_MODE_SYSTEM : UNIVERSAL_EMAIL_RULES;
 
+  // === BOLD HTML MODE (HTML → Image Slices export) ===
+  // When outputFormat is "html_to_image", the final email is rasterized and
+  // shipped as image blocks in Klaviyo, so we can drop the conservative email
+  // constraints and design boldly. No client-rendering safety needed.
+  if (isBoldHtmlMode && campaignMode !== "flow") {
+    systemPrompt += `\n\n═══ BOLD DESIGN MODE (HTML → IMAGE SLICES) ═══
+This email will be RASTERIZED to PNG and shipped as image blocks in Klaviyo.
+Client email renderer compatibility DOES NOT MATTER. Design like a modern
+landing page or magazine spread — you are freed from Outlook/Gmail limitations.
+
+YOU MAY (and should) use:
+- CSS gradients, radial gradients, mesh backgrounds, blur, box-shadow, filter
+- Custom Google Fonts via @import (Inter, Playfair, Space Grotesk, etc.)
+- Text OVER images with absolute positioning and z-index
+- Full-bleed hero imagery and edge-to-edge color blocks
+- Oversized display type (60px+), tight letter-spacing, mixed weights, italics
+- CSS flexbox and grid, transforms, border-radius, opacity, mix-blend-mode
+- SVG shapes, decorative dividers, custom bullets, badges, ribbons
+- Non-standard layouts: broken grids, overlapping elements, offset cards
+
+STILL REQUIRED:
+- Wrapper width 600px max, mobile-first (design assumes 390px viewport)
+- Every clickable region MUST be a real <a href="..."> with the actual URL —
+  the slicer reads hrefs from the HTML and re-binds them to image blocks
+- Give every distinct CTA/product/link its own <a> tag with a stable href
+- When you want side-by-side content (2/3/4 columns), use a table row of equal
+  width <td>s (the slicer detects these and preserves them as Klaviyo columns
+  with no mobile stacking). All columns in one row must be equal width.
+- Use real product photos from the brand asset library — never hallucinate
+  packaging or product imagery
+
+DO NOT include: preheader hacks, MSO conditionals, VML, dark-mode media
+queries — none of it matters after rasterization.
+
+Think Apple, Aesop, Glossier, Off-White — bold, art-directed, editorial. This
+is your chance to make emails that don't look like emails.
+═══ END BOLD DESIGN MODE ═══`;
+  }
+
   if (campaignMode === "flow" && flowConfig) {
     systemPrompt = `You are an expert Klaviyo email developer building production-ready flow email templates. You generate complete HTML with correct Liquid templating syntax. Rules:
 - Every dynamic value MUST use Liquid variables from the provided event JSON
