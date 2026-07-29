@@ -2887,7 +2887,8 @@ export default function CampaignEditor() {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
   }
 
-  const isImageSliceMode = campaignMode === "campaign" && generationMode === "image_slices";
+  const isImageSliceMode = campaignMode === "campaign" && (generationMode === "image_slices" || generationMode === "block_export");
+  const isBlockExportMode = campaignMode === "campaign" && generationMode === "block_export";
   const hasImageSlices = slices.length > 0;
   const isDraft = isImageSliceMode ? !hasImageSlices || campaign?.status === "draft" : !campaign?.html || campaign?.status === "draft";
   const isGenerating = campaign?.status === "generating" || generating;
