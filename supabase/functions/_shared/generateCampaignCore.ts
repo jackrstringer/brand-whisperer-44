@@ -1720,7 +1720,7 @@ UNIVERSAL RULES FOR EVENT DATA:
     const retryResp = await callAnthropic({
       model: GENERATION_MODEL,
       max_tokens: 32000,
-      system: UNIVERSAL_EMAIL_RULES,
+      system: isBoldHtmlMode ? systemPrompt : UNIVERSAL_EMAIL_RULES,
       messages: [{ role: "user", content: retryContent }],
     }, ANTHROPIC_API_KEY);
     if (retryResp.ok) {
@@ -1731,7 +1731,10 @@ UNIVERSAL RULES FOR EVENT DATA:
   }
 
   // === PASS 2: QA Audit ===
-  if (isCompleteHtml(html)) {
+  // Skip QA + finalization in bold HTML mode — those enforce safe-email conventions
+  // (table layouts, no stacking, brand card radius, etc.) that actively destroy the
+  // editorial/landing-page look this mode is designed to produce.
+  if (isCompleteHtml(html) && !isBoldHtmlMode) {
     const qaStart = Date.now();
     try {
       const allQaItems = [...brandQaChecklist, ...globalQaChecklist];
@@ -1820,12 +1823,16 @@ UNIVERSAL RULES FOR EVENT DATA:
   }
 
   // Unified finalization
-  const finalizeStart = Date.now();
-  html = finalizeCampaignHtml(html);
-  await logGenEvent(supabase, campaignId, "finalize_html", {
-    status: "completed", run_id: runId, event_key: `v${variantIdx}_finalize`,
-    duration_ms: Date.now() - finalizeStart, result: { html_length: html.length },
-  });
+  if (!isBoldHtmlMode) {
+    const finalizeStart = Date.now();
+    html = finalizeCampaignHtml(html);
+    await logGenEvent(supabase, campaignId, "finalize_html", {
+      status: "completed", run_id: runId, event_key: `v${variantIdx}_finalize`,
+      duration_ms: Date.now() - finalizeStart, result: { html_length: html.length },
+    });
+  } else {
+    console.log("[generateCampaignCore] Bold HTML mode — skipping QA + finalizeCampaignHtml to preserve editorial design.");
+  }
 
   // === KLAVIYO TEMPLATE VALIDATION (flow emails only) ===
   if (campaignMode === "flow" && brandId) {
