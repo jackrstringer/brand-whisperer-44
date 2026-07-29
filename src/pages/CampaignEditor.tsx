@@ -177,7 +177,7 @@ export default function CampaignEditor() {
   const [previewText, setPreviewText] = useState("");
   const [starredCampaign, setStarredCampaign] = useState(false);
   const [showReferenceDialog, setShowReferenceDialog] = useState(false);
-  const [generationMode, setGenerationMode] = useState<"html" | "image_slices" | "block_export">("html");
+  const [generationMode, setGenerationMode] = useState<"html" | "image_slices" | "block_export" | "html_to_image">("html");
   const [slices, setSlices] = useState<CampaignSlice[]>([]);
   const [selectedSliceId, setSelectedSliceId] = useState<string | null>(null);
   const [pushingKlaviyo, setPushingKlaviyo] = useState(false);
