@@ -476,7 +476,7 @@ export default function CampaignEditor() {
             preRenderFlowHtml(campaign.html, (campaign as any).flow_config as FlowConfig);
           }
         }
-        if ((campaign as any).generation_mode === "image_slices" || (campaign as any).generation_mode === "block_export" || (campaign as any).generation_mode === "html_to_image") {
+        if ((campaign as any).generation_mode === "image_slices" || (campaign as any).generation_mode === "block_export") {
           await loadImageSlices();
         }
       }
@@ -524,7 +524,7 @@ export default function CampaignEditor() {
   }, [brandId, campaignId, getMatchingVariantIndex, loadImageSlices, preRenderFlowHtml]);
 
   useEffect(() => {
-    if (generationMode !== "image_slices" && generationMode !== "block_export" && generationMode !== "html_to_image") return;
+    if (generationMode !== "image_slices" && generationMode !== "block_export") return;
     const anyActive = campaign?.status === "generating"
       || slices.some((slice) => slice.generation_status === "pending" || slice.generation_status === "generating");
     if (!anyActive) return;
@@ -1198,14 +1198,10 @@ export default function CampaignEditor() {
       }
 
       const pollInterval = window.setInterval(async () => {
-        const [{ data }, nextSlices] = await Promise.all([
-          supabase.from("campaigns").select("*").eq("id", campaignId).single(),
-          loadImageSlices(),
-        ]);
+        const { data } = await supabase.from("campaigns").select("*").eq("id", campaignId).single();
         if (!data) return;
-        // Slicing pipeline completes once slices are inserted with status=ready
-        // and at least one slice row exists.
-        if (data.status === "ready" && nextSlices.length > 0) {
+        // Bold HTML mode: just wait for the HTML to finish rendering. No slicing.
+        if (data.status === "ready") {
           window.clearInterval(pollInterval);
           generationCompletedRef.current = true;
           setCampaign(data as Campaign);
@@ -1214,7 +1210,7 @@ export default function CampaignEditor() {
           setGenStartTime(null);
           setMessages((prev) => [
             ...prev,
-            { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Bold HTML sliced into ${nextSlices.length} image blocks in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
+            { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Bold HTML design generated in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
           ]);
         } else if (data.status === "error") {
           window.clearInterval(pollInterval);
@@ -1222,7 +1218,7 @@ export default function CampaignEditor() {
           setGenerating(false);
           setGenStartTime(null);
           const reason = (data.last_error || "Unknown backend error").slice(0, 1200);
-          toast.error("Bold HTML → image slicing failed", {
+          toast.error("Bold HTML generation failed", {
             description: reason,
             duration: 16000,
           });
@@ -2986,7 +2982,7 @@ export default function CampaignEditor() {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
   }
 
-  const isImageSliceMode = campaignMode === "campaign" && (generationMode === "image_slices" || generationMode === "block_export" || generationMode === "html_to_image");
+  const isImageSliceMode = campaignMode === "campaign" && (generationMode === "image_slices" || generationMode === "block_export");
   const isBlockExportMode = campaignMode === "campaign" && generationMode === "block_export";
   const hasImageSlices = slices.length > 0;
   const isDraft = isImageSliceMode ? !hasImageSlices || campaign?.status === "draft" : !campaign?.html || campaign?.status === "draft";
@@ -5605,12 +5601,12 @@ export default function CampaignEditor() {
                     {generating
                       ? generationMode === "image_slices" ? "Generating Image Blocks..."
                         : generationMode === "block_export" ? "Generating Blocks..."
-                        : generationMode === "html_to_image" ? "Designing HTML & Slicing..."
+                        : generationMode === "html_to_image" ? "Designing bold HTML..."
                         : "Generating 3 Variants..."
                       : campaignMode === "flow" ? "Generate Flow Email"
                         : generationMode === "image_slices" ? "Generate Image Blocks"
                         : generationMode === "block_export" ? "Generate Blocks"
-                        : generationMode === "html_to_image" ? "Generate Bold HTML → Blocks"
+                        : generationMode === "html_to_image" ? "Generate Bold HTML"
                         : "Generate Campaign"}
                   </Button>
                 </div>
