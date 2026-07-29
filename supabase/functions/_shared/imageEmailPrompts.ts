@@ -140,7 +140,16 @@ export const PLANNER_OUTPUT_INSTRUCTIONS = `Return a single JSON object with thi
     "mockup_style": "<e.g. 'editorial magazine spread', 'candy-colored 3D render', 'photorealistic lifestyle', 'collage cutout'>",
     "background_treatment": "<solid color / gradient / textured / photographic — describe specifically>",
     "brand_voice": "<one-line copywriting tone>",
-    "slice_shape_language": "<how sections divide: wavy cutouts, hard geometric bands, floating cards, etc.>"
+    "slice_shape_language": "<how sections divide: wavy cutouts, hard geometric bands, floating cards, etc.>",
+    "identity_locked": {
+      "cta_shape": "<one of: pill / rounded-rect / hard-rect / underline-only>",
+      "cta_radius_px": <integer 0-48>,
+      "cta_case": "<one of: TITLE / UPPERCASE / sentence>",
+      "logo_placement": "<one of: top-center / top-left>",
+      "grid_columns": <1 or 2>,
+      "corner_radius_px": <integer 0-48 — the radius used on all cards/frames>"
+    },
+    "voice_examples": ["<verbatim example headline in-voice>", "<verbatim example headline in-voice>", "<verbatim example body sentence in-voice>"]
   },
   "slices": [
     {
@@ -165,4 +174,8 @@ HARD PLANNING RULES:
 5. USE THE PROVIDED ASSETS: For every slice that depicts a product, the reference_asset_urls MUST include at least one exact URL from the BRAND ASSET LIBRARY, PRODUCT ASSETS, or PINNED ASSETS sections above. NEVER invent a product from scratch. If no product asset exists for a needed use, fall back to lifestyle or typographic slices.
 6. USE THE REFERENCE CAMPAIGNS as structural and stylistic inspiration for the design_system fields (palette, mood, shape language) — study them before locking the system.
 7. Every headline_copy, body_copy, cta_label field must be REAL, publishable marketing copy — not descriptions or placeholders. If the brief provides copy, use it verbatim. Otherwise write it fresh in the brand's voice.
-8. Use archetype slugs verbatim from the list provided.`;
+8. Use archetype slugs verbatim from the list provided.
+9. COPY CEILINGS (hard limits — trim if longer): headline_copy ≤ 60 chars, body_copy ≤ 180 chars, cta_label ≤ 22 chars. Long copy destroys mobile legibility in a baked image.
+10. IDENTITY LOCK: every slice with a CTA must use the identity_locked.cta_shape, cta_radius_px, and cta_case exactly. Every slice with a card/frame must use identity_locked.corner_radius_px. This is what makes the campaign feel like one designer's hand.
+11. VOICE LOCK: voice_examples define the copywriting register. Every headline_copy and body_copy must sound like it could sit next to those examples — same rhythm, same vocabulary level, same punctuation habits.
+12. CAMPAIGN COMPLETENESS CHECKLIST (verify before returning): (a) logo header exists as slice 1, (b) at least one hero opener, (c) at least one proof/benefit slice, (d) at least one CTA-bearing slice with cta_url set, (e) all product-depicting slices reference a real asset URL. If ANY check fails, revise the plan before returning.`;
