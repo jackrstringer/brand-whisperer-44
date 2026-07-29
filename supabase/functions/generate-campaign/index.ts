@@ -60,25 +60,8 @@ async function runGeneration(body: any, campaignId: string, genStartedAt: string
     });
     console.log(`[generate-campaign] Background generation complete for ${campaignId} in ${durationSecs}s`);
 
-    // === HTML → Image Slices mode: automatically slice the rendered HTML into
-    // image blocks so the user gets a finished template with no extra clicks.
-    if (body.outputFormat === "html_to_image") {
-      try {
-        console.log(`[generate-campaign] Triggering HTML slice pipeline for ${campaignId}`);
-        // Fire-and-forget: slice-html-to-images runs its own background task
-        // and updates the campaign row when complete.
-        fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/slice-html-to-images`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ campaignId }),
-        }).catch((e) => console.error("[generate-campaign] slice trigger failed:", e));
-      } catch (e) {
-        console.error("[generate-campaign] Failed to trigger slice pipeline:", e);
-      }
-    }
+    // Note: HTML → Image Slices auto-slicing intentionally disabled.
+    // Bold HTML mode now just renders the design; slicing is a manual step later.
   } catch (err: any) {
     const reason = (err?.message || String(err) || "Unknown generation error").slice(0, 1500);
     console.error("[generate-campaign] Background error:", err);
