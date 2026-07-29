@@ -5601,12 +5601,12 @@ export default function CampaignEditor() {
                     {generating
                       ? generationMode === "image_slices" ? "Generating Image Blocks..."
                         : generationMode === "block_export" ? "Generating Blocks..."
-                        : generationMode === "html_to_image" ? "Designing HTML & Slicing..."
+                        : generationMode === "html_to_image" ? "Designing bold HTML..."
                         : "Generating 3 Variants..."
                       : campaignMode === "flow" ? "Generate Flow Email"
                         : generationMode === "image_slices" ? "Generate Image Blocks"
                         : generationMode === "block_export" ? "Generate Blocks"
-                        : generationMode === "html_to_image" ? "Generate Bold HTML → Blocks"
+                        : generationMode === "html_to_image" ? "Generate Bold HTML"
                         : "Generate Campaign"}
                   </Button>
                 </div>
