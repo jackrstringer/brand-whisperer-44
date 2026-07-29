@@ -417,6 +417,8 @@ export type Database = {
           last_error: string | null
           position: number
           prompt_used: string | null
+          qa_finding: Json | null
+          qa_regenerated_at: string | null
           reference_asset_urls: string[] | null
           updated_at: string
         }
@@ -436,6 +438,8 @@ export type Database = {
           last_error?: string | null
           position: number
           prompt_used?: string | null
+          qa_finding?: Json | null
+          qa_regenerated_at?: string | null
           reference_asset_urls?: string[] | null
           updated_at?: string
         }
@@ -455,6 +459,8 @@ export type Database = {
           last_error?: string | null
           position?: number
           prompt_used?: string | null
+          qa_finding?: Json | null
+          qa_regenerated_at?: string | null
           reference_asset_urls?: string[] | null
           updated_at?: string
         }
@@ -470,6 +476,7 @@ export type Database = {
       }
       campaigns: {
         Row: {
+          brand_file: Json | null
           brand_id: string
           brief: string | null
           cached_flow_preview: Json | null
@@ -510,6 +517,7 @@ export type Database = {
           visual_qa_status: string | null
         }
         Insert: {
+          brand_file?: Json | null
           brand_id: string
           brief?: string | null
           cached_flow_preview?: Json | null
@@ -550,6 +558,7 @@ export type Database = {
           visual_qa_status?: string | null
         }
         Update: {
+          brand_file?: Json | null
           brand_id?: string
           brief?: string | null
           cached_flow_preview?: Json | null

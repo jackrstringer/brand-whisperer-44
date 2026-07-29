@@ -177,7 +177,7 @@ export default function CampaignEditor() {
   const [previewText, setPreviewText] = useState("");
   const [starredCampaign, setStarredCampaign] = useState(false);
   const [showReferenceDialog, setShowReferenceDialog] = useState(false);
-  const [generationMode, setGenerationMode] = useState<"html" | "image_slices">("html");
+  const [generationMode, setGenerationMode] = useState<"html" | "image_slices" | "block_export">("html");
   const [slices, setSlices] = useState<CampaignSlice[]>([]);
   const [selectedSliceId, setSelectedSliceId] = useState<string | null>(null);
   const [pushingKlaviyo, setPushingKlaviyo] = useState(false);
@@ -413,7 +413,10 @@ export default function CampaignEditor() {
         setSendListIds(Array.isArray((campaign as any).send_list_ids) ? (campaign as any).send_list_ids : []);
         setSendSegmentIds(Array.isArray((campaign as any).send_segment_ids) ? (campaign as any).send_segment_ids : []);
         setCampaignMode((campaign as any).campaign_mode === "flow" ? "flow" : "campaign");
-        setGenerationMode((campaign as any).generation_mode === "image_slices" ? "image_slices" : "html");
+        {
+          const gm = (campaign as any).generation_mode;
+          setGenerationMode(gm === "image_slices" ? "image_slices" : gm === "block_export" ? "block_export" : "html");
+        }
         if ((campaign as any).flow_config) setFlowConfig((campaign as any).flow_config as FlowConfig);
         if ((campaign as any).campaign_mode === "flow") setFlowDetailTab("flow");
         // If returning to a generating campaign, restore the timer from generation_started_at
@@ -468,7 +471,7 @@ export default function CampaignEditor() {
             preRenderFlowHtml(campaign.html, (campaign as any).flow_config as FlowConfig);
           }
         }
-        if ((campaign as any).generation_mode === "image_slices") {
+        if ((campaign as any).generation_mode === "image_slices" || (campaign as any).generation_mode === "block_export") {
           await loadImageSlices();
         }
       }
@@ -516,7 +519,7 @@ export default function CampaignEditor() {
   }, [brandId, campaignId, getMatchingVariantIndex, loadImageSlices, preRenderFlowHtml]);
 
   useEffect(() => {
-    if (generationMode !== "image_slices") return;
+    if (generationMode !== "image_slices" && generationMode !== "block_export") return;
     const anyActive = campaign?.status === "generating"
       || slices.some((slice) => slice.generation_status === "pending" || slice.generation_status === "generating");
     if (!anyActive) return;
@@ -1144,7 +1147,7 @@ export default function CampaignEditor() {
       flow_config: campaignMode === "flow" ? flowConfig : null,
     } as any).eq("id", campaignId);
 
-    if (campaignMode === "campaign" && generationMode === "image_slices") {
+    if (campaignMode === "campaign" && (generationMode === "image_slices" || generationMode === "block_export")) {
       try {
         const { error } = await supabase.functions.invoke("plan-image-email", {
           body: { campaignId, brief: effectiveBrief },
@@ -2884,7 +2887,8 @@ export default function CampaignEditor() {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
   }
 
-  const isImageSliceMode = campaignMode === "campaign" && generationMode === "image_slices";
+  const isImageSliceMode = campaignMode === "campaign" && (generationMode === "image_slices" || generationMode === "block_export");
+  const isBlockExportMode = campaignMode === "campaign" && generationMode === "block_export";
   const hasImageSlices = slices.length > 0;
   const isDraft = isImageSliceMode ? !hasImageSlices || campaign?.status === "draft" : !campaign?.html || campaign?.status === "draft";
   const isGenerating = campaign?.status === "generating" || generating;
@@ -2964,6 +2968,59 @@ export default function CampaignEditor() {
       toast.error(err.message || "Failed to push");
     } finally {
       setPushingKlaviyo(false);
+    }
+  };
+
+  const handleDownloadBlockZip = async () => {
+    const complete = slices.filter((s) => s.generation_status === "complete" && s.image_url);
+    if (complete.length === 0) {
+      toast.error("No completed blocks to export");
+      return;
+    }
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      const results = await Promise.all(complete.map(async (s, i) => {
+        const res = await fetch(s.image_url as string);
+        if (!res.ok) throw new Error(`Fetch failed for slice ${s.position}`);
+        const buf = await res.arrayBuffer();
+        const name = `block-${String(i + 1).padStart(2, "0")}-${s.archetype_slug || "slice"}.png`;
+        return { name, buf };
+      }));
+      results.forEach((r) => zip.file(r.name, r.buf));
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${(campaign?.name || "campaign").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-blocks.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Downloaded ${results.length} blocks`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to download blocks");
+    }
+  };
+
+  const [qaRunning, setQaRunning] = useState(false);
+  const handleRunImageQa = async () => {
+    if (!campaignId) return;
+    setQaRunning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("qa-image-campaign", {
+        body: { campaignId, autoApply: true },
+      });
+      if (error) throw error;
+      const rubric = data as any;
+      const score = rubric?.overall_score;
+      toast.success(`Visual QA complete — score ${score}/100`, {
+        description: rubric?.verdict || "",
+        duration: 8000,
+      });
+      await loadImageSlices();
+    } catch (err: any) {
+      toast.error(err.message || "QA failed");
+    } finally {
+      setQaRunning(false);
     }
   };
 
@@ -4520,6 +4577,28 @@ export default function CampaignEditor() {
           {isImageSliceMode && completeSliceCount > 0 ? (
             <>
               <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRunImageQa}
+                disabled={qaRunning || completeSliceCount < slices.length}
+                className="active:scale-[0.98] transition-all"
+                title="Run whole-campaign visual QA with one auto-apply fix"
+              >
+                {qaRunning ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <ClipboardCheck className="w-3 h-3 mr-1" />}
+                Visual QA
+              </Button>
+              {isBlockExportMode ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadBlockZip}
+                  className="active:scale-[0.98] transition-all"
+                >
+                  <Download className="w-3 h-3 mr-1" />
+                  Download Blocks (ZIP)
+                </Button>
+              ) : (
+              <Button
                 variant="outline"
                 size="sm"
                 onClick={handlePushImageEmail}
@@ -4529,7 +4608,8 @@ export default function CampaignEditor() {
                 {pushingKlaviyo ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Send className="w-3 h-3 mr-1" />}
                 Push Template
               </Button>
-              {(campaign as any)?.klaviyo_template_id && (
+              )}
+              {!isBlockExportMode && (campaign as any)?.klaviyo_template_id && (
                 <a
                   href={`https://www.klaviyo.com/template/${(campaign as any).klaviyo_template_id}/edit`}
                   target="_blank"
@@ -4983,6 +5063,42 @@ export default function CampaignEditor() {
                 <Skeleton className="h-10 w-1/3" />
               </div>
             ) : isImageSliceMode && hasImageSlices ? (
+              isBlockExportMode ? (
+                <div className="py-8 px-6">
+                  <div className="max-w-[1100px] mx-auto grid grid-cols-2 lg:grid-cols-3 gap-4">
+                    {slices.map((slice) => (
+                      <div
+                        key={slice.id}
+                        className={`bg-background border rounded-lg overflow-hidden cursor-pointer transition-all ${slice.id === selectedSliceId ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-muted-foreground/40"}`}
+                        onClick={() => setSelectedSliceId(slice.id)}
+                      >
+                        <SlicePreview
+                          slice={slice}
+                          selected={slice.id === selectedSliceId}
+                          onSelect={() => setSelectedSliceId(slice.id)}
+                          onRegenerate={() => handleRegenerateSlice(slice.id)}
+                          onDelete={() => handleDeleteSlice(slice.id)}
+                        />
+                        <div className="px-3 py-2 border-t border-border flex items-center justify-between">
+                          <span className="text-[11px] text-muted-foreground truncate">
+                            {slice.archetype_slug || `Block ${slice.position}`}
+                          </span>
+                          {slice.image_url && (
+                            <a
+                              href={slice.image_url}
+                              download={`block-${String(slice.position).padStart(2, "0")}.png`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-[11px] text-primary hover:underline inline-flex items-center gap-1"
+                            >
+                              <Download className="w-3 h-3" /> PNG
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
               <div className="flex flex-col items-center py-10 px-6">
                 <div className="w-[600px] max-w-full bg-background shadow-xl rounded overflow-hidden border border-border">
                   {slices.map((slice) => (
@@ -4997,6 +5113,7 @@ export default function CampaignEditor() {
                   ))}
                 </div>
               </div>
+              )
             ) : campaign?.html ? (
               <div className={`flex flex-col ${showReferenceDialog && selectedReferences.length > 0 ? 'p-1 pl-0.5 pt-4' : 'p-8'}`}>
                 <div className={`flex ${showReferenceDialog && selectedReferences.length > 0 ? 'justify-start' : 'justify-center'}`}>
@@ -5116,6 +5233,17 @@ export default function CampaignEditor() {
                           }`}
                         >
                           Image Blocks
+                        </button>
+                        <button
+                          onClick={() => setGenerationMode("block_export")}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            generationMode === "block_export"
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                          title="Standalone image blocks — grid layout, ZIP export for Figma/Klaviyo drag-and-drop"
+                        >
+                          Block Export
                         </button>
                       </div>
                     </div>
