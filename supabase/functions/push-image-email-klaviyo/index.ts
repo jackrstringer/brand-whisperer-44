@@ -29,18 +29,28 @@ async function klaviyoCall(path: string, apiKey: string, method: string, body: a
 }
 
 function buildTemplateDefinition(slices: any[], name: string) {
-  const blocks = slices.map((s) => ({
+function buildTemplateDefinition(slices: any[], name: string) {
+  // Group slices by row_index (falls back to position for legacy image_slices mode
+  // that pre-dates the row/column columns).
+  const rowsMap = new Map<number, any[]>();
+  for (const s of slices) {
+    const rowKey = typeof s.row_index === "number" ? s.row_index : s.position;
+    if (!rowsMap.has(rowKey)) rowsMap.set(rowKey, []);
+    rowsMap.get(rowKey)!.push(s);
+  }
+  const orderedRowKeys = Array.from(rowsMap.keys()).sort((a, b) => a - b);
+
+  const buildImageBlock = (s: any) => ({
     content_type: "block",
     type: "image",
     data: {
       properties: {
-        alt_text: s.headline_copy || name,
+        alt_text: s.region_label || s.headline_copy || name,
         href: s.cta_url || "",
         src: s.image_url,
         dynamic: false,
       },
       styles: {
-        width: "600px",
         block_padding_top: "0px",
         block_padding_bottom: "0px",
         block_padding_left: "0px",
@@ -48,7 +58,43 @@ function buildTemplateDefinition(slices: any[], name: string) {
       },
       display_options: {},
     },
-  }));
+  });
+
+  // Klaviyo column layouts. Multi-column rows use equal-width layouts and
+  // disable mobile stacking so the horizontal split survives on mobile.
+  const COLUMN_LAYOUT: Record<number, string> = {
+    1: "1-column-full-width",
+    2: "2-columns-equal",
+    3: "3-columns-equal",
+    4: "4-columns-equal",
+  };
+
+  const templateRows = orderedRowKeys.map((rk) => {
+    const rowSlices = rowsMap.get(rk)!.sort((a, b) => (a.column_index ?? 0) - (b.column_index ?? 0));
+    const cols = Math.min(4, Math.max(1, rowSlices[0]?.columns_in_row || rowSlices.length || 1));
+    const layout = COLUMN_LAYOUT[cols] || "1-column-full-width";
+
+    if (cols === 1) {
+      return {
+        data: { styles: { column_layout: layout } },
+        columns: [{ data: {}, blocks: rowSlices.map(buildImageBlock) }],
+      };
+    }
+
+    // Multi-column row: one image block per column, no mobile stacking.
+    return {
+      data: {
+        styles: {
+          column_layout: layout,
+          stack_on_mobile: false,
+        },
+      },
+      columns: rowSlices.slice(0, cols).map((s) => ({
+        data: {},
+        blocks: [buildImageBlock(s)],
+      })),
+    };
+  });
 
   return {
     body: {
@@ -58,10 +104,7 @@ function buildTemplateDefinition(slices: any[], name: string) {
         content_type: "section",
         type: "section",
         data: { properties: {}, display_options: {}, styles: {} },
-        rows: [{
-          data: { styles: { column_layout: "1-column-full-width" } },
-          columns: [{ data: {}, blocks }],
-        }],
+        rows: templateRows,
       }],
     },
     styles: [],

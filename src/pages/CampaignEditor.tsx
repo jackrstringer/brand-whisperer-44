@@ -177,7 +177,7 @@ export default function CampaignEditor() {
   const [previewText, setPreviewText] = useState("");
   const [starredCampaign, setStarredCampaign] = useState(false);
   const [showReferenceDialog, setShowReferenceDialog] = useState(false);
-  const [generationMode, setGenerationMode] = useState<"html" | "image_slices" | "block_export">("html");
+  const [generationMode, setGenerationMode] = useState<"html" | "image_slices" | "block_export" | "html_to_image">("html");
   const [slices, setSlices] = useState<CampaignSlice[]>([]);
   const [selectedSliceId, setSelectedSliceId] = useState<string | null>(null);
   const [pushingKlaviyo, setPushingKlaviyo] = useState(false);
@@ -415,7 +415,12 @@ export default function CampaignEditor() {
         setCampaignMode((campaign as any).campaign_mode === "flow" ? "flow" : "campaign");
         {
           const gm = (campaign as any).generation_mode;
-          setGenerationMode(gm === "image_slices" ? "image_slices" : gm === "block_export" ? "block_export" : "html");
+          setGenerationMode(
+            gm === "image_slices" ? "image_slices"
+            : gm === "block_export" ? "block_export"
+            : gm === "html_to_image" ? "html_to_image"
+            : "html"
+          );
         }
         if ((campaign as any).flow_config) setFlowConfig((campaign as any).flow_config as FlowConfig);
         if ((campaign as any).campaign_mode === "flow") setFlowDetailTab("flow");
@@ -471,7 +476,7 @@ export default function CampaignEditor() {
             preRenderFlowHtml(campaign.html, (campaign as any).flow_config as FlowConfig);
           }
         }
-        if ((campaign as any).generation_mode === "image_slices" || (campaign as any).generation_mode === "block_export") {
+        if ((campaign as any).generation_mode === "image_slices" || (campaign as any).generation_mode === "block_export" || (campaign as any).generation_mode === "html_to_image") {
           await loadImageSlices();
         }
       }
@@ -519,7 +524,7 @@ export default function CampaignEditor() {
   }, [brandId, campaignId, getMatchingVariantIndex, loadImageSlices, preRenderFlowHtml]);
 
   useEffect(() => {
-    if (generationMode !== "image_slices" && generationMode !== "block_export") return;
+    if (generationMode !== "image_slices" && generationMode !== "block_export" && generationMode !== "html_to_image") return;
     const anyActive = campaign?.status === "generating"
       || slices.some((slice) => slice.generation_status === "pending" || slice.generation_status === "generating");
     if (!anyActive) return;
@@ -1146,6 +1151,99 @@ export default function CampaignEditor() {
       generation_mode: campaignMode === "campaign" ? generationMode : "standard",
       flow_config: campaignMode === "flow" ? flowConfig : null,
     } as any).eq("id", campaignId);
+
+    // HTML → Image Slices: run the standard single-variant generator with the
+    // bold-design prompt track, then poll for the slice-html-to-images pipeline
+    // to populate campaign_slices.
+    if (campaignMode === "campaign" && generationMode === "html_to_image") {
+      const genUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-campaign`;
+      try {
+        const resp = await fetch(genUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          },
+          body: JSON.stringify({
+            brandId, campaignId, brief: effectiveBrief, goal: effectiveGoal, copy: extraCopy || undefined, speedMode,
+            productIds: selectedProductIds.length > 0 ? selectedProductIds : undefined,
+            pinnedAssetUrls: allPinned.length > 0 ? allPinned : undefined,
+            matchProductColors: matchProductColors || undefined,
+            designNotes: designNotes.trim() || undefined,
+            shopifyProducts: selectedShopifyProducts.length > 0 ? selectedShopifyProducts : undefined,
+            reference: selectedReferences.length > 0 ? {
+              type: selectedReferences[0].type,
+              id: selectedReferences[0].id,
+              image_urls: selectedReferences[0].image_urls,
+              strength: refDesignMode === "dupe" ? 10 : 7,
+              mode: refDesignMode,
+            } : undefined,
+            outputFormat: "html_to_image",
+          }),
+        });
+        if (!resp.ok && resp.status !== 202) {
+          const payload = await resp.json().catch(() => null);
+          throw new Error(payload?.error || `Generation failed: ${resp.status}`);
+        }
+      } catch (err: any) {
+        console.error("[html-to-image] Error:", err);
+        toast.error("Failed to start bold HTML generation", {
+          description: err?.message || "Unknown backend error",
+          duration: 12000,
+        });
+        setGenerating(false);
+        setGenStartTime(null);
+        return;
+      }
+
+      const pollInterval = window.setInterval(async () => {
+        const [{ data }, nextSlices] = await Promise.all([
+          supabase.from("campaigns").select("*").eq("id", campaignId).single(),
+          loadImageSlices(),
+        ]);
+        if (!data) return;
+        // Slicing pipeline completes once slices are inserted with status=ready
+        // and at least one slice row exists.
+        if (data.status === "ready" && nextSlices.length > 0) {
+          window.clearInterval(pollInterval);
+          generationCompletedRef.current = true;
+          setCampaign(data as Campaign);
+          setGenerating(false);
+          const elapsed = genStartTime ? Math.floor((Date.now() - genStartTime) / 1000) : 0;
+          setGenStartTime(null);
+          setMessages((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Bold HTML sliced into ${nextSlices.length} image blocks in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
+          ]);
+        } else if (data.status === "error") {
+          window.clearInterval(pollInterval);
+          setCampaign(data as Campaign);
+          setGenerating(false);
+          setGenStartTime(null);
+          const reason = (data.last_error || "Unknown backend error").slice(0, 1200);
+          toast.error("Bold HTML → image slicing failed", {
+            description: reason,
+            duration: 16000,
+          });
+          setMessages((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Generation failed: ${reason}`, created_at: new Date().toISOString() },
+          ]);
+        }
+      }, 4000);
+
+      window.setTimeout(() => {
+        if (!generationCompletedRef.current) {
+          window.clearInterval(pollInterval);
+          setGenerating(false);
+          setGenStartTime(null);
+          setCampaign((c) => c ? { ...c, status: "draft" } : c);
+          toast.error("Bold HTML → blocks timed out. Please try again.");
+        }
+      }, 360000);
+      return;
+    }
 
     if (campaignMode === "campaign" && (generationMode === "image_slices" || generationMode === "block_export")) {
       try {
@@ -2888,7 +2986,7 @@ export default function CampaignEditor() {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
   }
 
-  const isImageSliceMode = campaignMode === "campaign" && (generationMode === "image_slices" || generationMode === "block_export");
+  const isImageSliceMode = campaignMode === "campaign" && (generationMode === "image_slices" || generationMode === "block_export" || generationMode === "html_to_image");
   const isBlockExportMode = campaignMode === "campaign" && generationMode === "block_export";
   const hasImageSlices = slices.length > 0;
   const isDraft = isImageSliceMode ? !hasImageSlices || campaign?.status === "draft" : !campaign?.html || campaign?.status === "draft";
@@ -5101,16 +5199,48 @@ export default function CampaignEditor() {
               ) : (
               <div className="flex flex-col items-center py-10 px-6">
                 <div className="w-[600px] max-w-full bg-background shadow-xl rounded overflow-hidden border border-border">
-                  {slices.map((slice) => (
-                    <SlicePreview
-                      key={slice.id}
-                      slice={slice}
-                      selected={slice.id === selectedSliceId}
-                      onSelect={() => setSelectedSliceId(slice.id)}
-                      onRegenerate={() => handleRegenerateSlice(slice.id)}
-                      onDelete={() => handleDeleteSlice(slice.id)}
-                    />
-                  ))}
+                  {(() => {
+                    // Group slices by row_index so multi-column rows render side by side.
+                    // Legacy image_slices mode has no row_index — each slice becomes its own full-width row.
+                    const rowsMap = new Map<number, typeof slices>();
+                    slices.forEach((s, i) => {
+                      const key = typeof (s as any).row_index === "number" ? (s as any).row_index : i;
+                      if (!rowsMap.has(key)) rowsMap.set(key, [] as any);
+                      (rowsMap.get(key) as any[]).push(s);
+                    });
+                    const rowKeys = Array.from(rowsMap.keys()).sort((a, b) => a - b);
+                    return rowKeys.map((rk) => {
+                      const rowSlices = (rowsMap.get(rk) as any[]).sort((a, b) => (a.column_index ?? 0) - (b.column_index ?? 0));
+                      if (rowSlices.length === 1) {
+                        const slice = rowSlices[0];
+                        return (
+                          <SlicePreview
+                            key={slice.id}
+                            slice={slice}
+                            selected={slice.id === selectedSliceId}
+                            onSelect={() => setSelectedSliceId(slice.id)}
+                            onRegenerate={() => handleRegenerateSlice(slice.id)}
+                            onDelete={() => handleDeleteSlice(slice.id)}
+                          />
+                        );
+                      }
+                      return (
+                        <div key={`row-${rk}`} className="flex w-full">
+                          {rowSlices.map((slice) => (
+                            <div key={slice.id} className="flex-1 min-w-0">
+                              <SlicePreview
+                                slice={slice}
+                                selected={slice.id === selectedSliceId}
+                                onSelect={() => setSelectedSliceId(slice.id)}
+                                onRegenerate={() => handleRegenerateSlice(slice.id)}
+                                onDelete={() => handleDeleteSlice(slice.id)}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
               )
@@ -5244,6 +5374,17 @@ export default function CampaignEditor() {
                           title="Standalone image blocks — grid layout, ZIP export for Figma/Klaviyo drag-and-drop"
                         >
                           Block Export
+                        </button>
+                        <button
+                          onClick={() => setGenerationMode("html_to_image")}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            generationMode === "html_to_image"
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                          title="Bold HTML design → automatically sliced into image blocks (no email-client design limits)"
+                        >
+                          Bold HTML → Blocks
                         </button>
                       </div>
                     </div>
@@ -5462,8 +5603,15 @@ export default function CampaignEditor() {
                     className="w-full bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all"
                   >
                     {generating
-                      ? generationMode === "image_slices" ? "Generating Image Blocks..." : "Generating 3 Variants..."
-                      : campaignMode === "flow" ? "Generate Flow Email" : generationMode === "image_slices" ? "Generate Image Blocks" : "Generate Campaign"}
+                      ? generationMode === "image_slices" ? "Generating Image Blocks..."
+                        : generationMode === "block_export" ? "Generating Blocks..."
+                        : generationMode === "html_to_image" ? "Designing HTML & Slicing..."
+                        : "Generating 3 Variants..."
+                      : campaignMode === "flow" ? "Generate Flow Email"
+                        : generationMode === "image_slices" ? "Generate Image Blocks"
+                        : generationMode === "block_export" ? "Generate Blocks"
+                        : generationMode === "html_to_image" ? "Generate Bold HTML → Blocks"
+                        : "Generate Campaign"}
                   </Button>
                 </div>
               </div>

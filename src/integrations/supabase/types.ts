@@ -406,6 +406,8 @@ export type Database = {
           aspect_ratio: string
           body_copy: string | null
           campaign_id: string
+          column_index: number
+          columns_in_row: number
           composition_brief: string | null
           created_at: string
           cta_label: string | null
@@ -420,6 +422,8 @@ export type Database = {
           qa_finding: Json | null
           qa_regenerated_at: string | null
           reference_asset_urls: string[] | null
+          region_label: string | null
+          row_index: number | null
           updated_at: string
         }
         Insert: {
@@ -427,6 +431,8 @@ export type Database = {
           aspect_ratio?: string
           body_copy?: string | null
           campaign_id: string
+          column_index?: number
+          columns_in_row?: number
           composition_brief?: string | null
           created_at?: string
           cta_label?: string | null
@@ -441,6 +447,8 @@ export type Database = {
           qa_finding?: Json | null
           qa_regenerated_at?: string | null
           reference_asset_urls?: string[] | null
+          region_label?: string | null
+          row_index?: number | null
           updated_at?: string
         }
         Update: {
@@ -448,6 +456,8 @@ export type Database = {
           aspect_ratio?: string
           body_copy?: string | null
           campaign_id?: string
+          column_index?: number
+          columns_in_row?: number
           composition_brief?: string | null
           created_at?: string
           cta_label?: string | null
@@ -462,6 +472,8 @@ export type Database = {
           qa_finding?: Json | null
           qa_regenerated_at?: string | null
           reference_asset_urls?: string[] | null
+          region_label?: string | null
+          row_index?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -493,6 +505,7 @@ export type Database = {
           goal: string | null
           html: string | null
           html_history: Json | null
+          html_render_url: string | null
           id: string
           klaviyo_campaign_id: string | null
           klaviyo_template_id: string | null
@@ -508,6 +521,7 @@ export type Database = {
           send_list_ids: string[] | null
           send_segment_ids: string[] | null
           slice_plan: Json | null
+          slice_plan_html: Json | null
           speed_mode: string | null
           status: string
           subject_line: string | null
@@ -534,6 +548,7 @@ export type Database = {
           goal?: string | null
           html?: string | null
           html_history?: Json | null
+          html_render_url?: string | null
           id?: string
           klaviyo_campaign_id?: string | null
           klaviyo_template_id?: string | null
@@ -549,6 +564,7 @@ export type Database = {
           send_list_ids?: string[] | null
           send_segment_ids?: string[] | null
           slice_plan?: Json | null
+          slice_plan_html?: Json | null
           speed_mode?: string | null
           status?: string
           subject_line?: string | null
@@ -575,6 +591,7 @@ export type Database = {
           goal?: string | null
           html?: string | null
           html_history?: Json | null
+          html_render_url?: string | null
           id?: string
           klaviyo_campaign_id?: string | null
           klaviyo_template_id?: string | null
@@ -590,6 +607,7 @@ export type Database = {
           send_list_ids?: string[] | null
           send_segment_ids?: string[] | null
           slice_plan?: Json | null
+          slice_plan_html?: Json | null
           speed_mode?: string | null
           status?: string
           subject_line?: string | null
