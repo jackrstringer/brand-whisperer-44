@@ -1147,7 +1147,7 @@ export default function CampaignEditor() {
       flow_config: campaignMode === "flow" ? flowConfig : null,
     } as any).eq("id", campaignId);
 
-    if (campaignMode === "campaign" && generationMode === "image_slices") {
+    if (campaignMode === "campaign" && (generationMode === "image_slices" || generationMode === "block_export")) {
       try {
         const { error } = await supabase.functions.invoke("plan-image-email", {
           body: { campaignId, brief: effectiveBrief },
