@@ -2971,6 +2971,59 @@ export default function CampaignEditor() {
     }
   };
 
+  const handleDownloadBlockZip = async () => {
+    const complete = slices.filter((s) => s.generation_status === "complete" && s.image_url);
+    if (complete.length === 0) {
+      toast.error("No completed blocks to export");
+      return;
+    }
+    try {
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      const results = await Promise.all(complete.map(async (s, i) => {
+        const res = await fetch(s.image_url as string);
+        if (!res.ok) throw new Error(`Fetch failed for slice ${s.position}`);
+        const buf = await res.arrayBuffer();
+        const name = `block-${String(i + 1).padStart(2, "0")}-${s.archetype_slug || "slice"}.png`;
+        return { name, buf };
+      }));
+      results.forEach((r) => zip.file(r.name, r.buf));
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${(campaign?.name || "campaign").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-blocks.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Downloaded ${results.length} blocks`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to download blocks");
+    }
+  };
+
+  const [qaRunning, setQaRunning] = useState(false);
+  const handleRunImageQa = async () => {
+    if (!campaignId) return;
+    setQaRunning(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("qa-image-campaign", {
+        body: { campaignId, autoApply: true },
+      });
+      if (error) throw error;
+      const rubric = data as any;
+      const score = rubric?.overall_score;
+      toast.success(`Visual QA complete — score ${score}/100`, {
+        description: rubric?.verdict || "",
+        duration: 8000,
+      });
+      await loadImageSlices();
+    } catch (err: any) {
+      toast.error(err.message || "QA failed");
+    } finally {
+      setQaRunning(false);
+    }
+  };
+
   const zoomScale = 1;
   const renderedWidth = renderWidth;
   const renderedHeight = iframeContentHeight;
