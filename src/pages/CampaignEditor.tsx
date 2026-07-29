@@ -5121,6 +5121,17 @@ export default function CampaignEditor() {
                         >
                           Image Blocks
                         </button>
+                        <button
+                          onClick={() => setGenerationMode("block_export")}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            generationMode === "block_export"
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                          title="Standalone image blocks — grid layout, ZIP export for Figma/Klaviyo drag-and-drop"
+                        >
+                          Block Export
+                        </button>
                       </div>
                     </div>
                     {/* Import from ClickUp */}
