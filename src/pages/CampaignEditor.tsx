@@ -5199,16 +5199,48 @@ export default function CampaignEditor() {
               ) : (
               <div className="flex flex-col items-center py-10 px-6">
                 <div className="w-[600px] max-w-full bg-background shadow-xl rounded overflow-hidden border border-border">
-                  {slices.map((slice) => (
-                    <SlicePreview
-                      key={slice.id}
-                      slice={slice}
-                      selected={slice.id === selectedSliceId}
-                      onSelect={() => setSelectedSliceId(slice.id)}
-                      onRegenerate={() => handleRegenerateSlice(slice.id)}
-                      onDelete={() => handleDeleteSlice(slice.id)}
-                    />
-                  ))}
+                  {(() => {
+                    // Group slices by row_index so multi-column rows render side by side.
+                    // Legacy image_slices mode has no row_index — each slice becomes its own full-width row.
+                    const rowsMap = new Map<number, typeof slices>();
+                    slices.forEach((s, i) => {
+                      const key = typeof (s as any).row_index === "number" ? (s as any).row_index : i;
+                      if (!rowsMap.has(key)) rowsMap.set(key, [] as any);
+                      (rowsMap.get(key) as any[]).push(s);
+                    });
+                    const rowKeys = Array.from(rowsMap.keys()).sort((a, b) => a - b);
+                    return rowKeys.map((rk) => {
+                      const rowSlices = (rowsMap.get(rk) as any[]).sort((a, b) => (a.column_index ?? 0) - (b.column_index ?? 0));
+                      if (rowSlices.length === 1) {
+                        const slice = rowSlices[0];
+                        return (
+                          <SlicePreview
+                            key={slice.id}
+                            slice={slice}
+                            selected={slice.id === selectedSliceId}
+                            onSelect={() => setSelectedSliceId(slice.id)}
+                            onRegenerate={() => handleRegenerateSlice(slice.id)}
+                            onDelete={() => handleDeleteSlice(slice.id)}
+                          />
+                        );
+                      }
+                      return (
+                        <div key={`row-${rk}`} className="flex w-full">
+                          {rowSlices.map((slice) => (
+                            <div key={slice.id} className="flex-1 min-w-0">
+                              <SlicePreview
+                                slice={slice}
+                                selected={slice.id === selectedSliceId}
+                                onSelect={() => setSelectedSliceId(slice.id)}
+                                onRegenerate={() => handleRegenerateSlice(slice.id)}
+                                onDelete={() => handleDeleteSlice(slice.id)}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
               )
