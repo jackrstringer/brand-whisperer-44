@@ -415,7 +415,12 @@ export default function CampaignEditor() {
         setCampaignMode((campaign as any).campaign_mode === "flow" ? "flow" : "campaign");
         {
           const gm = (campaign as any).generation_mode;
-          setGenerationMode(gm === "image_slices" ? "image_slices" : gm === "block_export" ? "block_export" : "html");
+          setGenerationMode(
+            gm === "image_slices" ? "image_slices"
+            : gm === "block_export" ? "block_export"
+            : gm === "html_to_image" ? "html_to_image"
+            : "html"
+          );
         }
         if ((campaign as any).flow_config) setFlowConfig((campaign as any).flow_config as FlowConfig);
         if ((campaign as any).campaign_mode === "flow") setFlowDetailTab("flow");
