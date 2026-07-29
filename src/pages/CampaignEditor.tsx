@@ -5603,8 +5603,15 @@ export default function CampaignEditor() {
                     className="w-full bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] transition-all"
                   >
                     {generating
-                      ? generationMode === "image_slices" ? "Generating Image Blocks..." : "Generating 3 Variants..."
-                      : campaignMode === "flow" ? "Generate Flow Email" : generationMode === "image_slices" ? "Generate Image Blocks" : "Generate Campaign"}
+                      ? generationMode === "image_slices" ? "Generating Image Blocks..."
+                        : generationMode === "block_export" ? "Generating Blocks..."
+                        : generationMode === "html_to_image" ? "Designing HTML & Slicing..."
+                        : "Generating 3 Variants..."
+                      : campaignMode === "flow" ? "Generate Flow Email"
+                        : generationMode === "image_slices" ? "Generate Image Blocks"
+                        : generationMode === "block_export" ? "Generate Blocks"
+                        : generationMode === "html_to_image" ? "Generate Bold HTML → Blocks"
+                        : "Generate Campaign"}
                   </Button>
                 </div>
               </div>
