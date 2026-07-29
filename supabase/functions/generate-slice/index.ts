@@ -41,13 +41,26 @@ async function generateImageOpenAI(prompt: string, size: string, referenceUrls: 
     form.append("quality", "high");
     form.append("n", "1");
     let attached = 0;
-    for (const url of referenceUrls.slice(0, 6)) {
+    for (const url of referenceUrls.slice(0, 8)) {
       try {
         const imgRes = await fetch(url);
         if (!imgRes.ok) continue;
-        const blob = await imgRes.blob();
-        const name = url.split("/").pop()?.split("?")[0] || `ref-${attached}.png`;
-        form.append("image[]", blob, name);
+        const arrayBuf = await imgRes.arrayBuffer();
+        // Force PNG mime — OpenAI images/edits rejects unknown/generic types.
+        // Re-wrap the raw bytes in a Blob with an explicit image/png type
+        // (the actual PNG/JPEG detection is done server-side by header bytes).
+        const upstreamType = imgRes.headers.get("content-type") || "";
+        const mime = /jpe?g/i.test(upstreamType) ? "image/jpeg"
+          : /webp/i.test(upstreamType) ? "image/webp"
+          : "image/png";
+        const ext = mime === "image/jpeg" ? "jpg" : mime === "image/webp" ? "webp" : "png";
+        const blob = new Blob([arrayBuf], { type: mime });
+        const name = `ref-${attached}.${ext}`;
+        // OpenAI's images/edits accepts the field name `image` repeated
+        // for multiple reference images. `image[]` is NOT correct and gets
+        // ignored / rejected — this was the root cause of GPT-Image-2
+        // hallucinating packaging instead of using the attached assets.
+        form.append("image", blob, name);
         attached++;
       } catch (e) {
         console.warn("[generate-slice] failed to attach ref", url, e);
@@ -57,6 +70,7 @@ async function generateImageOpenAI(prompt: string, size: string, referenceUrls: 
       // Fall back to text-only generation if none of the refs could be fetched.
       return generateImageOpenAI(prompt, size, []);
     }
+    console.log(`[generate-slice] attached ${attached} reference images to gpt-image-2 edits call`);
     body = form;
   } else {
     headers["Content-Type"] = "application/json";
@@ -178,10 +192,12 @@ async function runGenerateSlice(sliceId: string, campaignId: string) {
     });
 
     const size = aspectRatioToImageSize(planItem.aspect_ratio);
-    const groundingUrls = [
-      ...(planItem.reference_asset_urls || []),
-      ...priorUrls,
-    ].filter((u) => typeof u === "string" && u.startsWith("http"));
+    // ONLY use real brand/product asset URLs as edit references. Prior slice
+    // URLs are used for prompt-level continuity guidance (via buildSlicePrompt)
+    // — feeding them back into images/edits makes the model remix earlier
+    // slices instead of reproducing the actual product photography.
+    const groundingUrls = (planItem.reference_asset_urls || [])
+      .filter((u) => typeof u === "string" && u.startsWith("http"));
 
     // Retry loop: attempt 1 uses the original brief; attempt 2 on moderation
     // failure fully rewrites the brief via Claude to strip lifestyle content
