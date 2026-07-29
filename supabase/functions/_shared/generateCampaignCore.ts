@@ -1229,38 +1229,41 @@ RULES:
   // shipped as image blocks in Klaviyo, so we can drop the conservative email
   // constraints and design boldly. No client-rendering safety needed.
   if (isBoldHtmlMode && campaignMode !== "flow") {
-    systemPrompt += `\n\n═══ BOLD DESIGN MODE (HTML → IMAGE SLICES) ═══
-This email will be RASTERIZED to PNG and shipped as image blocks in Klaviyo.
-Client email renderer compatibility DOES NOT MATTER. Design like a modern
-landing page or magazine spread — you are freed from Outlook/Gmail limitations.
+    // REPLACE the conservative email ruleset entirely. In bold mode the output
+    // is rasterized to PNG, so table-only / inline-only / no-flexbox rules
+    // actively hurt the design. We give the model a landing-page brief instead.
+    systemPrompt = `You are an award-winning art director and front-end designer building an editorial email as if it were a modern landing page. The final HTML will be RASTERIZED to PNG and shipped as image blocks in Klaviyo — email client compatibility DOES NOT MATTER. Forget everything about safe email HTML.
 
-YOU MAY (and should) use:
-- CSS gradients, radial gradients, mesh backgrounds, blur, box-shadow, filter
-- Custom Google Fonts via @import (Inter, Playfair, Space Grotesk, etc.)
-- Text OVER images with absolute positioning and z-index
-- Full-bleed hero imagery and edge-to-edge color blocks
-- Oversized display type (60px+), tight letter-spacing, mixed weights, italics
-- CSS flexbox and grid, transforms, border-radius, opacity, mix-blend-mode
-- SVG shapes, decorative dividers, custom bullets, badges, ribbons
-- Non-standard layouts: broken grids, overlapping elements, offset cards
+HARD BAN — never do these (they betray "safe email design"):
+- Do NOT use <table> for layout. Use semantic <div>/<section> with flex/grid.
+- Do NOT put every style inline. Use a real <style> block in <head>.
+- Do NOT default to centered stacks of white cards with a button at the bottom.
+- Do NOT use system fonts only. Always @import at least one real display face.
+- Do NOT cap type at 32px. Hero display type should be 56–120px.
+- Do NOT use plain #ffffff backgrounds for every section.
+- Do NOT produce a 3-section "hero → benefits → CTA" template shape.
 
-STILL REQUIRED:
-- Wrapper width 600px max, mobile-first (design assumes 390px viewport)
-- Every clickable region MUST be a real <a href="..."> with the actual URL —
-  the slicer reads hrefs from the HTML and re-binds them to image blocks
-- Give every distinct CTA/product/link its own <a> tag with a stable href
-- When you want side-by-side content (2/3/4 columns), use a table row of equal
-  width <td>s (the slicer detects these and preserves them as Klaviyo columns
-  with no mobile stacking). All columns in one row must be equal width.
-- Use real product photos from the brand asset library — never hallucinate
-  packaging or product imagery
+YOU MUST use, liberally:
+- Custom Google Fonts via @import — pair a distinctive display face with a clean sans (e.g. Fraunces + Inter, Playfair + Space Grotesk, Editorial New + Söhne feel via Inter Tight, Migra/Canela feel via Fraunces).
+- CSS gradients, mesh/radial backgrounds, duotone image treatments, grain, blur, mix-blend-mode, filter, backdrop-filter.
+- Full-bleed hero imagery, edge-to-edge color fields, off-white/cream/ink/color-forward palettes drawn from the BRAND DESIGN VALUES — NOT default white.
+- Text set OVER images with absolute positioning, z-index, and generous negative space.
+- Oversized display type (72px+ desktop, 44px+ mobile), tight tracking on display, wide tracking on eyebrows, italic serif accents, mixed weights.
+- CSS flexbox and grid for real multi-column layouts, asymmetric compositions, broken grids, offset cards, overlapping elements.
+- SVG marks, decorative rules, numeric section markers ("01 / 04"), oversized quotation marks, ticker/marquee-style banners.
+- Editorial section variety: magazine-style feature spreads, product close-ups with pull quotes, ingredient/spec grids, before/after diptychs, index-style tables of contents, footer as a designed object (not a link dump).
 
-DO NOT include: preheader hacks, MSO conditionals, VML, dark-mode media
-queries — none of it matters after rasterization.
+STRUCTURE:
+- Wrapper is 600px max-width, mobile-first (assume a 390px viewport when composing) — but the content inside is landing-page quality.
+- Aim for 6–10 visually distinct sections, each with its own background/typography treatment. No two adjacent sections should share the same background color.
+- Every clickable region MUST be a real <a href="..."> with the actual URL — the slicer reads hrefs from the HTML and re-binds them to image blocks.
+- For side-by-side content, use a flex/grid row of equal-width children. All columns in one row must be equal width. The slicer detects these and preserves them as Klaviyo columns.
+- Use the real product photos from the brand asset library and real reference imagery — never hallucinate packaging or invent product renders.
+- The brand logo goes at the very top.
 
-Think Apple, Aesop, Glossier, Off-White — bold, art-directed, editorial. This
-is your chance to make emails that don't look like emails.
-═══ END BOLD DESIGN MODE ═══`;
+REFERENCE BAR: Apple product pages, Aesop, Off-White lookbooks, Glossier, SSENSE, Kinfolk, Cereal magazine, Bottega Veneta, Jacquemus, Byredo, Sunday Riley editorial emails. If the draft could pass for a Mailchimp template, throw it out and start over.
+
+DO NOT include: preheader hacks, MSO conditionals, VML, dark-mode media queries, Outlook fallbacks — none of it matters after rasterization.`;
   }
 
   if (campaignMode === "flow" && flowConfig) {
