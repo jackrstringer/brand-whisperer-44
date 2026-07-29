@@ -712,6 +712,12 @@ function isCompleteHtml(h: string): boolean {
   return h.length > 200 && /<\/html\s*>/i.test(h) && /<\/body\s*>/i.test(h) && /<table/i.test(h);
 }
 
+// Bold HTML mode intentionally bans <table> layouts, so the standard completeness
+// check would always fail. Use a table-agnostic check for that mode.
+function isCompleteBoldHtml(h: string): boolean {
+  return h.length > 200 && /<\/html\s*>/i.test(h) && /<\/body\s*>/i.test(h);
+}
+
 export interface GenerateCampaignParams {
   brandId: string;
   campaignId: string;
@@ -1711,7 +1717,8 @@ UNIVERSAL RULES FOR EVENT DATA:
   });
 
   // If Pass 1 truncated, retry once with leaner instruction
-  if (!isCompleteHtml(html) || pass1StopReason === "max_tokens") {
+  const completeCheck = (h: string) => isBoldHtmlMode ? isCompleteBoldHtml(h) : isCompleteHtml(h);
+  if (!completeCheck(html) || pass1StopReason === "max_tokens") {
     console.warn("Pass 1 truncated (stop_reason:", pass1StopReason, "), retrying with concise prompt...");
     const retryContent = [{
       type: "text",
@@ -1726,7 +1733,7 @@ UNIVERSAL RULES FOR EVENT DATA:
     if (retryResp.ok) {
       const retryResult = await retryResp.json();
       const retryHtml = extractHtmlOnly(retryResult.content?.[0]?.text || "");
-      if (isCompleteHtml(retryHtml)) html = retryHtml;
+      if (completeCheck(retryHtml)) html = retryHtml;
     }
   }
 
@@ -1734,7 +1741,7 @@ UNIVERSAL RULES FOR EVENT DATA:
   // Skip QA + finalization in bold HTML mode — those enforce safe-email conventions
   // (table layouts, no stacking, brand card radius, etc.) that actively destroy the
   // editorial/landing-page look this mode is designed to produce.
-  if (isCompleteHtml(html) && !isBoldHtmlMode) {
+  if (completeCheck(html) && !isBoldHtmlMode) {
     const qaStart = Date.now();
     try {
       const allQaItems = [...brandQaChecklist, ...globalQaChecklist];
@@ -1818,7 +1825,7 @@ UNIVERSAL RULES FOR EVENT DATA:
   }
 
   // Final guard: never return incomplete HTML
-  if (!isCompleteHtml(html)) {
+  if (!completeCheck(html)) {
     throw new Error("Generated HTML was incomplete. Please try again.");
   }
 
