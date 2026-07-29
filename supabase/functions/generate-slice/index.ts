@@ -26,21 +26,55 @@ function base64ToBytes(b64: string): Uint8Array {
   return bytes;
 }
 
-/** Text-only generation via OpenAI gpt-image-2 (used for pure-typography slices). */
-async function generateImageOpenAI(prompt: string, size: string): Promise<string> {
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+/** Generation via OpenAI gpt-image-2. When reference URLs are provided we use
+ *  the /v1/images/edits endpoint so the model reproduces the attached product
+ *  photos / logos exactly instead of hallucinating packaging. */
+async function generateImageOpenAI(prompt: string, size: string, referenceUrls: string[] = []): Promise<string> {
+  const usesEdits = referenceUrls.length > 0;
+  let body: BodyInit;
+  const headers: Record<string, string> = { "Authorization": `Bearer ${LOVABLE_API_KEY}` };
+  if (usesEdits) {
+    const form = new FormData();
+    form.append("model", "openai/gpt-image-2");
+    form.append("prompt", prompt);
+    form.append("size", size);
+    form.append("quality", "high");
+    form.append("n", "1");
+    let attached = 0;
+    for (const url of referenceUrls.slice(0, 6)) {
+      try {
+        const imgRes = await fetch(url);
+        if (!imgRes.ok) continue;
+        const blob = await imgRes.blob();
+        const name = url.split("/").pop()?.split("?")[0] || `ref-${attached}.png`;
+        form.append("image[]", blob, name);
+        attached++;
+      } catch (e) {
+        console.warn("[generate-slice] failed to attach ref", url, e);
+      }
+    }
+    if (attached === 0) {
+      // Fall back to text-only generation if none of the refs could be fetched.
+      return generateImageOpenAI(prompt, size, []);
+    }
+    body = form;
+  } else {
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify({
       model: "openai/gpt-image-2",
       prompt,
       size,
       quality: "high",
       n: 1,
-    }),
+    });
+  }
+  const endpoint = usesEdits
+    ? "https://ai.gateway.lovable.dev/v1/images/edits"
+    : "https://ai.gateway.lovable.dev/v1/images/generations";
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers,
+    body,
   });
   if (!res.ok) {
     const errBody = await res.text();
@@ -50,37 +84,6 @@ async function generateImageOpenAI(prompt: string, size: string): Promise<string
   const data = await res.json();
   const b64 = data?.data?.[0]?.b64_json;
   if (!b64) throw new Error(`AI Gateway returned no image data: ${JSON.stringify(data).slice(0, 400)}`);
-  return b64;
-}
-
-/** Grounded generation via Gemini Nano Banana 2 — accepts image URL references
- *  natively via the chat-completions image shape so brand assets (logos, product
- *  shots, prior slices) are reproduced faithfully instead of hallucinated. */
-async function generateImageGeminiGrounded(prompt: string, referenceUrls: string[]): Promise<string> {
-  const content: any[] = [{ type: "text", text: prompt }];
-  for (const url of referenceUrls.slice(0, 6)) {
-    content.push({ type: "image_url", image_url: { url } });
-  }
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${LOVABLE_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "google/gemini-3.1-flash-image",
-      messages: [{ role: "user", content }],
-      modalities: ["image", "text"],
-    }),
-  });
-  if (!res.ok) {
-    const errBody = await res.text();
-    const isMod = /content_policy|moderation|safety/i.test(errBody);
-    throw new Error(`${isMod ? "MODERATION_BLOCKED" : "GATEWAY_FAILED"}::Gemini image failed [${res.status}]: ${errBody.slice(0, 600)}`);
-  }
-  const data = await res.json();
-  const b64 = data?.data?.[0]?.b64_json;
-  if (!b64) throw new Error(`Gemini returned no image data: ${JSON.stringify(data).slice(0, 400)}`);
   return b64;
 }
 
@@ -197,22 +200,14 @@ async function runGenerateSlice(sliceId: string, campaignId: string) {
       usedPrompt = buildPrompt(itemForAttempt);
 
       try {
-        if (groundingUrls.length > 0) {
-          b64 = await generateImageGeminiGrounded(usedPrompt, groundingUrls);
-        } else {
-          b64 = await generateImageOpenAI(usedPrompt, size);
-        }
+        b64 = await generateImageOpenAI(usedPrompt, size, groundingUrls);
         break;
       } catch (err: any) {
         lastErr = err;
         console.warn(`[generate-slice] ${sliceId} attempt ${attempt} failed:`, err?.message?.slice(0, 300));
-        // Only retry once; if attempt 2 also fails, throw.
         if (attempt === 2) throw err;
-        // If the first attempt was OpenAI + non-moderation, try Gemini grounded as attempt 2 fallback.
-        if (attempt === 1 && groundingUrls.length === 0 && !/MODERATION_BLOCKED/i.test(String(err.message || err))) {
-          // No grounding available; second attempt is same path. Skip.
-          throw err;
-        }
+        // Only retry when moderation blocked (so the rewritten brief has a chance).
+        if (!/MODERATION_BLOCKED/i.test(String(err.message || err))) throw err;
       }
     }
 
