@@ -1720,7 +1720,7 @@ UNIVERSAL RULES FOR EVENT DATA:
     const retryResp = await callAnthropic({
       model: GENERATION_MODEL,
       max_tokens: 32000,
-      system: UNIVERSAL_EMAIL_RULES,
+      system: isBoldHtmlMode ? systemPrompt : UNIVERSAL_EMAIL_RULES,
       messages: [{ role: "user", content: retryContent }],
     }, ANTHROPIC_API_KEY);
     if (retryResp.ok) {
