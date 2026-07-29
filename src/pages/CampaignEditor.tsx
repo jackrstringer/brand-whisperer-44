@@ -5250,6 +5250,17 @@ export default function CampaignEditor() {
                         >
                           Block Export
                         </button>
+                        <button
+                          onClick={() => setGenerationMode("html_to_image")}
+                          className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                            generationMode === "html_to_image"
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                          title="Bold HTML design → automatically sliced into image blocks (no email-client design limits)"
+                        >
+                          Bold HTML → Blocks
+                        </button>
                       </div>
                     </div>
                     {/* Import from ClickUp */}
