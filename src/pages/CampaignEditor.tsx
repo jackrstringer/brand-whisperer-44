@@ -519,7 +519,7 @@ export default function CampaignEditor() {
   }, [brandId, campaignId, getMatchingVariantIndex, loadImageSlices, preRenderFlowHtml]);
 
   useEffect(() => {
-    if (generationMode !== "image_slices") return;
+    if (generationMode !== "image_slices" && generationMode !== "block_export") return;
     const anyActive = campaign?.status === "generating"
       || slices.some((slice) => slice.generation_status === "pending" || slice.generation_status === "generating");
     if (!anyActive) return;
