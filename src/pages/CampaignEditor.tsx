@@ -471,7 +471,7 @@ export default function CampaignEditor() {
             preRenderFlowHtml(campaign.html, (campaign as any).flow_config as FlowConfig);
           }
         }
-        if ((campaign as any).generation_mode === "image_slices") {
+        if ((campaign as any).generation_mode === "image_slices" || (campaign as any).generation_mode === "block_export") {
           await loadImageSlices();
         }
       }
