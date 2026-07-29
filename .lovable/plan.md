@@ -1,132 +1,96 @@
-# Image-Slice Email Generator
+# Blocklab pipeline port + Block Export mode
 
-Pure image-based emails. Every email is a vertical stack of 3–6 image slices, each one a fully rendered ~600–1080px-wide PNG (hero, story, benefit grid, testimonial, offer, footer, etc.). Every slice is one clickable link. No HTML text, no live buttons. All copy, product treatment, palette, and type are baked into the image.
+Rebuild image-mode generation around Blocklab's 6-stage architecture, and add a new lightweight "Block Export" mode that generates standalone PNG blocks for Figma.
 
-Think Higgsfield / static-ad generator, but the AI plans a coordinated **series** of sibling images that share one design system so they stack into a coherent email — exactly like the Misfits, Optimite, and Health Nag references.
+## Part 1 — Rebuild image-mode generation (Blocklab port)
 
-## Core mental model
+### Stage 1: Planning (single Opus 4.7 call)
+Rewrite `plan-image-email/index.ts`:
+- Consolidate all planning into ONE Opus call that produces both the **design system** and the **block plan** (already the case) but with a much richer contract:
+  - Load client voice + past headline examples (from `brand_intelligence.compiled_context` + prior campaign copy).
+  - Load `identity_locked` fields: canonical CTA label/shape/radius, accent color, type system — pulled from brand profile. These CANNOT be overridden by the brief.
+  - Copy ceilings baked into the prompt (headline / subhead / body word caps, banned phrases, narrative-arc requirement).
+  - Campaign completeness checklist: wordmark once at top, ≥3 CTAs, canonical CTA label, footer rule, no dead blocks.
+  - Output includes per-block: `id`, `archetype`, `size`, `product_asset_key(s)` (1–3, planner-directed), `composition`, `devices[]`, `brief`, `copy` (headline/sub/body/cta).
+- **Post-plan code repairs** (no model): append canonical button geometry string (fixed px/radius) to every block's brief; fix composition/device namespace collisions.
 
-```text
-Brief ─► Design System (locked once)
-         palette, type pair, product treatment,
-         background/mood, mockup style, brand voice
-         │
-         ▼
-       Slice Plan (locked once)
-         [hero, story, 3-benefit-grid, testimonial, offer-CTA, footer]
-         │
-         ▼
-       Parallel GPT Image 2 generation with:
-         - locked design system in every prompt
-         - locked previous-slice reference images (visual continuity)
-         - slice-specific composition brief
-         │
-         ▼
-       6 sibling PNG slices → stitched preview → export
-```
+### Stage 2: Brand file synthesis
+New shared module `supabase/functions/_shared/brandFile.ts`:
+- Builds an in-memory brand pack per campaign: palette, up to N identity images (product cutouts from `brand_assets` + `product_assets`), style reference images (prior campaign renders from `reference_campaigns` filtered by brand affinity), scene asset map keyed by filename stem.
+- Cached in the campaign row so slice regen doesn't rebuild it.
 
-The critical difference from a normal ad generator: **cross-slice visual coherence is a first-class requirement**. Every slice must feel like it came from the same designer's hand on the same afternoon. We enforce this by (a) locking a machine-readable design system before generation, (b) passing prior slices as image references to each subsequent slice, and (c) using a shared master prompt fragment prepended to every slice.
+### Stage 3: Generation (per-block, parallel)
+Rewrite `generate-slice/index.ts`:
+- Switch from `/v1/images/generations` to **`/v1/images/edits`** with `openai/gpt-image-2`, attaching:
+  - 1–3 planner-selected brand assets (product cutouts + optional logo/lifestyle).
+  - Style reference images (2–3 past campaigns).
+  - Prompt with 7 sections: universal rules, brand facts, block type, brief, canvas/continuity string, construction spec, attachment note ("reproduce these exact photographs, do not reimagine").
+- **Retry loop** (2 attempts): missed blocks retried; on attempt 2, if still failed (moderation), call Claude Sonnet to fully rewrite the brief stripping scene description, then fall back to product-cutout composition.
 
-## Two-phase generation
+### Stage 4: Trim
+New `supabase/functions/_shared/trimSlice.ts`:
+- Detects dead surface rows (uniform background) at top/bottom of each generated PNG and crops them. Never scales — fixed column width, variable height.
 
-### Phase 1 — Design System Lock
-Single call, Claude Opus 4.7, produces a JSON design system:
-- `palette`: 4–6 hex values with semantic roles (bg, accent, text, highlight)
-- `typography`: heading style, body style, weight/tone description
-- `product_treatment`: e.g. "product boxes stacked at 15° with rim light, no shadows on transparent background"
-- `mood`: sensory description (Misfits = "sugar rush, arcade energy", Health Nag = "clean pharmaceutical, cool blues, floating capsules")
-- `mockup_style`: "editorial magazine spread", "collage cutout", "3D render clay", etc.
-- `background_treatment`: solid color / gradient / photographic / textured
-- `brand_voice`: 1-line copywriting tone
-- `slice_shape_language`: how sections divide (wavy cutouts vs hard geometric bands vs floating cards)
+### Stage 5: Stack (client-side, already exists)
+Keep the current stitched preview. Append real footer PNG if brand has one; never generate a footer.
 
-### Phase 2 — Slice Plan
-Same call returns an ordered slice array, each slice with:
-- `slice_type` (hero, story, benefit_grid, testimonial, offer, product_spotlight, footer, etc. from a curated taxonomy of ~30 email slice archetypes)
-- `aspect_ratio` (1:1, 4:5, 3:4, 3:2, etc.)
-- `headline_copy`, `body_copy`, `cta_label` (baked into image)
-- `composition_brief` (what the image should show visually)
-- `cta_url` (the href the entire slice links to)
+### Stage 6: Whole-campaign QA (single Opus 4.7 vision call)
+Rewrite `qa-campaign/index.ts` for image-mode:
+- Input: stacked email PNG + labeled side-by-side strip of blocks + plan (briefs stripped).
+- 14-point rubric: copy arc, CTA consistency, type scale, product drift, alignment, wordmark placement, dead gaps, seams, legibility, palette adherence, mobile fit, hierarchy, continuity, footer.
+- Returns verdict `ship | fix_then_ship | regenerate` + per-block `action` + `brief_edit`.
+- **One auto-apply pass**: regenerate only flagged blocks with QA's brief_edit appended, re-trim those blocks, restack. No re-check loop.
 
-Slice count is AI-decided based on brief complexity, typically 3–7.
+### Editor UX changes (`CampaignEditor.tsx`)
+- Show QA verdict badge + per-block findings once QA completes.
+- "Regenerate flagged" button re-runs the QA apply pass on-demand.
+- Progress indicator shows: Planning → Brand file → Generating (X/N) → Trim → QA → Ready.
 
-## Phase 3 — Image Generation
+## Part 2 — Block Export mode
 
-For each slice, in parallel (concurrency 3):
+New campaign generation mode `mode: "block_export"` (alongside `html` and `image`).
 
-1. Build the prompt = master fragment (design system JSON rendered as prose) + slice composition brief + slice copy verbatim + "generate as a complete finished ad slice ready to publish, all text pixel-perfect".
-2. Pass reference images: brand product assets + previously-generated slices from this email (for slices 2+).
-3. Call **Lovable AI Gateway** with `openai/gpt-image-2`, streaming, `partial_images: 1`, `quality: high`.
-4. Stream partials to the UI (blurred on partial, sharp on complete).
-5. Upload the final PNG to `campaign-slices` storage bucket.
+### Flow
+1. User picks brand + one reference campaign + block count + brief.
+2. Runs Stage 1 (planning) and Stage 3 (per-block generation) only — **no stitching, no QA, no trim**.
+3. Each block appears as an independent PNG card in the editor.
+4. Per-block actions: Regenerate, Edit brief, **Download PNG**, **Download all as ZIP**.
 
-Reference-image feedback loop is what makes sibling slices coherent. Slice 3 sees slices 1 and 2 as visual anchors and is told: "match this visual system exactly — same palette, type, product treatment, mood".
+### UI
+- New segmented option "Block Export" in the Output Format toggle already in `CampaignEditor.tsx`.
+- Grid layout (not stacked) for generated blocks.
+- ZIP download built client-side with `jszip`.
 
-## Phase 4 — Assembly & Klaviyo Export
+## Technical details
 
-Stitch slices in the editor: preview iframe stacks `<a href><img></a>` per slice. When user hits "Push to Klaviyo":
-- POST `/api/templates` with `editor_type: "SYSTEM_DRAGGABLE"` and a `definition` containing one `image` block per slice (each with `href` and `alt_text`), no button/text blocks.
-- Optionally POST `/api/campaign-message-assign-template` to attach to a campaign send.
+### DB migration
+- Add `campaigns.mode` values: extend to `'block_export'` alongside existing `html`/`image` values (currently `generation_mode` column).
+- Add `campaigns.brand_file jsonb` to cache Stage 2 output.
+- Add `campaign_slices.qa_finding jsonb` (action + brief_edit from last QA pass).
+- Add `campaign_slices.qa_regenerated_at timestamptz`.
 
-Klaviyo image blocks are the only block type we need — the entire visual is the image. This is well within Klaviyo's documented `SYSTEM_DRAGGABLE` block palette.
+### Edge functions touched
+- `plan-image-email` — rewritten with richer contract, identity_locked, checklist.
+- `generate-slice` — switched to `/v1/images/edits`, retry loop, moderation fallback via Claude.
+- `qa-campaign` — rewritten for image-mode 14-point rubric + auto-apply.
+- New `_shared/brandFile.ts`, `_shared/trimSlice.ts`, `_shared/imageEditsClient.ts`.
 
-## Editor UX
+### Frontend
+- `CampaignEditor.tsx` — Output Format toggle gets 3 options; QA verdict panel; block-grid vs stitched-preview branching.
+- `SliceInspector` — expose QA finding, per-block download.
+- New `src/lib/blockExport.ts` — ZIP builder.
 
-New `ImageCampaignEditor` page (`/brands/:brandId/campaigns/:campaignId` with `campaign_mode: "image"`):
+### Models
+- Planning + QA: `openai/gpt-5.5-pro` (Opus 4.7 equivalent — confirm from catalog before wiring).
+- Image gen: `openai/gpt-image-2` via `/v1/images/edits`.
+- Moderation-fallback brief rewrite: `google/gemini-3.6-flash`.
 
-- **Left rail (30%)**: brief input, design system chips (palette swatches, font names, mood — all editable, re-lock re-runs Phase 1 for future regens), slice list with reorder handles.
-- **Center (50%)**: live stitched preview at 600px width, each slice framed with hover controls (regenerate, edit copy, change CTA URL, delete, insert-slice-below).
-- **Right rail (20%)**: per-slice inspector — copy fields, CTA URL, aspect ratio, composition brief. Editing any field + hitting "regenerate this slice" runs a single Phase 3 call with the locked design system.
+### Known limits carried over from Blocklab
+- QA is one auto-apply pass, not iterative.
+- No cross-campaign block cache.
+- Timing: 3-block ~6 min; 5–6 block with moderation retries can hit 45+ min. Block count is the biggest speed lever.
 
-Slice regeneration always preserves the design system and passes sibling slices as references, so a re-rolled slice still fits.
-
-## Slice archetype library (seeded)
-
-~30 curated archetypes drawn from the taxonomy research (hero, product hero, lifestyle hero, quote hero, split hero, single-product spotlight, 2-up/3-up/4-up product grid, percent-off, BOGO, free-shipping bar, countdown, code reveal, single testimonial, testimonial grid, UGC grid, press logos, star rating, editorial split, brand story, founder note, step-by-step, benefits grid, before/after, comparison, category tiles, shop-the-look, back-in-stock, gift guide, footer). Each archetype stores: default aspect ratio, composition prompt template, whether copy has a CTA, typical role in email flow. These bias the AI's slice plan but don't constrain it.
-
-## Data model
-
-New tables:
-
-- `email_slice_archetypes` (seeded, ~30 rows): `slug`, `category`, `label`, `default_aspect_ratio`, `composition_template`, `role_hint`.
-- `campaign_slices`: `id`, `campaign_id`, `position`, `archetype_slug`, `image_url`, `headline_copy`, `body_copy`, `cta_label`, `cta_url`, `aspect_ratio`, `composition_brief`, `prompt_used`, `generation_status` (pending/generating/complete/failed), `created_at`.
-
-Extend `campaigns`:
-- `campaign_mode` enum accepts `"image"`.
-- `design_system` jsonb — the Phase 1 lock.
-- `slice_plan` jsonb — the Phase 2 plan (source of truth; `campaign_slices` rows are the materialized results).
-- `klaviyo_template_id` text — set after push.
-
-New storage bucket: `campaign-slices` (public).
-
-## New edge functions
-
-1. `plan-image-email` — Phase 1+2. Claude Opus 4.7, takes brief + brand context + optional reference emails, returns `{design_system, slice_plan}`.
-2. `generate-slice` — Phase 3. Streams GPT Image 2 with the master prompt + prior-slice references. One call per slice.
-3. `push-to-klaviyo-template` — assembles Klaviyo `SYSTEM_DRAGGABLE` definition (all image blocks) and POSTs to `/api/templates`.
-4. `assign-template-to-campaign` — thin wrapper around Klaviyo's `campaign-message-assign-template`.
-
-## Klaviyo integration
-
-Uses existing Klaviyo connection from `KlaviyoSetup`. If brand isn't connected, push is disabled with a link to Integrations. Confirmed capabilities from research:
-
-- `POST /api/templates` with `editor_type: "SYSTEM_DRAGGABLE"`, revision `2026-07-15` — GA.
-- `image` block accepts `href`, `alt_text`, `src`, `width`, `height` — everything we need.
-- 1,000-template cap per account (we'll surface a warning as user approaches it).
-
-## Out of scope (this pass)
-
-- Baked-in animation / video slices.
-- Hotspot regions (user chose single-link-per-slice).
-- Live HTML text overlays.
-- Block Library / reusable-slice mode (defer until this generator is proven).
-- Klaviyo Universal Content push (only meaningful once we have a reusable-slice mode).
-
-## Sequencing
-
-1. Migration + storage bucket + seed `email_slice_archetypes`.
-2. `plan-image-email` edge function.
-3. `generate-slice` edge function + streaming client helper.
-4. `ImageCampaignEditor` page with live stitched preview and per-slice controls.
-5. Mode picker tile "Image Email" + route wiring.
-6. `push-to-klaviyo-template` + `assign-template-to-campaign`.
+## Out of scope
+- Iterative QA loop
+- Figma plugin (export produces raw PNGs only)
+- Cross-campaign block reuse/caching
