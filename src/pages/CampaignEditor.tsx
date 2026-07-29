@@ -1152,6 +1152,99 @@ export default function CampaignEditor() {
       flow_config: campaignMode === "flow" ? flowConfig : null,
     } as any).eq("id", campaignId);
 
+    // HTML → Image Slices: run the standard single-variant generator with the
+    // bold-design prompt track, then poll for the slice-html-to-images pipeline
+    // to populate campaign_slices.
+    if (campaignMode === "campaign" && generationMode === "html_to_image") {
+      const genUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-campaign`;
+      try {
+        const resp = await fetch(genUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          },
+          body: JSON.stringify({
+            brandId, campaignId, brief: effectiveBrief, goal: effectiveGoal, copy: extraCopy || undefined, speedMode,
+            productIds: selectedProductIds.length > 0 ? selectedProductIds : undefined,
+            pinnedAssetUrls: allPinned.length > 0 ? allPinned : undefined,
+            matchProductColors: matchProductColors || undefined,
+            designNotes: designNotes.trim() || undefined,
+            shopifyProducts: selectedShopifyProducts.length > 0 ? selectedShopifyProducts : undefined,
+            reference: selectedReferences.length > 0 ? {
+              type: selectedReferences[0].type,
+              id: selectedReferences[0].id,
+              image_urls: selectedReferences[0].image_urls,
+              strength: refDesignMode === "dupe" ? 10 : 7,
+              mode: refDesignMode,
+            } : undefined,
+            outputFormat: "html_to_image",
+          }),
+        });
+        if (!resp.ok && resp.status !== 202) {
+          const payload = await resp.json().catch(() => null);
+          throw new Error(payload?.error || `Generation failed: ${resp.status}`);
+        }
+      } catch (err: any) {
+        console.error("[html-to-image] Error:", err);
+        toast.error("Failed to start bold HTML generation", {
+          description: err?.message || "Unknown backend error",
+          duration: 12000,
+        });
+        setGenerating(false);
+        setGenStartTime(null);
+        return;
+      }
+
+      const pollInterval = window.setInterval(async () => {
+        const [{ data }, nextSlices] = await Promise.all([
+          supabase.from("campaigns").select("*").eq("id", campaignId).single(),
+          loadImageSlices(),
+        ]);
+        if (!data) return;
+        // Slicing pipeline completes once slices are inserted with status=ready
+        // and at least one slice row exists.
+        if (data.status === "ready" && nextSlices.length > 0) {
+          window.clearInterval(pollInterval);
+          generationCompletedRef.current = true;
+          setCampaign(data as Campaign);
+          setGenerating(false);
+          const elapsed = genStartTime ? Math.floor((Date.now() - genStartTime) / 1000) : 0;
+          setGenStartTime(null);
+          setMessages((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Bold HTML sliced into ${nextSlices.length} image blocks in ${formatTimer(elapsed)}`, created_at: new Date().toISOString() },
+          ]);
+        } else if (data.status === "error") {
+          window.clearInterval(pollInterval);
+          setCampaign(data as Campaign);
+          setGenerating(false);
+          setGenStartTime(null);
+          const reason = (data.last_error || "Unknown backend error").slice(0, 1200);
+          toast.error("Bold HTML → image slicing failed", {
+            description: reason,
+            duration: 16000,
+          });
+          setMessages((prev) => [
+            ...prev,
+            { id: crypto.randomUUID(), campaign_id: campaignId, role: "system", content: `Generation failed: ${reason}`, created_at: new Date().toISOString() },
+          ]);
+        }
+      }, 4000);
+
+      window.setTimeout(() => {
+        if (!generationCompletedRef.current) {
+          window.clearInterval(pollInterval);
+          setGenerating(false);
+          setGenStartTime(null);
+          setCampaign((c) => c ? { ...c, status: "draft" } : c);
+          toast.error("Bold HTML → blocks timed out. Please try again.");
+        }
+      }, 360000);
+      return;
+    }
+
     if (campaignMode === "campaign" && (generationMode === "image_slices" || generationMode === "block_export")) {
       try {
         const { error } = await supabase.functions.invoke("plan-image-email", {
