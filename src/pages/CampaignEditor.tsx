@@ -3002,7 +3002,6 @@ export default function CampaignEditor() {
     }
   };
 
-  const [qaRunning, setQaRunning] = useState(false);
   const handleRunImageQa = async () => {
     if (!campaignId) return;
     setQaRunning(true);
