@@ -750,6 +750,8 @@ export async function generateCampaignCore(
     shopifyProducts, reference, refreshCopy, _isSubGeneration, _runId,
     campaignMode, flowConfig, flowNotes, featuredDesignElements,
   } = params;
+  const outputFormat: string = (params as any).outputFormat || "html";
+  const isBoldHtmlMode = outputFormat === "html_to_image";
   const variantIdx = params._variantIndex ?? 0;
   const runId = _runId;
 
