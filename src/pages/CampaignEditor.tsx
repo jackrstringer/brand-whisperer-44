@@ -5063,6 +5063,42 @@ export default function CampaignEditor() {
                 <Skeleton className="h-10 w-1/3" />
               </div>
             ) : isImageSliceMode && hasImageSlices ? (
+              isBlockExportMode ? (
+                <div className="py-8 px-6">
+                  <div className="max-w-[1100px] mx-auto grid grid-cols-2 lg:grid-cols-3 gap-4">
+                    {slices.map((slice) => (
+                      <div
+                        key={slice.id}
+                        className={`bg-background border rounded-lg overflow-hidden cursor-pointer transition-all ${slice.id === selectedSliceId ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-muted-foreground/40"}`}
+                        onClick={() => setSelectedSliceId(slice.id)}
+                      >
+                        <SlicePreview
+                          slice={slice}
+                          selected={slice.id === selectedSliceId}
+                          onSelect={() => setSelectedSliceId(slice.id)}
+                          onRegenerate={() => handleRegenerateSlice(slice.id)}
+                          onDelete={() => handleDeleteSlice(slice.id)}
+                        />
+                        <div className="px-3 py-2 border-t border-border flex items-center justify-between">
+                          <span className="text-[11px] text-muted-foreground truncate">
+                            {slice.archetype_slug || `Block ${slice.position}`}
+                          </span>
+                          {slice.image_url && (
+                            <a
+                              href={slice.image_url}
+                              download={`block-${String(slice.position).padStart(2, "0")}.png`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-[11px] text-primary hover:underline inline-flex items-center gap-1"
+                            >
+                              <Download className="w-3 h-3" /> PNG
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
               <div className="flex flex-col items-center py-10 px-6">
                 <div className="w-[600px] max-w-full bg-background shadow-xl rounded overflow-hidden border border-border">
                   {slices.map((slice) => (
@@ -5077,6 +5113,7 @@ export default function CampaignEditor() {
                   ))}
                 </div>
               </div>
+              )
             ) : campaign?.html ? (
               <div className={`flex flex-col ${showReferenceDialog && selectedReferences.length > 0 ? 'p-1 pl-0.5 pt-4' : 'p-8'}`}>
                 <div className={`flex ${showReferenceDialog && selectedReferences.length > 0 ? 'justify-start' : 'justify-center'}`}>
