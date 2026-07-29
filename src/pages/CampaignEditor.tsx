@@ -4577,6 +4577,28 @@ export default function CampaignEditor() {
           {isImageSliceMode && completeSliceCount > 0 ? (
             <>
               <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRunImageQa}
+                disabled={qaRunning || completeSliceCount < slices.length}
+                className="active:scale-[0.98] transition-all"
+                title="Run whole-campaign visual QA with one auto-apply fix"
+              >
+                {qaRunning ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <ClipboardCheck className="w-3 h-3 mr-1" />}
+                Visual QA
+              </Button>
+              {isBlockExportMode ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadBlockZip}
+                  className="active:scale-[0.98] transition-all"
+                >
+                  <Download className="w-3 h-3 mr-1" />
+                  Download Blocks (ZIP)
+                </Button>
+              ) : (
+              <Button
                 variant="outline"
                 size="sm"
                 onClick={handlePushImageEmail}
@@ -4586,7 +4608,8 @@ export default function CampaignEditor() {
                 {pushingKlaviyo ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Send className="w-3 h-3 mr-1" />}
                 Push Template
               </Button>
-              {(campaign as any)?.klaviyo_template_id && (
+              )}
+              {!isBlockExportMode && (campaign as any)?.klaviyo_template_id && (
                 <a
                   href={`https://www.klaviyo.com/template/${(campaign as any).klaviyo_template_id}/edit`}
                   target="_blank"
