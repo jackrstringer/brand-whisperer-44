@@ -16,6 +16,15 @@ export interface DesignSystem {
   background_treatment: string;
   brand_voice: string;
   slice_shape_language: string;
+  identity_locked?: {
+    cta_shape?: string;
+    cta_radius_px?: number;
+    cta_case?: string;
+    logo_placement?: string;
+    grid_columns?: number;
+    corner_radius_px?: number;
+  };
+  voice_examples?: string[];
 }
 
 export interface SlicePlanItem {
@@ -35,6 +44,17 @@ export function renderDesignSystemPreamble(ds: DesignSystem): string {
   const palette = (ds.palette || [])
     .map((p) => `${p.role}: ${p.hex}`)
     .join(", ");
+  const id = ds.identity_locked || {};
+  const identityLine = [
+    id.cta_shape && `CTA shape: ${id.cta_shape}`,
+    id.cta_radius_px != null && `CTA corner radius: ${id.cta_radius_px}px`,
+    id.cta_case && `CTA label case: ${id.cta_case}`,
+    id.corner_radius_px != null && `Card/frame corner radius: ${id.corner_radius_px}px`,
+    id.logo_placement && `Logo placement: ${id.logo_placement}`,
+  ].filter(Boolean).join(" • ");
+  const voiceLine = (ds.voice_examples || []).length > 0
+    ? `VOICE EXAMPLES (match this register exactly): ${(ds.voice_examples || []).map((v) => `"${v}"`).join(" | ")}`
+    : "";
   return `LOCKED VISUAL SYSTEM — every element in this image MUST obey these rules exactly so it stacks seamlessly with the other slices in this email:
 
 PALETTE: ${palette}. Use ONLY these colors. No off-palette shades.
@@ -45,6 +65,8 @@ SHAPE LANGUAGE: ${ds.slice_shape_language}
 MOOD: ${ds.mood}
 STYLE: ${ds.mockup_style}
 VOICE: ${ds.brand_voice}
+${identityLine ? `IDENTITY LOCK (must obey exactly): ${identityLine}` : ""}
+${voiceLine}
 
 MOBILE-FIRST FORMAT: This slice will render at 390px wide on a phone. Compose it so it reads perfectly at that width — generous type sizes, single dominant focal point, no crowded multi-column layouts unless the archetype explicitly requires it. Assume the viewer is holding a phone.
 
