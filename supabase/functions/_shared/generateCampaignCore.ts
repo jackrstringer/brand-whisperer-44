@@ -734,6 +734,8 @@ export interface GenerateCampaignParams {
   flowNotes?: string;
   /** 1–3 slugs from emailCopywriterSkill — names the visual blocks the email should lead with. */
   featuredDesignElements?: string[];
+  /** "html" (default), "image_slices" (GPT-Image-2 blocks), "html_to_image" (bold HTML rasterized to slices). */
+  outputFormat?: "html" | "image_slices" | "block_export" | "html_to_image";
 }
 
 /**
