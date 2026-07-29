@@ -177,7 +177,7 @@ export default function CampaignEditor() {
   const [previewText, setPreviewText] = useState("");
   const [starredCampaign, setStarredCampaign] = useState(false);
   const [showReferenceDialog, setShowReferenceDialog] = useState(false);
-  const [generationMode, setGenerationMode] = useState<"html" | "image_slices">("html");
+  const [generationMode, setGenerationMode] = useState<"html" | "image_slices" | "block_export">("html");
   const [slices, setSlices] = useState<CampaignSlice[]>([]);
   const [selectedSliceId, setSelectedSliceId] = useState<string | null>(null);
   const [pushingKlaviyo, setPushingKlaviyo] = useState(false);
@@ -413,7 +413,10 @@ export default function CampaignEditor() {
         setSendListIds(Array.isArray((campaign as any).send_list_ids) ? (campaign as any).send_list_ids : []);
         setSendSegmentIds(Array.isArray((campaign as any).send_segment_ids) ? (campaign as any).send_segment_ids : []);
         setCampaignMode((campaign as any).campaign_mode === "flow" ? "flow" : "campaign");
-        setGenerationMode((campaign as any).generation_mode === "image_slices" ? "image_slices" : "html");
+        {
+          const gm = (campaign as any).generation_mode;
+          setGenerationMode(gm === "image_slices" ? "image_slices" : gm === "block_export" ? "block_export" : "html");
+        }
         if ((campaign as any).flow_config) setFlowConfig((campaign as any).flow_config as FlowConfig);
         if ((campaign as any).campaign_mode === "flow") setFlowDetailTab("flow");
         // If returning to a generating campaign, restore the timer from generation_started_at
