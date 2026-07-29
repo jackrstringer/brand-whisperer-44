@@ -2882,6 +2882,7 @@ export default function CampaignEditor() {
     }, 150);
   }, [commentThreads, commentCurrentUser, captureCommentScreenshot, queryElementInfo]);
 
+  const [qaRunning, setQaRunning] = useState(false);
 
   if (loading) {
     return <div className="min-h-screen bg-background flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
