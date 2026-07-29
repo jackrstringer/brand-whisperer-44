@@ -712,6 +712,12 @@ function isCompleteHtml(h: string): boolean {
   return h.length > 200 && /<\/html\s*>/i.test(h) && /<\/body\s*>/i.test(h) && /<table/i.test(h);
 }
 
+// Bold HTML mode intentionally bans <table> layouts, so the standard completeness
+// check would always fail. Use a table-agnostic check for that mode.
+function isCompleteBoldHtml(h: string): boolean {
+  return h.length > 200 && /<\/html\s*>/i.test(h) && /<\/body\s*>/i.test(h);
+}
+
 export interface GenerateCampaignParams {
   brandId: string;
   campaignId: string;
